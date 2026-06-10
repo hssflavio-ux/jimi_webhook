@@ -1,0 +1,274 @@
+<?php
+/**
+ * JIMI IoT Hub - Handler de Envio de Comandos
+ * Endpoint: /sendcommand  (via .htaccess → handlers/sendcommand.php)
+ * Versão: 2.0.0
+ * Data:   2026-02-24
+ *
+ * Proxy entre o Dashboard (AJAX) e a API interna do IoTHub.
+ * Suporta comandos JIMI (proNo 128) e JT/T (proNo 37121, 37377, 37381, 37382, 33283, 33536).
+ *
+ * ┌─────────────────────────────────────────────────────────────────────────────┐
+ * │ BUGS CORRIGIDOS em relação à versão anterior (v1.x)                        │
+ * ├─────┬───────────────────────────────────────────────────────────────────────┤
+ * │ #1  │ Campo 'deviceImei' → 'imei'                                           │
+ * │     │ A doc oficial (test.html §1.2.2 e §2.2.2) usa 'imei'. O IoTHub       │
+ * │     │ rejeitava silenciosamente qualquer payload com 'deviceImei'.          │
+ * ├─────┼───────────────────────────────────────────────────────────────────────┤
+ * │ #2  │ Porta 9080 → 10088                                                    │
+ * │     │ 9080  = tracker-dvr-api  → queries históricas / MongoDB               │
+ * │     │ 10088 = tracker-instruction-server → ENVIO de comandos aos devices    │
+ * │     │ Usar 9080 para enviar comandos nunca funcionou.                        │
+ * ├─────┼───────────────────────────────────────────────────────────────────────┤
+ * │ #3  │ Campos obrigatórios ausentes no payload:                              │
+ * │     │   serverFlagId  (ex: 0 para JTT, 1 para JIMI)                        │
+ * │     │   cmdType       = 'normallns' (fixo conforme docs)                    │
+ * │     │   token         = token interno IoTHub (padrão '123')                 │
+ * ├─────┼───────────────────────────────────────────────────────────────────────┤
+ * │ #4  │ Logger não capturava rawResp do IoTHub — diagnóstico impossível       │
+ * │     │ Agora loga iothub_url, http_code, iothub_resp (300 chars), etc.       │
+ * ├─────┼───────────────────────────────────────────────────────────────────────┤
+ * │ #5  │ iothubCode=-1 genérico mascarava o código real de rejeição do IoTHub  │
+ * │     │ Agora o código real é exposto no log e na resposta ao dashboard.      │
+ * └─────┴───────────────────────────────────────────────────────────────────────┘
+ *
+ * Referência oficial:
+ *   https://docs.jimicloud.com/test/test.html
+ *   Payload completo (seção 1.2.2 / 2.2.2 — curl de referência):
+ *     imei, cmdContent, serverFlagId, proNo, platform, requestId, cmdType, token
+ */
+
+if (ob_get_level()) ob_end_clean();
+header('Content-Type: application/json; charset=utf-8');
+
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../core/Logger.php';
+
+// ── Apenas POST ───────────────────────────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['code' => 405, 'msg' => 'Method Not Allowed']);
+    exit;
+}
+
+// ── Validação de token interno do Dashboard ───────────────────────────────────
+$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
+$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_POST['_token'] ?? '');
+if ($sentToken !== $validToken) {
+    http_response_code(401);
+    Logger::warning('sendcommand: token inválido', [
+        'ip'  => $_SERVER['REMOTE_ADDR'] ?? '',
+        'uri' => $_SERVER['REQUEST_URI'] ?? '',
+    ]);
+    echo json_encode(['code' => 401, 'msg' => 'Unauthorized']);
+    exit;
+}
+
+// ── Parâmetros de entrada ─────────────────────────────────────────────────────
+$imei       = trim($_POST['imei']       ?? '');
+$cmdContent = trim($_POST['cmdContent'] ?? '');
+$proNo      = intval($_POST['proNo']    ?? 128);
+
+if (!$imei || !$cmdContent) {
+    http_response_code(400);
+    echo json_encode(['code' => 400, 'msg' => 'Parâmetros obrigatórios: imei, cmdContent']);
+    exit;
+}
+
+// Validação de IMEI — 15 a 17 dígitos numéricos
+if (!preg_match('/^\d{15,17}$/', $imei)) {
+    http_response_code(400);
+    echo json_encode(['code' => 400, 'msg' => 'IMEI inválido (esperado 15–17 dígitos numéricos)']);
+    exit;
+}
+
+// Validação de proNo — deve ser inteiro positivo conhecido
+$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 33283, 33536];
+if (!in_array($proNo, $proNosConhecidos, true)) {
+    // Não bloqueia — apenas loga aviso para proNos desconhecidos
+    Logger::warning('sendcommand: proNo desconhecido, prosseguindo', [
+        'imei'  => $imei,
+        'proNo' => $proNo,
+    ]);
+}
+
+// Para comandos JT/T (proNo ≠ 128): cmdContent DEVE ser JSON válido
+// Re-serializa para garantir formato canônico sem espaços antes de enviar ao IoTHub
+if ($proNo !== 128) {
+    $decodedJson = json_decode($cmdContent, true);
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        http_response_code(400);
+        echo json_encode([
+            'code' => 400,
+            'msg'  => 'Para proNo ' . $proNo . ', cmdContent deve ser JSON válido. '
+                    . 'Erro: ' . json_last_error_msg(),
+        ]);
+        exit;
+    }
+    // Serialização canônica: sem espaços, sem escapes desnecessários
+    $cmdContent = json_encode($decodedJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
+// ── Configuração do endpoint de comando do IoTHub ─────────────────────────────
+//
+// BUG #2 CORRIGIDO:
+//   PORTA CORRETA: 10088 → tracker-instruction-server (envio de comandos)
+//   PORTA ERRADA:  9080  → tracker-dvr-api (apenas queries históricas)
+//
+// Configurável via variável de ambiente IOTHUB_COMMAND_URL para flexibilidade
+// em ambientes com múltiplos servidores ou portas customizadas.
+$iothubUrl = getenv('IOTHUB_COMMAND_URL') ?: 'http://localhost:10088/api/device/sendInstruct';
+
+// Token interno da API do IoTHub (não confundir com o token do webhook DataPush)
+// Padrão '123' conforme todos os exemplos curl da documentação oficial
+$iothubApiToken = getenv('IOTHUB_API_TOKEN') ?: '123';
+
+// BUG #3 CORRIGIDO: serverFlagId vem do POST (JS diferencia por protocolo)
+//   serverFlagId=1 → gateway JIMI (porta 21100) → JC400 series
+//   serverFlagId=0 → gateway JT/T (porta 21122) → JC450/JC181 series
+$serverFlagId = isset($_POST['serverFlagId'])
+    ? intval($_POST['serverFlagId'])
+    : intval(getenv('IOTHUB_SERVER_FLAG_ID') ?: '0');
+
+// requestId único para rastreamento ponta-a-ponta (dashboard ↔ IoTHub ↔ device)
+$requestId = 'dash_' . date('YmdHis') . '_' . substr(md5(uniqid('', true)), 0, 8);
+
+// ── Payload completo para a API interna do IoTHub ─────────────────────────────
+//
+// BUG #1 CORRIGIDO: 'deviceImei' → 'imei'
+// BUG #3 CORRIGIDO: serverFlagId, cmdType, token — campos obrigatórios adicionados
+//
+// Referência: https://docs.jimicloud.com/test/test.html §1.2.2 e §2.2.2
+// curl --data-urlencode 'imei=...' 'serverFlagId=...' 'cmdType=normallns' 'token=...'
+$postFields = http_build_query([
+    'imei'         => $imei,            // BUG #1: era 'deviceImei'
+    'cmdContent'   => $cmdContent,
+    'serverFlagId' => $serverFlagId,    // BUG #3: campo obrigatório ausente
+    'proNo'        => $proNo,
+    'platform'     => 'web',
+    'requestId'    => $requestId,
+    'cmdType'      => 'normallns',      // BUG #3: campo obrigatório ausente
+    'token'        => $iothubApiToken,  // BUG #3: token API interna ausente
+]);
+
+// ── Chamada cURL ao IoTHub ────────────────────────────────────────────────────
+$ch = curl_init($iothubUrl);
+curl_setopt_array($ch, [
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => $postFields,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 15,
+    CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+]);
+
+$rawResp   = curl_exec($ch);
+$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError = curl_error($ch);
+curl_close($ch);
+
+// ── Interpretação da resposta do IoTHub ──────────────────────────────────────
+$iothubResp = [];
+$iothubCode = -1;
+$iothubMsg  = 'Sem resposta';
+$dbStatus   = 'failed';
+$resultMsg  = 'Falha desconhecida';
+
+if ($curlError || $httpCode === 0) {
+    // Falha de conectividade: IoTHub não acessível (container down, porta fechada)
+    $dbStatus  = 'failed';
+    $resultMsg = 'IoTHub inacessível — verifique se tracker-instruction-server está UP. '
+               . 'Detalhe: ' . ($curlError ?: "HTTP code=$httpCode");
+
+} else {
+    // IoTHub respondeu com HTTP 200 — decodifica o body JSON
+    if ($rawResp) {
+        $iothubResp = json_decode($rawResp, true) ?? [];
+    }
+
+    // Suporte a variações de chave entre versões do IoTHub:
+    //   Versões mais antigas: code/msg
+    //   Versões mais novas:   resultCode/resultMsg ou code/message
+    $iothubCode = $iothubResp['code']       ?? $iothubResp['resultCode'] ?? -1;
+    $iothubMsg  = $iothubResp['msg']        ?? $iothubResp['message']
+                ?? $iothubResp['resultMsg'] ?? "code={$iothubCode} (sem msg)";
+
+    if ($iothubCode === 0) {
+        // Sucesso: IoTHub aceitou o comando
+        // Se device estiver online  → entregue imediatamente
+        // Se device estiver offline → entregue quando reconectar (assíncrono via /pushInstructResponse)
+        $dbStatus  = 'sent';
+        $resultMsg = $iothubMsg ?: 'Comando aceito pelo IoTHub';
+
+    } else {
+        // BUG #5 CORRIGIDO: agora exibe o código real em vez de -1 genérico
+        $dbStatus  = 'failed';
+        $resultMsg = "IoTHub rejeitou o comando (code={$iothubCode}): {$iothubMsg}";
+    }
+}
+
+// ── Persistência na tabela `commands` ────────────────────────────────────────
+$insertedId = null;
+try {
+    $db   = Database::getInstance()->getConnection();
+    $stmt = $db->prepare("
+        INSERT INTO commands
+            (imei, command_content, command_type, status, operator,
+             api_type, response_payload, created_at, updated_at)
+        VALUES
+            (:imei, :cmd, 'request', :status, 'dashboard',
+             :api_type, :resp, NOW(), NOW())
+    ");
+    $stmt->execute([
+        ':imei'     => $imei,
+        ':cmd'      => $cmdContent,
+        ':status'   => $dbStatus,
+        ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
+        ':resp'     => $rawResp ?: null,   // Guarda rawResp completo para auditoria
+    ]);
+    $insertedId = $db->lastInsertId();
+
+    // BUG #4 CORRIGIDO: agora loga rawResp, iothub_url e iothub_code reais
+    Logger::info('sendcommand: comando registrado', [
+        'imei'         => $imei,
+        'proNo'        => $proNo,
+        'serverFlagId' => $serverFlagId,
+        'status'       => $dbStatus,
+        'iothub_code'  => $iothubCode,
+        'iothub_msg'   => $iothubMsg,
+        'command_id'   => $insertedId,
+        'http_code'    => $httpCode,
+        'iothub_url'   => $iothubUrl,
+        'iothub_resp'  => substr((string)($rawResp ?: ''), 0, 300),
+        'request_id'   => $requestId,
+    ]);
+
+} catch (Exception $e) {
+    // Falha no banco não deve impedir a resposta ao dashboard
+    Logger::error('sendcommand: falha ao gravar no banco', [
+        'error' => $e->getMessage(),
+        'imei'  => $imei,
+        'proNo' => $proNo,
+    ]);
+}
+
+// ── Resposta JSON ao Dashboard ────────────────────────────────────────────────
+//
+// O campo 'endpoint' é usado pelo JS do dashboard para confirmar
+// que a porta 10088 está sendo usada (não a 9080 — bug anterior).
+//
+// O campo 'iothub_code' permite ao dashboard diferenciar:
+//   0  = sucesso
+//   -1 = IoTHub inacessível
+//   outros = erro específico retornado pelo IoTHub
+echo json_encode([
+    'code'         => ($dbStatus === 'sent') ? 0 : $iothubCode,
+    'msg'          => $resultMsg,
+    'command_id'   => $insertedId,
+    'iothub_code'  => $iothubCode,
+    'iothub_msg'   => $iothubMsg,
+    'http_status'  => $httpCode,
+    'request_id'   => $requestId,
+    'endpoint'     => $iothubUrl,     // JS verifica que contém '10088'
+    'server_flag'  => $serverFlagId,  // Para debug: confirma qual gateway foi usado
+], JSON_UNESCAPED_UNICODE);

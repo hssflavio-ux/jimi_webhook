@@ -1,0 +1,21 @@
+# Jimi Webhook System
+> Gateway PHP para dispositivos IoT Jimi — recebe webhooks, persiste em MySQL, painel Bootstrap 5.3 com 5 abas.
+
+## Core Files
+- [config/WebhookHandler.php]: Handler base abstrato (token, idempotência, async, transação)
+- [config/database.php]: Singleton PDO (lê .env, timezone UTC, utf8mb4)
+- [core/Logger.php]: Logger estático unificado (rotação diária, JSON context, 5 níveis)
+- [includes/functions.php]: Funções utilitárias (normalize_data, get_webhook_data, sanitize_date, detect_media_type)
+- [handlers/]: 11 webhook push endpoints + 6 dashboard AJAX endpoints + 3 auxiliares
+- [web/]: Painel Bootstrap (index.php wrapper, dashboard_template.php, assets/js, assets/css)
+- [mysql/]: Schema dump de produção + script de migração v2.0.0
+- [docs/]: API_COVERAGE.md, ADR-001.md
+
+## Key Concepts
+- **WebhookHandler**: Classe abstrata que todos os handlers de push DEVEM estender. Fornece validação de token, idempotência (MD5 hash, janela 10 min), resposta assíncrona via fastcgi_finish_request(), gerenciamento de transações e logging estruturado.
+- **normalize_data()**: Mapeia camelCase → snake_case (deviceImei→imei, lat→latitude, lng→longitude).
+- **Protocolo duplo**: JIMI (msgClass=0, JC400) e JT/T 808 (msgClass=1, JC450). Isolamento estrito no pushalarm com resolução de nome por protocolo.
+- **Async HTTP 200**: Handlers respondem imediatamente e continuam processando em background (PHP-FPM).
+- **Painel 5 abas**: Câmeras (telemetria + live stream), Alarmes (mapa + mídia + VIDEOUPLOAD), Comandos (33 presets + histórico), Mídia (galeria + player), Configuração (ler/alterar parâmetros).
+- **Player HTTP-FLV**: flv.js para streams ao vivo (`rtmp://IP:1936/{ch}/{imei}` → `http://IP:8881/{ch}/{imei}.flv`).
+- **Timezone**: Banco em UTC, painel converte para BRT (GMT-3). Conversão dupla é perigo conhecido.

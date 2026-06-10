@@ -1,0 +1,360 @@
+[2026-05-12 00:01:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A01%3A49%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.57%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 00:12:15] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A12%3A11%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 00:22:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A22%3A33%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.57%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 00:33:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A32%3A55%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.57%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 00:43:20] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A43%3A17%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 00:53:45] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2000%3A53%3A39%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.57%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:04:05] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A04%3A01%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:14:25] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A14%3A23%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:24:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A24%3A45%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.57%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:35:10] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A35%3A07%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:45:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A45%3A29%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 01:55:55] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2001%3A55%3A51%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:06:15] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A06%3A14%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:16:40] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A16%3A36%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:27:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A26%3A58%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:37:25] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A37%3A20%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:47:45] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A47%3A42%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 02:58:05] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2002%3A58%3A04%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 03:08:30] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2003%3A08%3A26%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.54%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 03:18:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2003%3A18%3A48%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 03:29:15] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2003%3A29%3A10%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 03:39:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2003%3A39%3A32%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 03:50:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2003%3A49%3A54%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:00:20] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A00%3A16%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:10:40] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A10%3A39%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:21:05] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A21%3A01%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:31:25] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A31%3A23%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:41:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A41%3A45%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 04:52:10] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2004%3A52%3A07%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:02:30] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A02%3A29%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:12:55] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A12%3A51%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:23:15] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A23%3A13%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:33:40] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A33%3A35%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:44:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A43%3A57%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 05:54:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2005%3A54%3A34%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:05:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A04%3A56%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:15:20] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A15%3A18%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:25:45] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A25%3A40%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:36:05] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A36%3A02%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:46:30] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A46%3A24%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 06:56:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2006%3A56%3A47%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:07:10] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A07%3A09%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:17:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A17%3A31%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:27:55] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A27%3A53%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:38:20] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A38%3A15%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.52%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:48:40] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A48%3A37%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 07:59:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2007%3A58%3A59%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 08:09:25] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2008%3A09%3A21%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 08:19:45] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2008%3A19%3A43%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 08:30:10] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2008%3A30%3A05%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 08:40:30] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2008%3A40%3A27%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 08:50:55] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2008%3A50%3A49%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:01:15] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A01%3A12%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:11:35] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A11%3A34%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:22:00] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A21%3A56%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:32:20] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A32%3A18%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:42:45] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A42%3A40%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 09:53:05] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2009%3A53%3A02%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:03:25] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A03%3A24%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:13:50] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A13%3A46%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:24:10] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A24%3A08%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:34:36] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A34%3A30%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:44:56] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A44%3A52%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 10:55:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2010%3A55%3A14%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:05:41] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A05%3A37%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:16:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A15%3A59%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:26:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A26%3A21%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:36:46] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A36%3A43%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:47:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A47%3A05%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 11:57:31] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2011%3A57%3A27%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:07:51] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A07%3A49%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:18:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A18%3A11%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:28:36] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A28%3A33%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.43%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:39:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A38%3A55%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:49:21] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A49%3A17%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 12:59:41] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2012%3A59%3A39%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.43%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 13:10:06] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2013%3A10%3A01%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 13:20:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2013%3A20%3A23%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 13:30:46] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2013%3A30%3A44%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.43%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 13:41:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2013%3A41%3A06%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 13:51:31] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2013%3A51%3A28%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:01:56] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A01%3A51%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:12:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A12%3A13%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:22:41] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A22%3A35%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:33:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A32%3A57%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:43:21] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A43%3A19%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 14:53:46] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2014%3A53%3A41%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 15:04:06] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2015%3A04%3A03%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.45%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 15:14:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2015%3A14%3A25%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 15:24:51] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2015%3A24%3A47%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.5%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 15:35:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2015%3A35%3A09%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.47%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 15:45:36] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2015%3A45%3A31%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.07%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 16:43:06] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2016%3A43%3A01%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 16:53:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2016%3A53%3A24%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.71%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:03:51] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A03%3A46%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.71%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:14:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A14%3A08%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:14:41] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A14%3A37%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:25:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A24%3A59%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.71%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:36:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A36%3A12%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:46:36] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A46%3A34%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 17:57:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2017%3A56%3A56%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:07:21] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A07%3A18%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:17:46] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A17%3A40%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:28:06] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A28%3A02%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:38:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A38%3A24%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.69%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:48:51] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A48%3A47%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 18:59:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2018%3A59%3A09%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 19:09:36] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2019%3A09%3A31%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 19:19:56] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2019%3A19%3A53%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.61%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 19:30:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2019%3A30%3A15%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 19:40:41] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2019%3A40%3A37%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 19:51:01] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2019%3A50%3A59%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:01:26] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A01%3A21%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:11:46] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A11%3A43%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:22:11] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A22%3A05%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:32:31] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A32%3A27%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.64%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:42:51] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A42%3A49%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.61%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 20:53:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2020%3A53%3A11%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.03%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 23:15:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2023%3A15%3A11%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.73%7D%5D&token=a12341234123
+------------------------------------------------------------
+[2026-05-12 23:56:16] PAYLOAD RECEIVED:
+data_list=%5B%7B%22signalLevel%22%3A4%2C%22voltageLevel%22%3A-1%2C%22voltageValue%22%3A0.0%2C%22deviceImei%22%3A%22865478070011327%22%2C%22gateTime%22%3A%222026-05-12%2023%3A56%3A11%22%2C%22isExtPowerSupply%22%3A1%2C%22externalVoltage%22%3A12.66%7D%5D&token=a12341234123
+------------------------------------------------------------

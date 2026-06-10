@@ -1,0 +1,50 @@
+/**
+ * JIMI IoT Dashboard - Styles v2.0.0
+ */
+body { background: #f0f2f5; }
+.nav-tabs .nav-link        { font-weight: 600; color: #495057; }
+.nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 3px solid #0d6efd; }
+
+/* Status badges (comandos) */
+.cs-pending  { background: #ffc107; color: #000; }
+.cs-queued   { background: #6c757d; color: #fff; }
+.cs-sent     { background: #0dcaf0; color: #000; }
+.cs-executed { background: #198754; color: #fff; }
+.cs-failed   { background: #dc3545; color: #fff; }
+
+/* Origin badges (aba comandos) */
+.src-alarm     { background: #6f42c1; color: #fff; font-size: .7rem; }
+.src-dashboard { background: #adb5bd; color: #000; font-size: .7rem; }
+
+/* Bordas de severidade (aba alarmes) */
+.border-critical { border-left: 4px solid #dc3545; }
+.border-warning  { border-left: 4px solid #ffc107; }
+.border-info     { border-left: 4px solid #0dcaf0; }
+
+.table-sm td, .table-sm th { font-size: .82rem; }
+#cmdFeedback { transition: opacity .3s; }
+
+/* Indicador de refresh silencioso */
+#refreshDot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; background: #6c757d;
+    transition: background .4s;
+}
+#refreshDot.pulsing { background: #0d6efd; }
+
+/* Cursor pointer nas linhas do histórico de comandos */
+#cmdHistory tr { cursor: pointer; }
+#cmdHistory tr:hover { background-color: rgba(13, 110, 253, 0.04); }
+
+/* Modal de detalhes do comando */
+#cmdDetailModal pre {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 6px;
+    padding: 1rem;
+    max-height: 300px;
+    overflow: auto;
+    font-size: .82rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
