@@ -1,0 +1,24 @@
+# Environment — contém credenciais
+.env
+
+# Logs
+logs/*.log
+
+# Dependências (não usamos composer/npm, mas por segurança)
+vendor/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.old
+*.bak
