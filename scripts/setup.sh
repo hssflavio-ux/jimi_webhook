@@ -9,7 +9,7 @@
 set -euo pipefail
 
 APP_DIR="/var/www/jimi_webhook"
-REPO_URL="git@github.com:hssflavio-ux/jimi_webhook.git"
+REPO_URL="git@github.com:Flaviohses/jimi_webhook.git"
 NON_INTERACTIVE=0
 
 for arg in "$@"; do
