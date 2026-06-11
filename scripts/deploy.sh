@@ -93,12 +93,23 @@ else
     exit 1
 fi
 
-# Git remote — verificar conexão SSH
+# Git remote — verificar conexão e forçar SSH
 echo "  Verificando Git..."
 GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
 echo "  Remote: $GIT_REMOTE"
+
+# Se o remote for HTTPS, converte automaticamente para SSH
+if [[ "$GIT_REMOTE" == https://github.com/* ]]; then
+    echo "  ℹ Remote HTTPS detectado — convertendo para SSH..."
+    SSH_REMOTE=$(echo "$GIT_REMOTE" | sed 's|https://github.com/|git@github.com:|')
+    if [[ "$SSH_REMOTE" != *.git ]]; then SSH_REMOTE="${SSH_REMOTE}.git"; fi
+    git remote set-url origin "$SSH_REMOTE"
+    echo "  ✓ Remote alterado para: $SSH_REMOTE"
+    GIT_REMOTE="$SSH_REMOTE"
+fi
+
 if git fetch origin --quiet 2>/dev/null; then
-    echo "  ✓ Conexão GitHub OK"
+    echo "  ✓ Conexão GitHub OK (SSH)"
 else
     echo "  ✗ FALHA: git fetch falhou."
     echo "          Configure SSH Key: ssh-keygen -t ed25519 -C 'deploy' -f ~/.ssh/github_deploy"

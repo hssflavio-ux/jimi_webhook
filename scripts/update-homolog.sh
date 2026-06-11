@@ -244,6 +244,16 @@ do_deploy() {
     GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
     info "Remote: $GIT_REMOTE"
 
+    # Se o remote for HTTPS, converte automaticamente para SSH
+    if [[ "$GIT_REMOTE" == https://github.com/* ]]; then
+        info "Remote HTTPS detectado — convertendo para SSH..."
+        SSH_REMOTE=$(echo "$GIT_REMOTE" | sed 's|https://github.com/|git@github.com:|')
+        if [[ "$SSH_REMOTE" != *.git ]]; then SSH_REMOTE="${SSH_REMOTE}.git"; fi
+        git remote set-url origin "$SSH_REMOTE"
+        ok "Remote alterado para: $SSH_REMOTE"
+        GIT_REMOTE="$SSH_REMOTE"
+    fi
+
     if git fetch origin --quiet 2>/dev/null; then
         ok "Conexão GitHub OK (SSH)"
     else
