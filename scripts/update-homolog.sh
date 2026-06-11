@@ -3,7 +3,7 @@
 # JIMI WEBHOOK SYSTEM — Atualização Servidor de Homologação v3.0.0
 # ============================================================
 # Uso:
-#   ./scripts/update-homolog.sh              — atualização completa
+#   ./scripts/update-homolog.sh              — atualização completa (via SSH)
 #   ./scripts/update-homolog.sh --status     — somente status do banco (sem deploy)
 #   ./scripts/update-homolog.sh --force      — força redeploy mesmo sem mudanças
 #   ./scripts/update-homolog.sh --skip-backup  — pula backup
@@ -241,25 +241,14 @@ do_backup() {
 do_deploy() {
     section "FASE 3: DEPLOY — Atualizando código"
 
-    # Configurar remote com token (se presente)
     GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
-    info "Remote: ${GIT_REMOTE//:\/\/*@/://***@}"
+    info "Remote: $GIT_REMOTE"
 
-    # Tenta fetch; se falhar e for HTTPS sem token, tenta configurar com token
-    if ! git fetch origin --quiet 2>/dev/null; then
-        if [[ "$GIT_REMOTE" == https://github.com/* ]] || [[ "$GIT_REMOTE" == https://*github.com* ]]; then
-            warn "Fetch falhou — tentando com token do ambiente..."
-            if [ -n "${GITHUB_TOKEN:-}" ]; then
-                TOKEN_URL=$(echo "$GIT_REMOTE" | sed "s|https://|https://${GITHUB_TOKEN}@|")
-                git remote set-url origin "$TOKEN_URL" 2>/dev/null
-                ok "Remote reconfigurado com token"
-            fi
-        fi
-        if ! git fetch origin --quiet 2>/dev/null; then
-            fail "git fetch falhou. Verifique conectividade e autenticação GitHub."
-        fi
+    if git fetch origin --quiet 2>/dev/null; then
+        ok "Conexão GitHub OK (SSH)"
+    else
+        fail "git fetch falhou. Verifique a chave SSH no servidor: ssh -T git@github.com"
     fi
-    ok "Conexão GitHub OK"
 
     # Verificar branch
     git checkout main --quiet 2>/dev/null || true
