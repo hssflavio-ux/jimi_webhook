@@ -1,4 +1,4 @@
-# API Coverage — Jimi Webhook System v2.0.0
+# API Coverage — Jimi Webhook System v3.0.0
 
 Referência oficial: `https://docs.jimicloud.com/integration/integration.html`
 
@@ -8,7 +8,7 @@ Referência oficial: `https://docs.jimicloud.com/integration/integration.html`
 
 ### `/pushevent` — Login/Logout Notification (Seção 1.1)
 
-**Handler**: `handlers/pushevent.php` v2.0.0  
+**Handler**: `handlers/pushevent.php` v3.0.0  
 **Tabela**: `events`
 
 **Parâmetros:**

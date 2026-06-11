@@ -5,6 +5,44 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [3.0.0] — 2026-06-10
+
+### Added
+- **Design System Cursor-inspired**: redesign completo do dashboard baseado no DESIGN.md
+- **Tipografia editorial**: Inter (weight 400/500/600) + JetBrains Mono em todas superfícies de código
+- **Design tokens**: 30+ CSS custom properties (surfaces, hairlines, text, brand, timeline pastels, semantic, radii, spacing)
+- **Timeline pastels**: 5 cores dedicadas para status pills (thinking=peach, grep=mint, read=blue, edit=lavender, done=gold)
+- **Protocol toggle**: pill selector substituindo radio buttons Bootstrap para JIMI/JTT
+- **Galeria de mídia responsiva**: cards 3-colunas com thumbnails condicionais (imagem real vs ícone por tipo), download + player
+- **Player de vídeo modal**: suporte a playback de arquivos de mídia via modal dedicado
+- **Configuração assíncrona**: queries device info/params/set com feedback em code-block
+- **`docs/PRD.md`**: Product Requirements Document completo (12 seções, 650+ linhas)
+- **Plano de redesign**: `.opencode/plans/dashboard-redesign.md`
+
+### Changed
+- **Painel**: migrado de visual Bootstrap 5.3 padrão para design system Cursor-inspired
+  - Canvas: `#f0f2f5` (cinza Bootstrap) → `#f7f7f4` (cream quente)
+  - Cor primária: `#0d6efd` (azul) → `#f54e00` (Cursor Orange)
+  - Profundidade: sombras Bootstrap → hairlines 1px (`#e6e5e0`)
+  - CTAs: `rounded-pill` → raio 8px (dev-tool dialect)
+  - Cards: shadows → bordas hairline + white-on-cream contrast
+  - Tabelas: zebra stripe → hairline lines + hover canvas-soft
+  - Alarmes: tabela densa → cards individuais com barra de severidade colorida
+  - Status: badges Bootstrap → timeline pastel pills
+  - Tabs: nav-tabs Bootstrap → navegação editorial com underline laranja
+  - Forms: Bootstrap form-control → ds-input (44px, 8px radius, focus ring laranja)
+  - Code blocks: bg-dark com texto claro → ds-code-block (canvas-soft, fonte mono)
+  - Navbar: bg-dark → cream canvas com dots coloridos
+- **`web/dashboard_template.php`**: reescrita completa (~850 linhas) com CSS tokens + JS inline + HTML adaptado
+- **`web/assets/js/dashboard.js`**: atualizado para novas classes (`cs-*` → `ds-cmd-*`, `src-*` → `ds-origin-*`, protocol toggle como pills)
+- **Fontes**: Bootstrap Icons → Google Fonts (Inter + JetBrains Mono via CDN)
+- **Versionamento**: `2.0.0` → `3.0.0` (major bump — redesign completo do frontend)
+
+### Removed
+- Classes CSS Bootstrap visuais (`bg-*`, `btn-*`, `badge`, `table-*`, `card`, `shadow-*`, `border-*` utilitários visuais)
+- Protocol radio buttons (`input[name="proto"]`) substituídos por `.ds-proto-option` pill selector
+- Estilos inline de cores (`style="background:..."`) no JS de renderização dinâmica
+
 ## [2.0.0] — 2026-06-09
 
 ### Added

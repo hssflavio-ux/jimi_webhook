@@ -1,8 +1,8 @@
-# AGENTS.md — Jimi Webhook System (v2.0.0)
+# AGENTS.md — Jimi Webhook System (v3.0.0)
 
 ## Project
 
-PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from Jimi IoT Hub (`jimicloud.com`), persists to MySQL, and serves a Bootstrap dashboard for device monitoring, media viewing, command dispatch, and remote configuration.
+PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from Jimi IoT Hub (`jimicloud.com`), persists to MySQL, and serves a Cursor-inspired editorial dashboard for device monitoring, media viewing, command dispatch, and remote configuration.
 
 Official API reference: `https://docs.jimicloud.com/integration/integration.html`
 
@@ -97,7 +97,7 @@ token=a12341234123&data_list=[{"gateTime":"2025-01-07 11:06:05","imei":"86924706
 |---|---|---|
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` | — | MySQL connection |
 | `WEBHOOK_TOKEN` | `a12341234123` | Token for webhook and dashboard auth |
-| `SYSTEM_VERSION` | `2.0.0` | System version (auto-populated) |
+| `SYSTEM_VERSION` | `3.0.0` | System version (auto-populated) |
 | `FILE_STORAGE_URL` | `http://189.22.240.43:23010/download/` | Base URL for media file downloads |
 | `STREAM_URL` | `http://189.22.240.43:8881` | Base URL for HTTP-FLV live/playback streams |
 
@@ -113,7 +113,17 @@ O AG Kit define 45 skills e 20 agentes especialistas. **Sempre** verifique se al
 - `web/index.php` — wrapper que carrega `handlers/dashboard.php` (rota canônica: `/dashboard`)
 - `/dashboard` → `handlers/dashboard.php` + `web/dashboard_template.php` (controller/view pattern)
 
-Ambos usam o mesmo código. O template (`dashboard_template.php`) é a fonte canônica do HTML/JS. O `web/assets/js/dashboard.js` mantém os presets sincronizados para referência.
+Ambos usam o mesmo código. O template (`dashboard_template.php`) é a fonte canônica do HTML/CSS/JS — inclui 30+ CSS custom properties do design system, protocol toggle como pills, galeria de mídia, player de vídeo modal, e configuração assíncrona.
+
+### Design System (v3.0.0)
+O dashboard segue o design system Cursor-inspired documentado em `DESIGN.md`:
+- **Canvas**: `#f7f7f4` cream (não cinza Bootstrap `#f0f2f5`)
+- **Tipografia**: Inter (weight 400/500/600) + JetBrains Mono para código
+- **Cor primária**: `#f54e00` Cursor Orange (apenas em CTAs, tabs e links)
+- **Profundidade**: hairlines 1px (`#e6e5e0`), zero sombras
+- **Timeline pastels**: 5 cores dedicadas para status pills (peach/mint/blue/lavender/gold)
+- **Radii**: 8px em CTAs, 12px em cards, 6px em inputs compactos
+- **Fontes**: Inter + JetBrains Mono via Google Fonts CDN (substituindo Bootstrap Icons como fonte principal)
 
 ### Timezone handling is error-prone
 Multiple comments mark `ROOT OF BUG` around UTC/BRT (GMT-3) conversions. All DB times are UTC; dashboard converts to BRT for display. Double-conversion is a known hazard.
@@ -125,7 +135,12 @@ Webhook handlers return HTTP 200 immediately, then continue processing. This req
 `config/database.php` and handler files contain hardcoded DB password and webhook token as fallbacks. Treat as non-sensitive dev defaults; production relies on `.env`.
 
 ### No build step, no package manager
-Pure PHP — no `composer.json`, no `package.json`, no framework. CDN-loaded Bootstrap 5.3 + Bootstrap Icons + flv.js for the frontend.
+Pure PHP — no `composer.json`, no `package.json`, no framework. CDN-loaded Bootstrap 5.3 (grid/utilities/tabs/modals only) + Google Fonts (Inter + JetBrains Mono) + Bootstrap Icons + flv.js for the frontend.
+
+### PRD and documentation
+- `docs/PRD.md` — Product Requirements Document completo (12 seções: arquitetura, features, database schema, protocol support, security, backlog, operações)
+- `DESIGN.md` — design system tokens (cores, tipografia, componentes, espaçamento, regras de uso)
+- `docs/adr/ADR-001.md` — decisão de isolamento estrito de protocolo JIMI vs JT/T 808
 
 ### requestMeta for extra POST fields
 `WebhookHandler` stores extra POST fields (like `msgType` for `/pushinstructresponse`) in `$this->requestMeta`. Handlers needing non-standard POST params should read from this property.

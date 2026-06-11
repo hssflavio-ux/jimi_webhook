@@ -1,5 +1,6 @@
 /**
- * JIMI IoT Dashboard - Client JS v2.0.0
+ * JIMI IoT Dashboard - Client JS v3.0.0
+ * Design System: Cursor-inspired editorial (DESIGN.md)
  *
  * Variáveis globais esperadas (definidas no PHP antes deste script):
  *   DASH_TOKEN  — token de autenticação do dashboard
@@ -20,11 +21,9 @@ const hdrs = { 'X-Dashboard-Token': DASH_TOKEN };
 // ═══════════════════════════════════════════════════════════════════════════════
 // Utilitários
 // ═══════════════════════════════════════════════════════════════════════════════
-function esc(s) {
-    return String(s ?? '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+const esc = s => String(s ?? '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
 function pulse() {
     const dot = document.getElementById('refreshDot');
@@ -37,22 +36,20 @@ function pulse() {
 function showFeedback(type, msg) {
     const el = document.getElementById('cmdFeedback');
     if (!el) return;
-    el.className = `alert alert-${type} mb-3 py-2 small`;
+    el.className = 'ds-feedback ds-feedback-' + type;
     el.textContent = msg;
+    el.classList.remove('d-none');
 }
 
 function showToast(type, msg, delay = 5000) {
     const toast = document.getElementById('videoToast');
     if (!toast) return;
-    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    const bgMap = { success:'bg-success', danger:'bg-danger', warning:'bg-warning', info:'bg-info' };
+    toast.className = 'toast align-items-center text-white border-0 ' + (bgMap[type] || 'bg-secondary');
     document.getElementById('videoToastMsg').textContent = msg;
     new bootstrap.Toast(toast, { delay }).show();
 }
 
-/**
- * Formata JSON ou string para exibição legível.
- * Tenta parsear como JSON; se falhar, retorna a string original.
- */
 function prettyJson(val) {
     if (!val || val === '—') return val;
     try {
@@ -63,11 +60,6 @@ function prettyJson(val) {
     }
 }
 
-/**
- * Gera timestamp no formato JTT (yyMMddHHmmss) com offset de dias.
- * Ex: jttDateNow(-7) = data/hora UTC de 7 dias atrás no formato "260101000000"
- * O formato ISO "2024-01-01 00:00:00" é INVÁLIDO para comandos JTT.
- */
 function jttDateNow(offsetDays = 0) {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
@@ -81,7 +73,7 @@ function jttDateNow(offsetDays = 0) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Refresh silencioso de Dispositivos + Status API (substitui location.reload)
+// Refresh silencioso de Dispositivos + Status API
 // ═══════════════════════════════════════════════════════════════════════════════
 async function refreshDevices() {
     pulse();
@@ -91,44 +83,39 @@ async function refreshDevices() {
         const data = await resp.json();
         if (data.code !== 0) return;
 
-        // Atualiza badge de status da API na navbar
         const badge = document.getElementById('apiStatusBadge');
         if (badge) {
-            badge.className = `badge bg-${data.apiStatus.color} d-flex align-items-center px-3 py-2`;
+            badge.className = 'ds-pill ds-pill-' + (data.apiStatus.color === 'success' ? 'success' : 'error');
+            const dot = badge.querySelector('.ds-status-dot');
+            if (dot) dot.className = 'ds-status-dot ' + (data.apiStatus.color === 'success' ? 'online' : 'offline');
             const lbl = badge.querySelector('#apiStatusLabel');
             if (lbl) lbl.textContent = data.apiStatus.label;
         }
         const lastEl = document.getElementById('apiStatusLast');
         if (lastEl) lastEl.textContent = data.apiStatus.last;
 
-        // Atualiza contador de dispositivos
-        const countBadge = document.getElementById('devicesCount');
+        const countBadge = document.getElementById('camerasCount');
         if (countBadge) countBadge.textContent = data.count;
 
-        // Reconstrói tabela de dispositivos
-        const tbody = document.getElementById('devicesBody');
+        const tbody = document.getElementById('camerasBody');
         if (!tbody) return;
 
         if (!data.devices || !data.devices.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Nenhum dispositivo registrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5"><div class="ds-empty"><i class="bi bi-camera-video-off ds-empty-icon"></i>Nenhuma câmera conectada.</div></td></tr>';
             return;
         }
 
         tbody.innerHTML = data.devices.map(d => {
+            const ignPill = d.ign_status === 'ACC ON' ? 'ds-pill-grep' : 'ds-pill-neutral';
             const mapBtn = d.has_gps
-                ? `<a href="${esc(d.map_url)}" target="_blank" class="btn btn-sm btn-outline-primary py-0">
-                       <i class="bi bi-geo-alt-fill"></i> Localizar
-                   </a>`
-                : `<span class="text-muted small"><i class="bi bi-geo-alt"></i> Sem GPS</span>`;
+                ? `<a href="${esc(d.map_url)}" target="_blank" class="ds-btn ds-btn-primary ds-btn-sm"><i class="bi bi-geo-alt-fill"></i>Localizar</a>`
+                : `<span class="ds-caption">Sem GPS</span>`;
             return `<tr>
-                <td>
-                    <div class="fw-bold">${esc(d.name)}</div>
-                    <small class="text-muted font-monospace">${esc(d.imei)}</small>
-                </td>
-                <td><span class="badge bg-${esc(d.ign_class)}">${esc(d.ign_status)}</span></td>
-                <td><i class="bi bi-speedometer2 text-secondary"></i> ${d.speed} km/h</td>
+                <td><div class="ds-title-sm" style="margin-bottom:2px">${esc(d.name)}</div><span class="ds-mono-sm ds-text-muted">${esc(d.imei)}</span></td>
+                <td><span class="ds-pill ds-pill-sm ${ignPill}">${esc(d.ign_status)}</span></td>
+                <td><span class="ds-cell-speed">${d.speed}</span><span class="ds-cell-speed-u">km/h</span></td>
                 <td>${mapBtn}</td>
-                <td class="text-end font-monospace small">${esc(d.last_comm)}</td>
+                <td class="ds-mono-sm ds-text-muted" style="text-align:right">${esc(d.last_comm)}</td>
             </tr>`;
         }).join('');
 
@@ -138,12 +125,15 @@ async function refreshDevices() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Toggle protocolo JIMI / JTT
+// Toggle protocolo JIMI / JTT (pill selector)
 // ═══════════════════════════════════════════════════════════════════════════════
-document.querySelectorAll('input[name="proto"]').forEach(r => {
-    r.addEventListener('change', function () {
-        document.getElementById('secJimi').style.display = this.value === 'jimi' ? '' : 'none';
-        document.getElementById('secJtt').style.display  = this.value === 'jtt'  ? '' : 'none';
+document.querySelectorAll('.ds-proto-option').forEach(btn => {
+    btn.addEventListener('click', function () {
+        document.querySelectorAll('.ds-proto-option').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        const proto = this.dataset.proto;
+        document.getElementById('secJimi').style.display = proto === 'jimi' ? '' : 'none';
+        document.getElementById('secJtt').style.display  = proto === 'jtt'  ? '' : 'none';
     });
 });
 
@@ -155,113 +145,24 @@ function applyJimiPreset(val) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Presets JTT (11 presets — alinhados com dashboard_template.php)
-// BUG #5 FIX: dataType, codeStreamType e videoUDPPort devem ser int (0), não string
-// BUG #6 FIX: proNo 37381/37377/37382 usam formato JTT = yyMMddHHmmss
+// Presets JTT
 // ═══════════════════════════════════════════════════════════════════════════════
 const JTT_PRESETS = {
-    // proNo 37121 — Streaming em tempo real
-    '37121|ch1': [37121, JSON.stringify({
-        dataType: 0, codeStreamType: 0, channel: "1",
-        videoIP: "189.22.240.43", videoTCPPort: "10002", videoUDPPort: 0
-    })],
-    '37121|ch2': [37121, JSON.stringify({
-        dataType: 0, codeStreamType: 0, channel: "2",
-        videoIP: "189.22.240.43", videoTCPPort: "10002", videoUDPPort: 0
-    })],
-    '37121|ch12': [37121, JSON.stringify({
-        dataType: 0, codeStreamType: 0, channel: "1-2",
-        videoIP: "189.22.240.43", videoTCPPort: "10002", videoUDPPort: 0
-    })],
-
-    // proNo 128 — Comando texto para JTT (VIDEOUPLOAD)
-    '128|videoupload': [128, 'VIDEOUPLOAD,189.22.240.43,23010,ALARM_LABEL_AQUI,1-2-3'],
-
-    // proNo 37381 — Listar recursos de áudio/vídeo
-    '37381|list': [37381, JSON.stringify({
-        beginTime: jttDateNow(-7),
-        endTime:   jttDateNow(0),
-        mediaType: 0,
-        channelId: 1,
-        eventCode: 0
-    })],
-
-    // proNo 37377 — Playback de vídeo histórico
-    '37377|playback': [37377, JSON.stringify({
-        serverLen: 15,
-        serverAddress: "189.22.240.43",
-        tcpPort: 10003,
-        udpPort: 0,
-        channel: 1,
-        resourceType: 0,
-        codeType: 0,
-        storageType: 0,
-        playMethod: 0,
-        forwardRewind: 0,
-        beginTime: jttDateNow(-1),
-        endTime: jttDateNow(0),
-        instructionID: "playback_" + Date.now()
-    })],
-
-    // proNo 33283 — Ack manual de alarme
-    '33283|ack': [33283, JSON.stringify({ alarmSerialNo: 0, type: 0 })],
-
-    // proNo 37382 — Upload de arquivo por FTP
-    '37382|ftp': [37382, JSON.stringify({
-        serverAddress: "189.22.240.43",
-        serverPort: 21,
-        userName: "ftp_user",
-        password: "Jimi@371##",
-        path: "/",
-        beginTime: jttDateNow(-1),
-        endTime: jttDateNow(0),
-        channelNo: 1,
-        fileType: 0,
-        storageType: 0,
-        codeType: 0,
-        instructionID: "ftp_" + Date.now()
-    })],
-
-    // proNo 33536 — Texto para Voz (TTS)
-    '33536|tts': [33536, JSON.stringify({
-        flag: 0,
-        text: "Atenção, mensagem do sistema"
-    })],
-
-    // proNo 34817 — Foto instantânea da câmera
-    '34817|foto': [34817, JSON.stringify({
-        channel: 1,
-        photoCmd: 1,
-        timeInterval: 0,
-        saveFlag: 0,
-        resolution: 0x04,
-        quality: 5,
-        light: 128,
-        contrast: 60,
-        saturability: 60,
-        chroma: 128
-    })],
-
-    // proNo 34818 — Consultar mídia armazenada no dispositivo
-    '34818|midia': [34818, JSON.stringify({
-        mediaType: 2,
-        channel: 1,
-        eventCode: 0,
-        beginTime: jttDateNow(-7),
-        endTime: jttDateNow(0)
-    })],
-
-    // proNo 33028 — Consultar todos os parâmetros do dispositivo
-    '33028|params': [33028, '""'],
-
-    // proNo 33030 — Consultar parâmetros específicos (ex: heartbeat, intervalo)
-    '33030|params_esp': [33030, JSON.stringify({ "44": "", "41": "", "32": "", "1": "" })],
-
-    // proNo 33031 — Consultar propriedades do dispositivo (modelo, firmware, ICCID)
-    '33031|info': [33031, '{}'],
-
-    // proNo 33029 — Controle do terminal (reset, factory reset, upgrade)
-    '33029|reset': [33029, JSON.stringify({ cmd: 4, params: "" })],
+    '37121|ch1': [37121, JSON.stringify({ dataType:0, codeStreamType:0, channel:"1", videoIP:"189.22.240.43", videoTCPPort:"10002", videoUDPPort:0 })],
+    '37121|ch2': [37121, JSON.stringify({ dataType:0, codeStreamType:0, channel:"2", videoIP:"189.22.240.43", videoTCPPort:"10002", videoUDPPort:0 })],
+    '37121|ch12':[37121, JSON.stringify({ dataType:0, codeStreamType:0, channel:"1-2", videoIP:"189.22.240.43", videoTCPPort:"10002", videoUDPPort:0 })],
+    '128|videoupload':[128, 'VIDEOUPLOAD,189.22.240.43,23010,ALARM_LABEL_AQUI,1-2-3'],
+    '37381|list':[37381, JSON.stringify({ beginTime:jttDateNow(-7), endTime:jttDateNow(0), mediaType:0, channelId:1, eventCode:0 })],
+    '37377|playback':[37377, JSON.stringify({ serverLen:15, serverAddress:"189.22.240.43", tcpPort:10003, udpPort:0, channel:1, resourceType:0, codeType:0, storageType:0, playMethod:0, forwardRewind:0, beginTime:jttDateNow(-1), endTime:jttDateNow(0), instructionID:"playback_"+Date.now() })],
+    '33283|ack':[33283, JSON.stringify({ alarmSerialNo:0, type:0 })],
+    '37382|ftp':[37382, JSON.stringify({ serverAddress:"189.22.240.43", serverPort:21, userName:"ftp_user", password:"Jimi@371##", path:"/", beginTime:jttDateNow(-1), endTime:jttDateNow(0), channelNo:1, fileType:0, storageType:0, codeType:0, instructionID:"ftp_"+Date.now() })],
+    '33536|tts':[33536, JSON.stringify({ flag:0, text:"Atenção, mensagem do sistema" })],
+    '34817|foto':[34817, JSON.stringify({ channel:1, photoCmd:1, timeInterval:0, saveFlag:0, resolution:0x04, quality:5, light:128, contrast:60, saturability:60, chroma:128 })],
+    '34818|midia':[34818, JSON.stringify({ mediaType:2, channel:1, eventCode:0, beginTime:jttDateNow(-7), endTime:jttDateNow(0) })],
+    '33028|params':[33028, '""'],
+    '33030|params_esp':[33030, JSON.stringify({"44":"","41":"","32":"","1":""})],
+    '33031|info':[33031, '{}'],
+    '33029|reset':[33029, JSON.stringify({ cmd:4, params:"" })],
 };
 
 function applyJttPreset() {
@@ -277,7 +178,7 @@ function applyJttPreset() {
 // ═══════════════════════════════════════════════════════════════════════════════
 async function sendCommand() {
     const imei  = document.getElementById('cmdImei').value.trim();
-    const proto = document.querySelector('input[name="proto"]:checked').value;
+    const proto = document.querySelector('.ds-proto-option.active')?.dataset?.proto || 'jimi';
 
     if (!imei) { showFeedback('warning', 'Selecione um dispositivo.'); return; }
 
@@ -286,14 +187,13 @@ async function sendCommand() {
     if (proto === 'jimi') {
         cmdContent   = document.getElementById('jimiContent').value.trim();
         proNo        = 128;
-        serverFlagId = 1;  // BUG #8 FIX: JIMI (JC400) → gateway 21100
+        serverFlagId = 1;
         if (!cmdContent) { showFeedback('warning', 'Informe o conteúdo do comando.'); return; }
     } else {
         cmdContent   = document.getElementById('jttContent').value.trim();
         proNo        = parseInt(document.getElementById('jttProNo').value) || 37121;
-        serverFlagId = 0;  // BUG #8 FIX: JTT (JC450) → gateway 21122
+        serverFlagId = 0;
         if (!cmdContent) { showFeedback('warning', 'Informe os parâmetros JSON.'); return; }
-        // proNo 128 para JTT (ex: VIDEOUPLOAD manual) não precisa ser JSON
         if (proNo !== 128) {
             try { JSON.parse(cmdContent); }
             catch (e) { showFeedback('danger', 'JSON inválido: ' + e.message); return; }
@@ -303,7 +203,7 @@ async function sendCommand() {
     const btn = document.getElementById('btnSend');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
-    showFeedback('info', `Enviando proNo ${proNo} ao IoTHub (serverFlagId=${serverFlagId})...`);
+    showFeedback('info', `Enviando proNo ${proNo} (serverFlagId=${serverFlagId})...`);
 
     const body = new URLSearchParams({ imei, cmdContent, proNo, serverFlagId });
 
@@ -316,8 +216,7 @@ async function sendCommand() {
         const data = await resp.json();
 
         if (data.code === 0) {
-            showFeedback('success',
-                `Comando enviado! ID #${data.command_id ?? '—'} | IoTHub: ${data.msg}`);
+            showFeedback('success', `Comando enviado! ID #${data.command_id ?? '—'} | ${data.msg}`);
             setTimeout(() => refreshCommands(), 1200);
         } else {
             showFeedback('danger', `Falha (${data.code}): ${data.msg}`);
@@ -326,13 +225,12 @@ async function sendCommand() {
         showFeedback('danger', 'Erro de rede: ' + e.message);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-send-fill me-1"></i> Enviar Comando';
+        btn.innerHTML = '<i class="bi bi-send-fill me-1"></i>Enviar Comando';
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // VIDEOUPLOAD para alarmes JTT
-// BUG #8 FIX: serverFlagId=0 obrigatório para comandos JTT
 // ═══════════════════════════════════════════════════════════════════════════════
 async function requestVideoUpload(imei, alarmLabel, alarmId, alarmName) {
     if (!alarmLabel) {
@@ -375,12 +273,11 @@ async function refreshCommands() {
         const data = await resp.json();
         if (data.code !== 0) return;
 
-        // Badge respostas offline
         const oc = data.offline_count || 0;
         const offlineBadge = document.getElementById('offlineBadge');
         if (offlineBadge) {
             offlineBadge.innerHTML = oc > 0
-                ? `<span class="badge bg-warning text-dark"><i class="bi bi-wifi-off me-1"></i>${oc} resp. offline</span>`
+                ? `<span class="ds-pill ds-pill-sm ds-pill-thinking"><i class="bi bi-wifi-off me-1"></i>${oc} resp. offline</span>`
                 : '';
         }
 
@@ -388,40 +285,34 @@ async function refreshCommands() {
         if (!tbody) return;
 
         if (!data.commands || !data.commands.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">Nenhum comando enviado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6"><div class="ds-empty"><i class="bi bi-terminal ds-empty-icon"></i>Nenhum comando no log.</div></td></tr>';
             return;
         }
 
         tbody.innerHTML = data.commands.map(c => {
-            const badgeClass = {
-                pending:  'cs-pending',
-                queued:   'cs-queued',
-                sent:     'cs-sent',
-                executed: 'cs-executed',
-                failed:   'cs-failed',
-            }[c.status] || 'bg-secondary';
+            const statusClass = {
+                pending:  'ds-cmd-pending',
+                queued:   'ds-cmd-queued',
+                sent:     'ds-cmd-sent',
+                executed: 'ds-cmd-executed',
+                failed:   'ds-cmd-failed',
+            }[c.status] || 'ds-pill-neutral';
 
             const resp = c.response ? String(c.response).substring(0, 100) : '—';
             const cmd  = (c.command || '').substring(0, 50);
             const rawResp = c.response ?? c.raw_response ?? '';
             const rawCmd  = c.command ?? '';
 
-            // Badge de origem (alarme vs dashboard)
             const originBadge = c.origin === 'alarm'
-                ? '<span class="badge src-alarm ms-1">Alarme</span>'
-                : (c.origin ? `<span class="badge src-dashboard ms-1">${esc(c.origin)}</span>` : '');
+                ? '<span class="ds-pill ds-pill-sm ds-origin-alarm ms-1">Alarme</span>'
+                : (c.origin ? `<span class="ds-pill ds-pill-sm ds-origin-dashboard ms-1">${esc(c.origin)}</span>` : '');
 
             return `<tr onclick="showCommandDetail(${esc(JSON.stringify(rawCmd))}, ${esc(JSON.stringify(rawResp))}, '${esc(c.imei)}', '${esc(c.status)}', '${esc(c.created)}')" style="cursor:pointer">
-                <td class="font-monospace small">${esc(c.imei)}</td>
-                <td class="font-monospace small"
-                    style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-                    title="${esc(c.command)}">${esc(cmd)}</td>
-                <td><span class="badge ${badgeClass}">${esc(c.status.toUpperCase())}</span>${originBadge}</td>
-                <td class="small">${esc(c.created)}</td>
-                <td class="small text-muted"
-                    style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                    ${esc(resp)}
-                </td>
+                <td class="ds-mono-sm">${esc(c.imei)}</td>
+                <td class="ds-mono-sm" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(c.command)}">${esc(cmd)}</td>
+                <td><span class="ds-pill ds-pill-sm ${statusClass}">${esc(c.status.toUpperCase())}</span>${originBadge}</td>
+                <td class="ds-mono-sm ds-text-muted">${esc(c.created)}</td>
+                <td class="ds-mono-sm ds-text-muted" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(resp)}</td>
             </tr>`;
         }).join('');
 
@@ -438,36 +329,30 @@ function showCommandDetail(command, response, imei, status, created) {
     if (!modalEl) return;
 
     document.getElementById('cmdDetailImei').textContent    = imei;
-    document.getElementById('cmdDetailStatus').textContent  = status.toUpperCase();
     document.getElementById('cmdDetailCreated').textContent = created;
     document.getElementById('cmdDetailCommand').textContent = prettyJson(command);
     document.getElementById('cmdDetailResponse').textContent = prettyJson(response) || '—';
 
-    const statusBadge = document.getElementById('cmdDetailStatus');
-    const badgeClass = {
-        PENDING:  'cs-pending',
-        QUEUED:   'cs-queued',
-        SENT:     'cs-sent',
-        EXECUTED: 'cs-executed',
-        FAILED:   'cs-failed',
-    }[status.toUpperCase()] || 'bg-secondary';
-    statusBadge.className = `badge ${badgeClass}`;
+    const statusEl = document.getElementById('cmdDetailStatus');
+    const statusClass = {
+        pending:'ds-cmd-pending', queued:'ds-cmd-queued', sent:'ds-cmd-sent',
+        executed:'ds-cmd-executed', failed:'ds-cmd-failed',
+    }[status.toLowerCase()] || 'ds-pill-neutral';
+    statusEl.innerHTML = `<span class="ds-pill ds-pill-sm ${statusClass}">${status.toUpperCase()}</span>`;
 
     new bootstrap.Modal(modalEl).show();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Timers de refresh automático (sem location.reload)
+// Timers de refresh automático
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Countdown de comandos — 30s
 let cmdCountdown = 30;
-const cmdCdEl = document.getElementById('refreshCountdown');
-const cmdCdEl2 = document.getElementById('camCountdown');
+const cmdCdEl = document.getElementById('cmdCountdown');
 setInterval(() => {
     cmdCountdown--;
-    if (cmdCdEl)  cmdCdEl.textContent  = cmdCountdown;
-    if (cmdCdEl2) cmdCdEl2.textContent = cmdCountdown;
+    if (cmdCdEl) cmdCdEl.textContent = cmdCountdown;
     if (cmdCountdown <= 0) {
         cmdCountdown = 30;
         refreshCommands();
@@ -496,3 +381,135 @@ document.addEventListener('visibilitychange', () => {
         refreshCommands();
     }
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Configuração (queries)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function queryConfig(proNo, payload) {
+    const imei = document.getElementById('configImei').value;
+    if (!imei) return;
+    const result = document.getElementById('configResult');
+    result.innerHTML = '<div class="ds-code-block">Consultando...</div>';
+    try {
+        const body = new URLSearchParams({ imei, cmdContent: payload, proNo: String(proNo), serverFlagId: '0' });
+        const resp = await fetch(URL_SEND, { method:'POST', headers:{ ...hdrs, 'Content-Type':'application/x-www-form-urlencoded' }, body });
+        const data = await resp.json();
+        result.innerHTML = '<div class="ds-code-block">' + esc(prettyJson(data)) + '</div>';
+    } catch(e) {
+        result.innerHTML = '<div class="ds-code-block">Erro: ' + esc(e.message) + '</div>';
+    }
+}
+
+async function queryDeviceInfo() { await queryConfig(33031, '{}'); }
+async function queryAllParams() { await queryConfig(33028, '""'); }
+async function querySpecificParams() { await queryConfig(33030, JSON.stringify({"44":"","41":"","32":"","1":""})); }
+
+function updateParamHelp() {
+    const sel = document.getElementById('paramId');
+    const help = document.getElementById('paramHelp');
+    if (!help) return;
+    const texts = {
+        '1': 'Intervalo em segundos entre heartbeats.',
+        '32':'0=Tempo, 1=Distância, 2=Tempo+Distância.',
+        '41':'Intervalo de envio por tempo (segundos).',
+        '44':'Intervalo de envio por distância (metros).',
+        '85':'Velocidade máxima. Exceder gera alarme.',
+        '86':'Duração acima do limite para alarme (s).',
+        '87':'Tempo máximo de condução contínua (s).',
+        '19':'Endereço IP/domínio do servidor principal.',
+        '24':'Porta TCP do servidor principal.',
+        '49':'Raio da cerca eletrônica em metros.',
+    };
+    help.textContent = texts[sel.value] || '';
+}
+
+async function setParam() {
+    const imei = document.getElementById('configImei').value;
+    const pid = document.getElementById('paramId').value;
+    const pval = document.getElementById('paramValue').value.trim();
+    const result = document.getElementById('setParamResult');
+    if (!imei || !pid || !pval) {
+        result.innerHTML = '<span class="ds-feedback ds-feedback-warning d-inline-block">Preencha IMEI, parâmetro e valor.</span>';
+        return;
+    }
+    result.innerHTML = '<span class="ds-caption">Enviando alteração...</span>';
+    try {
+        const payload = JSON.stringify({ [pid]: pval });
+        const body = new URLSearchParams({ imei, cmdContent: payload, proNo: '33027', serverFlagId: '0' });
+        const resp = await fetch(URL_SEND, { method:'POST', headers:{ ...hdrs, 'Content-Type':'application/x-www-form-urlencoded' }, body });
+        const data = await resp.json();
+        result.innerHTML = data.code === 0
+            ? '<span class="ds-feedback ds-feedback-success d-inline-block"><i class="bi bi-check-circle me-1"></i>Parâmetro ' + pid + ' alterado com sucesso.</span>'
+            : '<span class="ds-feedback ds-feedback-danger d-inline-block">Falha (' + data.code + '): ' + data.msg + '</span>';
+    } catch(e) {
+        result.innerHTML = '<span class="ds-feedback ds-feedback-danger d-inline-block">Erro: ' + esc(e.message) + '</span>';
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Galeria de Mídia
+// ═══════════════════════════════════════════════════════════════════════════════
+async function refreshMedia() {
+    const imei = document.getElementById('mediaImeiFilter')?.value || '';
+    const gallery = document.getElementById('mediaGallery');
+    if (!gallery) return;
+    gallery.innerHTML = '<div class="col-12"><div class="ds-empty"><i class="bi bi-hourglass-split ds-empty-icon"></i>Carregando...</div></div>';
+
+    try {
+        const params = new URLSearchParams();
+        if (imei) params.set('imei', imei);
+        const resp = await fetch('../mediadata?' + params.toString(), { headers: hdrs });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const data = await resp.json();
+
+        const countEl = document.getElementById('mediaCount');
+        if (countEl) countEl.textContent = data.files ? data.files.length : 0;
+
+        if (!data.files || !data.files.length) {
+            gallery.innerHTML = '<div class="col-12"><div class="ds-empty"><i class="bi bi-film ds-empty-icon"></i>Nenhum arquivo de mídia encontrado.</div></div>';
+            return;
+        }
+
+        gallery.innerHTML = data.files.map(f => {
+            const type = f.media_type || 'other';
+            const icon = type === 'image' ? 'bi-file-image' : type === 'video' ? 'bi-file-play' : type === 'audio' ? 'bi-file-music' : 'bi-file';
+            const isImg = type === 'image' && f.url;
+            const thumb = isImg
+                ? `<img src="${esc(f.url)}" alt="${esc(f.file_name)}" loading="lazy">`
+                : `<i class="bi ${icon} ds-media-thumb-icon"></i>`;
+            const dlUrl = f.url || f.download_url || '';
+            const tcls = type === 'image' ? 'img' : type === 'video' ? 'vid' : 'aud';
+
+            return `<div class="col-xl-4 col-md-6">
+                <div class="ds-media-card">
+                    <div class="ds-media-thumb ${tcls}">${thumb}</div>
+                    <div class="ds-media-info">
+                        <div class="ds-mono-sm ds-text-ink" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.file_name)}">${esc(f.file_name)}</div>
+                        <div class="ds-caption mt-1">${esc(f.gateway_time || '—')} · ${esc(f.imei || '—')}</div>
+                    </div>
+                    <div class="ds-media-actions">
+                        ${dlUrl ? `<a href="${esc(dlUrl)}" target="_blank" class="ds-btn ds-btn-secondary ds-btn-xs"><i class="bi bi-download me-1"></i>Download</a>` : ''}
+                        ${type === 'video' && dlUrl ? `<button class="ds-btn ds-btn-ghost ds-btn-xs" onclick="playVideo('${esc(dlUrl)}','${esc(f.file_name)}')"><i class="bi bi-play-fill me-1"></i>Play</button>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+
+    } catch (e) {
+        gallery.innerHTML = `<div class="col-12"><div class="ds-empty"><span class="ds-empty-icon"><i class="bi bi-exclamation-triangle"></i></span>Erro ao carregar: ${esc(e.message)}</div></div>`;
+    }
+}
+
+function playVideo(url, title) {
+    const modal = document.getElementById('videoPlayerModal');
+    const video = document.getElementById('videoPlayer');
+    const loading = document.getElementById('videoPlayerLoading');
+    document.getElementById('videoPlayerTitle').textContent = title || 'Player';
+    if (loading) loading.style.display = 'block';
+    if (video) { video.style.display = 'none'; video.src = url; video.style.display = ''; video.play(); if (loading) loading.style.display = 'none'; }
+    new bootstrap.Modal(modal).show();
+    if (modal) modal.addEventListener('hidden.bs.modal', () => { if (video) { video.pause(); video.src = ''; } }, { once: true });
+}
+
+const tabMediaBtn = document.getElementById('tabMediaBtn');
+if (tabMediaBtn) tabMediaBtn.addEventListener('shown.bs.tab', () => refreshMedia());
