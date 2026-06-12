@@ -6,6 +6,8 @@ PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from Jimi IoT H
 
 Official API reference: `https://docs.jimicloud.com/integration/integration.html`
 
+**STATUS.md** — Status detalhado do desenvolvimento, bugs corrigidos, pendências. Leia antes de continuar o desenvolvimento.
+
 ## Architecture (v3.1.0)
 
 ```
@@ -64,7 +66,7 @@ Jimi IoT Hub  --POST-->  .htaccess  -->  handlers/router.php  -->  handlers/*.ph
 ## Key navigation
 
 - **`handlers/router.php`** — Front controller: parses URL segments and dispatches to handlers
-- **`includes/auth.php`** — Auth middleware: `require_login()`, `require_admin()`, `get_current_user()`, `get_current_customer()`, `login_user()`, `logout_user()`, `set_customer_context()`
+- **`includes/auth.php`** — Auth middleware: `require_login()`, `require_admin()`, `get_jimi_user()`, `get_customer_id()`, `get_customer()`, `login_user()`, `logout_user()`, `set_customer_context()`
 - **`web/layout_base.php`** — Main layout shell (sidebar + header + content). Includes design system CSS inline
 - **`web/layout_ativo_sidebar.php`** — Secondary sidebar for asset detail (9 tabs)
 - **`web/layout_base_close.php`** — Closes layout tags
@@ -130,7 +132,7 @@ Asset Detail (secondary sidebar, 9 tabs):
 All non-file requests go through `router.php`. This replaces the old single-segment rewrite. Multi-segment URLs like `/ativos/868120246598152` or `/clientes/1` are now supported.
 
 ### Authentication (v3.1.0)
-Session-based auth using PHP native sessions + `sessions` table. Cookie: `jimi_session`. All dashboard pages must call `require_login()`. First-run: visit `/setup` to create admin user after migration.
+Token-based auth using cookie `jimi_token` (64-char hex) + `sessions` table in MySQL. No dependency on `session_start()` or PHP session files. All dashboard pages must call `require_login()`. First-run: visit `/setup` to create admin user after migration.
 
 ### Design System (v3.0.0 — preserved)
 - **Canvas**: `#f7f7f4` cream, **Primary**: `#f54e00` Cursor Orange
