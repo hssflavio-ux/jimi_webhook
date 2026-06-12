@@ -273,7 +273,6 @@ function sendCommand(e) {
         if (data.code === 0) {
             document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--success)">Comando enviado! ID #' + data.command_id + '</span>';
             startPolling(data.command_id);
-            setTimeout(function() { location.reload(); }, 3000);
         } else {
             document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--error)">Erro: ' + (data.iothub_msg || data.msg) + '</span>';
         }
@@ -305,7 +304,10 @@ function startPolling(commandId) {
                     if (data.commands[i].id == commandId) { cmd = data.commands[i]; break; }
                 }
             }
-            if (!cmd) return;
+            if (!cmd) {
+            if (pollPhase < 2) { pollTimer = setTimeout(poll, pollPhase === 0 ? 3000 : 10000); if (pollPhase === 0 && pollCount >= 10) pollPhase = 1; if (pollPhase === 1 && pollCount >= 10 + 30) pollPhase = 2; }
+            return;
+        }
 
             if (cmd.status === 'executed') {
                 bar.className = 'poll-bar success';

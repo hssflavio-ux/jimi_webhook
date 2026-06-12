@@ -1,5 +1,6 @@
 RewriteEngine On
 RewriteRule ^$ handlers/router.php [L]
+RewriteRule ^config$ handlers/router.php [L]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ handlers/router.php [L,QSA]

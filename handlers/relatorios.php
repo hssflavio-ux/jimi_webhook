@@ -22,10 +22,16 @@ function fmt_brt_rpt($dt) {
     return $d->format('d/m/Y H:i:s');
 }
 
-$reportType = $_GET['tipo'] ?? 'alarmes';
-$dateFrom   = $_GET['from'] ?? date('Y-m-d', strtotime('-7 days'));
-$dateTo     = $_GET['to'] ?? date('Y-m-d');
-$imeiFilter = $_GET['imei'] ?? '';
+$reportType  = $_GET['tipo'] ?? 'alarmes';
+$dateFrom    = $_GET['from'] ?? date('Y-m-d', strtotime('-7 days'));
+$dateTo      = $_GET['to'] ?? date('Y-m-d');
+$imeiFilter  = $_GET['imei'] ?? '';
+$alarmSev    = $_GET['severity'] ?? '';
+$alarmCat    = $_GET['category'] ?? '';
+
+// Tipos de alarme para filtro
+$alarmCategories = $db->query("SELECT DISTINCT category FROM alarm_types WHERE category IS NOT NULL ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
+$alarmSeverities = ['critical', 'warning', 'info'];
 
 // Dispositivos do cliente para dropdown
 $devices = $db->query("SELECT imei, device_name FROM devices WHERE customer_id = $customer_id ORDER BY device_name")->fetchAll(PDO::FETCH_ASSOC);
@@ -40,6 +46,8 @@ if ($reportType === 'alarmes') {
     if ($imeiFilter) $where .= " AND a.imei = " . $db->quote($imeiFilter);
     $where .= " AND a.created_at >= " . $db->quote($dateFrom . ' 00:00:00');
     $where .= " AND a.created_at <= " . $db->quote($dateTo . ' 23:59:59');
+    if ($alarmSev) $where .= " AND COALESCE(at.severity,'info') = " . $db->quote($alarmSev);
+    if ($alarmCat) $where .= " AND at.category = " . $db->quote($alarmCat);
 
     $rows = $db->query("
         SELECT a.id, a.imei, a.alarm_name, a.alarm_time, a.created_at, a.msg_class,
@@ -132,6 +140,26 @@ include __DIR__ . '/../web/layout_base.php';
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Até</label>
             <input type="date" name="to" value="<?= $dateTo ?>" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface)">
         </div>
+        <?php if ($reportType === 'alarmes'): ?>
+        <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Severidade</label>
+            <select name="severity" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface)">
+                <option value="">Todas</option>
+                <?php foreach ($alarmSeverities as $s): ?>
+                <option value="<?= $s ?>" <?= $alarmSev===$s?'selected':'' ?>><?= ucfirst($s) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Categoria</label>
+            <select name="category" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);max-width:160px">
+                <option value="">Todas</option>
+                <?php foreach ($alarmCategories as $cat): ?>
+                <option value="<?= htmlspecialchars($cat) ?>" <?= $alarmCat===$cat?'selected':'' ?>><?= htmlspecialchars($cat) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
         <button type="submit" class="btn btn-outline btn-sm" style="height:34px">Filtrar</button>
     </form>
 </div>
