@@ -5,32 +5,39 @@
  */
 require_once __DIR__ . '/../config/database.php';
 
-$db  = Database::getInstance()->getConnection();
-$tz_brt = new DateTimeZone('America/Sao_Paulo');
+$error = null;
+$redirect = isset($_GET['redirect']) ? $_GET['redirect'] : '/dashboard';
 
-$hasUsers = (bool) $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+try {
+    $db = Database::getInstance()->getConnection();
+    $hasUsers = (bool) $db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+} catch (Exception $e) {
+    $hasUsers = false;
+    $error = 'Erro de conexão com o banco de dados.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_once __DIR__ . '/../includes/auth.php';
 
-    $email    = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $redirect = $_POST['redirect'] ?? '/dashboard';
+    $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
+    $password = isset($_POST['password']) ? $_POST['password'] : '';
+    $redirect = isset($_POST['redirect']) ? $_POST['redirect'] : '/dashboard';
 
-    $result = login_user($email, $password);
-
-    if ($result['success']) {
-        header('Location: ' . $redirect);
-        exit;
+    if ($email && $password) {
+        $result = login_user($email, $password);
+        if (isset($result['success']) && $result['success']) {
+            header('Location: ' . $redirect);
+            exit;
+        }
+        $error = isset($result['error']) ? $result['error'] : 'Falha na autenticação.';
+    } else {
+        $error = 'Informe e-mail e senha.';
     }
-    $error = $result['error'];
 } else {
     if (!$hasUsers) {
         header('Location: /setup');
         exit;
     }
-    $redirect = $_GET['redirect'] ?? '/dashboard';
 }
 
-$error = $error ?? null;
 include __DIR__ . '/../web/login_template.php';
