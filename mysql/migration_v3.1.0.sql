@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `customers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Clientes do sistema (multi-tenant)';
 
 -- Seed: Cliente Padrão
-INSERT INTO `customers` (`id`, `name`, `document`, `email`, `phone`, `address`, `is_active`) VALUES
+INSERT IGNORE INTO `customers` (`id`, `name`, `document`, `email`, `phone`, `address`, `is_active`) VALUES
 (1, 'Frota Principal', NULL, NULL, NULL, NULL, 1);
 
 -- ------------------------------------------------------------
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS `device_models` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Catálogo de modelos de dispositivos suportados';
 
 -- Seed: 6 modelos de câmera
-INSERT INTO `device_models` (`model_name`, `protocol`, `camera_count`, `description`) VALUES
+INSERT IGNORE INTO `device_models` (`model_name`, `protocol`, `camera_count`, `description`) VALUES
 ('JC400D',  'JIMI', 1, 'Câmera veicular JIMI 1 canal (protocolo JIMI)'),
 ('JC400AD', 'JIMI', 1, 'Câmera veicular JIMI avançada 1 canal (protocolo JIMI)'),
 ('JC371',   'JTT',  1, 'Câmera veicular JT/T 1 canal (protocolo JT/T 808)'),
