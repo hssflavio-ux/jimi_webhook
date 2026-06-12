@@ -1,7 +1,7 @@
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^([a-zA-Z0-9_-]+)$ handlers/$1.php [L,QSA]
+RewriteRule ^(.*)$ handlers/router.php [L,QSA]
 
 <IfModule mod_headers.c>
     Header set X-Content-Type-Options "nosniff"

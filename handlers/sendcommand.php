@@ -65,9 +65,20 @@ if ($sentToken !== $validToken) {
 }
 
 // ── Parâmetros de entrada ─────────────────────────────────────────────────────
-$imei       = trim($_POST['imei']       ?? '');
-$cmdContent = trim($_POST['cmdContent'] ?? '');
-$proNo      = intval($_POST['proNo']    ?? 128);
+// Aceita tanto form-urlencoded ($_POST) quanto JSON (php://input) do novo frontend
+$input = [];
+$contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+if (stripos($contentType, 'application/json') !== false) {
+    $rawBody = file_get_contents('php://input');
+    $decoded = json_decode($rawBody, true);
+    if (is_array($decoded)) $input = $decoded;
+} else {
+    $input = $_POST;
+}
+
+$imei       = trim($input['imei']       ?? '');
+$cmdContent = trim($input['content']    ?? $input['cmdContent'] ?? '');
+$proNo      = intval($input['proNo']    ?? 128);
 
 if (!$imei || !$cmdContent) {
     http_response_code(400);
@@ -83,7 +94,7 @@ if (!preg_match('/^\d{15,17}$/', $imei)) {
 }
 
 // Validação de proNo — deve ser inteiro positivo conhecido
-$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 33283, 33536];
+$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
 if (!in_array($proNo, $proNosConhecidos, true)) {
     // Não bloqueia — apenas loga aviso para proNos desconhecidos
     Logger::warning('sendcommand: proNo desconhecido, prosseguindo', [
@@ -126,8 +137,8 @@ $iothubApiToken = getenv('IOTHUB_API_TOKEN') ?: '123';
 // BUG #3 CORRIGIDO: serverFlagId vem do POST (JS diferencia por protocolo)
 //   serverFlagId=1 → gateway JIMI (porta 21100) → JC400 series
 //   serverFlagId=0 → gateway JT/T (porta 21122) → JC450/JC181 series
-$serverFlagId = isset($_POST['serverFlagId'])
-    ? intval($_POST['serverFlagId'])
+$serverFlagId = isset($input['serverFlagId'])
+    ? intval($input['serverFlagId'])
     : intval(getenv('IOTHUB_SERVER_FLAG_ID') ?: '0');
 
 // requestId único para rastreamento ponta-a-ponta (dashboard ↔ IoTHub ↔ device)

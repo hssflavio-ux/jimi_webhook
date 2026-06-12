@@ -98,14 +98,20 @@ echo "  Verificando Git..."
 GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
 echo "  Remote: $GIT_REMOTE"
 
-# Se o remote for HTTPS, converte automaticamente para SSH
+# Se o remote for HTTPS, testa SSH e converte se disponível
 if [[ "$GIT_REMOTE" == https://github.com/* ]]; then
-    echo "  ℹ Remote HTTPS detectado — convertendo para SSH..."
+    echo "  ℹ Remote HTTPS detectado — testando SSH..."
     SSH_REMOTE=$(echo "$GIT_REMOTE" | sed 's|https://github.com/|git@github.com:|')
+    SSH_REMOTE="${SSH_REMOTE%/}"
     if [[ "$SSH_REMOTE" != *.git ]]; then SSH_REMOTE="${SSH_REMOTE}.git"; fi
-    git remote set-url origin "$SSH_REMOTE"
-    echo "  ✓ Remote alterado para: $SSH_REMOTE"
-    GIT_REMOTE="$SSH_REMOTE"
+
+    if git ls-remote "$SSH_REMOTE" HEAD --quiet 2>/dev/null; then
+        git remote set-url origin "$SSH_REMOTE"
+        echo "  ✓ Remote alterado para: $SSH_REMOTE"
+        GIT_REMOTE="$SSH_REMOTE"
+    else
+        echo "  ⚠ SSH indisponível — mantendo HTTPS"
+    fi
 fi
 
 if git fetch origin --quiet 2>/dev/null; then

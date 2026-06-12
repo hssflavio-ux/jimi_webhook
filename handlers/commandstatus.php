@@ -37,8 +37,10 @@ if ($sentToken !== $validToken) {
 }
 
 // ── Parâmetros ────────────────────────────────────────────────────────────────
-$imei  = trim($_GET['imei']  ?? '');
-$limit = min(max(intval($_GET['limit'] ?? 30), 1), 100);
+$imei       = trim($_GET['imei']       ?? '');
+$commandId  = intval($_GET['command_id'] ?? 0);
+$customerId = intval($_GET['customer_id'] ?? 0);
+$limit      = min(max(intval($_GET['limit'] ?? 30), 1), 100);
 
 // ── Funções auxiliares ────────────────────────────────────────────────────────
 $tzUTC = new DateTimeZone('UTC');
@@ -59,7 +61,23 @@ try {
     $db = Database::getInstance()->getConnection();
 
     // ── Histórico de comandos ─────────────────────────────────────────────────
-    $whereSql = $imei ? 'WHERE imei = :imei' : '';
+    $conditions = [];
+    $params = [];
+
+    if ($commandId > 0) {
+        $conditions[] = 'id = :command_id';
+        $params[':command_id'] = $commandId;
+    }
+    if ($imei) {
+        $conditions[] = 'imei = :imei';
+        $params[':imei'] = $imei;
+    }
+    if ($customerId > 0) {
+        $conditions[] = 'imei IN (SELECT imei FROM devices WHERE customer_id = :customer_id)';
+        $params[':customer_id'] = $customerId;
+    }
+
+    $whereSql = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
     $sql = "
         SELECT id, imei, command_content, command_type, status, operator,
                response_payload, created_at, updated_at
@@ -69,7 +87,7 @@ try {
         LIMIT :limit
     ";
     $stmt = $db->prepare($sql);
-    if ($imei) $stmt->bindValue(':imei', $imei, PDO::PARAM_STR);
+    foreach ($params as $key => $val) $stmt->bindValue($key, $val);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
     $stmt->execute();
 
