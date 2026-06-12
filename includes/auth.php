@@ -49,7 +49,7 @@ function require_login() {
 
 function require_admin() {
     require_login();
-    $user = get_current_user();
+    $user = get_jimi_user();
     if (isset($user['role']) && $user['role'] !== 'admin') {
         http_response_code(403);
         die('Acesso restrito ao administrador.');
@@ -66,7 +66,7 @@ function refresh_session() {
     } catch (Exception $e) {}
 }
 
-function get_current_user() {
+function get_jimi_user() {
     auth_init();
     if (empty($_SESSION['user_id'])) return null;
     try {
@@ -80,13 +80,13 @@ function get_current_user() {
     }
 }
 
-function get_current_customer_id() {
+function get_customer_id() {
     auth_init();
     return isset($_SESSION['customer_id']) ? $_SESSION['customer_id'] : null;
 }
 
-function get_current_customer() {
-    $cid = get_current_customer_id();
+function get_customer() {
+    $cid = get_customer_id();
     if (!$cid) return null;
     try {
         $db = Database::getInstance()->getConnection();

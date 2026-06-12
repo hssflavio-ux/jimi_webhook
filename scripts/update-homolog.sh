@@ -322,16 +322,34 @@ do_deploy() {
         DB_VERSION=$(mysql_query "SELECT COALESCE(version,'0') FROM ${DB_NAME}.system_info WHERE id=1 LIMIT 1" 2>/dev/null || echo "0")
         info "Versão do banco: $DB_VERSION"
 
-        if [ "$DB_VERSION" != "2.0.0" ] || [ "$FORCE" -eq 1 ]; then
+        if [ "$DB_VERSION" = "0" ]; then
             info "Aplicando migration_v2.0.0.sql..."
             if mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"${DB_PASS}" "$DB_NAME" < mysql/migration_v2.0.0.sql 2>/tmp/migrate_err.log; then
-                ok "Migração aplicada com sucesso"
+                ok "Migração v2.0.0 aplicada com sucesso"
             else
-                warn "Erro na migração:"
+                warn "Erro na migração v2.0.0:"
                 cat /tmp/migrate_err.log 2>/dev/null || true
             fi
         else
-            ok "Banco já está na versão $DB_VERSION — migração desnecessária"
+            ok "Banco já está na versão $DB_VERSION — migração v2.0.0 desnecessária"
+        fi
+
+        # v3.1.0 migration
+        if [ -f "mysql/migration_v3.1.0.sql" ]; then
+            DB_VERSION=$(mysql_query "SELECT COALESCE(version,'0') FROM ${DB_NAME}.system_info WHERE id=1 LIMIT 1" 2>/dev/null || echo "0")
+            info "Versão do banco: $DB_VERSION"
+
+            if [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ] || [ "$FORCE" -eq 1 ]; then
+                info "Aplicando migration_v3.1.0.sql..."
+                if mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"${DB_PASS}" "$DB_NAME" < mysql/migration_v3.1.0.sql 2>/tmp/migrate_err_v31.log; then
+                    ok "Migração v3.1.0 aplicada com sucesso"
+                else
+                    warn "Erro na migração v3.1.0:"
+                    cat /tmp/migrate_err_v31.log 2>/dev/null || true
+                fi
+            else
+                ok "Banco já está na versão $DB_VERSION — migração v3.1.0 desnecessária"
+            fi
         fi
     fi
 

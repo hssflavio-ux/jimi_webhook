@@ -229,17 +229,38 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
             "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
             2>/dev/null || echo "0")
 
-        if [ "$DB_VERSION" != "2.0.0" ] || [ "$FORCE" -eq 1 ]; then
+        if [ "$DB_VERSION" = "0" ]; then
             echo "  Aplicando migration_v2.0.0.sql (versão atual do banco: $DB_VERSION)..."
             if mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
                 -p"${DB_PASS}" "${DB_NAME:-jimi_tracker}" < mysql/migration_v2.0.0.sql 2>/tmp/migrate_err.log; then
-                echo "  ✓ Migração aplicada com sucesso"
+                echo "  ✓ Migração v2.0.0 aplicada com sucesso"
             else
-                echo "  ⚠ AVISO: Erro na migração. Veja /tmp/migrate_err.log"
+                echo "  ⚠ AVISO: Erro na migração v2.0.0. Veja /tmp/migrate_err.log"
                 cat /tmp/migrate_err.log 2>/dev/null || true
             fi
         else
-            echo "  ✓ Banco já está na versão $DB_VERSION — migração desnecessária"
+            echo "  ✓ Banco já está na versão $DB_VERSION — migração v2.0.0 desnecessária"
+        fi
+
+        # v3.1.0 migration
+        if [ -f "mysql/migration_v3.1.0.sql" ]; then
+            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                -p"${DB_PASS}" -N -e \
+                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+                2>/dev/null || echo "0")
+
+            if [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ] || [ "$FORCE" -eq 1 ]; then
+                echo "  Aplicando migration_v3.1.0.sql (versão atual do banco: $DB_VERSION)..."
+                if mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                    -p"${DB_PASS}" "${DB_NAME:-jimi_tracker}" < mysql/migration_v3.1.0.sql 2>/tmp/migrate_err_v31.log; then
+                    echo "  ✓ Migração v3.1.0 aplicada com sucesso"
+                else
+                    echo "  ⚠ AVISO: Erro na migração v3.1.0. Veja /tmp/migrate_err_v31.log"
+                    cat /tmp/migrate_err_v31.log 2>/dev/null || true
+                fi
+            else
+                echo "  ✓ Banco já está na versão $DB_VERSION — migração v3.1.0 desnecessária"
+            fi
         fi
     fi
 fi

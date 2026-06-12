@@ -9,7 +9,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
-$customer_id = get_current_customer_id();
+$customer_id = get_customer_id();
 $db = Database::getInstance()->getConnection();
 
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY protocol, model_name")->fetchAll(PDO::FETCH_ASSOC);

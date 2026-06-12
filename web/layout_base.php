@@ -8,8 +8,8 @@
  * Variáveis esperadas:
  *   $page_title      — Título da página (aparece no header)
  *   $current_route   — Rota ativa para highlight no menu
- *   $user            — Array do usuário atual (get_current_user())
- *   $customer        — Cliente ativo (get_current_customer())
+ *   $user            — Array do usuário atual (get_jimi_user())
+ *   $customer        — Cliente ativo (get_customer())
  *   $customers       — Lista de clientes disponíveis (get_available_customers())
  *   $body_class      — Classe CSS extra no body (ex: 'ativo-detalhe')
  *   $extra_head      — HTML extra no <head> (CSS/JS específicos da página)
@@ -21,8 +21,8 @@ require_once __DIR__ . '/../includes/auth.php';
 
 if (!isset($page_title))    $page_title    = 'Painel';
 if (!isset($current_route)) $current_route = 'dashboard';
-if (!isset($user))          $user          = get_current_user();
-if (!isset($customer))      $customer      = get_current_customer();
+if (!isset($user))          $user          = get_jimi_user();
+if (!isset($customer))      $customer      = get_customer();
 if (!isset($customers))     $customers     = get_available_customers($user['id'] ?? 0);
 
 $navLinks = [

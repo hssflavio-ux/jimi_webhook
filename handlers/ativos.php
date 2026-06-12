@@ -6,7 +6,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
-$customer_id = get_current_customer_id();
+$customer_id = get_customer_id();
 $tz_utc = new DateTimeZone('UTC');
 $tz_brt = new DateTimeZone('America/Sao_Paulo');
 
