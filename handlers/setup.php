@@ -54,7 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 if ($success) {
-    header("Refresh: 2; url=/login");
+    header('Location: /login');
+    exit;
 }
 ?>
 <!DOCTYPE html>

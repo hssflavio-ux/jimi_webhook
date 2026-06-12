@@ -20,14 +20,18 @@ define('SESSION_LIFETIME', 86400); // 24 horas
 function start_session() {
     if (session_status() === PHP_SESSION_ACTIVE) return;
     session_name(SESSION_COOKIE);
-    session_set_cookie_params([
-        'lifetime' => SESSION_LIFETIME,
-        'path'     => '/',
-        'domain'   => '',
-        'secure'   => false,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params([
+            'lifetime' => SESSION_LIFETIME,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => false,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        session_set_cookie_params(SESSION_LIFETIME, '/', '', false, true);
+    }
     session_start();
 }
 
