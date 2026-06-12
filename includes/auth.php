@@ -2,8 +2,8 @@
 /**
  * JIMI Webhook System — Módulo de Autenticação v3.1.0
  *
- * Gerencia sessões de usuário via cookie + tabela `sessions`.
- * Todas as páginas do dashboard devem chamar require_login().
+ * Autenticação via token em cookie + tabela `sessions` (MySQL).
+ * NÃO depende de session_start() / arquivos de sessão PHP.
  *
  * Uso:
  *   require_once __DIR__ . '/../includes/auth.php';
@@ -14,33 +14,42 @@
 
 require_once __DIR__ . '/../config/database.php';
 
-define('SESSION_COOKIE', 'jimi_session');
-define('SESSION_LIFETIME', 86400); // 24 horas
+define('AUTH_COOKIE', 'jimi_token');
+define('AUTH_LIFETIME', 86400); // 24 horas
 
-function start_session() {
-    if (session_status() === PHP_SESSION_ACTIVE) return;
-    session_name(SESSION_COOKIE);
-    if (PHP_VERSION_ID >= 70300) {
-        session_set_cookie_params([
-            'lifetime' => SESSION_LIFETIME,
-            'path'     => '/',
-            'domain'   => '',
-            'secure'   => false,
-            'httponly' => true,
-            'samesite' => 'Lax',
-        ]);
-    } else {
-        session_set_cookie_params(SESSION_LIFETIME, '/', '', false, true);
+/**
+ * Lê o cookie jimi_token e popula o contexto de autenticação
+ * a partir da tabela `sessions`. Não usa session_start().
+ */
+function auth_init() {
+    if (!empty($GLOBALS['_auth_initialized'])) return;
+
+    $token = $_COOKIE[AUTH_COOKIE] ?? '';
+    if ($token && strlen($token) === 64 && ctype_xdigit($token)) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT user_id, customer_id FROM sessions WHERE id = ? AND expires_at > NOW()");
+        $stmt->execute([$token]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            $_SESSION['user_id']     = (int)$row['user_id'];
+            $_SESSION['customer_id'] = $row['customer_id'] ? (int)$row['customer_id'] : null;
+        }
     }
-    session_start();
+
+    if (empty($_SESSION['user_id'])) {
+        $_SESSION['user_id']     = null;
+        $_SESSION['customer_id'] = null;
+    }
+
+    $GLOBALS['_auth_initialized'] = true;
 }
 
 function require_login() {
-    start_session();
+    auth_init();
     if (empty($_SESSION['user_id'])) {
-        $redirect = '/login';
         $current = $_SERVER['REQUEST_URI'];
-        if ($current !== '/login' && $current !== '/setup') {
+        $redirect = '/login';
+        if ($current !== '/login' && $current !== '/setup' && $current !== '/') {
             $redirect .= '?redirect=' . urlencode($current);
         }
         header('Location: ' . $redirect);
@@ -52,20 +61,22 @@ function require_login() {
 function require_admin() {
     require_login();
     $user = get_current_user();
-    if ($user['role'] !== 'admin') {
+    if (($user['role'] ?? '') !== 'admin') {
         http_response_code(403);
         die('Acesso restrito ao administrador.');
     }
 }
 
 function refresh_session() {
-    if (empty($_SESSION['user_id'])) return;
+    $token = $_COOKIE[AUTH_COOKIE] ?? '';
+    if (!$token) return;
     $db = Database::getInstance()->getConnection();
-    $stmt = $db->prepare("UPDATE sessions SET expires_at = DATE_ADD(NOW(), INTERVAL 24 HOUR) WHERE id = ? AND user_id = ?");
-    $stmt->execute([session_id(), $_SESSION['user_id']]);
+    $stmt = $db->prepare("UPDATE sessions SET expires_at = DATE_ADD(NOW(), INTERVAL 24 HOUR) WHERE id = ?");
+    $stmt->execute([$token]);
 }
 
 function get_current_user() {
+    auth_init();
     if (empty($_SESSION['user_id'])) return null;
     $db = Database::getInstance()->getConnection();
     $stmt = $db->prepare("SELECT id, email, name, role, is_active FROM users WHERE id = ?");
@@ -74,6 +85,7 @@ function get_current_user() {
 }
 
 function get_current_customer_id() {
+    auth_init();
     return $_SESSION['customer_id'] ?? null;
 }
 
@@ -87,12 +99,14 @@ function get_current_customer() {
 }
 
 function set_customer_context($customer_id) {
-    start_session();
     $_SESSION['customer_id'] = (int)$customer_id;
+
+    $token = $GLOBALS['_auth_token'] ?? ($_COOKIE[AUTH_COOKIE] ?? '');
+    if (!$token) return;
 
     $db = Database::getInstance()->getConnection();
     $stmt = $db->prepare("UPDATE sessions SET customer_id = ? WHERE id = ?");
-    $stmt->execute([$customer_id, session_id()]);
+    $stmt->execute([$customer_id, $token]);
 
     $stmt = $db->prepare("SELECT role FROM customer_users WHERE customer_id = ? AND user_id = ?");
     $stmt->execute([$customer_id, $_SESSION['user_id']]);
@@ -117,7 +131,7 @@ function get_available_customers($user_id) {
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) {
             $rows = [[
-                'id' => $row['id'],
+                'id'   => $row['id'],
                 'name' => $row['name'],
                 'role' => 'viewer'
             ]];
@@ -135,14 +149,26 @@ function login_user($email, $password) {
     if (!$user || !$user['is_active']) return ['success' => false, 'error' => 'Usuário não encontrado ou inativo.'];
     if (!password_verify($password, $user['password_hash'])) return ['success' => false, 'error' => 'Senha incorreta.'];
 
-    start_session();
-    session_regenerate_id(true);
+    $token = bin2hex(random_bytes(32));
+    $GLOBALS['_auth_token'] = $token;
+
+    if (PHP_VERSION_ID >= 70300) {
+        setcookie(AUTH_COOKIE, $token, [
+            'expires'  => time() + AUTH_LIFETIME,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => false,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        setcookie(AUTH_COOKIE, $token, time() + AUTH_LIFETIME, '/', '', false, true);
+    }
 
     $_SESSION['user_id'] = (int)$user['id'];
 
-    $sid = session_id();
     $stmt = $db->prepare("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL 24 HOUR))");
-    $stmt->execute([$sid, $user['id']]);
+    $stmt->execute([$token, $user['id']]);
 
     $stmt = $db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
     $stmt->execute([$user['id']]);
@@ -156,10 +182,23 @@ function login_user($email, $password) {
 }
 
 function logout_user() {
-    start_session();
-    $db = Database::getInstance()->getConnection();
-    $stmt = $db->prepare("DELETE FROM sessions WHERE id = ?");
-    $stmt->execute([session_id()]);
-    session_destroy();
-    setcookie(SESSION_COOKIE, '', time() - 3600, '/');
+    $token = $_COOKIE[AUTH_COOKIE] ?? '';
+    if ($token) {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("DELETE FROM sessions WHERE id = ?");
+        $stmt->execute([$token]);
+    }
+    if (PHP_VERSION_ID >= 70300) {
+        setcookie(AUTH_COOKIE, '', [
+            'expires'  => time() - 3600,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => false,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        setcookie(AUTH_COOKIE, '', time() - 3600, '/', '', false, true);
+    }
+    $_SESSION = [];
 }
