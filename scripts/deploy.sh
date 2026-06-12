@@ -249,7 +249,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
                 2>/dev/null || echo "0")
 
-            if [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ] || [ "$FORCE" -eq 1 ]; then
+            if [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
                 echo "  Aplicando migration_v3.1.0.sql (versão atual do banco: $DB_VERSION)..."
                 if mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
                     -p"${DB_PASS}" "${DB_NAME:-jimi_tracker}" < mysql/migration_v3.1.0.sql 2>/tmp/migrate_err_v31.log; then

@@ -106,17 +106,43 @@ INSERT IGNORE INTO `device_models` (`model_name`, `protocol`, `camera_count`, `d
 ('JC182',   'JTT',  1, 'Câmera compacta JT/T 1 canal avançada (protocolo JT/T 808)');
 
 -- ------------------------------------------------------------
--- 6. Alterar tabela: devices (novas colunas para cadastro)
+-- 6. Alterar tabela: devices (novas colunas — idempotente)
 -- ------------------------------------------------------------
-ALTER TABLE `devices`
-    ADD COLUMN `customer_id` bigint unsigned DEFAULT NULL COMMENT 'Cliente proprietário do dispositivo' AFTER `imei`,
-    ADD COLUMN `device_model_id` bigint unsigned DEFAULT NULL COMMENT 'FK para device_models' AFTER `device_model`,
-    ADD COLUMN `camera_count` int DEFAULT 1 COMMENT 'Quantidade de câmeras' AFTER `device_model_id`,
-    ADD COLUMN `created_by` bigint unsigned DEFAULT NULL COMMENT 'Usuário que cadastrou' AFTER `is_active`,
-    ADD INDEX `idx_dev_customer` (`customer_id`),
-    ADD INDEX `idx_dev_model` (`device_model_id`),
-    ADD CONSTRAINT `fk_dev_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE SET NULL,
-    ADD CONSTRAINT `fk_dev_model` FOREIGN KEY (`device_model_id`) REFERENCES `device_models`(`id`) ON DELETE SET NULL;
+DROP PROCEDURE IF EXISTS `add_column_if_not_exists`;
+DELIMITER //
+CREATE PROCEDURE `add_column_if_not_exists`(IN p_table VARCHAR(128), IN p_column VARCHAR(128), IN p_definition TEXT)
+BEGIN
+    DECLARE col_count INT;
+    SELECT COUNT(*) INTO col_count FROM information_schema.COLUMNS
+    WHERE table_schema = DATABASE() AND table_name = p_table AND column_name = p_column;
+    IF col_count = 0 THEN
+        SET @sql = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN `', p_column, '` ', p_definition);
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END//
+DELIMITER ;
+
+CALL add_column_if_not_exists('devices', 'customer_id', "bigint unsigned DEFAULT NULL COMMENT 'Cliente proprietário do dispositivo' AFTER `imei`");
+CALL add_column_if_not_exists('devices', 'device_model_id', "bigint unsigned DEFAULT NULL COMMENT 'FK para device_models' AFTER `device_model`");
+CALL add_column_if_not_exists('devices', 'camera_count', "int DEFAULT 1 COMMENT 'Quantidade de câmeras' AFTER `device_model_id`");
+CALL add_column_if_not_exists('devices', 'created_by', "bigint unsigned DEFAULT NULL COMMENT 'Usuário que cadastrou' AFTER `is_active`");
+
+-- Índices (idempotente via stored procedure existente)
+CALL create_index_if_not_exists('devices', 'idx_dev_customer', '(`customer_id`)');
+CALL create_index_if_not_exists('devices', 'idx_dev_model', '(`device_model_id`)');
+
+-- Foreign Keys (idempotente: drop + add)
+SET @fk_exists = (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE table_schema=DATABASE() AND table_name='devices' AND constraint_name='fk_dev_customer');
+SET @sql_fk1 = IF(@fk_exists = 0, 'ALTER TABLE `devices` ADD CONSTRAINT `fk_dev_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql_fk1; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @fk_exists = (SELECT COUNT(*) FROM information_schema.KEY_COLUMN_USAGE WHERE table_schema=DATABASE() AND table_name='devices' AND constraint_name='fk_dev_model');
+SET @sql_fk2 = IF(@fk_exists = 0, 'ALTER TABLE `devices` ADD CONSTRAINT `fk_dev_model` FOREIGN KEY (`device_model_id`) REFERENCES `device_models`(`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql_fk2; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+DROP PROCEDURE IF EXISTS `add_column_if_not_exists`;
 
 -- ------------------------------------------------------------
 -- 7. Migrar dispositivos existentes para cliente padrão
