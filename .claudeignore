@@ -1,0 +1,13 @@
+# Framework de agentes externos — centenas de arquivos sem relação com o código da aplicação
+.agents/
+
+# Estado local de ferramentas de IA
+.opencode/
+.claude/
+
+# Logs de runtime
+logs/
+
+# Dependências (caso apareçam futuramente)
+vendor/
+node_modules/

@@ -22,3 +22,7 @@ Thumbs.db
 # Backup files
 *.old
 *.bak
+
+# Ferramentas de IA locais (estado de sessão, planos, configurações)
+.opencode/
+.claude/

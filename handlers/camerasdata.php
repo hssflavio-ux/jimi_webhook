@@ -1,8 +1,8 @@
 <?php
 /**
  * JIMI IoT Hub - Handler de Dados das Câmeras
- * Endpoint: /camerasdata  (via .htaccess → handlers/camerasdata.php)
- * Versão: 2.0.0
+ * Endpoint: /camerasdata  (via .htaccess → handlers/router.php → camerasdata.php)
+ * Versão: 3.2.0
  *
  * Retorna dados de dispositivos, status da API e últimos alarmes em JSON
  * para atualização em segundo plano no painel sem recarregar a página.
@@ -15,6 +15,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -22,13 +23,22 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
+// ── Autorização: sessão de dashboard ativa (cookie jimi_token) OU token compartilhado ──
+auth_init();
+$hasSession = !empty($_SESSION['user_id']);
+
 $validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['_token'] ?? '');
-if ($sentToken !== $validToken) {
+$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['token'] ?? ($_GET['_token'] ?? ''));
+$hasToken   = ($sentToken !== '' && $sentToken === $validToken);
+
+if (!$hasSession && !$hasToken) {
     http_response_code(401);
     echo json_encode(['code' => 401, 'msg' => 'Unauthorized']);
     exit;
 }
+
+// Multi-tenant: só filtra por cliente quando a chamada vem de uma sessão de dashboard logada
+$customerId = $hasSession ? get_customer_id() : null;
 
 // ── Helpers de timezone (MySQL retorna UTC via conexão) ───────────────────────
 $tz_utc = new DateTimeZone('UTC');
@@ -70,14 +80,22 @@ try {
         }
     }
 
-    // ── 2. Dispositivos ───────────────────────────────────────────────────────
-    $stmt = $db->query("
+    // ── 2. Dispositivos (filtrado por customer_id quando há sessão ativa) ─────
+    $sql = "
         SELECT d.imei, d.device_name, d.last_communication,
-               s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status
+               s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
         FROM devices d
         LEFT JOIN device_statistics s ON d.imei = s.imei
-        ORDER BY d.last_communication DESC
-    ");
+    ";
+    $queryParams = [];
+    if ($customerId) {
+        $sql .= " WHERE d.customer_id = ?";
+        $queryParams[] = $customerId;
+    }
+    $sql .= " ORDER BY d.last_communication DESC";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute($queryParams);
 
     $devices = [];
     while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -85,10 +103,15 @@ try {
         $devices[] = [
             'imei'       => $r['imei'],
             'name'       => $r['device_name'] ?? 'Sem Nome',
+            'lat'        => $hasGps ? (float)$r['last_latitude'] : null,
+            'lng'        => $hasGps ? (float)$r['last_longitude'] : null,
+            'speed'      => (int)round($r['last_speed'] ?? 0),
+            'acc'        => (int)($r['last_acc_status'] ?? 0),
+            'is_online'  => (bool)($r['is_online'] ?? 0),
+            'last'       => fmtBrt($r['last_communication'], $tz_utc, $tz_brt),
             'last_comm'  => fmtBrt($r['last_communication'], $tz_utc, $tz_brt),
             'ign_status' => ($r['last_acc_status'] == 1) ? 'Ligada' : 'Desligada',
             'ign_class'  => ($r['last_acc_status'] == 1) ? 'success' : 'secondary',
-            'speed'      => (int)round($r['last_speed'] ?? 0),
             'has_gps'    => $hasGps,
             'map_url'    => $hasGps
                 ? "https://www.google.com/maps?q={$r['last_latitude']},{$r['last_longitude']}"

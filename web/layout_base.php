@@ -36,6 +36,7 @@ $navLinks = [
 ];
 if (($user['role'] ?? '') === 'admin') {
     $navLinks[] = ['route' => 'clientes', 'label' => 'Clientes', 'icon' => 'people', 'href' => '/clientes'];
+    $navLinks[] = ['route' => 'usuarios', 'label' => 'Usuários', 'icon' => 'user',   'href' => '/usuarios'];
 }
 
 function nav_icon($name) {
@@ -48,6 +49,7 @@ function nav_icon($name) {
         'terminal' => '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
         'gear'     => '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>',
         'people'  => '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
+        'user'    => '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
         'logout'  => '<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
     ];
     return $icons[$name] ?? '';
@@ -615,11 +617,13 @@ tbody tr:hover { background: var(--canvas-soft); }
     </nav>
 
     <div class="sidebar-footer">
-        <div class="sidebar-footer-avatar"><?= strtoupper(substr($user['name'] ?? 'U', 0, 1)) ?></div>
-        <div class="sidebar-footer-info">
-            <div class="sidebar-footer-name"><?= htmlspecialchars($user['name'] ?? 'Usuário') ?></div>
-            <div class="sidebar-footer-role"><?= $user['role'] ?? '' ?></div>
-        </div>
+        <a href="/perfil" style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;text-decoration:none" title="Meu perfil">
+            <div class="sidebar-footer-avatar"><?= strtoupper(substr($user['name'] ?? 'U', 0, 1)) ?></div>
+            <div class="sidebar-footer-info">
+                <div class="sidebar-footer-name"><?= htmlspecialchars($user['name'] ?? 'Usuário') ?></div>
+                <div class="sidebar-footer-role"><?= $user['role'] ?? '' ?></div>
+            </div>
+        </a>
         <a href="/logout" class="sidebar-footer-logout" title="Sair">
             <svg viewBox="0 0 24 24"><?= nav_icon('logout') ?></svg>
         </a>

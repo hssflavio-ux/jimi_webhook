@@ -22,6 +22,8 @@
  *   /clientes                  → clientes.php
  *   /clientes/novo             → clientes_novo.php
  *   /clientes/{id}             → cliente_dashboard.php
+ *   /usuarios                  → usuarios.php
+ *   /perfil                    → perfil.php
  *   /camerasdata               → camerasdata.php (AJAX)
  *   /commandstatus             → commandstatus.php (AJAX)
  *   /sendcommand               → sendcommand.php (AJAX)
@@ -52,7 +54,7 @@ if (empty($segments)) {
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
                       'pushcmd','pushevent'];
-    $simpleRoutes = ['login','logout','setup','dashboard','live','relatorios','video','comandos','config','ping','customer_switch'];
+    $simpleRoutes = ['login','logout','setup','dashboard','live','relatorios','video','comandos','config','ping','customer_switch','usuarios','perfil'];
 
     if (in_array($first, $simpleRoutes)) {
         $handler = $first . '.php';

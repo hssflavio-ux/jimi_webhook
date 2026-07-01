@@ -64,7 +64,7 @@ include __DIR__ . '/../web/layout_base.php';
                 if ($dev['last_communication']) { $dtL = new DateTime($dev['last_communication'], $tz_utc); $isOnline = (new DateTime('now', $tz_utc))->getTimestamp() - $dtL->getTimestamp() < 600; }
                 $hasGps = !empty($dev['last_latitude']) && $dev['last_latitude'] != 0;
             ?>
-            <tr class="device-row<?= $hasGps ? ' has-gps' : '' ?>" data-index="<?= $i ?>" data-lat="<?= $dev['last_latitude'] ?? '' ?>" data-lng="<?= $dev['last_longitude'] ?? '' ?>" data-name="<?= htmlspecialchars($dev['device_name'] ?? $dev['imei']) ?>" style="cursor:<?= $hasGps ? 'pointer' : 'default' ?>">
+            <tr class="device-row<?= $hasGps ? ' has-gps' : '' ?>" data-imei="<?= htmlspecialchars($dev['imei']) ?>" data-lat="<?= $dev['last_latitude'] ?? '' ?>" data-lng="<?= $dev['last_longitude'] ?? '' ?>" data-name="<?= htmlspecialchars($dev['device_name'] ?? $dev['imei']) ?>" style="cursor:<?= $hasGps ? 'pointer' : 'default' ?>">
                 <td style="font-weight:500;color:var(--ink)"><?= htmlspecialchars($dev['device_name'] ?? 'Sem Nome') ?></td>
                 <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
                 <td><?= htmlspecialchars($dev['model_display']) ?></td>
@@ -89,37 +89,72 @@ var devices = <?= $devicesJson ?>;
 var map = L.map('dash-map').setView([-15.78, -47.93], 5);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(map);
 
-var markers = [];
-var allBounds = [];
+var markers = {}; // imei -> L.CircleMarker
 
-devices.forEach(function(d, i) {
+function upsertMarker(imei, lat, lng, speed, acc, name) {
+    if (markers[imei]) map.removeLayer(markers[imei]);
+    var color = (acc == 1) ? '#f54e00' : '#9fbbe0';
+    var marker = L.circleMarker([lat, lng], { radius:7, fillColor:color, color:'#fff', weight:2, fillOpacity:0.9 }).addTo(map);
+    marker.bindPopup('<strong>' + (name || imei) + '</strong><br>' + Math.round(speed || 0) + ' km/h<br><a href="/ativos/' + imei + '">Detalhes</a>');
+    markers[imei] = marker;
+    return marker;
+}
+
+var allBounds = [];
+devices.forEach(function(d) {
     if (!d.last_latitude || d.last_latitude == 0) return;
     var lat = parseFloat(d.last_latitude), lng = parseFloat(d.last_longitude);
-    var speed = Math.round(d.last_speed || 0);
-    var isMoving = d.last_acc_status == 1;
-    var color = isMoving ? '#f54e00' : '#9fbbe0';
-
-    var marker = L.circleMarker([lat, lng], { radius:7, fillColor:color, color:'#fff', weight:2, fillOpacity:0.9 }).addTo(map);
-    marker.bindPopup('<strong>' + (d.device_name || d.imei) + '</strong><br>' + speed + ' km/h<br><a href="/ativos/' + d.imei + '">Detalhes</a>');
-    marker._deviceIndex = i;
-    markers.push(marker);
+    upsertMarker(d.imei, lat, lng, d.last_speed, d.last_acc_status, d.device_name);
     allBounds.push([lat, lng]);
 });
 
 if (allBounds.length > 0) map.fitBounds(allBounds, { padding: [30, 30] });
 
-// Click handler
-document.querySelectorAll('.device-row.has-gps').forEach(function(row) {
+// Click handler (delegado por data-imei, funciona também para linhas que ganham GPS depois do refresh)
+document.querySelectorAll('.device-row').forEach(function(row) {
     row.addEventListener('click', function() {
-        var idx = parseInt(this.dataset.index);
+        if (!this.classList.contains('has-gps')) return;
+        var imei = this.dataset.imei;
         document.querySelectorAll('.device-row').forEach(function(r) { r.style.background = ''; });
         this.style.background = 'var(--canvas-soft)';
-        if (markers[idx]) {
-            map.setView(markers[idx].getLatLng(), 15);
-            markers[idx].openPopup();
+        if (markers[imei]) {
+            map.setView(markers[imei].getLatLng(), 15);
+            markers[imei].openPopup();
         }
     });
 });
+
+// Auto-refresh: atualiza tabela e marcadores a cada 30s sem recarregar a página
+function refreshDashboard() {
+    fetch('/camerasdata')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data.devices) return;
+            data.devices.forEach(function(d) {
+                var row = document.querySelector('.device-row[data-imei="' + d.imei + '"]');
+                if (row) {
+                    var statusHtml = d.is_online
+                        ? '<span class="badge badge-success">Online</span>'
+                        : '<span class="badge" style="background:var(--surface-strong);color:var(--muted)">Offline</span>';
+                    if (d.acc == 1) statusHtml += ' <span class="badge badge-warning">Ligado</span>';
+                    row.children[3].innerHTML = statusHtml;
+                    row.children[4].textContent = Math.round(d.speed || 0) + ' km/h';
+                    row.children[5].textContent = d.last_comm || d.last || '-';
+                }
+                if (d.lat && d.lng) {
+                    if (row) {
+                        row.classList.add('has-gps');
+                        row.style.cursor = 'pointer';
+                        row.dataset.lat = d.lat;
+                        row.dataset.lng = d.lng;
+                    }
+                    upsertMarker(d.imei, d.lat, d.lng, d.speed, d.acc, d.name);
+                }
+            });
+        }).catch(function(){});
+}
+
+setInterval(refreshDashboard, 30000);
 </script>
 
 <?php include __DIR__ . '/../web/layout_base_close.php'; ?>
