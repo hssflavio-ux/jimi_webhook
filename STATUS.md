@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v3.2.0 (Review)
 
-> Última atualização: 02/07/2026 — Bugs #16–#18: parse error em /comandos, `$extra_head` impresso dentro do `<style>` do layout, token ausente no polling de comandos
+> Última atualização: 02/07/2026 — Bugs #16–#19 corrigidos (parse error em /comandos, `$extra_head` dentro do `<style>`, token ausente no polling, JSON quotado nos presets JT/T). Feature: presets de texto proNo 128 disponíveis para câmeras JT/T (optgroup "Texto (proNo 128)" em /comandos)
 > Servidor: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 
 ---

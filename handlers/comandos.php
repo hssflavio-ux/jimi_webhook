@@ -250,13 +250,21 @@ function buildJimiControls(cameras) {
 
 function buildJttControls(cameras) {
     var html = '<div class="form-group"><label>Comando Predefinido</label><select id="jtt-preset" onchange="fillJttPreset()">';
+    html += '<optgroup label="JT/T (JSON)">';
     for (var key in jttPresets) {
         html += '<option value="' + key + '">' + jttPresets[key].label + '</option>';
     }
-    html += '</select></div>';
+    html += '</optgroup>';
+    // Câmeras JT/T também aceitam comandos de texto via proNo 128 (docs test.html §2.2.2)
+    html += '<optgroup label="Texto (proNo 128)">';
+    for (var txt in jimiPresets) {
+        if (txt === '') continue;
+        html += '<option value="txt:' + txt + '">' + jimiPresets[txt] + '</option>';
+    }
+    html += '</optgroup></select></div>';
     html += '<div class="form-group"><label>proNo</label>';
     html += '<input type="number" id="cmd-proNo-jtt" value="37121" onchange="document.getElementById(\'cmd-proNo\').value=this.value"></div>';
-    html += '<div class="form-group"><label>Parâmetros (JSON)</label>';
+    html += '<div class="form-group"><label id="jtt-content-label">Parâmetros (JSON)</label>';
     html += '<textarea id="cmd-content-jtt" name="content" rows="3" placeholder=\'{"channelId":1,"mediaType":0}\' style="font-family:\'JetBrains Mono\',monospace;font-size:13px" required></textarea></div>';
     document.getElementById('dynamic-controls').innerHTML = html;
     document.getElementById('cmd-proNo').value = '37121';
@@ -266,7 +274,17 @@ function fillJimiPreset() {
     document.getElementById('cmd-content').value = document.getElementById('jimi-preset').value;
 }
 function fillJttPreset() {
-    var p = jttPresets[document.getElementById('jtt-preset').value];
+    var val = document.getElementById('jtt-preset').value;
+    var label = document.getElementById('jtt-content-label');
+    if (val.indexOf('txt:') === 0) {
+        // Comando de texto (proNo 128): conteúdo plano, sem validação JSON no backend
+        document.getElementById('cmd-proNo-jtt').value = '128';
+        document.getElementById('cmd-proNo').value = '128';
+        document.getElementById('cmd-content-jtt').value = val.substring(4);
+        if (label) label.textContent = 'Conteúdo do Comando (texto)';
+        return;
+    }
+    var p = jttPresets[val];
     if (p) {
         document.getElementById('cmd-proNo-jtt').value = p.proNo;
         document.getElementById('cmd-proNo').value = p.proNo;
@@ -275,6 +293,7 @@ function fillJttPreset() {
         try { pretty = JSON.stringify(JSON.parse(p.content), null, 2); }
         catch (e) { pretty = p.content; }
         document.getElementById('cmd-content-jtt').value = pretty;
+        if (label) label.textContent = 'Parâmetros (JSON)';
     }
 }
 
