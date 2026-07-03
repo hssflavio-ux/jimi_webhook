@@ -131,11 +131,17 @@ include __DIR__ . '/../web/layout_base.php';
                         if (!empty($c['response_payload'])) {
                             $respDecoded = json_decode($c['response_payload'], true);
                             if (is_array($respDecoded)) {
-                                $respPreview = $respDecoded['resultContent']
-                                    ?? $respDecoded['content']
-                                    ?? $respDecoded['msg']
-                                    ?? $respDecoded['message']
-                                    ?? json_encode($respDecoded, JSON_UNESCAPED_UNICODE);
+                                if (isset($respDecoded['resultContent'])) {
+                                    $respPreview = $respDecoded['resultContent'];
+                                } elseif (isset($respDecoded['content'])) {
+                                    $respPreview = $respDecoded['content'];
+                                } elseif (isset($respDecoded['msg'])) {
+                                    $respPreview = $respDecoded['msg'];
+                                } elseif (isset($respDecoded['message'])) {
+                                    $respPreview = $respDecoded['message'];
+                                } else {
+                                    $respPreview = json_encode($respDecoded, JSON_UNESCAPED_UNICODE);
+                                }
                             } else {
                                 $respPreview = (string)$c['response_payload'];
                             }
@@ -146,7 +152,7 @@ include __DIR__ . '/../web/layout_base.php';
                         <td class="text-mono" style="font-size:10px"><?= htmlspecialchars($c['imei']) ?></td>
                         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"><?= htmlspecialchars(is_string($cmdPreview) ? $cmdPreview : '') ?></td>
                         <td><span class="badge <?= $statusBadge ?>"><?= $c['status'] ?></span></td>
-                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="<?= htmlspecialchars($respPreview) ?>"><?= htmlspecialchars(mb_substr($respPreview, 0, 60)) ?></td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="<?= htmlspecialchars($respPreview) ?>"><?= htmlspecialchars(substr($respPreview, 0, 60)) ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($commands)): ?>
