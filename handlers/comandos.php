@@ -59,7 +59,7 @@ $extra_head = '<style>
 .poll-spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .poll-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.poll-response { margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(0,0,0,.04); font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; color: var(--ink); }
+.poll-response { margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(0,0,0,.04); font-family: "JetBrains Mono", monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; color: var(--ink); }
 </style>';
 
 include __DIR__ . '/../web/layout_base.php';
