@@ -19,10 +19,10 @@ function fmt_brt_short($dt) { global $tz_utc, $tz_brt; if (!$dt) return '-'; $d 
 $db = Database::getInstance()->getConnection();
 
 // KPI
-$totalDevices  = $db->query("SELECT COUNT(*) FROM devices WHERE customer_id = $customer_id")->fetchColumn();
-$onlineDevices = $db->query("SELECT COUNT(*) FROM devices d JOIN device_statistics s ON d.imei=s.imei WHERE d.customer_id=$customer_id AND s.is_online=1")->fetchColumn();
-$alarmsToday   = $db->query("SELECT COUNT(*) FROM alarms a JOIN devices d ON a.imei=d.imei WHERE d.customer_id=$customer_id AND a.created_at>=DATE(NOW())")->fetchColumn();
-$cmdsToday     = $db->query("SELECT COUNT(*) FROM commands c JOIN devices d ON c.imei=d.imei WHERE d.customer_id=$customer_id AND c.created_at>=DATE(NOW())")->fetchColumn();
+$totalDevices  = $db->query("SELECT COUNT(*) FROM devices WHERE customer_id = $customer_id AND is_active = 1")->fetchColumn();
+$onlineDevices = $db->query("SELECT COUNT(*) FROM devices d JOIN device_statistics s ON d.imei=s.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND s.is_online=1")->fetchColumn();
+$alarmsToday   = $db->query("SELECT COUNT(*) FROM alarms a JOIN devices d ON a.imei=d.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND a.created_at>=DATE(NOW())")->fetchColumn();
+$cmdsToday     = $db->query("SELECT COUNT(*) FROM commands c JOIN devices d ON c.imei=d.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND c.created_at>=DATE(NOW())")->fetchColumn();
 
 // Devices
 $devices = $db->query("
@@ -32,7 +32,7 @@ $devices = $db->query("
     FROM devices d
     LEFT JOIN device_statistics s ON d.imei = s.imei
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = $customer_id
+    WHERE d.customer_id = $customer_id AND d.is_active = 1
     ORDER BY d.last_communication DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -71,7 +71,7 @@ include __DIR__ . '/../web/layout_base.php';
                 <td><?php if ($isOnline): ?><span class="badge badge-success">Online</span><?php else: ?><span class="badge" style="background:var(--surface-strong);color:var(--muted)">Offline</span><?php endif; ?><?php if ($dev['last_acc_status']==1): ?> <span class="badge badge-warning">Ligado</span><?php endif; ?></td>
                 <td><?= round($dev['last_speed'] ?? 0) ?> km/h</td>
                 <td><?= fmt_brt_short($dev['last_communication']) ?></td>
-                <td><a href="/ativos/<?= urlencode($dev['imei']) ?>" class="btn btn-outline btn-sm">Detalhes</a></td>
+                <td><a href="/ativos/<?= urlencode($dev['imei']) ?>" class="btn btn-outline btn-sm" onclick="event.stopPropagation()">Detalhes</a></td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($devices)): ?>
@@ -112,7 +112,9 @@ if (allBounds.length > 0) map.fitBounds(allBounds, { padding: [30, 30] });
 
 // Click handler (delegado por data-imei, funciona também para linhas que ganham GPS depois do refresh)
 document.querySelectorAll('.device-row').forEach(function(row) {
-    row.addEventListener('click', function() {
+    row.addEventListener('click', function(e) {
+        // Não interceptar cliques em links/botões dentro da row
+        if (e.target.closest('a, button')) return;
         if (!this.classList.contains('has-gps')) return;
         var imei = this.dataset.imei;
         document.querySelectorAll('.device-row').forEach(function(r) { r.style.background = ''; });

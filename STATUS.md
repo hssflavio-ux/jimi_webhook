@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v3.2.0 (Review)
 
-> Última atualização: 30/06/2026 — Revisão Geral (REVIEW_PLAN.md Fases 0-7)
+> Última atualização: 02/07/2026 — Correção de 3 bugs frontend (Detalhes, is_active, respostas de comandos)
 > Servidor: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 
 ---
@@ -126,6 +126,9 @@ Reconstrução completa do dashboard no estilo NavTrack, mantendo PHP puro (sem 
 | 9 | `set_customer_context()` não persistia | `$_COOKIE` não tem o token na mesma request | `$GLOBALS['_auth_token']` no `login_user()` | `auth.php` |
 | 10 | `_gen_token()` fallback quebrado | `bin2hex()` em string ASCII | `md5()` duplo como fallback | `auth.php` |
 | 11 | Edit de ativos não salvava | `f.action` retorna URL do form, não campo hidden | `f.querySelector('[name=action]').value` | `ativos.php` |
+| 12 | Botão "Detalhes" não navega para detalhe do ativo | Click handler da row `.device-row` interceptava cliques em links/botões internos (evento bubbling sem early return) | Adicionado `onclick="event.stopPropagation()"` no `<a>` + `e.target.closest('a, button')` return no handler da row | `dashboard.php` |
+| 13 | Dispositivos removidos continuam visíveis no painel/mapa/live | Queries de `dashboard.php`, `camerasdata.php`, `live.php`, `comandos.php` não filtravam `is_active=1`. Soft-delete (`is_active=0`) não era respeitado fora de `ativos.php` | Adicionado `AND d.is_active = 1` em todas as queries de dispositivos (KPIs, listagens, auto-refresh) + `WHERE d.is_active = 1` no `camerasdata.php` | `dashboard.php`, `camerasdata.php`, `live.php`, `comandos.php` |
+| 14 | Comandos não exibem resposta (nem do dispositivo nem erro do IoTHub) | Polling bar mostrava apenas status genérico ("Resposta recebida!" / "Falha") sem conteúdo da resposta. `sendCommand()` não exibia detalhes do erro IoTHub (código, mensagem, status HTTP). Tabela de histórico não tinha coluna Resposta | Polling bar agora exibe `cmd.response` do `commandstatus.php` em div dedicada. Erro de envio mostra `iothub_msg`, `iothub_code` e alerta de equipamento offline. Tabela de histórico com coluna "Resposta" que extrai preview do `response_payload` (mesma lógica do `commandstatus.php`) | `comandos.php` |
 
 ---
 

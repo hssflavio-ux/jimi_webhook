@@ -32,7 +32,7 @@ $devices = $db->query("
            COALESCE(dm.protocol, 'JIMI') AS protocol, COALESCE(dm.camera_count, 1) AS camera_count
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = $customer_id
+    WHERE d.customer_id = $customer_id AND d.is_active = 1
     ORDER BY d.device_name
 ")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -50,14 +50,16 @@ $page_title    = 'Comandos';
 $current_route = 'comandos';
 
 $extra_head = '<style>
-.poll-bar { display: none; padding: 10px 14px; border-radius: var(--radius-sm); margin: 12px 0; font-size: 13px; align-items: center; gap: 10px; }
-.poll-bar.active { display: flex; background: #eef4fa; border: 1px solid #d0dff0; color: #5a7fa8; }
+.poll-bar { display: none; padding: 10px 14px; border-radius: var(--radius-sm); margin: 12px 0; font-size: 13px; gap: 10px; flex-direction: column; }
+.poll-bar.active { display: flex; border: 1px solid #d0dff0; color: #5a7fa8; }
 .poll-bar.success { display: flex; background: #f0faf5; border: 1px solid #d4f0e2; color: var(--success); }
 .poll-bar.failed { display: flex; background: #fef2f5; border: 1px solid #fce4eb; color: var(--error); }
 .poll-bar.timeout { display: flex; background: #fdf3e8; border: 1px solid #fce8d0; color: var(--warning); }
+.poll-bar-header { display: flex; align-items: center; gap: 10px; }
 .poll-spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; flex-shrink: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .poll-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.poll-response { margin-top: 8px; padding: 8px 10px; border-radius: var(--radius-sm); background: rgba(0,0,0,.04); font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; color: var(--ink); }
 </style>';
 
 include __DIR__ . '/../web/layout_base.php';
@@ -96,8 +98,11 @@ include __DIR__ . '/../web/layout_base.php';
 
             <!-- Polling Bar -->
             <div id="poll-bar" class="poll-bar">
-                <div class="poll-spinner" id="poll-spinner"></div>
-                <span id="poll-text">Comando enviado. Aguardando resposta...</span>
+                <div class="poll-bar-header">
+                    <div class="poll-spinner" id="poll-spinner"></div>
+                    <span id="poll-text">Comando enviado. Aguardando resposta...</span>
+                </div>
+                <div id="poll-response" class="poll-response" style="display:none"></div>
             </div>
 
             <button type="submit" id="cmd-submit" class="btn btn-primary" disabled>Selecione um dispositivo</button>
@@ -112,7 +117,7 @@ include __DIR__ . '/../web/layout_base.php';
         </div>
         <div style="max-height:500px;overflow-y:auto" id="cmd-history">
             <table style="font-size:12px;width:100%">
-                <thead><tr><th>Data</th><th>IMEI</th><th>Comando</th><th>Status</th></tr></thead>
+                <thead><tr><th>Data</th><th>IMEI</th><th>Comando</th><th>Status</th><th>Resposta</th></tr></thead>
                 <tbody>
                     <?php foreach ($commands as $c):
                         $statusBadge = $c['status'] === 'executed' ? 'badge-success' :
@@ -121,16 +126,31 @@ include __DIR__ . '/../web/layout_base.php';
                         $cmdPreview = json_decode($c['command_content'], true);
                         if (is_array($cmdPreview)) $cmdPreview = json_encode($cmdPreview, JSON_UNESCAPED_UNICODE);
                         else $cmdPreview = $c['command_content'];
+                        // Extrair preview da resposta
+                        $respPreview = '-';
+                        if (!empty($c['response_payload'])) {
+                            $respDecoded = json_decode($c['response_payload'], true);
+                            if (is_array($respDecoded)) {
+                                $respPreview = $respDecoded['resultContent']
+                                    ?? $respDecoded['content']
+                                    ?? $respDecoded['msg']
+                                    ?? $respDecoded['message']
+                                    ?? json_encode($respDecoded, JSON_UNESCAPED_UNICODE);
+                            } else {
+                                $respPreview = (string)$c['response_payload'];
+                            }
+                        }
                     ?>
                     <tr style="cursor:pointer" onclick="showDetail(<?= $c['id'] ?>)">
                         <td style="white-space:nowrap"><?= fmt_brt_cmd($c['created_at']) ?></td>
                         <td class="text-mono" style="font-size:10px"><?= htmlspecialchars($c['imei']) ?></td>
                         <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px"><?= htmlspecialchars(is_string($cmdPreview) ? $cmdPreview : '') ?></td>
                         <td><span class="badge <?= $statusBadge ?>"><?= $c['status'] ?></span></td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="<?= htmlspecialchars($respPreview) ?>"><?= htmlspecialchars(mb_substr($respPreview, 0, 60)) ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($commands)): ?>
-                    <tr><td colspan="4"><div class="empty-state"><p>Nenhum comando enviado.</p></div></td></tr>
+                    <tr><td colspan="5"><div class="empty-state"><p>Nenhum comando enviado.</p></div></td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -274,11 +294,24 @@ function sendCommand(e) {
             document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--success)">Comando enviado! ID #' + data.command_id + '</span>';
             startPolling(data.command_id);
         } else {
-            document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--error)">Erro: ' + (data.iothub_msg || data.msg) + '</span>';
+            // Mostrar mensagem detalhada do IoTHub ou erro genérico
+            var errMsg = data.iothub_msg || data.msg || 'Erro desconhecido';
+            var errDetail = '';
+            if (data.iothub_code !== undefined && data.iothub_code !== 0) {
+                errDetail = ' (código IoTHub: ' + data.iothub_code + ')';
+            }
+            if (data.http_status === 0 || data.http_status === undefined) {
+                errDetail += ' — IoTHub inacessível ou equipamento offline';
+            }
+            document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--error)">Erro: ' + errMsg + errDetail + '</span>';
+            // Se tiver command_id mesmo com erro, permitir ver no histórico
+            if (data.command_id) {
+                document.getElementById('cmd-feedback').innerHTML += '<br><span style="font-size:12px;color:var(--muted)">Comando registrado como #' + data.command_id + ' — status: falha</span>';
+            }
         }
     }).catch(function(err) {
         document.getElementById('cmd-submit').disabled = false;
-        document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--error)">Erro de rede</span>';
+        document.getElementById('cmd-feedback').innerHTML = '<span style="color:var(--error)">Erro de rede: não foi possível contactar o servidor</span>';
     });
 }
 
@@ -289,10 +322,20 @@ function startPolling(commandId) {
     var bar = document.getElementById('poll-bar');
     var text = document.getElementById('poll-text');
     var spinner = document.getElementById('poll-spinner');
+    var respDiv = document.getElementById('poll-response');
 
     bar.className = 'poll-bar active';
     spinner.innerHTML = '<div class="poll-spinner"></div>';
     text.textContent = 'Comando #' + commandId + ' enviado. Aguardando resposta do dispositivo...';
+    respDiv.style.display = 'none';
+    respDiv.textContent = '';
+
+    function showResponse(responseText) {
+        if (responseText && responseText !== '-' && responseText !== 'null') {
+            respDiv.textContent = responseText;
+            respDiv.style.display = 'block';
+        }
+    }
 
     function poll() {
         pollCount++;
@@ -312,15 +355,23 @@ function startPolling(commandId) {
             if (cmd.status === 'executed') {
                 bar.className = 'poll-bar success';
                 spinner.innerHTML = '<div class="poll-dot" style="background:var(--success)"></div>';
-                text.textContent = 'Resposta recebida! Comando #' + commandId + ' executado com sucesso.';
+                text.textContent = '✓ Resposta recebida! Comando #' + commandId + ' executado com sucesso.';
+                showResponse(cmd.response);
             } else if (cmd.status === 'failed') {
                 bar.className = 'poll-bar failed';
                 spinner.innerHTML = '<div class="poll-dot" style="background:var(--error)"></div>';
-                text.textContent = 'Falha no comando #' + commandId + '.';
+                text.textContent = '✗ Falha no comando #' + commandId + '.';
+                // Mostrar a resposta de erro (pode conter detalhes do IoTHub ou do dispositivo)
+                var failResp = cmd.response;
+                if (!failResp || failResp === '-') {
+                    // Tentar montar mensagem a partir do status
+                    failResp = 'O comando foi rejeitado pelo IoTHub ou o equipamento está offline.';
+                }
+                showResponse(failResp);
             } else if (pollPhase === 2) {
                 bar.className = 'poll-bar timeout';
                 spinner.innerHTML = '<div class="poll-dot" style="background:var(--warning)"></div>';
-                text.textContent = 'Timeout (5 min). Comando #' + commandId + ' em fila offline. Resposta chegará quando o dispositivo conectar.';
+                text.textContent = '⏱ Timeout (5 min). Comando #' + commandId + ' em fila offline. Resposta chegará quando o dispositivo conectar.';
             } else {
                 // continue polling
                 text.textContent = 'Aguardando resposta #' + commandId + '... (' + pollCount + ' tentativa' + (pollCount>1?'s':'') + ')';
@@ -338,6 +389,8 @@ function clearPolling() {
     if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
     document.getElementById('poll-bar').className = 'poll-bar';
     document.getElementById('poll-text').textContent = '';
+    document.getElementById('poll-response').style.display = 'none';
+    document.getElementById('poll-response').textContent = '';
 }
 
 function showDetail(cmdId) {

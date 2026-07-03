@@ -17,7 +17,7 @@ $devices = $db->query("
            s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status
     FROM devices d
     LEFT JOIN device_statistics s ON d.imei = s.imei
-    WHERE d.customer_id = $customer_id
+    WHERE d.customer_id = $customer_id AND d.is_active = 1
     ORDER BY d.last_communication DESC
 ")->fetchAll(PDO::FETCH_ASSOC);
 

@@ -80,16 +80,17 @@ try {
         }
     }
 
-    // ── 2. Dispositivos (filtrado por customer_id quando há sessão ativa) ─────
+    // ── 2. Dispositivos (filtrado por customer_id quando há sessão ativa, apenas ativos) ─────
     $sql = "
         SELECT d.imei, d.device_name, d.last_communication,
                s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
         FROM devices d
         LEFT JOIN device_statistics s ON d.imei = s.imei
+        WHERE d.is_active = 1
     ";
     $queryParams = [];
     if ($customerId) {
-        $sql .= " WHERE d.customer_id = ?";
+        $sql .= " AND d.customer_id = ?";
         $queryParams[] = $customerId;
     }
     $sql .= " ORDER BY d.last_communication DESC";
