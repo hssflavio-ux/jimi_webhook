@@ -99,7 +99,7 @@ include __DIR__ . '/../web/layout_base.php';
             <!-- Polling Bar -->
             <div id="poll-bar" class="poll-bar">
                 <div class="poll-bar-header">
-                    <div class="poll-spinner" id="poll-spinner"></div>
+                    <div id="poll-spinner"></div>
                     <span id="poll-text">Comando enviado. Aguardando resposta...</span>
                 </div>
                 <div id="poll-response" class="poll-response" style="display:none"></div>
@@ -345,7 +345,8 @@ function startPolling(commandId) {
 
     function poll() {
         pollCount++;
-        fetch('/commandstatus?command_id=' + commandId).then(function(r) { return r.json(); })
+        fetch('/commandstatus?command_id=' + commandId, { headers: { 'X-Dashboard-Token': dashToken } })
+        .then(function(r) { return r.json(); })
         .then(function(data) {
             var cmd = null;
             if (data.commands) {
@@ -354,9 +355,17 @@ function startPolling(commandId) {
                 }
             }
             if (!cmd) {
-            if (pollPhase < 2) { pollTimer = setTimeout(poll, pollPhase === 0 ? 3000 : 10000); if (pollPhase === 0 && pollCount >= 10) pollPhase = 1; if (pollPhase === 1 && pollCount >= 10 + 30) pollPhase = 2; }
-            return;
-        }
+                if (pollPhase === 2) {
+                    bar.className = 'poll-bar timeout';
+                    spinner.innerHTML = '<div class="poll-dot" style="background:var(--warning)"></div>';
+                    text.textContent = '⏱ Timeout (5 min). Comando #' + commandId + ' em fila offline. Resposta chegará quando o dispositivo conectar.';
+                } else {
+                    pollTimer = setTimeout(poll, pollPhase === 0 ? 3000 : 10000);
+                    if (pollPhase === 0 && pollCount >= 10) pollPhase = 1;
+                    else if (pollPhase === 1 && pollCount >= 10 + 30) pollPhase = 2;
+                }
+                return;
+            }
 
             if (cmd.status === 'executed') {
                 bar.className = 'poll-bar success';
@@ -384,8 +393,12 @@ function startPolling(commandId) {
                 pollTimer = setTimeout(poll, pollPhase === 0 ? 3000 : 10000);
                 // phase transition
                 if (pollPhase === 0 && pollCount >= 10) pollPhase = 1; // after 30s switch to 10s
-                if (pollPhase === 1 && pollCount >= 10 + 30) pollPhase = 2; // after 5min, timeout
+                else if (pollPhase === 1 && pollCount >= 10 + 30) pollPhase = 2; // after 5min, timeout
             }
+        })
+        .catch(function() {
+            // Falha de rede transitória: re-agenda sem matar o polling
+            if (pollPhase < 2) pollTimer = setTimeout(poll, 10000);
         });
     }
     pollTimer = setTimeout(poll, 3000);
@@ -400,7 +413,8 @@ function clearPolling() {
 }
 
 function showDetail(cmdId) {
-    fetch('/commandstatus?command_id=' + cmdId).then(function(r) { return r.json(); })
+    fetch('/commandstatus?command_id=' + cmdId, { headers: { 'X-Dashboard-Token': dashToken } })
+    .then(function(r) { return r.json(); })
     .then(function(data) {
         var cmds = data.commands || [];
         if (!cmds.length) return;

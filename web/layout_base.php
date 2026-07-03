@@ -583,8 +583,8 @@ tbody tr:hover { background: var(--canvas-soft); }
 .date-filter input[type="date"]:focus { outline: none; border-color: var(--primary); }
 .date-filter-label { font-size: 12px; color: var(--muted); font-weight: 500; }
 
-<?= $extra_head ?? '' ?>
 </style>
+<?= $extra_head ?? '' ?>
 </head>
 <body class="<?= $body_class ?? '' ?>">
 <!-- Sidebar -->
