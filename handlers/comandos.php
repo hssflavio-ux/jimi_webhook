@@ -270,7 +270,11 @@ function fillJttPreset() {
     if (p) {
         document.getElementById('cmd-proNo-jtt').value = p.proNo;
         document.getElementById('cmd-proNo').value = p.proNo;
-        document.getElementById('cmd-content-jtt').value = JSON.stringify(p.content, null, 2);
+        // p.content já é uma string JSON — apenas formata (stringify direto geraria string quotada: "{}")
+        var pretty;
+        try { pretty = JSON.stringify(JSON.parse(p.content), null, 2); }
+        catch (e) { pretty = p.content; }
+        document.getElementById('cmd-content-jtt').value = pretty;
     }
 }
 

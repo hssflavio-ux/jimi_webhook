@@ -117,7 +117,13 @@ if ($proNo !== 128) {
         exit;
     }
     // Serialização canônica: sem espaços, sem escapes desnecessários
-    $cmdContent = json_encode($decodedJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    $canonical = json_encode($decodedJson, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    // json_decode(assoc) converte {} em array vazio e o re-encode viraria "[]";
+    // preserva o objeto vazio quando o original era um objeto JSON
+    if ($canonical === '[]' && $cmdContent[0] === '{') {
+        $canonical = '{}';
+    }
+    $cmdContent = $canonical;
 }
 
 // ── Configuração do endpoint de comando do IoTHub ─────────────────────────────
