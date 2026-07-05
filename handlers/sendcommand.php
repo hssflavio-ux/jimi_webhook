@@ -43,6 +43,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // ── Apenas POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -51,16 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-// ── Validação de token interno do Dashboard ───────────────────────────────────
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_POST['_token'] ?? '');
-if ($sentToken !== $validToken) {
-    http_response_code(401);
-    Logger::warning('sendcommand: token inválido', [
-        'ip'  => $_SERVER['REMOTE_ADDR'] ?? '',
-        'uri' => $_SERVER['REQUEST_URI'] ?? '',
-    ]);
-    echo json_encode(['code' => 401, 'msg' => 'Unauthorized']);
+// ── Autorização: sessão de dashboard obrigatória (R02 — antes bastava o token
+// compartilhado WEBHOOK_TOKEN, que permitia enviar comandos para qualquer IMEI
+// de qualquer cliente; o header X-Dashboard-Token legado é ignorado) ──────────
+require_ajax_session();
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
 
@@ -93,14 +92,40 @@ if (!preg_match('/^\d{15,17}$/', $imei)) {
     exit;
 }
 
-// Validação de proNo — deve ser inteiro positivo conhecido
+// Multi-tenant: o IMEI deve pertencer ao cliente da sessão (R02)
+try {
+    $db  = Database::getInstance()->getConnection();
+    $own = $db->prepare("SELECT 1 FROM devices WHERE imei = :imei AND customer_id = :cid AND is_active = 1");
+    $own->execute([':imei' => $imei, ':cid' => $customerId]);
+    if (!$own->fetchColumn()) {
+        http_response_code(403);
+        Logger::warning('sendcommand: IMEI não pertence ao cliente da sessão', [
+            'imei'        => $imei,
+            'customer_id' => $customerId,
+        ]);
+        echo json_encode(['code' => 403, 'msg' => 'Dispositivo não pertence ao cliente atual']);
+        exit;
+    }
+} catch (Exception $e) {
+    Logger::error('sendcommand: falha ao validar posse do IMEI', ['error' => $e->getMessage()]);
+    http_response_code(500);
+    echo json_encode(['code' => 500, 'msg' => 'Erro interno']);
+    exit;
+}
+
+// Validação de proNo — deve ser inteiro positivo conhecido (R03: whitelist bloqueante)
 $proNosConhecidos = [128, 37121, 37377, 37381, 37382, 33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
 if (!in_array($proNo, $proNosConhecidos, true)) {
-    // Não bloqueia — apenas loga aviso para proNos desconhecidos
-    Logger::warning('sendcommand: proNo desconhecido, prosseguindo', [
+    http_response_code(400);
+    Logger::warning('sendcommand: proNo desconhecido bloqueado', [
         'imei'  => $imei,
         'proNo' => $proNo,
     ]);
+    echo json_encode([
+        'code' => 400,
+        'msg'  => 'proNo desconhecido: ' . $proNo . '. Permitidos: ' . implode(', ', $proNosConhecidos),
+    ]);
+    exit;
 }
 
 // Para comandos JT/T (proNo ≠ 128): cmdContent DEVE ser JSON válido

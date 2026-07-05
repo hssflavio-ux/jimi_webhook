@@ -12,6 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -19,11 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['_token'] ?? '');
-if ($sentToken !== $validToken) {
-    http_response_code(401);
-    echo json_encode(['code' => 401, 'msg' => 'Não autorizado']);
+// ── Autorização: sessão de dashboard obrigatória (R02 — antes bastava o token
+// compartilhado, que expunha o histórico GPS de qualquer IMEI de qualquer cliente)
+require_ajax_session();
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
 
@@ -39,6 +42,15 @@ if (!$imei) {
 
 try {
     $db = Database::getInstance()->getConnection();
+
+    // Multi-tenant: o IMEI deve pertencer ao cliente da sessão
+    $own = $db->prepare("SELECT 1 FROM devices WHERE imei = ? AND customer_id = ? AND is_active = 1");
+    $own->execute([$imei, $customerId]);
+    if (!$own->fetchColumn()) {
+        http_response_code(404);
+        echo json_encode(['code' => 404, 'msg' => 'Dispositivo não encontrado']);
+        exit;
+    }
 
     $stmt = $db->prepare("
         SELECT imei, gps_time, latitude, longitude, speed, direction,

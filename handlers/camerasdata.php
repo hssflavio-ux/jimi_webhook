@@ -23,22 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// ── Autorização: sessão de dashboard ativa (cookie jimi_token) OU token compartilhado ──
-auth_init();
-$hasSession = !empty($_SESSION['user_id']);
+// ── Autorização: sessão de dashboard ativa (cookie jimi_token) obrigatória ───
+// R01: o token compartilhado (WEBHOOK_TOKEN) não dá mais acesso sozinho — sem o
+// escopo de cliente da sessão ele expunha dispositivos de todos os clientes.
+// Os chamadores (dashboard/live) rodam no browser logado, então o cookie já
+// acompanha o fetch; o parâmetro ?token= legado é simplesmente ignorado.
+require_ajax_session();
 
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['token'] ?? ($_GET['_token'] ?? ''));
-$hasToken   = ($sentToken !== '' && $sentToken === $validToken);
-
-if (!$hasSession && !$hasToken) {
-    http_response_code(401);
-    echo json_encode(['code' => 401, 'msg' => 'Unauthorized']);
+// Multi-tenant: escopo sempre limitado ao cliente da sessão
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
-
-// Multi-tenant: só filtra por cliente quando a chamada vem de uma sessão de dashboard logada
-$customerId = $hasSession ? get_customer_id() : null;
 
 // ── Helpers de timezone (MySQL retorna UTC via conexão) ───────────────────────
 $tz_utc = new DateTimeZone('UTC');
@@ -58,14 +56,17 @@ function fmtBrt($dateStr, $tz_utc, $tz_brt) {
 try {
     $db = Database::getInstance()->getConnection();
 
-    // ── 1. Status da API ──────────────────────────────────────────────────────
-    $row = $db->query("
+    // ── 1. Status da API (escopo do cliente da sessão) ────────────────────────
+    $stApi = $db->prepare("
         SELECT GREATEST(
-            COALESCE(MAX(last_communication), '2000-01-01 00:00:00'),
-            COALESCE((SELECT MAX(created_at) FROM alarms), '2000-01-01 00:00:00')
+            COALESCE((SELECT MAX(last_communication) FROM devices WHERE customer_id = ?), '2000-01-01 00:00:00'),
+            COALESCE((SELECT MAX(a.created_at) FROM alarms a
+                      JOIN devices d ON a.imei = d.imei
+                      WHERE d.customer_id = ?), '2000-01-01 00:00:00')
         ) AS last_hit
-        FROM devices
-    ")->fetchColumn();
+    ");
+    $stApi->execute([$customerId, $customerId]);
+    $row = $stApi->fetchColumn();
 
     $apiStatus = ['label' => 'OFFLINE', 'color' => 'danger', 'last' => '-'];
     if ($row) {
@@ -80,23 +81,17 @@ try {
         }
     }
 
-    // ── 2. Dispositivos (filtrado por customer_id quando há sessão ativa, apenas ativos) ─────
-    $sql = "
+    // ── 2. Dispositivos (sempre filtrado pelo cliente da sessão, apenas ativos) ─
+    $stmt = $db->prepare("
         SELECT d.imei, d.device_name, d.last_communication,
                s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
         FROM devices d
         LEFT JOIN device_statistics s ON d.imei = s.imei
         WHERE d.is_active = 1
-    ";
-    $queryParams = [];
-    if ($customerId) {
-        $sql .= " AND d.customer_id = ?";
-        $queryParams[] = $customerId;
-    }
-    $sql .= " ORDER BY d.last_communication DESC";
-
-    $stmt = $db->prepare($sql);
-    $stmt->execute($queryParams);
+          AND d.customer_id = ?
+        ORDER BY d.last_communication DESC
+    ");
+    $stmt->execute([$customerId]);
 
     $devices = [];
     while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {

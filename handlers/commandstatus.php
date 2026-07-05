@@ -19,6 +19,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // ── Apenas GET ────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -27,19 +28,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-// ── Validação de token interno ────────────────────────────────────────────────
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['_token'] ?? '');
-if ($sentToken !== $validToken) {
-    http_response_code(401);
-    echo json_encode(['code' => 401, 'msg' => 'Unauthorized']);
+// ── Autorização: sessão de dashboard obrigatória (R02 — antes bastava o token
+// compartilhado, que expunha o histórico de comandos de qualquer cliente; o
+// ?customer_id= vinha do GET e era escolhido pelo próprio chamador) ───────────
+require_ajax_session();
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
 
 // ── Parâmetros ────────────────────────────────────────────────────────────────
 $imei       = trim($_GET['imei']       ?? '');
 $commandId  = intval($_GET['command_id'] ?? 0);
-$customerId = intval($_GET['customer_id'] ?? 0);
 $limit      = min(max(intval($_GET['limit'] ?? 30), 1), 100);
 
 // ── Funções auxiliares ────────────────────────────────────────────────────────
@@ -60,9 +62,9 @@ $fmtDate = function ($d) use ($tzUTC, $tzBRT) {
 try {
     $db = Database::getInstance()->getConnection();
 
-    // ── Histórico de comandos ─────────────────────────────────────────────────
-    $conditions = [];
-    $params = [];
+    // ── Histórico de comandos (sempre restrito ao cliente da sessão) ──────────
+    $conditions = ['imei IN (SELECT imei FROM devices WHERE customer_id = :customer_id)'];
+    $params = [':customer_id' => $customerId];
 
     if ($commandId > 0) {
         $conditions[] = 'id = :command_id';
@@ -72,12 +74,8 @@ try {
         $conditions[] = 'imei = :imei';
         $params[':imei'] = $imei;
     }
-    if ($customerId > 0) {
-        $conditions[] = 'imei IN (SELECT imei FROM devices WHERE customer_id = :customer_id)';
-        $params[':customer_id'] = $customerId;
-    }
 
-    $whereSql = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
+    $whereSql = 'WHERE ' . implode(' AND ', $conditions);
     $sql = "
         SELECT id, imei, command_content, command_type, status, operator,
                response_payload, created_at, updated_at
@@ -129,10 +127,11 @@ try {
             SELECT imei, instruct_id, response_content, status, execute_time
             FROM command_responses
             WHERE created_at > NOW() - INTERVAL 1 HOUR
+              AND imei IN (SELECT imei FROM devices WHERE customer_id = ?)
             ORDER BY created_at DESC
             LIMIT 10
         ");
-        $offStmt->execute();
+        $offStmt->execute([$customerId]);
         $offlineRecent = $offStmt->fetchAll(PDO::FETCH_ASSOC);
         $offlineCount  = count($offlineRecent);
     } catch (Exception $e) {

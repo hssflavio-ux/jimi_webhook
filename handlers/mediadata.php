@@ -12,6 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -19,11 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['_token'] ?? '');
-if ($sentToken !== $validToken) {
-    http_response_code(401);
-    echo json_encode(['code' => 401, 'msg' => 'Não autorizado']);
+// ── Autorização: sessão de dashboard obrigatória (R02 — antes bastava o token
+// compartilhado, que expunha mídia de qualquer IMEI de qualquer cliente)
+require_ajax_session();
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
 
@@ -34,10 +37,11 @@ try {
     $offset = max((int)($_GET['offset'] ?? 0), 0);
 
     // ── 1. Arquivos de mídia (pushfileupload / pushftpfileupload) ─────────────
-    $whereMedia = '';
-    $paramsMedia = [':limit' => $limit, ':offset' => $offset];
+    // Multi-tenant: sempre restrito aos IMEIs do cliente da sessão
+    $whereMedia = 'WHERE imei IN (SELECT imei FROM devices WHERE customer_id = :cid)';
+    $paramsMedia = [':limit' => $limit, ':offset' => $offset, ':cid' => $customerId];
     if ($imei) {
-        $whereMedia = 'WHERE imei = :imei';
+        $whereMedia .= ' AND imei = :imei';
         $paramsMedia[':imei'] = $imei;
     }
 
@@ -56,10 +60,11 @@ try {
     $mediaFiles = $stmtMedia->fetchAll(PDO::FETCH_ASSOC);
 
     // ── 2. Lista de recursos (pushresourcelist) ────────────────────────────────
-    $whereRes = '';
-    $paramsRes = [':limit' => $limit, ':offset' => $offset];
+    // Multi-tenant: sempre restrito aos IMEIs do cliente da sessão
+    $whereRes = 'WHERE imei IN (SELECT imei FROM devices WHERE customer_id = :cid)';
+    $paramsRes = [':limit' => $limit, ':offset' => $offset, ':cid' => $customerId];
     if ($imei) {
-        $whereRes = 'WHERE imei = :imei';
+        $whereRes .= ' AND imei = :imei';
         $paramsRes[':imei'] = $imei;
     }
 

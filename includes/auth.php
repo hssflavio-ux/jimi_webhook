@@ -56,6 +56,23 @@ function require_admin() {
     }
 }
 
+/**
+ * Exige sessão de dashboard ativa para endpoints AJAX (resposta JSON).
+ * Ao contrário de require_login(), não redireciona: responde 401 em JSON e encerra.
+ * O chamador deve ter definido o header Content-Type: application/json.
+ *
+ * @returns int ID do usuário autenticado
+ */
+function require_ajax_session() {
+    auth_init();
+    if (empty($_SESSION['user_id'])) {
+        http_response_code(401);
+        echo json_encode(array('code' => 401, 'msg' => 'Unauthorized'));
+        exit;
+    }
+    return (int)$_SESSION['user_id'];
+}
+
 function refresh_session() {
     if (!isset($_COOKIE[AUTH_COOKIE])) return;
     $token = $_COOKIE[AUTH_COOKIE];

@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v3.2.0 (Review)
 
-> Última atualização: 02/07/2026 — Bugs #16–#19 corrigidos (parse error em /comandos, `$extra_head` dentro do `<style>`, token ausente no polling, JSON quotado nos presets JT/T). Feature: presets de texto proNo 128 disponíveis para câmeras JT/T (optgroup "Texto (proNo 128)" em /comandos)
+> Última atualização: 04/07/2026 — **Sprint 1 de segurança (v3.2.1)**: R01/R02 (cross-tenant leak nos 6 endpoints AJAX — sessão obrigatória via `require_ajax_session()` + escopo `customer_id` em todas as queries), R03 (proNo fora da whitelist bloqueado com HTTP 400) e R05 (open redirect no login sanitizado). Pendente de deploy + teste no browser (dashboard/live/comandos/video/config).
 > Servidor: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 
 ---
@@ -231,13 +231,13 @@ A migration v3.1.0 é **idempotente** — pode ser executada múltiplas vezes se
 > - **Revisão geral completa** (30/06/2026): 37 arquivos PHP auditados em 7 fases — ver §13.
 
 ### CRÍTICO (Segurança — Correção Imediata)
-- [ ] **R01 — `camerasdata.php` vaza dados cross-tenant via token**: Quando acessado sem sessão (apenas com token, como faz o auto-refresh do dashboard e do live), retorna TODOS os dispositivos de TODOS os clientes. Só filtra por `customer_id` quando há sessão ativa. **Impacto**: qualquer pessoa com o token de webhook vê/dispositivos de todos os clientes.
-- [ ] **R02 — Cross-tenant data leak nos 6 endpoints AJAX**: `commandstatus.php`, `sendcommand.php`, `mediadata.php`, `trackdata.php`, `hbdata.php`, `commandstatus.php` — NENHUM filtra por `customer_id` quando acessado via token. **Impacto**: vazamento de dados de GPS, heartbeat, comandos e mídia entre clientes. `sendcommand.php` ainda permite ENVIAR comandos para qualquer IMEI.
-- [ ] **R03 — `sendcommand.php` não bloqueia proNo desconhecidos**: proNos fora da whitelist são apenas logados (warning), mas o comando é enviado mesmo assim. **Impacto**: comandos arbitrários podem ser injetados se o token vazar.
+- [x] **R01 — `camerasdata.php` vaza dados cross-tenant via token** — ✅ **Corrigido 04/07/2026 (v3.2.1)**: sessão obrigatória (`require_ajax_session()`); token compartilhado não dá mais acesso sozinho; queries de status da API e dispositivos sempre escopadas pelo `customer_id` da sessão. O auto-refresh do dashboard/live continua funcionando porque roda no browser logado (cookie acompanha o fetch).
+- [x] **R02 — Cross-tenant data leak nos 6 endpoints AJAX** — ✅ **Corrigido 04/07/2026 (v3.2.1)**: `commandstatus.php`, `sendcommand.php`, `mediadata.php`, `trackdata.php`, `hbdata.php` exigem sessão e filtram por `customer_id` da sessão (subquery/JOIN em `devices`). `sendcommand.php` valida posse do IMEI (403 se não pertencer ao cliente). `trackdata` retorna 404 para IMEI de outro cliente; `hbdata` filtra a lista de IMEIs; `commandstatus` ignora `?customer_id=` do GET.
+- [x] **R03 — `sendcommand.php` não bloqueia proNo desconhecidos** — ✅ **Corrigido 04/07/2026 (v3.2.1)**: proNo fora da whitelist retorna HTTP 400. Todos os proNos usados pelas telas (128, 37121, 37377, 37381, 37382, 33283, 33536, 33027–33031, 34817, 34818) seguem permitidos.
 
 ### ALTO (Risco/Bug — Próximo Deploy)
 - [ ] **R04 — `relatorios.php` SQL injection via string interpolation**: $_GET params (`imei`, `from`, `to`, `severity`, `category`) interpolados em string SQL com `$db->quote()`. Padrão frágil — converter para prepared statements.
-- [ ] **R05 — `login.php` open redirect**: parâmetro `redirect` usado sem validação em `header('Location: ' . $redirect)`. Atacante pode craftar `/login?redirect=https://evil.com`. Fix: validar que redirect é path local.
+- [x] **R05 — `login.php` open redirect** — ✅ **Corrigido 04/07/2026 (v3.2.1)**: `safe_redirect_path()` aceita apenas paths locais começando com `/`; rejeita `//host`, backslash e CR/LF (fallback `/dashboard`).
 - [ ] **R06 — `pushgps.php` descarta silenciosamente coordenadas (0,0)**: `is_valid_coordinate()` retorna false para (0,0), que é um sinal válido de "sem fix GPS". O handler descarta o ponto e NÃO atualiza `device_statistics`. **Impacto**: dashboard/live mostra posição stale do dispositivo.
 - [ ] **R07 — `request_logs` sem índice em `payload_hash`**: `isDuplicateRequest()` faz `SELECT COUNT(1) FROM request_logs WHERE payload_hash = ?` sem índice → full table scan em toda requisição. Tabela cresce ~25K linhas+ com risco de timeout no webhook. Fix: `CREATE INDEX idx_payload_hash_created ON request_logs(payload_hash, created_at)`.
 - [ ] **R08 — Rotas mortas em `router.php`**: `/clientes/novo` → `clientes_novo.php` e `/clientes/{id}` → `cliente_dashboard.php` — **nenhum dos dois arquivos existe**. Acesso resulta em 404 "Handler não encontrado".
@@ -494,10 +494,11 @@ Devido à ausência de PHP CLI local, a revisão funcional completa via browser 
 
 ### Ordem de execução sugerida (por impacto):
 
-1. **Imediato** (antes do próximo deploy):
-   - Corrigir cross-tenant leak: `camerasdata.php` (R01) + 6 AJAX endpoints (R02) — adicionar filtro `customer_id` via token + IMEI JOIN em `devices`
-   - Bloquear proNo desconhecidos em `sendcommand.php` (R03)
-   - Corrigir open redirect em `login.php` (R05)
+1. ~~**Imediato** (antes do próximo deploy)~~ — ✅ **Concluído 04/07/2026 (v3.2.1 / Sprint 1)**:
+   - ~~Corrigir cross-tenant leak: `camerasdata.php` (R01) + 6 AJAX endpoints (R02)~~ → sessão obrigatória + escopo por `customer_id` da sessão
+   - ~~Bloquear proNo desconhecidos em `sendcommand.php` (R03)~~ → HTTP 400
+   - ~~Corrigir open redirect em `login.php` (R05)~~ → `safe_redirect_path()`
+   - **Validar após deploy**: auto-refresh do dashboard/live, polling de `/comandos`, envio de comando em `/video` e `/config` (tudo agora depende da sessão de dashboard, não mais do token)
 
 2. **Próximo deploy**:
    - Criar índice `idx_payload_hash_created` em `request_logs` (R07)

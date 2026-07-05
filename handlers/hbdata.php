@@ -12,6 +12,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
@@ -19,11 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     exit;
 }
 
-$validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-$sentToken  = $_SERVER['HTTP_X_DASHBOARD_TOKEN'] ?? ($_GET['_token'] ?? '');
-if ($sentToken !== $validToken) {
-    http_response_code(401);
-    echo json_encode(['code' => 401, 'msg' => 'Não autorizado']);
+// ── Autorização: sessão de dashboard obrigatória (R02 — antes bastava o token
+// compartilhado, que expunha heartbeats de qualquer IMEI de qualquer cliente)
+require_ajax_session();
+$customerId = (int)get_customer_id();
+if (!$customerId) {
+    http_response_code(403);
+    echo json_encode(['code' => 403, 'msg' => 'Contexto de cliente não definido']);
     exit;
 }
 
@@ -37,7 +40,19 @@ if (empty($imeis)) {
 }
 
 try {
-    $db     = Database::getInstance()->getConnection();
+    $db = Database::getInstance()->getConnection();
+
+    // Multi-tenant: restringe a consulta aos IMEIs que pertencem ao cliente da sessão
+    $phOwn = implode(',', array_fill(0, count($imeis), '?'));
+    $own = $db->prepare("SELECT imei FROM devices WHERE imei IN ($phOwn) AND customer_id = ? AND is_active = 1");
+    $own->execute(array_merge(array_values($imeis), [$customerId]));
+    $imeis = $own->fetchAll(PDO::FETCH_COLUMN);
+
+    if (empty($imeis)) {
+        echo json_encode(['code' => 0, 'count' => 0, 'heartbeats' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $placeholders = implode(',', array_fill(0, count($imeis), '?'));
     $stmt = $db->prepare("
         SELECT imei, heartbeat_time, battery, gsm_signal, temperature,
