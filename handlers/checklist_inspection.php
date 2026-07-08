@@ -54,14 +54,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['config_id'])) {
 }
 
 // ── Available checklists ───────────────────────────────────
-$cfgStmt = $db->prepare("
-    SELECT cc.*, (SELECT COUNT(*) FROM checklist_items WHERE config_id = cc.id) as item_count
-    FROM checklist_configs cc
-    WHERE cc.is_active = 1 AND (cc.customer_id IS NULL OR cc.customer_id = :cid)
-    ORDER BY cc.name
-");
-$cfgStmt->execute([':cid' => $customerId]);
-$checklists = $cfgStmt->fetchAll();
+$checklists = [];
+try {
+    $cfgStmt = $db->prepare("
+        SELECT cc.*, (SELECT COUNT(*) FROM checklist_items WHERE config_id = cc.id) as item_count
+        FROM checklist_configs cc
+        WHERE cc.is_active = 1 AND (cc.customer_id IS NULL OR cc.customer_id = :cid)
+        ORDER BY cc.name
+    ");
+    $cfgStmt->execute([':cid' => $customerId]);
+    $checklists = $cfgStmt->fetchAll();
+} catch (Exception $e) {}
 
 // ── Devices ───────────────────────────────────────────────
 $devStmt = $db->prepare("SELECT imei, COALESCE(device_name, imei) as label FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY label");
@@ -69,28 +72,36 @@ $devStmt->execute([':cid' => $customerId ?? 1]);
 $devices = $devStmt->fetchAll();
 
 // ── Drivers ──────────────────────────────────────────────
-$drvStmt = $db->prepare("SELECT id, name FROM drivers WHERE customer_id = :cid AND is_active = 1 ORDER BY name");
-$drvStmt->execute([':cid' => $customerId ?? 1]);
-$drivers = $drvStmt->fetchAll();
+$drivers = [];
+try {
+    $drvStmt = $db->prepare("SELECT id, name FROM drivers WHERE customer_id = :cid AND is_active = 1 ORDER BY name");
+    $drvStmt->execute([':cid' => $customerId ?? 1]);
+    $drivers = $drvStmt->fetchAll();
+} catch (Exception $e) {}
 
 // ── Load selected checklist items ─────────────────────────
 $items = [];
 if ($selectedCfgId) {
-    $itemStmt = $db->prepare("SELECT * FROM checklist_items WHERE config_id = :cid ORDER BY sort_order");
-    $itemStmt->execute([':cid' => $selectedCfgId]);
-    $items = $itemStmt->fetchAll();
+    try {
+        $itemStmt = $db->prepare("SELECT * FROM checklist_items WHERE config_id = :cid ORDER BY sort_order");
+        $itemStmt->execute([':cid' => $selectedCfgId]);
+        $items = $itemStmt->fetchAll();
+    } catch (Exception $e) {}
 }
 
 // ── History ──────────────────────────────────────────────
-$histStmt = $db->prepare("
-    SELECT cr.*, cc.name as checklist_name
-    FROM checklist_responses cr
-    JOIN checklist_configs cc ON cc.id = cr.config_id
-    WHERE cc.customer_id = :cid OR cc.customer_id IS NULL
-    ORDER BY cr.inspected_at DESC LIMIT 20
-");
-$histStmt->execute([':cid' => $customerId]);
-$history = $histStmt->fetchAll();
+$history = [];
+try {
+    $histStmt = $db->prepare("
+        SELECT cr.*, cc.name as checklist_name
+        FROM checklist_responses cr
+        JOIN checklist_configs cc ON cc.id = cr.config_id
+        WHERE cc.customer_id = :cid OR cc.customer_id IS NULL
+        ORDER BY cr.inspected_at DESC LIMIT 20
+    ");
+    $histStmt->execute([':cid' => $customerId]);
+    $history = $histStmt->fetchAll();
+} catch (Exception $e) {}
 
 $page_title = 'Inspeção Veicular';
 $current_route = 'checklist';

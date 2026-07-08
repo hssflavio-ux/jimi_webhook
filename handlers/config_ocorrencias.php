@@ -125,13 +125,16 @@ if ($action === 'editar' && !empty($_GET['id'])) {
 }
 
 // ── Lista de perfis ────────────────────────────────────────────
-$stmt = $db->query(
-    "SELECT oc.*,
-            (SELECT COUNT(*) FROM customers WHERE occurrence_config_id = oc.id) as customer_count
-     FROM occurrence_configs oc
-     ORDER BY oc.is_default DESC, oc.name ASC"
-);
-$configs = $stmt->fetchAll();
+$configs = [];
+try {
+    $stmt = $db->query(
+        "SELECT oc.*,
+                (SELECT COUNT(*) FROM customers WHERE occurrence_config_id = oc.id) as customer_count
+         FROM occurrence_configs oc
+         ORDER BY oc.is_default DESC, oc.name ASC"
+    );
+    $configs = $stmt->fetchAll();
+} catch (Exception $e) {}
 
 // ── Tipos de alarme para dropdown ──────────────────────────────
 $stmt = $db->query(

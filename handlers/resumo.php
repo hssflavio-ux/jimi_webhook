@@ -45,43 +45,50 @@ $occWaiting = get_metric($db, $customerId, 'occurrences_waiting', 0);
 
 // On-the-fly fallback if no cached metrics
 if ($devTotal == 0 && $devActive == 0 && $devOnline == 0 && $devOffline == 0) {
-    $kpiStmt = $db->prepare("
-        SELECT COUNT(*) as total,
-               SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active,
-               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
-               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
-        FROM devices WHERE customer_id = :cid
-    ");
-    $kpiStmt->execute([':cid' => $customerId ?? 1]);
-    $devKpiFb = $kpiStmt->fetch();
-    $devTotal   = $devKpiFb['total'] ?? 0;
-    $devActive  = $devKpiFb['active'] ?? 0;
-    $devOnline  = $devKpiFb['online'] ?? 0;
-    $devOffline = $devKpiFb['offline'] ?? 0;
+    try {
+        $kpiStmt = $db->prepare("
+            SELECT COUNT(*) as total,
+                   SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active,
+                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
+                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
+            FROM devices WHERE customer_id = :cid
+        ");
+        $kpiStmt->execute([':cid' => $customerId ?? 1]);
+        $devKpiFb = $kpiStmt->fetch();
+        $devTotal   = $devKpiFb['total'] ?? 0;
+        $devActive  = $devKpiFb['active'] ?? 0;
+        $devOnline  = $devKpiFb['online'] ?? 0;
+        $devOffline = $devKpiFb['offline'] ?? 0;
+    } catch (Exception $e) {}
 
-    $occStmt = $db->prepare("
-        SELECT COUNT(*) as total, SUM(CASE WHEN status='aguardando' THEN 1 ELSE 0 END) as waiting
-        FROM occurrences WHERE customer_id = :cid
-    ");
-    $occStmt->execute([':cid' => $customerId ?? 1]);
-    $occKpiFb = $occStmt->fetch();
-    $occTotal   = $occKpiFb['total'] ?? 0;
-    $occWaiting = $occKpiFb['waiting'] ?? 0;
+    try {
+        $occStmt = $db->prepare("
+            SELECT COUNT(*) as total, SUM(CASE WHEN status='aguardando' THEN 1 ELSE 0 END) as waiting
+            FROM occurrences WHERE customer_id = :cid
+        ");
+        $occStmt->execute([':cid' => $customerId ?? 1]);
+        $occKpiFb = $occStmt->fetch();
+        $occTotal   = $occKpiFb['total'] ?? 0;
+        $occWaiting = $occKpiFb['waiting'] ?? 0;
+    } catch (Exception $e) {}
 }
 
 // ── GPS Heatmap (always on-the-fly, last 2h) ─────────────────
-$gpsRows = $db->prepare("
-    SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
-           COALESCE(d.device_name, g.imei) as device_name
-    FROM gps_data g
-    JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-    WHERE g.latitude != 0 AND g.longitude != 0
-      AND ABS(g.latitude) > 0.0001 AND ABS(g.longitude) > 0.0001
-      AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
-    ORDER BY g.gps_time DESC LIMIT 500
-");
-$gpsRows->execute([':cid' => $customerId ?? 1]);
-$gpsData = $gpsRows->fetchAll();
+$gpsData = [];
+try {
+    $gpsRows = $db->prepare("
+        SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
+               COALESCE(d.device_name, g.imei) as device_name
+        FROM gps_data g
+        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
+        WHERE g.latitude != 0 AND g.longitude != 0
+          AND ABS(g.latitude) > 0.0001 AND ABS(g.longitude) > 0.0001
+          AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
+        ORDER BY g.gps_time DESC LIMIT 500
+    ");
+    $gpsRows->execute([':cid' => $customerId ?? 1]);
+    $gpsData = $gpsRows->fetchAll();
+} catch (Exception $e) {}
 
 // ── Speed + Outdated from cache ──────────────────────────────
 $spdParados = get_metric($db, $customerId, 'speed_parados', 0);
@@ -96,23 +103,25 @@ $outNever = get_metric($db, $customerId, 'outdated_never', 0);
 
 // On-the-fly fallback for speed
 if ($spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
-    $speedStmt = $db->prepare("
-        SELECT
-            SUM(CASE WHEN speed = 0 THEN 1 ELSE 0 END) as parados,
-            SUM(CASE WHEN speed > 0 AND speed <= 20 THEN 1 ELSE 0 END) as ate20,
-            SUM(CASE WHEN speed > 20 AND speed <= 60 THEN 1 ELSE 0 END) as ate60,
-            SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60,
-            COUNT(*) as total
-        FROM gps_data g
-        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-        WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.ignition = 1
-    ");
-    $speedStmt->execute([':cid' => $customerId ?? 1]);
-    $speedDist = $speedStmt->fetch();
-    $spdParados = $speedDist['parados'] ?? 0;
-    $spdAte20   = $speedDist['ate20'] ?? 0;
-    $spdAte60   = $speedDist['ate60'] ?? 0;
-    $spdAcima60 = $speedDist['acima60'] ?? 0;
+    try {
+        $speedStmt = $db->prepare("
+            SELECT
+                SUM(CASE WHEN speed = 0 THEN 1 ELSE 0 END) as parados,
+                SUM(CASE WHEN speed > 0 AND speed <= 20 THEN 1 ELSE 0 END) as ate20,
+                SUM(CASE WHEN speed > 20 AND speed <= 60 THEN 1 ELSE 0 END) as ate60,
+                SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60,
+                COUNT(*) as total
+            FROM gps_data g
+            JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
+            WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.ignition = 1
+        ");
+        $speedStmt->execute([':cid' => $customerId ?? 1]);
+        $speedDist = $speedStmt->fetch();
+        $spdParados = $speedDist['parados'] ?? 0;
+        $spdAte20   = $speedDist['ate20'] ?? 0;
+        $spdAte60   = $speedDist['ate60'] ?? 0;
+        $spdAcima60 = $speedDist['acima60'] ?? 0;
+    } catch (Exception $e) {}
 }
 $speedTotal = $spdParados + $spdAte20 + $spdAte60 + $spdAcima60;
 $outTotal   = $outLt7d + $outGt7d + $outGt30d + $outNever;
@@ -120,35 +129,43 @@ $outTotal   = $outLt7d + $outGt7d + $outGt30d + $outNever;
 // ── Top clientes (revendedor only) ───────────────────────────
 $topCustomers = [];
 if ($isReseller) {
-    $topCustomers = $db->query("
-        SELECT c.name, COUNT(d.id) as dev_count,
-               (SELECT COUNT(*) FROM occurrences o WHERE o.customer_id = c.id) as occ_count
-        FROM customers c
-        LEFT JOIN devices d ON d.customer_id = c.id AND d.is_active = 1
-        WHERE c.is_active = 1
-        GROUP BY c.id ORDER BY dev_count DESC LIMIT 5
-    ")->fetchAll();
+    try {
+        $topCustomers = $db->query("
+            SELECT c.name, COUNT(d.id) as dev_count,
+                   (SELECT COUNT(*) FROM occurrences o WHERE o.customer_id = c.id) as occ_count
+            FROM customers c
+            LEFT JOIN devices d ON d.customer_id = c.id AND d.is_active = 1
+            WHERE c.is_active = 1
+            GROUP BY c.id ORDER BY dev_count DESC LIMIT 5
+        ")->fetchAll();
+    } catch (Exception $e) {}
 }
 
 // ── Charts: alarmes + ocorrências hoje (hora-a-hora) ─────────
-$alarmsToday = $db->prepare("
-    SELECT HOUR(alarm_time) as hr, COUNT(*) as cnt
-    FROM alarms a
-    JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
-    WHERE a.alarm_time >= CURDATE()
-    GROUP BY HOUR(alarm_time) ORDER BY hr
-");
-$alarmsToday->execute([':cid' => $customerId ?? 1]);
-$alarmsHourly = $alarmsToday->fetchAll();
+$alarmsHourly = [];
+try {
+    $alarmsToday = $db->prepare("
+        SELECT HOUR(alarm_time) as hr, COUNT(*) as cnt
+        FROM alarms a
+        JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+        WHERE a.alarm_time >= CURDATE()
+        GROUP BY HOUR(alarm_time) ORDER BY hr
+    ");
+    $alarmsToday->execute([':cid' => $customerId ?? 1]);
+    $alarmsHourly = $alarmsToday->fetchAll();
+} catch (Exception $e) {}
 
-$occsToday = $db->prepare("
-    SELECT HOUR(first_alarm_at) as hr, COUNT(*) as cnt
-    FROM occurrences
-    WHERE customer_id = :cid AND first_alarm_at >= CURDATE()
-    GROUP BY HOUR(first_alarm_at) ORDER BY hr
-");
-$occsToday->execute([':cid' => $customerId ?? 1]);
-$occsHourly = $occsToday->fetchAll();
+$occsHourly = [];
+try {
+    $occsToday = $db->prepare("
+        SELECT HOUR(first_alarm_at) as hr, COUNT(*) as cnt
+        FROM occurrences
+        WHERE customer_id = :cid AND first_alarm_at >= CURDATE()
+        GROUP BY HOUR(first_alarm_at) ORDER BY hr
+    ");
+    $occsToday->execute([':cid' => $customerId ?? 1]);
+    $occsHourly = $occsToday->fetchAll();
+} catch (Exception $e) {}
 
 $page_title = 'Resumo';
 $current_route = 'resumo';

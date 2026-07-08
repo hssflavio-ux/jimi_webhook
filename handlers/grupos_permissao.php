@@ -93,13 +93,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$groups = $db->query("
-    SELECT pg.*, COUNT(u.id) AS user_count
-    FROM permission_groups pg
-    LEFT JOIN users u ON u.permission_group_id = pg.id
-    GROUP BY pg.id
-    ORDER BY pg.user_type, pg.name
-")->fetchAll(PDO::FETCH_ASSOC);
+$groups = [];
+try {
+    $groups = $db->query("
+        SELECT pg.*, COUNT(u.id) AS user_count
+        FROM permission_groups pg
+        LEFT JOIN users u ON u.permission_group_id = pg.id
+        GROUP BY pg.id
+        ORDER BY pg.user_type, pg.name
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
 
 $editGroup = null;
 $editPermissions = [];

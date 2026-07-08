@@ -27,8 +27,9 @@ $generated      = !empty($_GET['gerar']);
 // Download data
 $chartData = [];
 if ($generated) {
-    $cWhere = '';
-    $cParams = [];
+    try {
+        $cWhere = '';
+        $cParams = [];
 
     if ($isAdmin && $filterCust) {
         $cWhere .= ' AND a.customer_id = :fcid';
@@ -104,6 +105,7 @@ if ($generated) {
         $drByStmt->execute($cParams2);
         $chartData['alarms_by_driver'] = $drByStmt->fetchAll();
     }
+    } catch (Exception $e) {}
 }
 
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
@@ -111,9 +113,12 @@ $devices = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id
 $devices->execute([':cid' => $customerId ?? 1]);
 $devices = $devices->fetchAll();
 
-$drivers = $db->prepare("SELECT id, name FROM drivers WHERE customer_id = :cid AND is_active = 1 ORDER BY name");
-$drivers->execute([':cid' => $customerId ?? 1]);
-$drivers = $drivers->fetchAll();
+$drivers = [];
+try {
+    $drivers = $db->prepare("SELECT id, name FROM drivers WHERE customer_id = :cid AND is_active = 1 ORDER BY name");
+    $drivers->execute([':cid' => $customerId ?? 1]);
+    $drivers = $drivers->fetchAll();
+} catch (Exception $e) {}
 
 // All alarm types for multi-select
 $allAlarmTypes = $db->query("SELECT DISTINCT alarm_type FROM alarms ORDER BY alarm_type")->fetchAll(PDO::FETCH_COLUMN);

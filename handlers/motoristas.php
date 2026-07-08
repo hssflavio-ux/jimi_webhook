@@ -62,14 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $params = [];
 $where = $is_admin ? '1=1' : "d.customer_id = :cid";
 if (!$is_admin) $params[':cid'] = $customer_id;
-$drvStmt = $db->prepare("
-    SELECT d.*
-    FROM drivers d
-    WHERE $where
-    ORDER BY d.name
-");
-$drvStmt->execute($params);
-$drivers = $drvStmt->fetchAll(PDO::FETCH_ASSOC);
+$drivers = [];
+try {
+    $drvStmt = $db->prepare("
+        SELECT d.*
+        FROM drivers d
+        WHERE $where
+        ORDER BY d.name
+    ");
+    $drvStmt->execute($params);
+    $drivers = $drvStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
 
 $cnh_categories = ['A', 'B', 'AB', 'C', 'D', 'E'];
 

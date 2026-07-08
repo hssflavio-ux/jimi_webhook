@@ -191,7 +191,10 @@ $devices = $devicesStmt->fetchAll();
 // Dropdowns
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY model_name")->fetchAll();
-$branches = $db->query("SELECT id, name, customer_id FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
+$branches = [];
+try {
+    $branches = $db->query("SELECT id, name, customer_id FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
+} catch (Exception $e) {}
 
 // ── Edit mode ───────────────────────────────────────────────────
 $editDevice = null;

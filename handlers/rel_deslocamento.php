@@ -41,24 +41,28 @@ if ($generated) {
         $params[':imei'] = $selImei;
     }
 
-    $countStmt = $db->prepare("SELECT COUNT(*) FROM trips t $where");
-    $countStmt->execute($params);
-    $totalRows = (int)$countStmt->fetchColumn();
-    $totalPages = max(1, ceil($totalRows / $perPage));
-    $offset = ($page - 1) * $perPage;
+    try {
+        $countStmt = $db->prepare("SELECT COUNT(*) FROM trips t $where");
+        $countStmt->execute($params);
+        $totalRows = (int)$countStmt->fetchColumn();
+        $totalPages = max(1, ceil($totalRows / $perPage));
+        $offset = ($page - 1) * $perPage;
 
-    $stmt = $db->prepare("
-        SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
-               COALESCE(dr.name, '—') as driver_name
-        FROM trips t
-        LEFT JOIN devices d ON d.imei = t.imei
-        LEFT JOIN drivers dr ON dr.id = t.driver_id
-        $where
-        ORDER BY t.started_at DESC
-        LIMIT $perPage OFFSET $offset
-    ");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+        $stmt = $db->prepare("
+            SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
+                   COALESCE(dr.name, '—') as driver_name
+            FROM trips t
+            LEFT JOIN devices d ON d.imei = t.imei
+            LEFT JOIN drivers dr ON dr.id = t.driver_id
+            $where
+            ORDER BY t.started_at DESC
+            LIMIT $perPage OFFSET $offset
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+    } catch (Exception $e) {
+        $totalRows = 0; $totalPages = 1; $rows = [];
+    }
 }
 
 $devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");

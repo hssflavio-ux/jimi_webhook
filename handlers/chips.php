@@ -55,18 +55,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$params = [];
 $where = $is_admin ? '1=1' : "s.customer_id = :cid";
 if (!$is_admin) $params[':cid'] = $customer_id;
-$simCardsStmt = $db->prepare("
-    SELECT s.*, d.device_name
-    FROM sim_cards s
-    LEFT JOIN devices d ON d.imei = s.imei
-    WHERE $where
-    ORDER BY s.created_at DESC
-");
-$simCardsStmt->execute($params);
-$sim_cards = $simCardsStmt->fetchAll(PDO::FETCH_ASSOC);
+$sim_cards = [];
+try {
+    $simCardsStmt = $db->prepare("
+        SELECT s.*, d.device_name
+        FROM sim_cards s
+        LEFT JOIN devices d ON d.imei = s.imei
+        WHERE $where
+        ORDER BY s.created_at DESC
+    ");
+    $simCardsStmt->execute($params);
+    $sim_cards = $simCardsStmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {}
 
 $devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
 $devStmt->execute([':cid' => $customer_id]);

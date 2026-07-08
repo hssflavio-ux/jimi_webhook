@@ -82,14 +82,17 @@ if (($_GET['action'] ?? '') === 'excluir' && !empty($_GET['id'])) {
 }
 
 // ── List ──────────────────────────────────────────────────────
-$configs = $db->query("
-    SELECT cc.*, COALESCE(c.name, 'Global') as customer_name,
-           (SELECT COUNT(*) FROM checklist_items WHERE config_id = cc.id) as item_count
-    FROM checklist_configs cc
-    LEFT JOIN customers c ON c.id = cc.customer_id
-    WHERE cc.is_active = 1
-    ORDER BY cc.name
-")->fetchAll();
+$configs = [];
+try {
+    $configs = $db->query("
+        SELECT cc.*, COALESCE(c.name, 'Global') as customer_name,
+               (SELECT COUNT(*) FROM checklist_items WHERE config_id = cc.id) as item_count
+        FROM checklist_configs cc
+        LEFT JOIN customers c ON c.id = cc.customer_id
+        WHERE cc.is_active = 1
+        ORDER BY cc.name
+    ")->fetchAll();
+} catch (Exception $e) {}
 
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
 

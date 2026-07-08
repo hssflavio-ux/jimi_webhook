@@ -55,33 +55,37 @@ $detailOcc = null;
 $detailEvents = [];
 $detailMedia = null;
 if (!empty($_GET['id'])) {
-    $stmt = $db->prepare(
-        "SELECT o.*, c.name as customer_name, d.name as driver_name
-         FROM occurrences o
-         LEFT JOIN customers c ON c.id = o.customer_id
-         LEFT JOIN drivers d ON d.id = o.driver_id
-         WHERE o.id = :id"
-    );
-    $stmt->execute([':id' => (int)$_GET['id']]);
-    $detailOcc = $stmt->fetch();
-
-    if ($detailOcc) {
+    try {
         $stmt = $db->prepare(
-            "SELECT e.id as event_id, a.id as alarm_id, a.alarm_name, a.alarm_time,
-                    a.latitude, a.longitude, a.speed, a.file_url
-             FROM occurrence_events e
-             JOIN alarms a ON a.id = e.alarm_id
-             WHERE e.occurrence_id = :oid
-             ORDER BY a.alarm_time DESC"
+            "SELECT o.*, c.name as customer_name, d.name as driver_name
+             FROM occurrences o
+             LEFT JOIN customers c ON c.id = o.customer_id
+             LEFT JOIN drivers d ON d.id = o.driver_id
+             WHERE o.id = :id"
         );
-        $stmt->execute([':oid' => $detailOcc['id']]);
-        $detailEvents = $stmt->fetchAll();
+        $stmt->execute([':id' => (int)$_GET['id']]);
+        $detailOcc = $stmt->fetch();
 
-        if (!empty($detailOcc['media_file_id'])) {
-            $stmt = $db->prepare("SELECT * FROM media_files WHERE id = :mid");
-            $stmt->execute([':mid' => $detailOcc['media_file_id']]);
-            $detailMedia = $stmt->fetch();
+        if ($detailOcc) {
+            $stmt = $db->prepare(
+                "SELECT e.id as event_id, a.id as alarm_id, a.alarm_name, a.alarm_time,
+                        a.latitude, a.longitude, a.speed, a.file_url
+                 FROM occurrence_events e
+                 JOIN alarms a ON a.id = e.alarm_id
+                 WHERE e.occurrence_id = :oid
+                 ORDER BY a.alarm_time DESC"
+            );
+            $stmt->execute([':oid' => $detailOcc['id']]);
+            $detailEvents = $stmt->fetchAll();
+
+            if (!empty($detailOcc['media_file_id'])) {
+                $stmt = $db->prepare("SELECT * FROM media_files WHERE id = :mid");
+                $stmt->execute([':mid' => $detailOcc['media_file_id']]);
+                $detailMedia = $stmt->fetch();
+            }
         }
+    } catch (Exception $e) {
+        $detailOcc = null;
     }
 }
 

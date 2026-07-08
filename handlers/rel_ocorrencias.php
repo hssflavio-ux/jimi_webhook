@@ -65,32 +65,39 @@ if ($filterRisk) {
 }
 
 // Count
-$countStmt = $db->prepare("SELECT COUNT(*) FROM occurrences o $where");
-$countStmt->execute($params);
-$totalRows = (int)$countStmt->fetchColumn();
-$totalPages = max(1, ceil($totalRows / $perPage));
-$offset = ($page - 1) * $perPage;
+try {
+    $countStmt = $db->prepare("SELECT COUNT(*) FROM occurrences o $where");
+    $countStmt->execute($params);
+    $totalRows = (int)$countStmt->fetchColumn();
+    $totalPages = max(1, ceil($totalRows / $perPage));
+    $offset = ($page - 1) * $perPage;
 
-// Data
-$dataStmt = $db->prepare("
-    SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name
-    FROM occurrences o
-    LEFT JOIN customers c ON c.id = o.customer_id
-    LEFT JOIN drivers dr ON dr.id = o.driver_id
-    LEFT JOIN branches b ON b.id = o.branch_id
-    $where
-    ORDER BY o.last_alarm_at DESC
-    LIMIT $perPage OFFSET $offset
-");
-$dataStmt->execute($params);
-$rows = $dataStmt->fetchAll();
+    // Data
+    $dataStmt = $db->prepare("
+        SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name
+        FROM occurrences o
+        LEFT JOIN customers c ON c.id = o.customer_id
+        LEFT JOIN drivers dr ON dr.id = o.driver_id
+        LEFT JOIN branches b ON b.id = o.branch_id
+        $where
+        ORDER BY o.last_alarm_at DESC
+        LIMIT $perPage OFFSET $offset
+    ");
+    $dataStmt->execute($params);
+    $rows = $dataStmt->fetchAll();
+} catch (Exception $e) {
+    $totalRows = 0; $totalPages = 1; $rows = [];
+}
 
 // Dropdowns
-$custStmt = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name");
-$customers = $custStmt->fetchAll();
+$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
 
-$typeStmt = $db->query("SELECT DISTINCT alarm_type FROM occurrences ORDER BY alarm_type");
-$alarmTypes = $typeStmt->fetchAll();
+try {
+    $typeStmt = $db->query("SELECT DISTINCT alarm_type FROM occurrences ORDER BY alarm_type");
+    $alarmTypes = $typeStmt->fetchAll();
+} catch (Exception $e) {
+    $alarmTypes = [];
+}
 
 require_once __DIR__ . '/../web/layout_base.php';
 ?>

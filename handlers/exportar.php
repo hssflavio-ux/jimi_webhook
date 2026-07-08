@@ -50,20 +50,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify($_POST['csrf_token'] ??
 
 $countStmt = $db->prepare("SELECT COUNT(*) FROM jobs j WHERE j.customer_id = :cid OR j.customer_id IS NULL");
 $countStmt->execute([':cid' => $customerId]);
-$totalRows = (int)$countStmt->fetchColumn();
+$totalRows = 0;
+try {
+    $totalRows = (int)$countStmt->fetchColumn();
+} catch (Exception $e) {}
 $totalPages = max(1, ceil($totalRows / $perPage));
 $offset = ($page - 1) * $perPage;
 
-$jobs = $db->prepare("
-    SELECT j.*, u.name as requested_by_name
-    FROM jobs j
-    LEFT JOIN users u ON u.id = j.requested_by
-    WHERE j.customer_id = :cid OR j.customer_id IS NULL
-    ORDER BY j.created_at DESC
-    LIMIT $perPage OFFSET $offset
-");
-$jobs->execute([':cid' => $customerId]);
-$jobs = $jobs->fetchAll();
+$jobs = [];
+try {
+    $jobsStmt = $db->prepare("
+        SELECT j.*, u.name as requested_by_name
+        FROM jobs j
+        LEFT JOIN users u ON u.id = j.requested_by
+        WHERE j.customer_id = :cid OR j.customer_id IS NULL
+        ORDER BY j.created_at DESC
+        LIMIT $perPage OFFSET $offset
+    ");
+    $jobsStmt->execute([':cid' => $customerId]);
+    $jobs = $jobsStmt->fetchAll();
+} catch (Exception $e) {}
 
 // Device list for export filter
 $devices = $db->prepare("SELECT imei, COALESCE(device_name, imei) as label FROM devices WHERE customer_id = :cid ORDER BY label");

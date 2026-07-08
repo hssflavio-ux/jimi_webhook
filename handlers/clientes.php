@@ -61,18 +61,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── List ──────────────────────────────────────────────────────
-$customers = $db->query("
-    SELECT c.*, COUNT(d.id) AS device_count,
-           oc.name as occ_config_name
-    FROM customers c
-    LEFT JOIN devices d ON c.id = d.customer_id
-    LEFT JOIN occurrence_configs oc ON oc.id = c.occurrence_config_id
-    WHERE c.is_active = 1
-    GROUP BY c.id
-    ORDER BY c.name
-")->fetchAll();
+$customers = [];
+try {
+    $customers = $db->query("
+        SELECT c.*, COUNT(d.id) AS device_count,
+               oc.name as occ_config_name
+        FROM customers c
+        LEFT JOIN devices d ON c.id = d.customer_id
+        LEFT JOIN occurrence_configs oc ON oc.id = c.occurrence_config_id
+        WHERE c.is_active = 1
+        GROUP BY c.id
+        ORDER BY c.name
+    ")->fetchAll();
+} catch (Exception $e) {}
 
-$occConfigs = $db->query("SELECT id, name FROM occurrence_configs ORDER BY name")->fetchAll();
+$occConfigs = [];
+try {
+    $occConfigs = $db->query("SELECT id, name FROM occurrence_configs ORDER BY name")->fetchAll();
+} catch (Exception $e) {}
 
 $editCustomer = null;
 if (!empty($_GET['edit'])) {

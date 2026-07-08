@@ -110,7 +110,10 @@ if ($tab === 'clientes') {
 }
 
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name")->fetchAll();
-$permGroups = $db->query("SELECT id, name, user_type FROM permission_groups ORDER BY name")->fetchAll();
+$permGroups = [];
+try {
+    $permGroups = $db->query("SELECT id, name, user_type FROM permission_groups ORDER BY name")->fetchAll();
+} catch (Exception $e) {}
 $roleLabels = ['admin' => 'Administrador', 'operator' => 'Operador', 'viewer' => 'Visualizador'];
 
 $editUser = null; $editCustomerId = null;
