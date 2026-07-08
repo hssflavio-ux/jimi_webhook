@@ -31,37 +31,38 @@ $hasCoords = [];
 $geoCache = [];
 
 if ($generated && $selImei) {
-    $where = 'WHERE imei = :imei AND gps_time BETWEEN :df AND :dt';
-    $params = [':imei' => $selImei, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+    try {
+        $where = 'WHERE imei = :imei AND gps_time BETWEEN :df AND :dt';
+        $params = [':imei' => $selImei, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
 
-    if ($interval === 'sampled') {
-        $where .= ' AND MOD(id, 10) = 0';
-    }
-
-    $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data $where");
-    $countStmt->execute($params);
-    $totalRows = (int)$countStmt->fetchColumn();
-    $totalPages = max(1, ceil($totalRows / $perPage));
-    $offset = ($page - 1) * $perPage;
-
-    $stmt = $db->prepare("
-        SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
-               g.course, g.status as gps_status, g.ignition,
-               COALESCE(d.device_name, g.imei) as device_name
-        FROM gps_data g
-        LEFT JOIN devices d ON d.imei = g.imei
-        $where
-        ORDER BY g.gps_time DESC
-        LIMIT $perPage OFFSET $offset
-    ");
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
-
-    foreach ($rows as $r) {
-        if ($r['latitude'] && $r['longitude'] && $r['latitude'] != 0) {
-            $hasCoords[] = ['lat' => (float)$r['latitude'], 'lng' => (float)$r['longitude'], 'imei' => $r['imei'], 'name' => $r['device_name']];
+        if ($interval === 'sampled') {
+            $where .= ' AND MOD(id, 10) = 0';
         }
-    }
+
+        $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data $where");
+        $countStmt->execute($params);
+        $totalRows = (int)$countStmt->fetchColumn();
+        $totalPages = max(1, ceil($totalRows / $perPage));
+        $offset = ($page - 1) * $perPage;
+
+        $stmt = $db->prepare("
+            SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
+                   COALESCE(d.device_name, g.imei) as device_name
+            FROM gps_data g
+            LEFT JOIN devices d ON d.imei = g.imei
+            $where
+            ORDER BY g.gps_time DESC
+            LIMIT $perPage OFFSET $offset
+        ");
+        $stmt->execute($params);
+        $rows = $stmt->fetchAll();
+
+        foreach ($rows as $r) {
+            if ($r['latitude'] && $r['longitude'] && $r['latitude'] != 0) {
+                $hasCoords[] = ['lat' => (float)$r['latitude'], 'lng' => (float)$r['longitude'], 'imei' => $r['imei'], 'name' => $r['device_name']];
+            }
+        }
+    } catch (Exception $e) {}
 }
 
 $devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");

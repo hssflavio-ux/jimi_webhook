@@ -85,10 +85,10 @@ require_once __DIR__ . '/../web/layout_base.php';
     <!-- Filters + Timeline -->
     <div>
         <div class="card" style="margin-bottom:12px;padding:14px 16px;">
-            <form method="GET" style="display:flex;flex-direction:column;gap:10px;">
+            <form method="GET" id="playback-form" style="display:flex;flex-direction:column;gap:10px;" onsubmit="return onSubmitRequest(event)">
                 <div>
                     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
-                    <select name="imei" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <select name="imei" id="pb-imei" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                         <?php foreach ($devices as $d): ?>
                         <option value="<?= $d['imei'] ?>" data-cam="<?= $d['camera_count']??1 ?>" <?= $selImei===$d['imei']?'selected':'' ?>>
                             <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
@@ -197,6 +197,29 @@ function selectRecording(el, rec) {
         ph.style.display = '';
         v.style.display = 'none';
     }
+}
+
+function onSubmitRequest(e) {
+    var imei = document.getElementById('pb-imei').value;
+    var channel = document.querySelector('select[name=channel]').value;
+    if (imei) {
+        fetch('/sendcommand', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                imei: imei,
+                proNo: 34817,
+                serverFlagId: 0,
+                content: JSON.stringify({
+                    channel: String(channel),
+                    beginTime: document.querySelector('input[name=date_from]').value + ' 00:00:00',
+                    endTime: document.querySelector('input[name=date_to]').value + ' 23:59:59',
+                    mediaType: '2'
+                })
+            })
+        }).catch(function(){});
+    }
+    return true;
 }
 </script>
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

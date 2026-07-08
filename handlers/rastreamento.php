@@ -19,31 +19,37 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
 $selCustomerId = $_GET['customer_id'] ?? ($customerId ?? ($customers[0]['id'] ?? 1));
 
-$devices = $db->prepare("
-    SELECT d.imei, d.device_name, d.last_communication,
-           dm.model_name,
-           CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
-    FROM devices d
-    LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = :cid AND d.is_active = 1
-    ORDER BY d.is_online DESC, d.device_name ASC
-");
-$devices->execute([':cid' => $selCustomerId]);
-$devices = $devices->fetchAll();
+$devices = [];
+try {
+    $devStmt = $db->prepare("
+        SELECT d.imei, d.device_name, d.last_communication,
+               dm.model_name,
+               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+        FROM devices d
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        WHERE d.customer_id = :cid AND d.is_active = 1
+        ORDER BY d.is_online DESC, d.device_name ASC
+    ");
+    $devStmt->execute([':cid' => $selCustomerId]);
+    $devices = $devStmt->fetchAll();
+} catch (Exception $e) {}
 
 // Latest positions
-$positions = $db->prepare("
-    SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time, g.ignition,
-           COALESCE(d.device_name, g.imei) as device_name,
-           CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
-    FROM devices d
-    LEFT JOIN gps_data g ON g.id = (
-        SELECT g2.id FROM gps_data g2 WHERE g2.imei = d.imei AND g2.latitude != 0 ORDER BY g2.gps_time DESC LIMIT 1
-    )
-    WHERE d.customer_id = :cid AND d.is_active = 1
-");
-$positions->execute([':cid' => $selCustomerId]);
-$positions = $positions->fetchAll();
+$positions = [];
+try {
+    $posStmt = $db->prepare("
+        SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time, g.ignition,
+               COALESCE(d.device_name, g.imei) as device_name,
+               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+        FROM devices d
+        LEFT JOIN gps_data g ON g.id = (
+            SELECT g2.id FROM gps_data g2 WHERE g2.imei = d.imei AND g2.latitude != 0 ORDER BY g2.gps_time DESC LIMIT 1
+        )
+        WHERE d.customer_id = :cid AND d.is_active = 1
+    ");
+    $posStmt->execute([':cid' => $selCustomerId]);
+    $positions = $posStmt->fetchAll();
+} catch (Exception $e) {}
 
 $page_title = 'Rastreamento';
 $current_route = 'rastreamento';

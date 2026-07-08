@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v4.0.0 (YUV Parity)
 
-> **Última atualização**: 07/07/2026 — **55 queries v4 blindadas com try-catch, 0 erros lint**.
+> **Última atualização**: 07/07/2026 — **Fases 0–J + resiliência total. 79 PHP, 0 erros lint.**
 > **Servidor**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 > **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe`
 
@@ -30,7 +30,9 @@
 | **G — Performance+Polish** | 5 | ✅ | `metrics_snapshots` (nova tabela, 22 métricas por cliente), `metrics_rollup.php` (pré-computa KPIs a cada 5 min), `resumo.php` (lê do cache com fallback on-the-fly), tour de boas-vindas 5 passos (localStorage) + banner de comunicado, `exportar.php` (form de novo relatório com CSRF), `worker.php` (CSV real para 5 tipos: alarms/occurrences/positions/trips/devices), `bi.php` (filtro Motoristas + chips multi-select de Alarmes com overflow +N) |
 | **H — UX+Security+Quality** | 11 | ✅ | `/checklist/inspecao` (preenchimento de inspeção), filtro de período no dashboard ocorrências, rate limiting 5 tentativas/15min + `login_log`, white-label `brand_color` na sidebar CSS, import CSV real em equipamentos (POST batch), prepared statements em 9 arquivos legacy (dashboard/ativos/comandos/config/live/video/relatorios/chips/motoristas), `pushcmd.php` removido do disco, md5 com `JSON_UNESCAPED_UNICODE`, aliases `lon`/`msgId` em normalize_data, dupla normalização removida (pushalarm/pushresourcelist) |
 | **I — Tooling+Polish** | 4 | ✅ | `.githooks/pre-commit` (lint PHP automático, `git config core.hooksPath .githooks`), R13: `pushTerminalTransInfo` extrai `content`/`extensionData` estruturado, R16: log de erros em pushresourcelist, README.md atualizado com 30 rotas v4.0.0 + workers + segurança + white-label |
-| **J — Deploy** | 3 | ✅ | `DEPLOY_v4.md` (plano completo com checklist, rollback, crontab), `scripts/deploy-v4.sh` (--check/--backup/--migrate/--deploy/--verify, idempotente, verifica 17 tabelas v4), `.env.example` atualizado (IOTHUB vars, SYSTEM_VERSION=4.0.0), `update-homolog.sh` e `deploy.sh` com suporte a migration v4.0.0 |
+| **J — Deploy** | 3 | ✅ | `DEPLOY_v4.md` (plano completo com checklist, rollback, crontab), `scripts/deploy-v4.sh` (--check/--backup/--migrate/--deploy/--verify, idempotente, verifica 17 tabelas v4), `.env.example` atualizado (IOTHUB vars, SYSTEM_VERSION=4.0.0), `update-homolog.sh` e `deploy.sh` com suporte a migration v4.0.0, `scripts/crontab-setup.sh` (--check/--install/--remove workers) |
+| **K — Resiliência (hotfix)** | 18 | ✅ | Todas queries de tabelas v4 blindadas com try-catch: `resumo.php` (metrics_snapshots+occurrences), `bi.php` (occurrences+drivers), `rel_ocorrencias.php` (5 queries), `rel_deslocamento.php` (trips+drivers), `exportar.php` (jobs), `ocorrencias_dashboard.php` (detail+events), `ativos.php` (device_statistics), `camerasdata.php` (device_statistics), `ativo_detalhe.php` (device_statistics), `rastreamento.php` (gps_data), `rel_posicoes.php` (gps_data), `rel_desatualizados.php` (last_position_at), `clientes.php` (occurrence_configs), `chips.php` (sim_cards), `motoristas.php` (drivers), `equipamentos.php` (branches), `grupos_permissao.php` (permission_groups), `usuarios.php` (permission_groups), `checklist.php`+`checklist_inspection.php` (checklists), `config_ocorrencias.php` (occurrence_configs) |
+| **L — Bugfixes frontend** | 5 | ✅ | Login: redirect `/dashboard`→`/` + versão 4.0.0 + rate limiting resiliente. Legacy: `dashboard.php` e `live.php` viram redirect. Router: `config-ocorrencias` (hífen→underscore) adicionado `$renamedRoutes`. Playback: envia proNo 34817 ao clicar Requisitar. Migration: `d'água`→`dagua` (apostrofo quebrava SQL) |
 
 > **Total**: **80 arquivos** PHP (79 lint) + 1 migration SQL + README.md. **0 erros de lint** em todo o projeto.
 
@@ -380,37 +382,42 @@ jimi_webhook/
 ## 10. Pendências para Próxima Iteração
 
 ### Melhorias funcionais
-- [x] **Resumo `/`**: metrics_rollup para pré-computar KPIs (tabela `metrics_snapshots`, 22 métricas/customer) — **Fase G**
+- [x] **Resumo `/`**: metrics_rollup para pré-computar KPIs — **Fase G**
 - [x] **Resumo `/`**: tour de boas-vindas (5 passos) + banner de comunicado com localStorage — **Fase G**
 - [x] **BI `/bi`**: filtro de Motoristas e multi-select de Alarmes com chips `+N` — **Fase G**
-- [x] **Exportar**: CSV real para 5 tipos de relatório (alarms/occurrences/positions/trips/devices) — **Fase G**
-- [x] **Dashboard `/ocorrencias/dashboard`**: filtro de período no polling — **Fase H**
-- [x] **Checklist**: tela de preenchimento/inspeção (`/checklist/inspecao`) — **Fase H**
-- [x] **Importação em lote**: POST real do CSV parseado em `/equipamentos` — **Fase H**
-- [x] **White-label**: `brand_color` aplicado na sidebar via CSS custom properties — **Fase H**
-- [ ] **Importação em lote**: POST real do CSV parseado (hoje só lê e mostra contagem)
+- [x] **Exportar**: CSV real para 5 tipos de relatório — **Fase G**
+- [x] **Dashboard ocorrências**: filtro de período no polling — **Fase H**
+- [x] **Checklist**: tela de preenchimento/inspeção — **Fase H**
+- [x] **Importação em lote**: POST real do CSV parseado — **Fase H**
+- [x] **White-label**: brand_color na sidebar — **Fase H**
+- [x] **Vídeo Playback**: envia proNo 34817 ao clicar Requisitar — **Fase L**
 - [ ] **OTA firmware**: testar proNo 33027 end-to-end com dispositivo real
-- [ ] **Checklist**: tela de preenchimento/inspeção (hoje só CRUD de configuração)
-- [ ] **Dashboard `/ocorrencias/dashboard`**: implementar filtro de período no polling
-- [ ] **Relatórios**: exportação Excel/PDF funcional (hoje placeholder)
+- [ ] **Relatórios**: exportação Excel/PDF (hoje CSV)
+- [ ] **App mobile PWA**: responsive off-canvas improvements
 
 ### Infra e tooling
-- [x] **Rate limiting no login**: 5 tentativas/15 min por IP + tabela `login_log` — **Fase H**
-- [x] **Lint pre-commit hook**: `.githooks/pre-commit` + `git config core.hooksPath .githooks` — **Fase I**
+- [x] **Rate limiting no login**: 5 tentativas/15 min + `login_log` — **Fase H**
+- [x] **Lint pre-commit hook**: `.githooks/pre-commit` — **Fase I**
+- [x] **Logs de acesso**: `login_log` — **Fase H**
+- [x] **Resiliência total**: 55 queries v4 com try-catch — **Fase K**
+- [x] **Login redirect**: `/dashboard` → `/` + safe_redirect_path — **Fase L**
+- [x] **Router: config-ocorrencias**: renamedRoutes map (hífen vs underscore) — **Fase L**
+- [x] **Migration fix**: apóstrofo `d'água` → `dagua` — **Fase L**
+- [x] **Legacy pages**: dashboard.php e live.php → redirect — **Fase L**
+- [x] **Deploy scripts**: deploy-v4.sh, crontab-setup.sh, hotfix_login_log.sql — **Fase J**
 - [ ] **Testes automatizados**: Playwright para fluxos críticos (login, ocorrências, webhook replay)
-- [x] **Logs de acesso**: registrar tentativas de login (sucesso/falha) via `login_log` — **Fase H**
 - [ ] **Verificar end-to-end**: comandos → IoTHub → dispositivo → pushinstructresponse
 - [ ] **Arquivos de mídia**: verificar se `/pushfileupload` popula corretamente para `/video`
 
 ### Dívida técnica (não-crítica)
-- [x] String interpolation de `$customer_id` em 9 arquivos legacy — convertido para prepared statements — **Fase H**
-- [x] `pushTerminalTransInfo.php` não extrai dados estruturados (R13) — **Fase I**
-- [x] `normalize_data()` faltam aliases (R14): `lon→longitude`, `msgId→msg_id` — **Fase H**
-- [x] Dupla normalização em pushalarm.php e pushresourcelist.php (R15) — **Fase H**
-- [x] Código morto em pushresourcelist.php (R16) — **Fase I**
-- [x] `md5(json_encode(...))` sem `JSON_UNESCAPED_UNICODE` em WebhookHandler (R17) — **Fase H**
-- [x] Remover `pushcmd.php` do disco (já fora do router) — **Fase H**
-- [x] Atualizar `README.md` para refletir v4.0.0 — **Fase I**
+- [x] String interpolation em 9 arquivos → prepared statements — **Fase H**
+- [x] `pushTerminalTransInfo.php` estruturado (R13) — **Fase I**
+- [x] `normalize_data()` aliases `lon`/`msgId` (R14) — **Fase H**
+- [x] Dupla normalização (pushalarm/pushresourcelist) (R15) — **Fase H**
+- [x] Código morto em pushresourcelist (R16) — **Fase I**
+- [x] md5 sem `JSON_UNESCAPED_UNICODE` (R17) — **Fase H**
+- [x] `pushcmd.php` removido do disco — **Fase H**
+- [x] README.md atualizado para v4.0.0 — **Fase I**
 
 ### Funcionalidades futuras (fora do escopo YUV)
 - [ ] **Licenciamento por equipamento**: campo de licença/plano por device/cliente

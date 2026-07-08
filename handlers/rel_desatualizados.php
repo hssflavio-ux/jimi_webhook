@@ -42,32 +42,38 @@ $buckets = [
 
 $bucketCounts = [];
 $total = 0;
-foreach ($buckets as $key => $b) {
-    $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
-    $stmt = $db->prepare("SELECT COUNT(*) FROM devices d LEFT JOIN customers c ON c.id = d.customer_id $full");
-    $stmt->execute($params);
-    $bucketCounts[$key] = (int)$stmt->fetchColumn();
-    $total += $bucketCounts[$key];
+try {
+    foreach ($buckets as $key => $b) {
+        $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
+        $stmt = $db->prepare("SELECT COUNT(*) FROM devices d LEFT JOIN customers c ON c.id = d.customer_id $full");
+        $stmt->execute($params);
+        $bucketCounts[$key] = (int)$stmt->fetchColumn();
+        $total += $bucketCounts[$key];
+    }
+} catch (Exception $e) {
+    $bucketCounts = array_fill_keys(array_keys($buckets), 0);
 }
 
 $detailRows = [];
 if ($detailBucket && isset($buckets[$detailBucket])) {
-    $b = $buckets[$detailBucket];
-    $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
-    $stmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.last_position_at, d.last_communication,
-               COALESCE(c.name, '—') as customer_name,
-               TIMESTAMPDIFF(HOUR, d.last_position_at, NOW()) as hours_since,
-               COALESCE(dm.model_name, '—') as model_name
-        FROM devices d
-        LEFT JOIN customers c ON c.id = d.customer_id
-        LEFT JOIN device_models dm ON d.device_model_id = dm.id
-        $full
-        ORDER BY d.last_position_at IS NULL DESC, d.last_position_at ASC
-        LIMIT 200
-    ");
-    $stmt->execute($params);
-    $detailRows = $stmt->fetchAll();
+    try {
+        $b = $buckets[$detailBucket];
+        $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
+        $stmt = $db->prepare("
+            SELECT d.imei, d.device_name, d.last_position_at, d.last_communication,
+                   COALESCE(c.name, '—') as customer_name,
+                   TIMESTAMPDIFF(HOUR, d.last_position_at, NOW()) as hours_since,
+                   COALESCE(dm.model_name, '—') as model_name
+            FROM devices d
+            LEFT JOIN customers c ON c.id = d.customer_id
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            $full
+            ORDER BY d.last_position_at IS NULL DESC, d.last_position_at ASC
+            LIMIT 200
+        ");
+        $stmt->execute($params);
+        $detailRows = $stmt->fetchAll();
+    } catch (Exception $e) {}
 }
 
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();

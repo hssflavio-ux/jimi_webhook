@@ -65,7 +65,8 @@ if (empty($segments)) {
                       'pushevent'];
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','grupos-permissao','motoristas','config-ocorrencias','checklist'];
+                     'chips','equipamentos','grupos-permissao','motoristas','checklist'];
+    $renamedRoutes = ['config-ocorrencias' => 'config_ocorrencias.php'];
 
     // Subrotas de 2 segmentos por prefixo
     $subrouteMap = [
@@ -91,6 +92,9 @@ if (empty($segments)) {
 
     if (in_array($first, $simpleRoutes)) {
         $handler = $first . '.php';
+
+    } elseif (isset($renamedRoutes[$first])) {
+        $handler = $renamedRoutes[$first];
 
     } elseif (in_array($first, $ajaxRoutes) || in_array($first, $webhookRoutes)) {
         $handler = $first . '.php';
