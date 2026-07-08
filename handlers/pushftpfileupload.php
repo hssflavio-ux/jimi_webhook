@@ -9,6 +9,7 @@ define('HANDLER_NAME', 'pushftpfileupload');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/occurrence_engine.php';
 
 class PushFtpFileUploadHandler extends WebhookHandler {
 
@@ -30,6 +31,7 @@ class PushFtpFileUploadHandler extends WebhookHandler {
         $instructionID = $item['instructionID'] ?? $item['instructionId'] ?? null;
         $rawTime       = $item['gateTime'] ?? $item['ftpUploadTime'] ?? $item['uploadTime'] ?? null;
         $eventTime     = sanitize_date($rawTime);
+        $channel       = $item['channel'] ?? $item['chnNo'] ?? $item['channelNumber'] ?? null;
 
         // Fallback: firmwares antigos podem enviar fileUrl/filePath
         $fileName = $item['fileName'] ?? $item['file'] ?? $instructionID ?? 'unknown';
@@ -38,10 +40,13 @@ class PushFtpFileUploadHandler extends WebhookHandler {
         $fileType = detect_media_type($fileName);
 
         try {
+            $isSuccess = ($result === 0 || strtoupper((string)$result) === 'SUCCESS');
+            $downloadStatus = $isSuccess ? 'disponivel' : 'erro';
+
             $stmt = $this->db->prepare("
                 INSERT INTO media_files 
-                (imei, file_name, file_type, file_size, file_url, source_type, event_time, raw_data)
-                VALUES (:imei, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :raw)
+                (imei, file_name, file_type, file_size, file_url, source_type, event_time, channel, download_status, raw_data)
+                VALUES (:imei, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :ch, :ds, :raw)
             ");
             $stmt->execute([
                 ':imei'  => $imei,
@@ -50,8 +55,15 @@ class PushFtpFileUploadHandler extends WebhookHandler {
                 ':fsize' => $fileSize,
                 ':url'   => $fileUrl,
                 ':etime' => $eventTime,
+                ':ch'    => $channel,
+                ':ds'    => $downloadStatus,
                 ':raw'   => json_encode($item, JSON_UNESCAPED_UNICODE)
             ]);
+
+            $mediaId = (int)$this->db->lastInsertId();
+            if ($mediaId > 0 && $eventTime && $downloadStatus === 'disponivel') {
+                link_upload_to_occurrence($this->db, $imei, $eventTime, $mediaId);
+            }
 
             Logger::info('FTP Upload registrado', [
                 'source' => $this->handlerName, 'imei' => $imei,

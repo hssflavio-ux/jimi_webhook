@@ -1,24 +1,32 @@
-# Jimi Webhook System v3.0.0
-> Gateway PHP para dispositivos IoT Jimi — recebe webhooks, persiste em MySQL, painel com design system Cursor-inspired (5 abas).
+# Jimi Webhook System v4.0.0 — YUV Parity
+> Gateway PHP para dispositivos IoT Jimi (recebe webhooks, persiste em MySQL) + plataforma multi-tenant de rastreamento com telemetria de vídeo. Em transformação para ser uma cópia fiel da plataforma YUV (app.yuv.com.br), cujo núcleo é a gestão de ocorrências DMS (alarme de câmera → ocorrência → tratativa → risco, com regras por cliente). Sem build step, sem framework JS.
 
-## Core Files
-- [config/WebhookHandler.php]: Handler base abstrato (token, idempotência, async, transação)
+## Documentos-guia (ler nesta ordem)
+- [PROJETO_YUV.md]: Blueprint-mestre v4.0.0 — visão, rotas-alvo (22 telas), design system, modelo de dados (migração v4.0.0), motor de ocorrências, roadmap por fases, critérios de aceite. FONTE DE VERDADE DO ESCOPO.
+- [analise_yuv/analise_yuv.html]: Análise visual do YUV — 22 telas + 6 modais com screenshots, regras de negócio, dinâmica e lacunas vs. o projeto atual.
+- [DESIGN.md]: Design system Coinbase (azul #0052ff, canvas branco, sidebar dark near-black #0a0b0d, CTAs pill 100px, headings display peso 400, JetBrains Mono em números/IMEI). Deriva de DESIGN-coinbase.md; substitui a paleta Cursor das versões ≤3.x. Já aplicado em web/layout_base.php, web/login_template.php, handlers/setup.php.
+- [STATUS.md]: Status vivo + roadmap YUV (§0) + backlog de segurança herdado (§10).
+- [CLAUDE.md] / [AGENTS.md]: Arquitetura, rotas, convenções, gotchas.
+
+## Core Files (preservados)
+- [config/WebhookHandler.php]: Handler base abstrato (token, idempotência, async via fastcgi_finish_request, transação). Todos os push*.php estendem.
 - [config/database.php]: Singleton PDO (lê .env, timezone UTC, utf8mb4)
-- [core/Logger.php]: Logger estático unificado (rotação diária, JSON context, 5 níveis)
-- [includes/functions.php]: Funções utilitárias (normalize_data, get_webhook_data, sanitize_date, detect_media_type)
-- [handlers/]: 11 webhook push endpoints + 6 dashboard AJAX endpoints + 3 auxiliares
-- [web/]: Painel com design system (index.php wrapper, dashboard_template.php ~850 linhas, assets/js)
-- [mysql/]: Schema dump de produção + script de migração v2.0.0
-- [docs/]: PRD.md (12 seções), API_COVERAGE.md, ADR-001.md
-- [DESIGN.md]: Design system tokens Cursor-inspired (cores, tipografia, componentes, regras)
+- [core/Logger.php]: Logger estático (rotação diária, 5 níveis)
+- [includes/auth.php]: Auth por token em cookie (tabela sessions), require_login/require_admin/require_ajax_session
+- [includes/functions.php]: normalize_data, get_webhook_data, sanitize_date, detect_media_type
+- [handlers/router.php]: Front controller (dispatch por segmentos de URL)
+- [handlers/push*.php]: 12 receptores de webhook Jimi (GPS/heartbeat/alarme/evento/mídia)
+- [web/layout_base.php]: Shell do dashboard (será reescrito com o design YUV na Fase 0)
+- [mysql/]: jimi_tracker.sql (base) + migration_v2.0.0 + migration_v3.1.0 (multi-tenant/auth) + migration_v4.0.0 (YUV, a criar)
 
 ## Key Concepts
-- **WebhookHandler**: Classe abstrata que todos os handlers de push DEVEM estender. Fornece validação de token, idempotência (MD5 hash, janela 10 min), resposta assíncrona via fastcgi_finish_request(), gerenciamento de transações e logging estruturado.
-- **normalize_data()**: Mapeia camelCase → snake_case (deviceImei→imei, lat→latitude, lng→longitude).
-- **Protocolo duplo**: JIMI (msgClass=0, JC400) e JT/T 808 (msgClass=1, JC450). Isolamento estrito no pushalarm com resolução de nome por protocolo (ADR-001).
-- **Async HTTP 200**: Handlers respondem imediatamente e continuam processando em background (PHP-FPM obrigatório).
-- **Design System v3.0.0**: Canvas cream `#f7f7f4`, Cursor Orange `#f54e00` como única cor de CTA, tipografia Inter + JetBrains Mono, hairlines no lugar de sombras, timeline pastels para status pills, 8px radius em CTAs, 12px em cards.
-- **Painel 5 abas**: Câmeras (telemetria + live stream flv.js), Alarmes (cards com barra de severidade + VIDEOUPLOAD), Comandos (33 presets + protocol toggle pills + histórico), Mídia (galeria 3-colunas + player modal), Configuração (queries/set assíncrono).
-- **Player HTTP-FLV**: flv.js para streams ao vivo e playback de arquivos de mídia.
-- **Timezone**: Banco em UTC, painel converte para BRT (GMT-3). Conversão dupla é perigo conhecido.
-- **documentation**: PRD.md (Product Requirements Document completo), DESIGN.md (tokens visuais), ADR-001 (protocol isolation).
+- **Motor de ocorrências (novo, núcleo)**: em includes/occurrence_engine.php, chamado dentro de pushalarm.php. Resolve o occurrence_config do cliente → aplica o parâmetro do tipo de alarme → cria ou agrupa a ocorrência (dedup por janela). Ver PROJETO_YUV.md §7.
+- **Multi-tenancy**: revendedor → cliente → filial (nível novo). Escopo por customer_id da sessão. Impersonação auditada.
+- **WebhookHandler**: classe abstrata que todos os push handlers DEVEM estender (token, idempotência MD5 janela 10min, async HTTP 200, transação).
+- **Protocolo duplo**: JIMI (msgClass=0) e JT/T 808 (msgClass=1) com isolamento estrito (ADR-001).
+- **Async HTTP 200**: handlers respondem imediato e processam em background (PHP-FPM obrigatório).
+- **Design v4.0.0 (Coinbase)**: azul #0052ff (única voltagem: ação/link/foco/item ativo), canvas branco, sidebar dark near-black #0a0b0d, CTAs pill 100px, cards hairline + um nível de sombra no hover, headings display peso 400, JetBrains Mono em todo número/IMEI. Navegação (alvo) com grupos-sanfona + header com contador On/Off. Risco DMS: Baixo=azul, Médio=amarelo, Alto=vermelho.
+- **Rotas-alvo (YUV)**: / (Resumo), /rastreamento, /bi, /ocorrencias/dashboard, /comandos, /exportar, /video/{aovivo,playback,downloads}, /relatorios/{posicoes,deslocamento,desatualizados,alarmes,ocorrencias}, /ativos, /chips, /clientes, /equipamentos, /grupos-permissao, /motoristas, /config-ocorrencias, /usuarios.
+- **Tabelas novas (v4.0.0)**: occurrences, occurrence_events, occurrence_configs, occurrence_config_params, drivers, sim_cards, branches, permission_groups, trips, jobs, geocode_cache, impersonation_log.
+- **Workers (cron, a criar)**: worker.php (fila jobs: relatórios/downloads), trip_builder.php (viagens), metrics_rollup.php (KPIs).
+- **Timezone**: banco em UTC, painel converte para BRT (GMT-3).

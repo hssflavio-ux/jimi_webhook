@@ -93,7 +93,7 @@ var markers = {}; // imei -> L.CircleMarker
 
 function upsertMarker(imei, lat, lng, speed, acc, name) {
     if (markers[imei]) map.removeLayer(markers[imei]);
-    var color = (acc == 1) ? '#f54e00' : '#9fbbe0';
+    var color = (acc == 1) ? '#0052ff' : '#a8acb3';
     var marker = L.circleMarker([lat, lng], { radius:7, fillColor:color, color:'#fff', weight:2, fillOpacity:0.9 }).addTo(map);
     marker.bindPopup('<strong>' + (name || imei) + '</strong><br>' + Math.round(speed || 0) + ' km/h<br><a href="/ativos/' + imei + '">Detalhes</a>');
     markers[imei] = marker;

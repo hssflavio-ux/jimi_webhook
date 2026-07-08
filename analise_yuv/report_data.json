@@ -1,0 +1,576 @@
+{
+  "resumo": {
+    "heading": "Bem-vindo, Flavio!",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Ver tutorial",
+      "Hoje",
+      "Últimos 7 dias",
+      "Último mês"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Bem-vindo, Flavio! Ver tutorial Tempo real Dados atuais Equipamentos 4 / 4 100% ativos Conectividade 0 4 Online Offline Ignição Ligada 0 Desligada 4 0.0% Ocorrências 5 total 5 aguardando 1 críticas + − Leaflet | © OpenStreetMap © CARTO Mapa de Calor Operação em Tempo Real Velocidade da Frota 4 total da frota Parados 4 (100%) Até 20 km/h 0 (0.0%) Até 60 km/h 0 (0.0%) Acima 60 km/h 0 (0.0%) Ociosidade Desatualizados Sem posicionar há mais de 7 dias 25.0% Sem posicionar há mais de 30 dias 25.0% Nunca posicionados 50.0% Status de Equipamentos 0.0% Online JC371 0 2 JC400D 0 1 JC450 0 1 Visão por clientes Perfil revendedor Top 3 por equipamentos ativos 1 Telecom Track 2 2 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 Top 3 por ocorrências 1 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 5 Top 3 por desatualizados 1 Telecom Track 2 2 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 Dados temporais Selecione o período Hoje Últimos 7 dias Último mês Alarmes e Ocorrências Alarmes hoje 448 00:00 02:00 04:00 06:00 08:00 10:00 12:00 14:00 16:00 18:00 22:00 0 50 100 150 200 Quantidade de alarmes Ocorrências hoje 5 00:00 02:00 04:00 06:00 08:00 10:00 12:00 14:00 16:00 18:00 22:00 0 1 2 3 4 Total de ocorrências Alarmes por placa e motoristas Top 3 placas com mais alarmes 1 Teste Cockpit 448 Top 3 motoristas com mais alarmes Nenhum alarme por motorista neste período. Para exibir este ranking, habilite o FaceID na frota. Fale com seu comercial YUV para ativar o recurso. 50",
+    "url": "https://app.yuv.com.br/"
+  },
+  "tracking": {
+    "heading": "Clientes (2)",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros"
+    ],
+    "labels": [],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Clientes (2) Telecom Track CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL Ativos (4) Offline Teste Cockpit - 1 865478070012283 09/06/2026 03:42:20 Ignição ligada Offline SIX8A14 - TESTE 869247060256192 23/07/2025 10:22:01 Offline TESTE-JC400D 862798051420038 Offline bancada - conf 865478070012697 + − Leaflet | © OpenStreetMap contributors",
+    "url": "https://app.yuv.com.br/tracking"
+  },
+  "bi": {
+    "heading": "",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "+ 2",
+      "+ 3",
+      "Selecione opções",
+      "+ 55",
+      "06/07/2026 - 06/07/2026",
+      "Gerar"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 BI Cliente + 2 Ativos + 3 Motoristas Selecione opções Alarmes + 55 Período 06/07/2026 - 06/07/2026 Gerar",
+    "url": "https://app.yuv.com.br/bi"
+  },
+  "occ_dashboard": {
+    "heading": "5",
+    "tabs": [],
+    "ths": [
+      "Cliente",
+      "IMEI",
+      "Motorista",
+      "Data",
+      "Status",
+      "Tipo",
+      "Risco",
+      "#"
+    ],
+    "rows": 5,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Filtros"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Dashboard Filtros Atualização automática 5 Ocorrências 5 Aguardando Tratativa 0 Online 3 Offline Baixo Risco 80.0% Médio Risco 0.0% Alto Risco 20.0% Cliente IMEI Motorista Data Status Tipo Risco # 1 - Teste Cockpit 865478070012283 - 06/07/2026 11:54:31 Aguardando Tratativa Uso de celular Alto 1 - Teste Cockpit 865478070012283 - 06/07/2026 08:15:26 Aguardando Tratativa Distração Baixo 1 - Teste Cockpit 865478070012283 - 06/07/2026 08:10:19 Aguardando Tratativa Distração Baixo 1 - Teste Cockpit 865478070012283 - 06/07/2026 08:23:36 Aguardando Tratativa Distração Baixo 1 - Teste Cockpit 865478070012283 - 06/07/2026 08:19:29 Aguardando Tratativa Distração Baixo Página 1 até 1 de 5",
+    "url": "https://app.yuv.com.br/occurrences/dashboard"
+  },
+  "commands": {
+    "heading": "Comandos",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Novo comando",
+      "Histórico de Comandos (0)"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Comandos Comandos Novo comando Histórico de Comandos (0) Selecione um equipamento",
+    "url": "https://app.yuv.com.br/commands"
+  },
+  "report_export": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Nome",
+      "Tipo",
+      "Status",
+      "Data de Criação",
+      "Data de Atualização",
+      "#"
+    ],
+    "rows": 2,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros"
+    ],
+    "labels": [],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Exportar Relatórios Exportar Relatórios Atualização automática Nome Tipo Status Data de Criação Data de Atualização # Relatório de Alarmes PDF Concluído 21/05/2025 20:13:40 11/08/2025 17:33:26 Relatório de Alarmes Excel Concluído 21/05/2025 20:14:41 11/08/2025 17:33:26 Página 1 até 1 de 2",
+    "url": "https://app.yuv.com.br/report-export"
+  },
+  "streaming": {
+    "heading": "Ao Vivo",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Ao Vivo Playback Downloads Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Ao Vivo Ao Vivo Cliente Selecione uma opção Ativo Selecione uma opção",
+    "url": "https://app.yuv.com.br/streaming"
+  },
+  "playback": {
+    "heading": "Playback",
+    "tabs": [],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "July 6th, 2026",
+      "Requisitar"
+    ],
+    "labels": [
+      "Período"
+    ],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Ao Vivo Playback Downloads Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Playback Playback Equipamento Selecione uma opção Período July 6th, 2026 Requisitar Selecione um equipamento, canal e período Selecione um arquivo na timeline",
+    "url": "https://app.yuv.com.br/playback"
+  },
+  "downloads": {
+    "heading": "Downloads",
+    "tabs": [],
+    "ths": [
+      "Nome",
+      "Identificador",
+      "Equipamento",
+      "Modelo",
+      "Canal",
+      "Requisitado em",
+      "Status",
+      "#"
+    ],
+    "rows": 1,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Ao Vivo Playback Downloads Relatórios Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Downloads Downloads Status Selecione uma opção Pesquisar Nome Identificador Equipamento Modelo Canal Requisitado em Status # 2025-05-22 13:20:48 TESTE - SIX8A14 869247060256192 JC450 2 22/05/2025 15:23:00 Disponível Página 1 até 1 de 1",
+    "url": "https://app.yuv.com.br/downloads"
+  },
+  "positions": {
+    "heading": "Posições",
+    "tabs": [],
+    "ths": [
+      "Identificador",
+      "Endereço",
+      "Motorista",
+      "Ignição",
+      "Sinal",
+      "Velocidade",
+      "Horários",
+      "#"
+    ],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Exportar Excel",
+      "Exportar PDF",
+      "06/07/2026 00:00 - 06/07/2026 23:59",
+      "Todas as posições",
+      "Gerar",
+      "Ver posições"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Posições Deslocamento Desatualizados Alarmes Ocorrências Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Posições Posições Exportar Excel Exportar PDF Ativo Selecione uma opção Período 06/07/2026 00:00 - 06/07/2026 23:59 Intervalo Todas as posições Gerar Ver posições Identificador Endereço Motorista Ignição Sinal Velocidade Horários # Nenhum resultado encontrado Página 1 até 1 de 0",
+    "url": "https://app.yuv.com.br/positions"
+  },
+  "movement": {
+    "heading": "Deslocamento",
+    "tabs": [],
+    "ths": [
+      "Identificador",
+      "Motorista",
+      "Início",
+      "Local Início",
+      "Fim",
+      "Local Fim",
+      "Evento",
+      "Duração",
+      "Velocidade Máxima",
+      "KM",
+      "Qtd. de Alarmes",
+      "#"
+    ],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Exportar Excel",
+      "Exportar PDF",
+      "Selecione opções",
+      "06/07/2026 00:00 - 06/07/2026 23:59",
+      "Gerar"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Posições Deslocamento Desatualizados Alarmes Ocorrências Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Deslocamento Deslocamento Exportar Excel Exportar PDF Ativos Selecione opções Período 06/07/2026 00:00 - 06/07/2026 23:59 Gerar Identificador Motorista Início Local Início Fim Local Fim Evento Duração Velocidade Máxima KM Qtd. de Alarmes # Nenhum resultado encontrado Página 1 até 1 de 0",
+    "url": "https://app.yuv.com.br/movement"
+  },
+  "outdated": {
+    "heading": "",
+    "tabs": [
+      "Desatualizados"
+    ],
+    "ths": [],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Desatualizados",
+      "Exportar Excel",
+      "Exportar PDF",
+      "Detalhes"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Posições Deslocamento Desatualizados Alarmes Ocorrências Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Desatualizados Desatualizados Cliente Selecione uma opção Resumo 0% 0% 25% 25% 50% Posicionando nas últimas 24 horas Sem posicionar a mais de 1 dia Sem posicionar a mais de 7 dias Sem posicionar a mais de 30 dias Nunca posicionados Exportar Excel Exportar PDF Posicionando nas últimas 24 horas 0% Sem posicionar a mais de 1 dia 0% Sem posicionar a mais de 7 dias 25% Detalhes Sem posicionar a mais de 30 dias 25% Detalhes Nunca posicionados 50% Detalhes",
+    "url": "https://app.yuv.com.br/outdated"
+  },
+  "alarms": {
+    "heading": "Alarmes",
+    "tabs": [],
+    "ths": [
+      "Cliente",
+      "Filiais",
+      "Identificador",
+      "IMEI",
+      "Tipo de Alarme",
+      "Data",
+      "#"
+    ],
+    "rows": 20,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Exportar Excel",
+      "Exportar PDF",
+      "+ 2",
+      "+ 3",
+      "+ 55",
+      "Selecione opções",
+      "06/07/2026 00:00 - 06/07/2026 23:59",
+      "Gerar"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Posições Deslocamento Desatualizados Alarmes Ocorrências Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Alarmes Alarmes Exportar Excel Exportar PDF Clientes + 2 Equipamentos + 3 Tipo de Alarme + 55 Filiais Selecione opções Período 06/07/2026 00:00 - 06/07/2026 23:59 Gerar Cliente Filiais Identificador IMEI Tipo de Alarme Data # CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Distração 06/07/2026 14:37:52 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Distração 06/07/2026 14:31:42 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:30:34 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:30:04 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Distração 06/07/2026 14:29:47 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:29:34 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:29:04 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:28:34 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Distração 06/07/2026 14:28:11 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:28:04 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:27:04 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:26:34 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:26:03 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Distração 06/07/2026 14:25:35 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:25:33 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:25:03 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:24:33 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:24:03 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem cinto 06/07/2026 14:23:33 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 865478070012283 Sem ",
+    "url": "https://app.yuv.com.br/alarms"
+  },
+  "occurrences": {
+    "heading": "Ocorrências",
+    "tabs": [],
+    "ths": [
+      "Cliente",
+      "Identificador",
+      "Motorista",
+      "IMEI",
+      "Último alarme em",
+      "Alarme",
+      "Falso positivo",
+      "Situação",
+      "#"
+    ],
+    "rows": 5,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Exportar Excel",
+      "Exportar PDF",
+      "+ 2",
+      "Selecione uma opção",
+      "+ 3",
+      "+ 55",
+      "Todos",
+      "06/07/2026 00:00 - 06/07/2026 23:59",
+      "Gerar"
+    ],
+    "labels": [],
+    "placeholders": [],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Posições Deslocamento Desatualizados Alarmes Ocorrências Cadastros Comandos Exportar Relatórios On: 0 Off: 4 Ocorrências Ocorrências Exportar Excel Exportar PDF Clientes + 2 Filiais Selecione uma opção Ativos + 3 Tipo de Alarme + 55 Motoristas Selecione uma opção Falso positivo Todos Status Selecione uma opção Período 06/07/2026 00:00 - 06/07/2026 23:59 Gerar Cliente Identificador Motorista IMEI Último alarme em Alarme Falso positivo Situação # CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit - 865478070012283 06/07/2026 11:54:31 Uso de celular - Aguardando Tratativa CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit - 865478070012283 06/07/2026 08:23:36 Distração - Aguardando Tratativa CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit - 865478070012283 06/07/2026 08:19:29 Distração - Aguardando Tratativa CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit - 865478070012283 06/07/2026 08:15:26 Distração - Aguardando Tratativa CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit - 865478070012283 06/07/2026 08:10:19 Distração - Aguardando Tratativa Página 1 até 1 de 5",
+    "url": "https://app.yuv.com.br/occurrences"
+  },
+  "assets": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Identificador",
+      "Cliente",
+      "Modelo",
+      "Ano",
+      "IMEI",
+      "#"
+    ],
+    "rows": 4,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar",
+      "Exportar Excel"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Ativos Ativos Cadastrar Pesquisar Exportar Excel Identificador Cliente Modelo Ano IMEI # TESTE-JC400D - - - 862798051420038 1 - Teste Cockpit CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL - - 865478070012283 TESTE - SIX8A14 Telecom Track HB20S 2024 869247060256192 conf - bancada Telecom Track - - 865478070012697 Página 1 até 1 de 4",
+    "url": "https://app.yuv.com.br/assets"
+  },
+  "sim_cards": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Operadora",
+      "Número",
+      "ICCID",
+      "IMEI",
+      "#"
+    ],
+    "rows": 4,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar",
+      "Exportar Excel"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Chips Chips Cadastrar Pesquisar Exportar Excel Operadora Número ICCID IMEI # Claro Allcom 11965990763 89550537010008317637 - Claro 11940221899 89550537100002291944 869247060256192 Vivo Allcom 11930865391 89551080157131639558 - Claro Allcom 11913636778 89550537010008813718 865478070012283 Página 1 até 1 de 4",
+    "url": "https://app.yuv.com.br/sim-cards"
+  },
+  "customers": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Nome",
+      "E-mail",
+      "Grupo de Permissão",
+      "Configuração de Ocorrência",
+      "Configuração de Checklist",
+      "Ativo",
+      "#"
+    ],
+    "rows": 2,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar",
+      "Exportar Excel"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Clientes Clientes Cadastrar Pesquisar Exportar Excel Nome E-mail Grupo de Permissão Configuração de Ocorrência Configuração de Checklist Ativo # CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL robson.santos@cbmsa.com.br CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL - Ativo Telecom Track configuracao@telecomtrack.com.br CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL - - Ativo Página 1 até 1 de 2",
+    "url": "https://app.yuv.com.br/customers"
+  },
+  "devices": {
+    "heading": "Equipamentos",
+    "tabs": [],
+    "ths": [
+      "IMEI",
+      "Modelo",
+      "Cliente",
+      "Ativo",
+      "Chip",
+      "Último Heartbeat",
+      "Bateria",
+      "Periféricos",
+      "Situação",
+      "Status",
+      "#"
+    ],
+    "rows": 4,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Exportar Excel",
+      "Cadastrar",
+      "Atualizar Firmware",
+      "Importar em Lote",
+      "865478070012283",
+      "865478070012697",
+      "862798051420038",
+      "869247060256192"
+    ],
+    "labels": [
+      "Pesquisar",
+      "Cliente",
+      "Modelo",
+      "Status",
+      "Situação"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Equipamentos Equipamentos Exportar Excel Cadastrar Atualizar Firmware Importar em Lote Pesquisar Cliente Selecione uma opção Modelo Selecione uma opção Status Selecione uma opção Situação Selecione uma opção IMEI Modelo Cliente Ativo Chip Último Heartbeat Bateria Periféricos Situação Status # 865478070012283 JC371 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 - Teste Cockpit 11913636778 06/07/2026 14:42:53 - - Offline Ativo 865478070012697 JC371 Telecom Track conf - bancada - 24/03/2026 15:39:38 - - Offline Ativo 862798051420038 JC400D - TESTE-JC400D - 09/10/2025 12:58:23 - - Offline Ativo 869247060256192 JC450 Telecom Track TESTE - SIX8A14 11940221899 23/07/2025 10:22:00 - - Offline Ativo Página 1 até 1 de 4",
+    "url": "https://app.yuv.com.br/devices"
+  },
+  "permission_groups": {
+    "heading": "Grupos de Permissões",
+    "tabs": [],
+    "ths": [
+      "Nome",
+      "Tipo de Usuário",
+      "Qtd. de Usuários",
+      "#"
+    ],
+    "rows": 2,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Grupos de Permissões Grupos de Permissões Cadastrar Pesquisar Nome Tipo de Usuário Qtd. de Usuários # Administrador Revendedor 4 CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL Cliente 10 Página 1 até 1 de 2",
+    "url": "https://app.yuv.com.br/permission-groups"
+  },
+  "drivers": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Foto",
+      "Cliente",
+      "Nome",
+      "Data de Nascimento",
+      "CNH",
+      "CNH expira em",
+      "Exame toxicológico expira em",
+      "Identificador",
+      "Categorias",
+      "#"
+    ],
+    "rows": 0,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar",
+      "Exportar Excel"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Motoristas Motoristas Cadastrar Pesquisar Exportar Excel Foto Cliente Nome Data de Nascimento CNH CNH expira em Exame toxicológico expira em Identificador Categorias # Nenhum resultado encontrado Página 1 até 1 de 0",
+    "url": "https://app.yuv.com.br/drivers"
+  },
+  "occurrence_settings": {
+    "heading": "",
+    "tabs": [],
+    "ths": [
+      "Nome",
+      "Qtd. de Clientes",
+      "#"
+    ],
+    "rows": 2,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Cadastrar"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Configurações de Ocorrências Configurações de Ocorrências Cadastrar Pesquisar Nome Qtd. de Clientes # CONSTRUTORA BARBOSA MELLO - ARCELOR MITTAL 1 Padrão Sistema 1259 Página 1 até 1 de 2",
+    "url": "https://app.yuv.com.br/occurrence-settings"
+  },
+  "users": {
+    "heading": "",
+    "tabs": [
+      "Minha Empresa",
+      "Meus Clientes"
+    ],
+    "ths": [
+      "Foto",
+      "Nome",
+      "E-mail",
+      "Grupo de Permissão",
+      "Ativo",
+      "#"
+    ],
+    "rows": 3,
+    "buttons": [
+      "Vídeos",
+      "Relatórios",
+      "Cadastros",
+      "Minha Empresa",
+      "Meus Clientes",
+      "Cadastrar"
+    ],
+    "labels": [
+      "Pesquisar"
+    ],
+    "placeholders": [
+      "Pesquisar"
+    ],
+    "text": "Resumo Rastreamento BI Dashboard Vídeos Relatórios Cadastros Ativos Chips Clientes Equipamentos Grupos de Permissões Motoristas Configurações de Ocorrências Usuários Comandos Exportar Relatórios On: 0 Off: 4 Usuários Minha Empresa Meus Clientes Usuários Cadastrar Pesquisar Foto Nome E-mail Grupo de Permissão Ativo # Igor igor@telecomtrack.com.br Administrador Ativo Luciana central@telecomtrack.com.br Administrador Ativo Julia juliat.tck@gmail.com Administrador Ativo Página 1 até 1 de 3",
+    "url": "https://app.yuv.com.br/users"
+  }
+}

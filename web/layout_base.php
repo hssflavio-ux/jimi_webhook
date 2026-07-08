@@ -1,9 +1,9 @@
 <?php
 /**
- * JIMI Webhook System — Layout Base NavTrack-Inspired v3.1.0
+ * JIMI Webhook System — Layout Base v4.0.0 (YUV Parity)
  *
- * Layout two-column: sidebar esquerda + área de conteúdo principal.
- * Usa a paleta Cursor-inspired do DESIGN.md com adaptações NavTrack.
+ * Layout two-column com sidebar dark + accordion groups + header fleet counter.
+ * Design system Coinbase (ver DESIGN.md / DESIGN-coinbase.md).
  *
  * Variáveis esperadas:
  *   $page_title      — Título da página (aparece no header)
@@ -25,19 +25,62 @@ if (!isset($user))          $user          = get_jimi_user();
 if (!isset($customer))      $customer      = get_customer();
 if (!isset($customers))     $customers     = get_available_customers($user['id'] ?? 0);
 
-$navLinks = [
-    ['route' => 'dashboard',  'label' => 'Painel',      'icon' => 'grid',     'href' => '/dashboard'],
-    ['route' => 'live',       'label' => 'Ao Vivo',     'icon' => 'map',      'href' => '/live'],
-    ['route' => 'ativos',     'label' => 'Ativos',      'icon' => 'camera',   'href' => '/ativos'],
-    ['route' => 'relatorios', 'label' => 'Relatórios',   'icon' => 'chart',    'href' => '/relatorios'],
-    ['route' => 'video',      'label' => 'Vídeo',       'icon' => 'play',     'href' => '/video'],
-    ['route' => 'comandos',   'label' => 'Comandos',     'icon' => 'terminal', 'href' => '/comandos'],
-    ['route' => 'config',     'label' => 'Configuração', 'icon' => 'gear',     'href' => '/config'],
+// ── YUV Navigation (v4.0.0): principal + accordion groups ──
+$navPrincipal = [
+    ['route' => 'resumo',        'label' => 'Resumo',        'icon' => 'grid',     'href' => '/'],
+    ['route' => 'rastreamento',  'label' => 'Rastreamento',  'icon' => 'map',      'href' => '/rastreamento'],
+    ['route' => 'bi',            'label' => 'BI',            'icon' => 'chart',    'href' => '/bi'],
+    ['route' => 'ocorrencias',   'label' => 'Dashboard',     'icon' => 'alert',    'href' => '/ocorrencias/dashboard'],
 ];
-if (($user['role'] ?? '') === 'admin') {
-    $navLinks[] = ['route' => 'clientes', 'label' => 'Clientes', 'icon' => 'people', 'href' => '/clientes'];
-    $navLinks[] = ['route' => 'usuarios', 'label' => 'Usuários', 'icon' => 'user',   'href' => '/usuarios'];
-}
+
+$navGroups = [
+    'videos' => [
+        'label' => 'Vídeos',
+        'icon'  => 'play',
+        'items' => [
+            ['route' => 'video_aovivo',    'label' => 'Ao Vivo',   'href' => '/video/aovivo'],
+            ['route' => 'video_playback',  'label' => 'Playback',  'href' => '/video/playback'],
+            ['route' => 'video_downloads', 'label' => 'Downloads', 'href' => '/video/downloads'],
+        ],
+    ],
+    'relatorios' => [
+        'label' => 'Relatórios',
+        'icon'  => 'file',
+        'items' => [
+            ['route' => 'rel_posicoes',       'label' => 'Posições',       'href' => '/relatorios/posicoes'],
+            ['route' => 'rel_deslocamento',   'label' => 'Deslocamento',    'href' => '/relatorios/deslocamento'],
+            ['route' => 'rel_desatualizados', 'label' => 'Desatualizados',  'href' => '/relatorios/desatualizados'],
+            ['route' => 'rel_alarmes',        'label' => 'Alarmes',         'href' => '/relatorios/alarmes'],
+            ['route' => 'rel_ocorrencias',    'label' => 'Ocorrências',     'href' => '/relatorios/ocorrencias'],
+        ],
+    ],
+    'cadastros' => [
+        'label' => 'Cadastros',
+        'icon'  => 'folder',
+        'items' => [
+            ['route' => 'ativos',              'label' => 'Ativos',              'href' => '/ativos'],
+            ['route' => 'chips',               'label' => 'Chips',               'href' => '/chips'],
+            ['route' => 'clientes',            'label' => 'Clientes',            'href' => '/clientes'],
+            ['route' => 'equipamentos',        'label' => 'Equipamentos',        'href' => '/equipamentos'],
+            ['route' => 'grupos-permissao',    'label' => 'Grupos de Permissão', 'href' => '/grupos-permissao'],
+            ['route' => 'motoristas',          'label' => 'Motoristas',          'href' => '/motoristas'],
+            ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],
+            ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
+        ],
+    ],
+];
+
+// Bottom-level nav items (after groups)
+$navBottom = [
+    ['route' => 'comandos', 'label' => 'Comandos', 'icon' => 'terminal', 'href' => '/comandos'],
+    ['route' => 'exportar', 'label' => 'Exportar', 'icon' => 'download', 'href' => '/exportar'],
+];
+
+// Legacy compatibility: also match 'dashboard' → 'resumo', 'live' → 'rastreamento'
+if ($current_route === 'dashboard') $current_route = 'resumo';
+if ($current_route === 'live') $current_route = 'rastreamento';
+if ($current_route === 'video') $current_route = 'video_aovivo';
+if ($current_route === 'relatorios') $current_route = 'rel_alarmes';
 
 function nav_icon($name) {
     $icons = [
@@ -51,6 +94,11 @@ function nav_icon($name) {
         'people'  => '<path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>',
         'user'    => '<path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/>',
         'logout'  => '<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+        'file'    => '<path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/>',
+        'folder'  => '<path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>',
+        'alert'   => '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+        'download'=> '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+        'chevron-down' => '<polyline points="6 9 12 15 18 9"/>',
     ];
     return $icons[$name] ?? '';
 }
@@ -62,44 +110,57 @@ function nav_icon($name) {
 <title>JIMI — <?= htmlspecialchars($page_title) ?></title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <style>
 /* ═══════════════════════════════════════════════════════════
-   JIMI Design System v3.1.0 — NavTrack-inspired Layout
-   Paleta: Cursor-inspired (#f54e00 primary, #f7f7f4 canvas)
+   JIMI Design System v4.0.0 — Coinbase (ver DESIGN.md / DESIGN-coinbase.md)
+   Paleta: azul #0052ff (única voltagem), canvas branco, sidebar dark #0a0b0d, CTAs pill
    ═══════════════════════════════════════════════════════════ */
 :root {
-    --primary: #f54e00;
-    --primary-active: #d04200;
-    --primary-soft: #fff3ed;
-    --ink: #26251e;
-    --body: #5a5852;
-    --body-strong: #26251e;
-    --muted: #807d72;
-    --muted-soft: #a09c92;
-    --canvas: #f7f7f4;
-    --canvas-soft: #fafaf7;
+    /* ── Coinbase Design System (v4.0.0) ───────────────────
+       Azul #0052ff = única voltagem de marca (CTAs, links, foco).
+       Canvas branco, sidebar dark near-black, geometria pill. */
+    --primary: #0052ff;          /* Coinbase Blue */
+    --primary-active: #003ecc;
+    --primary-disabled: #a8b8cc;
+    --primary-soft: #eaf0ff;
+    --ink: #0a0b0d;
+    --body: #5b616e;
+    --body-strong: #0a0b0d;
+    --muted: #7c828a;
+    --muted-soft: #a8acb3;
+    --canvas: #ffffff;
+    --canvas-soft: #f7f7f7;       /* surface-soft (bandas alternadas) */
     --surface: #ffffff;
-    --surface-strong: #e6e5e0;
-    --hairline: #e6e5e0;
-    --hairline-soft: #efeee8;
-    --hairline-strong: #cfcdc4;
-    --error: #cf2d56;
-    --success: #1f8a65;
-    --warning: #c08532;
-    --info: #9fbbe0;
-    --peach: #dfa88f;
-    --mint: #9fc9a2;
-    --blue: #9fbbe0;
-    --lavender: #c0a8dd;
-    --gold: #c08532;
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --sidebar-w: 240px;
+    --surface-strong: #eef0f3;
+    --surface-dark: #0a0b0d;       /* sidebar / heros escuros */
+    --surface-dark-elevated: #16181c;
+    --on-dark: #ffffff;
+    --on-dark-soft: #a8acb3;
+    --hairline: #dee1e6;
+    --hairline-soft: #eef0f3;
+    --hairline-strong: #cbd0d8;
+    --error: #cf202f;              /* semantic-down (só texto/borda) */
+    --success: #05b169;            /* semantic-up */
+    --warning: #f4b000;            /* accent-yellow (ilustrativo) */
+    --info: #0052ff;
+    --accent-yellow: #f4b000;
+    /* aliases legados (compat) mapeados para a paleta Coinbase */
+    --peach: #a8acb3;
+    --mint: #05b169;
+    --blue: #0052ff;
+    --lavender: #7c828a;
+    --gold: #f4b000;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-pill: 100px;
+    --shadow-soft: 0 4px 12px rgba(0,0,0,.04);
+    --sidebar-w: 244px;
     --asset-sidebar-w: 200px;
-    --header-h: 56px;
+    --header-h: 64px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -119,8 +180,8 @@ body {
 .sidebar {
     width: var(--sidebar-w);
     min-width: var(--sidebar-w);
-    background: var(--surface);
-    border-right: 1px solid var(--hairline);
+    background: var(--surface-dark);
+    border-right: 1px solid #22252b;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -145,13 +206,13 @@ body {
 .sidebar-brand-name {
     font-size: 16px;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--on-dark);
     letter-spacing: -0.3px;
 }
 
 .sidebar-brand-version {
     font-size: 11px;
-    color: var(--muted-soft);
+    color: var(--on-dark-soft);
     font-family: 'JetBrains Mono', monospace;
     margin-left: auto;
 }
@@ -166,10 +227,10 @@ body {
     padding: 8px 10px;
     font-size: 13px;
     font-family: 'Inter', sans-serif;
-    border: 1px solid var(--hairline);
+    border: 1px solid #2a2d33;
     border-radius: var(--radius-sm);
-    background: var(--canvas);
-    color: var(--ink);
+    background: var(--surface-dark-elevated);
+    color: var(--on-dark);
     cursor: pointer;
 }
 .sidebar-customer select:focus { outline: none; border-color: var(--primary); }
@@ -187,16 +248,16 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 8px 12px;
+    padding: 9px 12px;
     font-size: 13px;
     font-weight: 500;
-    color: var(--body);
+    color: var(--on-dark-soft);
     text-decoration: none;
     border-radius: var(--radius-sm);
     transition: background .1s, color .1s;
 }
-.sidebar-nav a:hover { background: var(--canvas); color: var(--ink); }
-.sidebar-nav a.active { background: var(--primary-soft); color: var(--primary); }
+.sidebar-nav a:hover { background: var(--surface-dark-elevated); color: var(--on-dark); }
+.sidebar-nav a.active { background: var(--primary); color: #fff; }
 
 .sidebar-nav a svg {
     width: 18px; height: 18px;
@@ -207,13 +268,13 @@ body {
 
 .sidebar-nav-divider {
     height: 1px;
-    background: var(--hairline);
+    background: #22252b;
     margin: 6px 12px;
 }
 
 /* Sidebar Footer */
 .sidebar-footer {
-    border-top: 1px solid var(--hairline);
+    border-top: 1px solid #22252b;
     padding: 12px 16px;
     display: flex;
     align-items: center;
@@ -222,30 +283,30 @@ body {
 
 .sidebar-footer-avatar {
     width: 30px; height: 30px;
-    border-radius: 50%;
-    background: var(--blue);
+    border-radius: 9999px;
+    background: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 12px;
     font-weight: 600;
-    color: var(--ink);
+    color: #fff;
     flex-shrink: 0;
 }
 
 .sidebar-footer-info { flex: 1; min-width: 0; }
-.sidebar-footer-name { font-size: 13px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sidebar-footer-role { font-size: 11px; color: var(--muted); }
+.sidebar-footer-name { font-size: 13px; font-weight: 500; color: var(--on-dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-footer-role { font-size: 11px; color: var(--on-dark-soft); }
 
 .sidebar-footer-logout {
-    color: var(--muted);
+    color: var(--on-dark-soft);
     text-decoration: none;
     display: flex; align-items: center; justify-content: center;
     width: 30px; height: 30px;
     border-radius: var(--radius-sm);
     transition: background .1s, color .1s;
 }
-.sidebar-footer-logout:hover { background: #fef2f5; color: var(--error); }
+.sidebar-footer-logout:hover { background: var(--surface-dark-elevated); color: #ff6b7a; }
 .sidebar-footer-logout svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ── Main ────────────────────────────────────────────── */
@@ -357,12 +418,15 @@ body {
 }
 
 /* ── Cards ───────────────────────────────────────────── */
+/* Coinbase: superfícies planas + hairline; um único nível de sombra no hover */
 .card {
     background: var(--surface);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-lg);
     padding: 20px;
+    transition: box-shadow .15s;
 }
+.card:hover { box-shadow: var(--shadow-soft); }
 
 /* ── KPI Grid ────────────────────────────────────────── */
 .kpi-grid {
@@ -389,8 +453,9 @@ body {
 }
 
 .kpi-item-value {
+    font-family: 'JetBrains Mono', monospace;   /* Coinbase: números em mono */
     font-size: 28px;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--ink);
     letter-spacing: -0.5px;
     line-height: 1.1;
@@ -448,10 +513,10 @@ tbody tr:hover { background: var(--canvas-soft); }
     background: var(--surface-strong);
     color: var(--body);
 }
-.badge-success { background: #e8f5ef; color: var(--success); }
-.badge-error   { background: #fef2f5; color: var(--error); }
-.badge-warning { background: #fdf3e8; color: var(--warning); }
-.badge-info    { background: #eef4fa; color: #5a7fa8; }
+.badge-success { background: #e4f7ee; color: #05914f; }
+.badge-error   { background: #fdeaec; color: var(--error); }
+.badge-warning { background: #fdf3d6; color: #a97a00; }
+.badge-info    { background: var(--primary-soft); color: var(--primary); }
 .badge-primary { background: var(--primary-soft); color: var(--primary); }
 
 /* ── Buttons ─────────────────────────────────────────── */
@@ -459,12 +524,12 @@ tbody tr:hover { background: var(--canvas-soft); }
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 8px 18px;
-    font-size: 13px;
-    font-weight: 500;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
     font-family: 'Inter', sans-serif;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);   /* Coinbase: CTA sempre pill */
     cursor: pointer;
     text-decoration: none;
     transition: background .15s, opacity .15s;
@@ -473,15 +538,21 @@ tbody tr:hover { background: var(--canvas-soft); }
 
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-active); }
+.btn-primary:disabled, .btn-primary.is-disabled { background: var(--primary-disabled); cursor: not-allowed; }
 
+/* Secundário: pill cinza sobre branco (surface-strong) */
 .btn-outline {
-    background: transparent;
-    color: var(--body);
-    border: 1px solid var(--hairline);
+    background: var(--surface-strong);
+    color: var(--ink);
+    border: none;
 }
-.btn-outline:hover { background: var(--canvas); color: var(--ink); }
+.btn-outline:hover { background: var(--hairline); color: var(--ink); }
 
-.btn-sm { padding: 5px 12px; font-size: 12px; }
+/* Escuro: pill near-black (ex.: ações em bandas claras) */
+.btn-dark { background: var(--ink); color: #fff; }
+.btn-dark:hover { background: var(--surface-dark-elevated); }
+
+.btn-sm { padding: 6px 14px; font-size: 13px; }
 
 /* ── Forms ───────────────────────────────────────────── */
 .form-group { margin-bottom: 16px; }
@@ -498,18 +569,18 @@ tbody tr:hover { background: var(--canvas-soft); }
 .form-group select,
 .form-group textarea {
     width: 100%;
-    padding: 8px 12px;
+    padding: 11px 14px;
     font-size: 14px;
     font-family: 'Inter', sans-serif;
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     color: var(--ink);
     background: var(--canvas);
-    transition: border-color .15s;
+    transition: border-color .15s, box-shadow .15s;
 }
 .form-group input:focus,
 .form-group select:focus,
-.form-group textarea:focus { outline: none; border-color: var(--primary); }
+.form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 .form-group textarea { resize: vertical; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
 
 .form-row {
@@ -583,18 +654,137 @@ tbody tr:hover { background: var(--canvas-soft); }
 .date-filter input[type="date"]:focus { outline: none; border-color: var(--primary); }
 .date-filter-label { font-size: 12px; color: var(--muted); font-weight: 500; }
 
+/* ── Sidebar Accordion Groups (v4.0.0) ──────────────── */
+.sidebar-accordion { }
+.sidebar-accordion-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--on-dark-soft);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background .1s, color .1s;
+    user-select: none;
+}
+.sidebar-accordion-header:hover { background: var(--surface-dark-elevated); color: var(--on-dark); }
+.sidebar-accordion-header svg {
+    width: 18px; height: 18px;
+    stroke: currentColor; stroke-width: 2; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+    flex-shrink: 0;
+}
+.sidebar-accordion-header .chevron {
+    margin-left: auto;
+    transition: transform .2s;
+    width: 14px; height: 14px;
+}
+.sidebar-accordion.open .sidebar-accordion-header .chevron { transform: rotate(180deg); }
+.sidebar-accordion-body {
+    display: none;
+    padding-left: 28px;
+}
+.sidebar-accordion.open .sidebar-accordion-body { display: block; }
+
+/* Group divider */
+.sidebar-nav-divider {
+    height: 1px;
+    background: #22252b;
+    margin: 6px 12px;
+}
+
+/* ── Header Fleet Counter ────────────────────────────── */
+.fleet-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 12px;
+    font-weight: 500;
+}
+.fleet-counter-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.fleet-counter-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.fleet-counter-dot.on { background: var(--success); }
+.fleet-counter-dot.off { background: var(--muted-soft); }
+.fleet-counter-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    color: var(--ink);
+}
+
+/* ── Sidebar Collapse Button ──────────────────────────── */
+.sidebar-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--on-dark-soft);
+    cursor: pointer;
+    transition: background .1s;
+}
+.sidebar-collapse-btn:hover { background: var(--surface-dark-elevated); color: var(--on-dark); }
+.sidebar-collapse-btn svg { width: 16px; height: 16px; }
+
+/* Sidebar collapsed state */
+.sidebar.collapsed {
+    width: 64px; min-width: 64px;
+}
+.sidebar.collapsed .sidebar-brand-name,
+.sidebar.collapsed .sidebar-brand-version,
+.sidebar.collapsed .sidebar-customer,
+.sidebar.collapsed .sidebar-nav a span,
+.sidebar.collapsed .sidebar-accordion-header span,
+.sidebar.collapsed .sidebar-accordion-body,
+.sidebar.collapsed .sidebar-footer-info,
+.sidebar.collapsed .sidebar-nav-divider { display: none; }
+.sidebar.collapsed .sidebar-nav a,
+.sidebar.collapsed .sidebar-accordion-header { justify-content: center; padding: 10px; }
+.sidebar.collapsed .sidebar-footer { justify-content: center; }
+.sidebar.collapsed + .main { margin-left: 64px; }
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (max-width: 768px) {
+    .sidebar { transform: translateX(-100%); transition: transform .2s; }
+    .sidebar.mobile-open { transform: translateX(0); }
+    .main { margin-left: 0 !important; }
+    .main-header { padding: 0 16px; }
+    .main-content { padding: 16px; }
+}
+
+/* ── Hamburger (mobile) ──────────────────────────────── */
+.hamburger {
+    display: none;
+    width: 32px; height: 32px;
+    align-items: center; justify-content: center;
+    border: none; background: transparent;
+    cursor: pointer; color: var(--ink);
+}
+@media (max-width: 768px) { .hamburger { display: inline-flex; } }
+
 </style>
 <?= $extra_head ?? '' ?>
 </head>
 <body class="<?= $body_class ?? '' ?>">
 <!-- Sidebar -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
         <div class="sidebar-brand-dots">
             <span class="sb-p1"></span><span class="sb-p2"></span><span class="sb-p3"></span>
         </div>
         <div class="sidebar-brand-name">JIMI</div>
-        <div class="sidebar-brand-version">v<?= getenv('SYSTEM_VERSION') ?: '3.1' ?></div>
+        <div class="sidebar-brand-version">v<?= getenv('SYSTEM_VERSION') ?: '4.0' ?></div>
     </div>
 
     <div class="sidebar-customer">
@@ -608,10 +798,57 @@ tbody tr:hover { background: var(--canvas-soft); }
     </div>
 
     <nav class="sidebar-nav">
-        <?php foreach ($navLinks as $link): ?>
-        <a href="<?= $link['href'] ?>" class="<?= $current_route === $link['route'] ? 'active' : '' ?>">
+        <?php
+        // Principal items
+        foreach ($navPrincipal as $link):
+            $active = ($current_route === $link['route']) ? 'active' : '';
+        ?>
+        <a href="<?= $link['href'] ?>" class="<?= $active ?>">
             <svg viewBox="0 0 24 24"><?= nav_icon($link['icon']) ?></svg>
-            <?= $link['label'] ?>
+            <span><?= $link['label'] ?></span>
+        </a>
+        <?php endforeach; ?>
+
+        <!-- Accordion Groups -->
+        <?php
+        $accordionIdx = 0;
+        foreach ($navGroups as $groupKey => $group):
+            $accordionIdx++;
+            $itemRoutes = array_column($group['items'], 'route');
+            $isOpen = in_array($current_route, $itemRoutes);
+            $groupId = 'accordion-' . $groupKey;
+        ?>
+        <div class="sidebar-nav-divider"></div>
+        <div class="sidebar-accordion <?= $isOpen ? 'open' : '' ?>" id="<?= $groupId ?>">
+            <div class="sidebar-accordion-header" onclick="toggleAccordion('<?= $groupId ?>')">
+                <svg viewBox="0 0 24 24"><?= nav_icon($group['icon']) ?></svg>
+                <span><?= $group['label'] ?></span>
+                <svg class="chevron" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <?= nav_icon('chevron-down') ?>
+                </svg>
+            </div>
+            <div class="sidebar-accordion-body">
+                <?php foreach ($group['items'] as $item):
+                    $active = ($current_route === $item['route']) ? 'active' : '';
+                ?>
+                <a href="<?= $item['href'] ?>" class="<?= $active ?>">
+                    <span><?= $item['label'] ?></span>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
+
+        <div class="sidebar-nav-divider"></div>
+
+        <?php
+        // Bottom items
+        foreach ($navBottom as $link):
+            $active = ($current_route === $link['route']) ? 'active' : '';
+        ?>
+        <a href="<?= $link['href'] ?>" class="<?= $active ?>">
+            <svg viewBox="0 0 24 24"><?= nav_icon($link['icon']) ?></svg>
+            <span><?= $link['label'] ?></span>
         </a>
         <?php endforeach; ?>
     </nav>
@@ -633,11 +870,35 @@ tbody tr:hover { background: var(--canvas-soft); }
 <!-- Main -->
 <main class="main">
     <header class="main-header">
-        <div class="main-header-title"><?= htmlspecialchars($page_title) ?></div>
+        <div class="flex" style="align-items:center;gap:12px;">
+            <button class="hamburger" onclick="toggleMobileSidebar()" title="Menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round">
+                    <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+            </button>
+            <button class="sidebar-collapse-btn" onclick="toggleSidebar()" title="Colapsar sidebar">
+                <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>
+                </svg>
+            </button>
+            <div class="main-header-title"><?= htmlspecialchars($page_title) ?></div>
+        </div>
         <div class="main-header-meta">
             <?php if ($customer): ?>
             <span><?= htmlspecialchars($customer['name']) ?></span>
             <?php endif; ?>
+            <div class="fleet-counter" id="fleet-counter">
+                <div class="fleet-counter-item">
+                    <div class="fleet-counter-dot on"></div>
+                    <span>On</span>
+                    <span class="fleet-counter-val" id="fleet-on">--</span>
+                </div>
+                <div class="fleet-counter-item">
+                    <div class="fleet-counter-dot off"></div>
+                    <span>Off</span>
+                    <span class="fleet-counter-val" id="fleet-off">--</span>
+                </div>
+            </div>
             <span id="server-clock" class="text-mono">--</span>
         </div>
     </header>
@@ -654,6 +915,85 @@ function switchCustomer(id) {
         if (data.code === 0) location.reload();
     });
 }
+
+// ── Accordion Toggle ──────────────────────────────────
+function toggleAccordion(groupId) {
+    var el = document.getElementById(groupId);
+    if (!el) return;
+    el.classList.toggle('open');
+    // Persist state
+    var state = JSON.parse(localStorage.getItem('jimi_accordion') || '{}');
+    state[groupId] = el.classList.contains('open');
+    localStorage.setItem('jimi_accordion', JSON.stringify(state));
+}
+
+// Restore accordion state from localStorage
+(function() {
+    var state = JSON.parse(localStorage.getItem('jimi_accordion') || '{}');
+    Object.keys(state).forEach(function(k) {
+        var el = document.getElementById(k);
+        if (el) {
+            if (state[k]) el.classList.add('open');
+            else el.classList.remove('open');
+        }
+    });
+})();
+
+// ── Sidebar Collapse ──────────────────────────────────
+function toggleSidebar() {
+    var sb = document.getElementById('sidebar');
+    if (!sb) return;
+    sb.classList.toggle('collapsed');
+    localStorage.setItem('jimi_sidebar_collapsed', sb.classList.contains('collapsed'));
+}
+(function() {
+    if (localStorage.getItem('jimi_sidebar_collapsed') === 'true') {
+        var sb = document.getElementById('sidebar');
+        if (sb) sb.classList.add('collapsed');
+    }
+})();
+
+// ── Mobile Sidebar ────────────────────────────────────
+function toggleMobileSidebar() {
+    var sb = document.getElementById('sidebar');
+    if (!sb) return;
+    sb.classList.toggle('mobile-open');
+}
+document.addEventListener('click', function(e) {
+    var sb = document.getElementById('sidebar');
+    var hamb = document.querySelector('.hamburger');
+    if (sb && sb.classList.contains('mobile-open') && !sb.contains(e.target) && !hamb.contains(e.target)) {
+        sb.classList.remove('mobile-open');
+    }
+});
+
+// ── Fleet Counter Polling ─────────────────────────────
+(function() {
+    var elOn = document.getElementById('fleet-on');
+    var elOff = document.getElementById('fleet-off');
+    var container = document.getElementById('fleet-counter');
+    if (!elOn || !elOff || !container) return;
+
+    function fetchFleet() {
+        fetch('/camerasdata')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var devices = data.data || data.devices || [];
+                var onCount = 0, offCount = 0;
+                devices.forEach(function(d) {
+                    if (d.online || d.status === 'online' || d.is_online) onCount++;
+                    else offCount++;
+                });
+                elOn.textContent = onCount;
+                elOff.textContent = offCount;
+            })
+            .catch(function() {});
+    }
+    fetchFleet();
+    setInterval(fetchFleet, 30000);
+})();
+
+// ── Clock ─────────────────────────────────────────────
 function updateClock() {
     const el = document.getElementById('server-clock');
     if (el) el.textContent = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });

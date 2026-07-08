@@ -66,35 +66,36 @@ if ($success) {
 <title>JIMI — Configuração Inicial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* Coinbase Design System (v4.0.0) — azul #0052ff, canvas branco, geometria pill */
 :root {
-    --primary:#f54e00;--primary-active:#d04200;--ink:#26251e;--body:#5a5852;
-    --muted:#807d72;--canvas:#f7f7f4;--surface:#ffffff;--hairline:#e6e5e0;
-    --error:#cf2d56;--success:#1f8a65;--read:#9fbbe0;
+    --primary:#0052ff;--primary-active:#003ecc;--ink:#0a0b0d;--body:#5b616e;
+    --muted:#7c828a;--canvas:#ffffff;--surface:#ffffff;--surface-soft:#f7f7f7;
+    --surface-strong:#eef0f3;--hairline:#dee1e6;--error:#cf202f;--success:#05b169;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',sans-serif;background:var(--canvas);color:var(--body);min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:40px;width:100%;max-width:420px}
-h1{font-size:20px;font-weight:600;color:var(--ink);margin-bottom:8px}
-.sub{font-size:13px;color:var(--muted);margin-bottom:28px}
+body{font-family:'Inter',sans-serif;background:var(--surface-soft);color:var(--body);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:var(--surface);border:1px solid var(--hairline);border-radius:24px;padding:40px;width:100%;max-width:420px}
+h1{font-size:28px;font-weight:400;color:var(--ink);margin-bottom:8px;letter-spacing:-.5px}
+.sub{font-size:14px;color:var(--muted);margin-bottom:28px}
 .fg{margin-bottom:18px}
-label{display:block;font-size:12px;font-weight:500;color:var(--ink);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+label{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px;letter-spacing:.2px}
 input[type="text"],input[type="email"],input[type="password"]{
-    width:100%;padding:10px 12px;font-size:14px;font-family:'Inter',sans-serif;
-    border:1px solid var(--hairline);border-radius:6px;color:var(--ink);background:var(--canvas);
-    transition:border-color .15s
+    width:100%;padding:13px 16px;font-size:15px;font-family:'Inter',sans-serif;
+    border:1px solid var(--hairline);border-radius:12px;color:var(--ink);background:var(--canvas);
+    transition:border-color .15s,box-shadow .15s
 }
-input:focus{outline:none;border-color:var(--primary)}
-.btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 24px;font-size:14px;font-weight:500;
-    font-family:'Inter',sans-serif;border:none;border-radius:8px;cursor:pointer;transition:background .15s;width:100%}
+input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 24px;font-size:16px;font-weight:600;
+    font-family:'Inter',sans-serif;border:none;border-radius:100px;cursor:pointer;transition:background .15s;width:100%}
 .btn-primary{background:var(--primary);color:#fff}
 .btn-primary:hover{background:var(--primary-active)}
-.alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:20px}
-.alert-error{background:#fef2f5;color:var(--error);border:1px solid #fce4eb}
-.alert-success{background:#f0faf5;color:var(--success);border:1px solid #d4f0e2}
-.icon{width:32px;height:32px;background:var(--read);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
-.icon svg{width:18px;height:18px;color:var(--ink)}
+.alert{padding:12px 16px;border-radius:12px;font-size:14px;margin-bottom:20px}
+.alert-error{background:#fdeaec;color:var(--error);border:1px solid #f5c2c7}
+.alert-success{background:#e4f7ee;color:#05914f;border:1px solid #b7ecd0}
+.icon{width:40px;height:40px;background:var(--primary);border-radius:9999px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.icon svg{width:20px;height:20px;color:#fff}
 </style>
 </head>
 <body>

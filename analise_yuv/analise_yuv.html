@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Análise app.yuv.com.br — Pontos a implementar no jimi_webhook</title>
+<style>
+  :root{
+    --roxo:#702fd3; --roxo-2:#8b52e0; --tinta:#1d1b25; --cinza:#5b5766;
+    --linha:#e7e3ef; --canvas:#faf9fc; --card:#ffffff; --laranja:#f54e00;
+    --verde:#0f9d58; --amarelo:#e6a700; --vermelho:#e0364f; --azul:#2f6fd3;
+    --ok:#e7f6ee; --gap:#fdecef; --parc:#fff6e0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Inter',-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       color:var(--tinta);background:var(--canvas);line-height:1.6;font-size:15.5px}
+  a{color:var(--roxo);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+       background:#f0ecf9;color:#4a2a9c;padding:1px 6px;border-radius:5px;font-size:.86em}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+
+  /* Capa */
+  header.cover{background:linear-gradient(135deg,#4d1f96 0%,#702fd3 55%,#8b52e0 100%);
+       color:#fff;padding:64px 0 52px}
+  .cover .wrap{max-width:1080px}
+  .cover .kicker{text-transform:uppercase;letter-spacing:.16em;font-size:12.5px;
+       font-weight:600;opacity:.85}
+  .cover h1{font-size:40px;line-height:1.12;margin:14px 0 10px;font-weight:800}
+  .cover p.sub{font-size:18px;opacity:.94;margin:0 0 26px;max-width:760px}
+  .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .meta span{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);
+       padding:6px 13px;border-radius:999px;font-size:13px}
+
+  /* Seções */
+  section{padding:40px 0}
+  h2.mod{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--roxo);
+       font-weight:700;margin:0 0 4px}
+  h2 + h3.tit, h3.tit{font-size:27px;margin:2px 0 6px;font-weight:800;line-height:1.2}
+  .lead{color:var(--cinza);font-size:16px;max-width:820px;margin:0 0 18px}
+  .divisor{height:1px;background:var(--linha);border:0;margin:0}
+
+  /* Cards de feature */
+  .feat{background:var(--card);border:1px solid var(--linha);border-radius:16px;
+       overflow:hidden;margin:22px 0;box-shadow:0 1px 0 rgba(20,10,50,.02)}
+  .feat .head{display:flex;align-items:flex-start;gap:14px;padding:20px 22px 6px}
+  .feat .head .n{flex:0 0 auto;width:34px;height:34px;border-radius:9px;background:#f0ecf9;
+       color:var(--roxo);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px}
+  .feat .head .t{flex:1}
+  .feat .head h4{margin:0;font-size:20px;font-weight:800}
+  .feat .head .rota{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--cinza)}
+  .feat .body{padding:6px 22px 22px}
+  .shot{display:block;width:100%;border:1px solid var(--linha);border-radius:11px;margin:14px 0}
+  .shot.small{max-width:560px}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.duo{grid-template-columns:1fr}}
+  .cap{font-size:12.5px;color:#8a8598;text-align:center;margin:-6px 0 12px}
+
+  .block{margin:16px 0 6px}
+  .block .lbl{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.04em;
+       display:inline-flex;align-items:center;gap:7px;margin-bottom:6px}
+  .lbl.reg{color:var(--azul)} .lbl.imp{color:var(--roxo)} .lbl.din{color:var(--laranja)}
+  ul{margin:6px 0 6px;padding-left:20px} li{margin:4px 0}
+
+  .rec{background:#f7f4fd;border:1px solid #e6ddf8;border-left:4px solid var(--roxo);
+       border-radius:0 12px 12px 0;padding:14px 18px;margin:14px 0 2px}
+  .rec .lbl{color:var(--roxo)}
+
+  /* badges de prioridade / status */
+  .pill{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px;
+       letter-spacing:.02em;vertical-align:middle}
+  .p-alta{background:#fdecef;color:#c31f3d;border:1px solid #f6c9d3}
+  .p-media{background:#fff6e0;color:#a97800;border:1px solid #f2e1ad}
+  .p-baixa{background:#eaf3ff;color:#255fb0;border:1px solid #c8ddf7}
+  .s-novo{background:#fdecef;color:#c31f3d;border:1px solid #f6c9d3}
+  .s-parc{background:#fff6e0;color:#a97800;border:1px solid #f2e1ad}
+  .s-temos{background:#e7f6ee;color:#0c7a45;border:1px solid #bce6cf}
+
+  /* tabelas */
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px;
+       background:var(--card);border:1px solid var(--linha);border-radius:12px;overflow:hidden}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--linha);vertical-align:top}
+  th{background:#f6f3fb;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6a6478}
+  tr:last-child td{border-bottom:0}
+  .tbl-wrap{overflow-x:auto}
+
+  /* mapa de navegação */
+  .sitemap{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px;margin:16px 0}
+  .grp{background:var(--card);border:1px solid var(--linha);border-radius:13px;padding:14px 16px}
+  .grp h5{margin:0 0 8px;font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .grp h5 .dot{width:9px;height:9px;border-radius:50%;background:var(--roxo)}
+  .grp ul{list-style:none;padding:0;margin:0}
+  .grp li{padding:3px 0;font-size:13.5px;color:var(--cinza);display:flex;justify-content:space-between;gap:8px}
+  .grp li code{font-size:11.5px}
+
+  .callout{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:18px 20px;margin:16px 0}
+  .callout.warn{border-left:4px solid var(--amarelo);background:#fffdf6}
+  .callout.key{border-left:4px solid var(--roxo);background:#faf7ff}
+
+  footer{background:#1d1b25;color:#cfc9dd;padding:34px 0;margin-top:20px;font-size:13.5px}
+  footer a{color:#b79cf0}
+  .toc{columns:2;column-gap:26px;margin:8px 0}
+  @media(max-width:720px){.toc{columns:1}}
+  .toc a{display:block;padding:5px 0;font-size:14.5px;break-inside:avoid}
+  .num{color:var(--roxo);font-weight:700;font-family:'JetBrains Mono',monospace;margin-right:6px}
+  h3.sec-h{font-size:22px;margin:34px 0 4px;padding-top:10px;border-top:2px solid var(--linha);font-weight:800}
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="wrap">
+    <div class="kicker">Análise funcional • Benchmark de produto</div>
+    <h1>YUV — Your Unlimited Vision</h1>
+    <p class="sub">Análise completa da plataforma <strong>app.yuv.com.br</strong> (instância white-label “TelecomTrack”): todas as 22 telas, regras de negócio e dinâmica de cada funcionalidade — mapeadas para implementação no <strong>jimi_webhook</strong>.</p>
+    <div class="meta">
+      <span>🔎 22 telas navegadas + 6 modais/formulários</span>
+      <span>🖥️ Next.js (App Router) • Leaflet • Tailwind</span>
+      <span>🔑 Acesso: flavio@telecomtrack.com.br</span>
+      <span>📅 Levantamento: 06/07/2026</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ===================== SUMÁRIO EXECUTIVO ===================== -->
+<section>
+  <h2 class="mod">Panorama</h2>
+  <h3 class="tit">O que é o YUV e por que analisá-lo</h3>
+  <p class="lead">O YUV é uma plataforma <strong>multi-tenant de rastreamento de ativos com telemetria de vídeo (MDVR/ADAS/DMS)</strong>. Diferente de um rastreador GPS tradicional, o núcleo do produto é a <strong>gestão de ocorrências de comportamento do motorista</strong> capturadas por câmeras com IA (distração, uso de celular, sem cinto…), com um fluxo de tratativa, classificação de risco e configuração por cliente. O restante — rastreamento ao vivo, relatórios, cadastros e comandos — sustenta essa operação. Os modelos de equipamento vistos (<code>JC371</code>, <code>JC400D</code>, <code>JC450</code>) são dashcams/MDVR da própria Jimi, o mesmo ecossistema que o nosso <code>jimi_webhook</code> integra.</p>
+
+  <div class="callout key">
+    <strong>Leitura rápida da oportunidade.</strong> Nosso <code>jimi_webhook</code> já cobre a base (rastreamento ao vivo, ativos, clientes, comandos, vídeo, usuários, relatórios genéricos). O que o YUV tem <em>a mais</em> — e é onde está o valor competitivo — se concentra em <strong>4 frentes</strong>:
+    <ol style="margin:8px 0 0">
+      <li><strong>Módulo de Ocorrências / DMS</strong> — promoção de alarme → ocorrência, tratativa, risco, falso-positivo, motor de regras configurável por cliente.</li>
+      <li><strong>Vídeo estruturado</strong> — Ao Vivo, Playback por timeline e fila de Downloads (por canal).</li>
+      <li><strong>Relatórios ricos + exportação assíncrona</strong> — Posições, Deslocamento (viagens geocodificadas), Desatualizados e fila de exportação PDF/Excel.</li>
+      <li><strong>Cadastros avançados</strong> — Equipamentos com firmware OTA, importação em lote e periféricos; Chips (SIM); Motoristas com compliance (CNH/toxicológico) e FaceID; Grupos de Permissão; configs por cliente.</li>
+    </ol>
+  </div>
+</section>
+
+<hr class="divisor">
+
+<!-- ===================== MAPA DE NAVEGAÇÃO ===================== -->
+<section>
+  <h2 class="mod">Arquitetura de navegação</h2>
+  <h3 class="tit">Mapa completo das 22 rotas</h3>
+  <p class="lead">A sidebar organiza tudo em 4 blocos: itens principais no topo e três grupos sanfona (Vídeos, Relatórios, Cadastros). O cabeçalho global mostra o contador de frota <code>On/Off</code> e o seletor de perfil (revendedor × cliente).</p>
+
+  <div class="sitemap">
+    <div class="grp">
+      <h5><span class="dot"></span>Principal</h5>
+      <ul>
+        <li>Resumo <code>/</code></li>
+        <li>Rastreamento <code>/tracking</code></li>
+        <li>BI <code>/bi</code></li>
+        <li>Dashboard Ocorr. <code>/occurrences/dashboard</code></li>
+        <li>Comandos <code>/commands</code></li>
+        <li>Exportar Relat. <code>/report-export</code></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <h5><span class="dot"></span>Vídeos</h5>
+      <ul>
+        <li>Ao Vivo <code>/streaming</code></li>
+        <li>Playback <code>/playback</code></li>
+        <li>Downloads <code>/downloads</code></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <h5><span class="dot"></span>Relatórios</h5>
+      <ul>
+        <li>Posições <code>/positions</code></li>
+        <li>Deslocamento <code>/movement</code></li>
+        <li>Desatualizados <code>/outdated</code></li>
+        <li>Alarmes <code>/alarms</code></li>
+        <li>Ocorrências <code>/occurrences</code></li>
+      </ul>
+    </div>
+    <div class="grp">
+      <h5><span class="dot"></span>Cadastros</h5>
+      <ul>
+        <li>Ativos <code>/assets</code></li>
+        <li>Chips <code>/sim-cards</code></li>
+        <li>Clientes <code>/customers</code></li>
+        <li>Equipamentos <code>/devices</code></li>
+        <li>Grupos Permissão <code>/permission-groups</code></li>
+        <li>Motoristas <code>/drivers</code></li>
+        <li>Config. Ocorrências <code>/occurrence-settings</code></li>
+        <li>Usuários <code>/users</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<hr class="divisor">
+
+<!-- ===================== GAP ANALYSIS ===================== -->
+<section>
+  <h2 class="mod">Análise de lacunas</h2>
+  <h3 class="tit">O que já temos × o que falta implementar</h3>
+  <p class="lead">Comparação com o estado atual do <code>jimi_webhook</code> (rotas em <code>handlers/router.php</code>). Legenda:
+    <span class="pill s-temos">Já temos</span>
+    <span class="pill s-parc">Parcial</span>
+    <span class="pill s-novo">Novo</span>
+  </p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Funcionalidade YUV</th><th>Situação no jimi_webhook</th><th>Prioridade</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Dashboard de Ocorrências (DMS)</strong> — risco, tratativa, auto-refresh</td><td><span class="pill s-novo">Novo</span> recebemos <code>pushalarm</code>, mas não há camada de ocorrência</td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Relatório de Ocorrências</strong> — falso positivo, situação, 55 tipos de alarme</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Configurações de Ocorrências</strong> — motor de regras por cliente</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Relatório de Alarmes</strong> — grade filtrável + export</td><td><span class="pill s-parc">Parcial</span> em <code>/relatorios</code></td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Vídeo: Ao Vivo / Playback / Downloads</strong></td><td><span class="pill s-parc">Parcial</span> temos <code>/video</code> genérico</td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Equipamentos</strong> — OTA firmware, importação em lote, periféricos, rotação/marca d'água streaming</td><td><span class="pill s-parc">Parcial</span> temos <code>/config</code> + <code>/devicemodels</code></td><td><span class="pill p-alta">Alta</span></td></tr>
+      <tr><td><strong>Rastreamento</strong> — clientes × ativos, ignição, mapa</td><td><span class="pill s-temos">Já temos</span> <code>/live</code></td><td><span class="pill p-baixa">Manter</span></td></tr>
+      <tr><td><strong>Resumo</strong> — KPIs, heatmap, distribuição de velocidade, séries temporais</td><td><span class="pill s-parc">Parcial</span> <code>/dashboard</code></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Relatórios: Posições / Deslocamento / Desatualizados</strong></td><td><span class="pill s-parc">Parcial</span></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Exportar Relatórios</strong> — fila assíncrona PDF/Excel</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Motoristas</strong> — CNH/toxicológico, FaceID, identificador</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Chips (SIM)</strong> — operadora, ICCID, vínculo IMEI</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Grupos de Permissões</strong> — RBAC por tipo (revendedor/cliente)</td><td><span class="pill s-parc">Parcial</span> temos require_admin</td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>BI</strong> — gerador de análises sob demanda</td><td><span class="pill s-novo">Novo</span></td><td><span class="pill p-baixa">Baixa</span></td></tr>
+      <tr><td><strong>Clientes</strong> — config ocorrência/checklist + impersonação</td><td><span class="pill s-parc">Parcial</span> <code>/clientes</code></td><td><span class="pill p-media">Média</span></td></tr>
+      <tr><td><strong>Usuários</strong> — abas Minha Empresa / Meus Clientes</td><td><span class="pill s-temos">Já temos</span> <code>/usuarios</code></td><td><span class="pill p-baixa">Melhorar</span></td></tr>
+      <tr><td><strong>Comandos</strong> — histórico + polling de status</td><td><span class="pill s-temos">Já temos</span> <code>/comandos</code></td><td><span class="pill p-baixa">Manter</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ===================== ÍNDICE ===================== -->
+<section>
+  <h2 class="mod">Índice detalhado</h2>
+  <h3 class="tit">Telas analisadas</h3>
+  <div class="toc">
+    <a href="#f1"><span class="num">A1</span>Dashboard de Ocorrências (DMS)</a>
+    <a href="#f2"><span class="num">A2</span>Relatório de Ocorrências</a>
+    <a href="#f3"><span class="num">A3</span>Configurações de Ocorrências</a>
+    <a href="#f4"><span class="num">A4</span>Relatório de Alarmes</a>
+    <a href="#f5"><span class="num">B1</span>Vídeo — Ao Vivo</a>
+    <a href="#f6"><span class="num">B2</span>Vídeo — Playback</a>
+    <a href="#f7"><span class="num">B3</span>Vídeo — Downloads</a>
+    <a href="#f8"><span class="num">C1</span>Resumo (home)</a>
+    <a href="#f9"><span class="num">C2</span>Rastreamento</a>
+    <a href="#f10"><span class="num">C3</span>BI</a>
+    <a href="#f11"><span class="num">C4</span>Desatualizados</a>
+    <a href="#f12"><span class="num">D1</span>Relatório de Posições</a>
+    <a href="#f13"><span class="num">D2</span>Relatório de Deslocamento</a>
+    <a href="#f14"><span class="num">D3</span>Exportar Relatórios (fila)</a>
+    <a href="#f15"><span class="num">E1</span>Equipamentos</a>
+    <a href="#f16"><span class="num">E2</span>Chips (SIM)</a>
+    <a href="#f17"><span class="num">E3</span>Ativos</a>
+    <a href="#f18"><span class="num">E4</span>Motoristas</a>
+    <a href="#f19"><span class="num">E5</span>Clientes</a>
+    <a href="#f20"><span class="num">E6</span>Grupos de Permissões</a>
+    <a href="#f21"><span class="num">E7</span>Usuários</a>
+    <a href="#f22"><span class="num">F1</span>Comandos</a>
+  </div>
+</section>
+
+<!-- =====================================================================
+     BLOCO A — OCORRÊNCIAS / DMS
+====================================================================== -->
+<h3 class="sec-h">Bloco A — Módulo de Ocorrências / Telemetria de Vídeo (DMS/ADAS)</h3>
+<p class="lead">É o coração do produto e a maior lacuna nossa. A cadeia de valor é: <strong>o dispositivo gera um alarme de câmera → uma regra decide se ele vira “ocorrência” → a ocorrência entra numa fila de tratativa com classificação de risco → o operador trata (valida, marca falso-positivo, resolve)</strong>.</p>
+
+<!-- A1 -->
+<div class="feat" id="f1">
+  <div class="head"><div class="n">A1</div><div class="t">
+    <h4>Dashboard de Ocorrências <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/occurrences/dashboard</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_occ_dashboard.png" alt="Dashboard de Ocorrências">
+    <p>Painel operacional de gestão de eventos DMS. Quatro cartões de topo (<strong>Ocorrências</strong>, <strong>Aguardando Tratativa</strong>, <strong>Online</strong>, <strong>Offline</strong>), uma barra de <strong>distribuição de risco</strong> (Baixo/Médio/Alto em %) e a grade de ocorrências com ação de abrir cada caso.</p>
+
+    <div class="block"><span class="lbl reg">📐 Regras de negócio</span>
+    <ul>
+      <li><strong>Classificação de risco</strong> por tipo de evento: “Uso de celular” → <em>Alto</em>; “Distração” → <em>Baixo</em>. O risco é atributo da regra, não do alarme cru.</li>
+      <li><strong>Status/situação</strong> de cada ocorrência: <code>Aguardando Tratativa</code> é o estado inicial (fluxo de workflow, não só um log).</li>
+      <li>Cartões <strong>Online/Offline</strong> refletem a conectividade do <em>equipamento de câmera</em>, não do rastreador — o vídeo depende do device online.</li>
+      <li>A grade traz <strong>Cliente, IMEI, Motorista, Data, Tipo, Risco</strong> — a coluna Motorista fica vazia sem FaceID (ver E4).</li>
+    </ul></div>
+
+    <div class="block"><span class="lbl din">⚙️ Dinâmica</span>
+    <ul>
+      <li>Toggle <strong>“Atualização automática”</strong> (polling em tempo real, semelhante ao nosso <code>/commandstatus</code>).</li>
+      <li>Botão <strong>Filtros</strong> (colapsável) e paginação server-side.</li>
+      <li>Ação por linha (ícone de link externo) abre o <strong>caso da ocorrência</strong> em nova visão para tratativa.</li>
+    </ul></div>
+
+    <div class="rec"><span class="lbl">🚀 Como implementar no jimi_webhook</span>
+    <ul>
+      <li>Criar tabela <code>occurrences</code> (id, customer_id, imei, driver_id, alarm_type, risk, status, created_at, treated_by, treated_at, falso_positivo) alimentada a partir do handler <code>pushalarm.php</code> após aplicar a regra do cliente.</li>
+      <li>Nova rota <code>/ocorrencias</code> + AJAX <code>/ocorrenciasdata</code> reaproveitando o padrão de polling do <code>commandstatus.php</code> para o “Atualização automática”.</li>
+      <li>Reusar o design system do <code>layout_base.php</code> (cartões hairline). Barra de risco = 3 faixas coloridas somando 100%.</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- A2 -->
+<div class="feat" id="f2">
+  <div class="head"><div class="n">A2</div><div class="t">
+    <h4>Relatório de Ocorrências <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/occurrences</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_occurrences.png" alt="Relatório de Ocorrências">
+    <p>Versão analítica/histórica do dashboard, com filtro poderoso e exportação. É aqui que se audita e fecha as tratativas.</p>
+    <div class="block"><span class="lbl reg">📐 Regras de negócio</span>
+    <ul>
+      <li>Filtros combináveis: <strong>Clientes, Filiais, Ativos, Tipo de Alarme (55 tipos!), Motoristas, Falso positivo (Todos/Sim/Não), Status, Período</strong>.</li>
+      <li>Conceito de <strong>Falso positivo</strong> como classificação humana pós-evento — vira métrica de qualidade da IA.</li>
+      <li>Coluna <strong>“Último alarme em”</strong> sugere que ocorrências <strong>agrupam múltiplos alarmes</strong> do mesmo motorista/ativo (deduplicação por janela de tempo).</li>
+      <li>Suporte a <strong>Filiais</strong> = hierarquia dentro do cliente (nível a mais que o nosso customer_id).</li>
+    </ul></div>
+    <div class="block"><span class="lbl din">⚙️ Dinâmica</span>
+    <ul><li>Botões <strong>Exportar Excel</strong> e <strong>Exportar PDF</strong> (síncronos aqui; a fila assíncrona é o módulo D3).</li>
+        <li>“Gerar” dispara a consulta apenas após o usuário montar o filtro (evita carga desnecessária).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul>
+      <li>Endpoint único de ocorrências com filtros via query string; a mesma consulta serve grade e export.</li>
+      <li>Guardar o <strong>catálogo dos 55 tipos de alarme</strong> numa tabela <code>alarm_types</code> (código Jimi → rótulo PT-BR → risco padrão) — reaproveitável nos módulos A1/A3/A4.</li>
+      <li>Campo <code>falso_positivo</code> booleano + auditoria de quem marcou.</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- A3 -->
+<div class="feat" id="f3">
+  <div class="head"><div class="n">A3</div><div class="t">
+    <h4>Configurações de Ocorrências — motor de regras <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/occurrence-settings</div>
+  </div></div>
+  <div class="body">
+    <div class="duo">
+      <img class="shot" src="screenshots/page_occurrence_settings.png" alt="Lista de configurações de ocorrência">
+      <img class="shot" src="screenshots/modal_occ_settings_form.png" alt="Formulário de configuração de ocorrência">
+    </div>
+    <p class="cap">Esquerda: perfis de configuração por cliente. Direita: formulário (Nome + Parâmetros dinâmicos “+”).</p>
+    <p>Define <strong>quais alarmes viram ocorrência e com qual risco/tratamento</strong>. Cada perfil é aplicado a N clientes — note o perfil <strong>“Padrão Sistema” com 1.259 clientes</strong> e um perfil dedicado ao cliente “CONSTRUTORA BARBOSA MELLO”.</p>
+    <div class="block"><span class="lbl reg">📐 Regras de negócio</span>
+    <ul>
+      <li>Um perfil = <strong>Nome + lista de Parâmetros</strong> (cada parâmetro liga um tipo de alarme a um comportamento: gera ocorrência? qual risco? limiar?).</li>
+      <li>Herança: existe um <strong>perfil padrão global</strong> e perfis específicos que o sobrescrevem por cliente.</li>
+      <li>Vínculo com o cadastro de Clientes (coluna “Configuração de Ocorrência” em E5).</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul>
+      <li>Tabelas <code>occurrence_configs</code> (id, nome, is_default) e <code>occurrence_config_params</code> (config_id, alarm_type, gera_ocorrencia, risco, limiar). FK <code>customers.occurrence_config_id</code>.</li>
+      <li>No <code>pushalarm.php</code>: resolver o config do cliente do device → aplicar parâmetro do tipo de alarme → criar/agrupar ocorrência. É o ponto de integração central de todo o Bloco A.</li>
+      <li>Formulário “Parâmetros +” = linhas dinâmicas (mesmo padrão dos presets de comando em <code>/comandos</code>).</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- A4 -->
+<div class="feat" id="f4">
+  <div class="head"><div class="n">A4</div><div class="t">
+    <h4>Relatório de Alarmes <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/alarms</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_alarms.png" alt="Relatório de Alarmes">
+    <p>A camada crua, <em>antes</em> da regra de ocorrência: todos os alarmes recebidos. No teste, <strong>448 alarmes em um dia</strong> (23 páginas) — tipos “Distração” e “Sem cinto” dominam.</p>
+    <div class="block"><span class="lbl reg">📐 Regras / colunas</span>
+    <ul><li>Cliente, Filiais, Identificador, IMEI, <strong>Tipo de Alarme</strong>, Data — colunas ordenáveis.</li>
+        <li>Filtros: Clientes, Equipamentos, Tipo de Alarme (55), Filiais, Período.</li>
+        <li>Volume alto ⇒ precisa de <strong>paginação server-side + índices</strong> por (imei, data, tipo).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Já recebemos os alarmes via <code>pushalarm.php</code>; falta a <strong>tela de consulta</strong> com esses filtros e export. Estender o atual <code>/relatorios</code> com uma aba “Alarmes”.</li>
+        <li>Este relatório é o “alimentador” do Bloco A: alarme → (regra) → ocorrência.</li></ul></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BLOCO B — VÍDEO
+====================================================================== -->
+<h3 class="sec-h">Bloco B — Vídeo (MDVR / câmeras)</h3>
+<p class="lead">O YUV separa o vídeo em três fluxos distintos. Hoje temos <code>/video</code> genérico + AJAX <code>/mediadata</code>/<code>/camerasdata</code>; vale reestruturar nesses três.</p>
+
+<!-- B1 -->
+<div class="feat" id="f5">
+  <div class="head"><div class="n">B1</div><div class="t">
+    <h4>Vídeo — Ao Vivo (streaming) <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/streaming</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_streaming.png" alt="Ao Vivo">
+    <p>Transmissão ao vivo das câmeras. Fluxo enxuto: escolher <strong>Cliente → Ativo</strong> e o player abre os canais do MDVR.</p>
+    <div class="block"><span class="lbl reg">📐 Regras / dinâmica</span>
+    <ul><li>Seleção em cascata Cliente → Ativo (filtra ativos do cliente).</li>
+        <li>No cadastro do equipamento define-se <strong>rotação do streaming (360°)</strong> e <strong>marca d'água</strong> — atributos que afetam o player (ver E1).</li>
+        <li>Depende do device <strong>Online</strong>; multi-canal (o MDVR tem vários canais de câmera).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Consolidar nosso <code>/video</code> num <code>/video/aovivo</code> com seleção cliente→ativo→canal e o stream (HLS/RTMP conforme a API Jimi).</li></ul></div>
+  </div>
+</div>
+
+<!-- B2 -->
+<div class="feat" id="f6">
+  <div class="head"><div class="n">B2</div><div class="t">
+    <h4>Vídeo — Playback <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/playback</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_playback.png" alt="Playback">
+    <p>Reprodução de vídeo gravado no cartão do MDVR. Fluxo em 2 passos explícitos: <strong>1) selecionar equipamento, canal e período → Requisitar; 2) escolher um arquivo na timeline</strong>.</p>
+    <div class="block"><span class="lbl reg">📐 Regras / dinâmica</span>
+    <ul><li>Playback consulta a <strong>lista de arquivos existentes no device</strong> por período (é assíncrono — o device responde a lista de gravações).</li>
+        <li>Timeline por canal; o vídeo antigo é solicitado sob demanda (não está no servidor até ser baixado — vira o módulo B3).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Endpoint que envia comando de “listar gravações” ao device e monta a timeline; ao clicar num trecho, dispara o download → aparece em B3.</li></ul></div>
+  </div>
+</div>
+
+<!-- B3 -->
+<div class="feat" id="f7">
+  <div class="head"><div class="n">B3</div><div class="t">
+    <h4>Vídeo — Downloads <span class="pill p-media">Prioridade Média</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/downloads</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_downloads.png" alt="Downloads">
+    <p>Fila de extração de vídeos do device para o servidor. Colunas: Nome, Identificador, Equipamento (IMEI), <strong>Modelo, Canal</strong>, Requisitado em, <strong>Status</strong> (ex.: <em>Disponível</em>).</p>
+    <div class="block"><span class="lbl reg">📐 Regras / dinâmica</span>
+    <ul><li>É uma <strong>fila de jobs assíncronos</strong>: um pedido de vídeo do device leva tempo; quando pronto, muda para “Disponível” com link.</li>
+        <li>Filtro por Status; identifica <strong>canal</strong> específico da câmera.</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Tabela <code>video_downloads</code> (imei, canal, período, status, url, requested_by). O webhook <code>pushfileupload.php</code>/<code>pushftpfileupload.php</code> que já temos é exatamente quem fecha esse job (device → FTP → status “Disponível”).</li>
+        <li>Casa perfeitamente com nosso pipeline assíncrono do <code>WebhookHandler</code>.</li></ul></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BLOCO C — RASTREAMENTO & DASHBOARDS
+====================================================================== -->
+<h3 class="sec-h">Bloco C — Rastreamento & Dashboards</h3>
+
+<!-- C1 -->
+<div class="feat" id="f8">
+  <div class="head"><div class="n">C1</div><div class="t">
+    <h4>Resumo (home) <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_resumo.png" alt="Resumo / home dashboard">
+    <p>Home com visão 360° da operação. Muito mais rico que o nosso <code>/dashboard</code> atual.</p>
+    <div class="block"><span class="lbl reg">📐 Blocos e regras</span>
+    <ul>
+      <li><strong>Tempo real:</strong> Equipamentos ativos (4/4), Conectividade Online/Offline, Ignição ligada/desligada, Ocorrências (total, aguardando, críticas) e <strong>Mapa de Calor</strong>.</li>
+      <li><strong>Operação em tempo real:</strong> distribuição de <strong>Velocidade da Frota</strong> (Parados / ≤20 / ≤60 / &gt;60 km/h), <strong>Ociosidade</strong> (ignição ligada + velocidade 0), e <strong>Status por modelo</strong> (JC371/JC400D/JC450).</li>
+      <li><strong>Desatualizados</strong> (pizza): sem posicionar &gt;7d, &gt;30d, nunca posicionados.</li>
+      <li><strong>Visão por clientes (perfil revendedor):</strong> Top 3 por equipamentos ativos / ocorrências / desatualizados.</li>
+      <li><strong>Dados temporais:</strong> Alarmes hoje (448) e Ocorrências hoje (5) em série temporal (Hoje / 7 dias / mês), Top placas e Top motoristas com mais alarmes.</li>
+      <li>Nota de produto: “Top motoristas” exige <strong>FaceID habilitado</strong> — gancho comercial de upsell.</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Evoluir <code>/dashboard</code> com cartões de tempo real (reuso de <code>/trackdata</code>, <code>/hbdata</code>) e as séries temporais de alarmes/ocorrências (depende do Bloco A).</li>
+        <li>“Visão por clientes” só faz sentido no <strong>perfil revendedor</strong> — condicionar por tipo de usuário (Bloco E6).</li></ul></div>
+  </div>
+</div>
+
+<!-- C2 -->
+<div class="feat" id="f9">
+  <div class="head"><div class="n">C2</div><div class="t">
+    <h4>Rastreamento <span class="pill p-baixa">Manter</span> <span class="pill s-temos">Já temos</span></h4>
+    <div class="rota">/tracking</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_tracking.png" alt="Rastreamento ao vivo">
+    <p>Mapa Leaflet com dois painéis laterais: <strong>Clientes</strong> e <strong>Ativos</strong> (busca em cada). Cada ativo mostra status <span class="pill s-novo">Offline</span>/online, nome, <strong>IMEI</strong>, <strong>última posição (data/hora)</strong> e <strong>estado da ignição</strong>.</p>
+    <div class="block"><span class="lbl din">⚙️ Dinâmica</span>
+    <ul><li>Painéis colapsáveis; clique no ativo centraliza o mapa no pin.</li>
+        <li>Equivalente ao nosso <code>/live</code> — é o que já temos mais alinhado. Melhoria possível: chip de ignição e “tempo desde a última posição”.</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Recomendação</span>
+    <ul><li>Manter <code>/live</code>; adotar o layout de duas colunas (cliente/ativo) e os selos de ignição/última-posição como referência visual.</li></ul></div>
+  </div>
+</div>
+
+<!-- C3 -->
+<div class="feat" id="f10">
+  <div class="head"><div class="n">C3</div><div class="t">
+    <h4>BI <span class="pill p-baixa">Prioridade Baixa</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/bi</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_bi.png" alt="BI">
+    <p>Gerador de análises sob demanda: filtra <strong>Cliente, Ativos, Motoristas, Alarmes (55), Período</strong> e “Gerar” monta gráficos analíticos. Tela em branco até gerar (carga controlada).</p>
+    <div class="rec"><span class="lbl">🚀 Recomendação</span>
+    <ul><li>Baixa prioridade — sobrepõe-se ao Resumo + relatórios. Considerar só depois do Bloco A, reaproveitando os mesmos datasets de alarmes/ocorrências.</li></ul></div>
+  </div>
+</div>
+
+<!-- C4 -->
+<div class="feat" id="f11">
+  <div class="head"><div class="n">C4</div><div class="t">
+    <h4>Desatualizados <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/outdated</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_outdated.png" alt="Desatualizados">
+    <p>Saúde de posicionamento da frota, em <strong>faixas de tempo</strong>: posicionando nas últimas 24h, sem posicionar &gt;1d, &gt;7d, &gt;30d e <strong>nunca posicionados</strong>. Cada faixa tem “Detalhes” + export.</p>
+    <div class="block"><span class="lbl reg">📐 Regra</span>
+    <ul><li>Bucketização por <code>NOW() - last_position_at</code>; “nunca posicionados” = device cadastrado sem nenhuma posição (útil para pós-venda/instalação).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Consulta simples sobre a última posição por device (já temos o dado via <code>pushgps</code>). Ótimo indicador operacional de baixo custo.</li></ul></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BLOCO D — RELATÓRIOS OPERACIONAIS
+====================================================================== -->
+<h3 class="sec-h">Bloco D — Relatórios operacionais</h3>
+
+<!-- D1 -->
+<div class="feat" id="f12">
+  <div class="head"><div class="n">D1</div><div class="t">
+    <h4>Relatório de Posições <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/positions</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_positions.png" alt="Posições">
+    <p>Histórico de posições de um ativo em um período. Colunas: Identificador, <strong>Endereço</strong> (geocodificação reversa), Motorista, <strong>Ignição</strong>, <strong>Sinal</strong>, <strong>Velocidade</strong>, Horários. Botão <strong>“Ver posições”</strong> plota no mapa.</p>
+    <div class="block"><span class="lbl reg">📐 Regra / dinâmica</span>
+    <ul><li>Filtro <strong>Intervalo</strong> (“Todas as posições” × amostrado) para não estourar volume.</li>
+        <li>Export Excel/PDF; geocodificação reversa é feature de valor (endereço em vez de lat/long).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Já temos as posições (<code>pushgps</code>). Falta a grade com endereço geocodificado (cache de reverse-geocoding para não repetir chamadas) e o “Ver no mapa”.</li></ul></div>
+  </div>
+</div>
+
+<!-- D2 -->
+<div class="feat" id="f13">
+  <div class="head"><div class="n">D2</div><div class="t">
+    <h4>Relatório de Deslocamento (viagens) <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/movement</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_movement.png" alt="Deslocamento">
+    <p>Consolida posições em <strong>viagens/trechos</strong>. Colunas: Identificador, Motorista, <strong>Início / Local Início</strong>, <strong>Fim / Local Fim</strong>, Evento, <strong>Duração</strong>, <strong>Velocidade Máxima</strong>, <strong>KM</strong>, <strong>Qtd. de Alarmes</strong>.</p>
+    <div class="block"><span class="lbl reg">📐 Regra de negócio (a mais rica dos relatórios)</span>
+    <ul>
+      <li>Uma <strong>viagem</strong> = janela entre ignição ligada e desligada (ou movimento contínuo); requer motor de “trip detection”.</li>
+      <li>Cruza a viagem com os <strong>alarmes ocorridos</strong> nela (Qtd. de Alarmes) — liga telemetria de posição à de vídeo.</li>
+      <li>Locais de início/fim geocodificados; KM por integração das posições.</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Job que segmenta posições em viagens por ignição (temos ignição no <code>pushgps</code>/<code>pushhb</code>). Persistir <code>trips</code> para consulta rápida.</li></ul></div>
+  </div>
+</div>
+
+<!-- D3 -->
+<div class="feat" id="f14">
+  <div class="head"><div class="n">D3</div><div class="t">
+    <h4>Exportar Relatórios — fila assíncrona <span class="pill p-media">Prioridade Média</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/report-export</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_report_export.png" alt="Exportar Relatórios">
+    <p>Central de <strong>geração assíncrona</strong> de relatórios pesados. Colunas: Nome, <strong>Tipo</strong> (PDF/Excel), <strong>Status</strong> (Concluído), Data de Criação, Data de Atualização, botão de <strong>download</strong>. Toggle “Atualização automática”.</p>
+    <div class="block"><span class="lbl reg">📐 Regra / dinâmica</span>
+    <ul><li>Relatório grande não bloqueia a UI: entra na fila, processa em background, fica “Concluído” e disponibiliza o arquivo.</li>
+        <li>Polling de status (mesma ideia do nosso <code>commandstatus</code>).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Tabela <code>report_jobs</code> (nome, tipo, status, path, params, created_at). Um worker (cron) gera o arquivo; a UI faz polling. Encaixa no nosso padrão assíncrono (<code>fastcgi_finish_request</code> + processamento em background).</li></ul></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BLOCO E — CADASTROS
+====================================================================== -->
+<h3 class="sec-h">Bloco E — Cadastros</h3>
+<p class="lead">Todos seguem o mesmo padrão de CRUD (grade + Pesquisar + Cadastrar + Exportar Excel + menu de ações por linha). Destaco abaixo apenas o que agrega regra de negócio nova.</p>
+
+<!-- E1 -->
+<div class="feat" id="f15">
+  <div class="head"><div class="n">E1</div><div class="t">
+    <h4>Equipamentos <span class="pill p-alta">Prioridade Alta</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/devices</div>
+  </div></div>
+  <div class="body">
+    <div class="duo">
+      <img class="shot" src="screenshots/page_devices.png" alt="Equipamentos">
+      <img class="shot" src="screenshots/modal_device_form.png" alt="Cadastrar Equipamento">
+    </div>
+    <p class="cap">Grade de equipamentos e o formulário de cadastro (Modelo, IMEI, Chip, Periféricos, Rotação do streaming, marca d'água).</p>
+    <p>O cadastro mais estratégico. Grade com <strong>IMEI, Modelo, Cliente, Ativo, Chip, Último Heartbeat, Bateria, Periféricos, Situação (Online/Offline), Status (Ativo)</strong>.</p>
+    <div class="block"><span class="lbl reg">📐 Regras / recursos de destaque</span>
+    <ul>
+      <li><strong>Atualizar Firmware (OTA)</strong> — atualização remota de firmware da frota.</li>
+      <li><strong>Importar em Lote</strong> — cadastro em massa (planilha) para provisionar muitos devices.</li>
+      <li>Formulário: <strong>Modelo* + IMEI*</strong> (obrigatórios), Chip (vínculo SIM), <strong>Periféricos</strong> (busca/multi-seleção), <strong>Rotação do streaming (360°)</strong> e <strong>marca d'água no streaming</strong>.</li>
+      <li>Monitoramento de <strong>Heartbeat, Bateria e Periféricos</strong> por device.</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul>
+      <li>Já temos <code>/config</code> + <code>/devicemodels</code> e recebemos heartbeat (<code>pushhb</code>) e lista de recursos (<code>pushresourcelist</code>). Estender o cadastro com Chip, periféricos, rotação e marca d'água.</li>
+      <li><strong>OTA</strong> e <strong>Importar em Lote</strong> são os maiores diferenciais operacionais — priorizar OTA (usa o canal de comandos que já temos).</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- E2 -->
+<div class="feat" id="f16">
+  <div class="head"><div class="n">E2</div><div class="t">
+    <h4>Chips (SIM) <span class="pill p-media">Prioridade Média</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/sim-cards</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_sim_cards.png" alt="Chips">
+    <p>Inventário de SIM cards. Colunas: <strong>Operadora</strong> (Claro, Vivo, Allcom…), <strong>Número</strong>, <strong>ICCID</strong>, <strong>IMEI</strong> vinculado.</p>
+    <div class="block"><span class="lbl reg">📐 Regra</span>
+    <ul><li>Vínculo 1:1 chip↔device por IMEI; chip pode existir sem device (estoque, IMEI vazio).</li>
+        <li>Base para controle de conectividade/custos de telemetria por operadora.</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Tabela <code>sim_cards</code> (operadora, numero, iccid, imei nullable). CRUD simples reaproveitando o padrão de <code>/ativos</code>.</li></ul></div>
+  </div>
+</div>
+
+<!-- E3 -->
+<div class="feat" id="f17">
+  <div class="head"><div class="n">E3</div><div class="t">
+    <h4>Ativos <span class="pill p-baixa">Manter</span> <span class="pill s-temos">Já temos</span></h4>
+    <div class="rota">/assets</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_assets.png" alt="Ativos">
+    <p>Cadastro de veículos/ativos: Identificador, Cliente, <strong>Modelo</strong>, <strong>Ano</strong>, IMEI. Equivale ao nosso <code>/ativos</code>.</p>
+    <div class="rec"><span class="lbl">🚀 Recomendação</span>
+    <ul><li>Manter. Diferença: separam claramente <strong>Ativo (veículo)</strong> de <strong>Equipamento (device)</strong> — o ativo referencia o IMEI. Vale adotar essa separação conceitual (um device pode trocar de veículo).</li></ul></div>
+  </div>
+</div>
+
+<!-- E4 -->
+<div class="feat" id="f18">
+  <div class="head"><div class="n">E4</div><div class="t">
+    <h4>Motoristas <span class="pill p-media">Prioridade Média</span> <span class="pill s-novo">Novo</span></h4>
+    <div class="rota">/drivers</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_drivers.png" alt="Motoristas">
+    <p>Cadastro de motoristas com <strong>compliance</strong>. Colunas: Foto, Cliente, Nome, Data de Nascimento, <strong>CNH</strong>, <strong>CNH expira em</strong>, <strong>Exame toxicológico expira em</strong>, <strong>Identificador</strong>, Categorias.</p>
+    <div class="block"><span class="lbl reg">📐 Regras de negócio</span>
+    <ul>
+      <li>Alertas de <strong>vencimento de CNH e exame toxicológico</strong> (obrigatório para motorista profissional no Brasil).</li>
+      <li><strong>Identificador</strong> vincula o motorista ao veículo — habilita <strong>FaceID</strong> (associa a ocorrência DMS ao motorista correto; sem isso, colunas “Motorista” ficam vazias em A1/A2/C1).</li>
+      <li>Categorias da CNH (A, B, D, E…).</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Tabela <code>drivers</code> + rotina de alerta de vencimentos. O <strong>FaceID/identificação</strong> é o elo que dá valor total ao Bloco A (atribuição de ocorrências por motorista).</li></ul></div>
+  </div>
+</div>
+
+<!-- E5 -->
+<div class="feat" id="f19">
+  <div class="head"><div class="n">E5</div><div class="t">
+    <h4>Clientes <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/customers</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_customers.png" alt="Clientes">
+    <p>Cadastro de clientes (tenants). Colunas relevantes: Grupo de Permissão, <strong>Configuração de Ocorrência</strong>, <strong>Configuração de Checklist</strong>, Ativo, e um ícone de <strong>impersonação</strong> (“entrar como” o cliente).</p>
+    <div class="block"><span class="lbl reg">📐 Regras de negócio</span>
+    <ul>
+      <li>Cada cliente aponta para um <strong>perfil de Configuração de Ocorrência</strong> (liga com A3) e um de <strong>Checklist</strong> (módulo não explorado a fundo, provável inspeção veicular).</li>
+      <li><strong>Impersonação</strong>: o revendedor faz login no contexto do cliente para suporte — poderoso e sensível (auditar!).</li>
+    </ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Temos <code>/clientes</code> e <code>set_customer_context()</code>. Adicionar FK para <code>occurrence_config</code> e um botão de impersonação seguro (registrar em log quem impersonou quem).</li></ul></div>
+  </div>
+</div>
+
+<!-- E6 -->
+<div class="feat" id="f20">
+  <div class="head"><div class="n">E6</div><div class="t">
+    <h4>Grupos de Permissões <span class="pill p-media">Prioridade Média</span> <span class="pill s-parc">Parcial</span></h4>
+    <div class="rota">/permission-groups</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_permission_groups.png" alt="Grupos de Permissões">
+    <p>RBAC. Colunas: Nome, <strong>Tipo de Usuário</strong> (<em>Revendedor</em> × <em>Cliente</em>), Qtd. de Usuários.</p>
+    <div class="block"><span class="lbl reg">📐 Regra</span>
+    <ul><li>Dois níveis de tenant: <strong>Revendedor</strong> (vê vários clientes, tem “perfil revendedor” no Resumo) e <strong>Cliente</strong> (vê só o próprio).</li>
+        <li>Grupo define as permissões finas por tela/ação.</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Como implementar</span>
+    <ul><li>Hoje temos só <code>require_login</code>/<code>require_admin</code> (binário). Evoluir para grupos com matriz de permissões e o eixo revendedor×cliente — habilita as visões “por clientes” do Resumo.</li></ul></div>
+  </div>
+</div>
+
+<!-- E7 -->
+<div class="feat" id="f21">
+  <div class="head"><div class="n">E7</div><div class="t">
+    <h4>Usuários <span class="pill p-baixa">Melhorar</span> <span class="pill s-temos">Já temos</span></h4>
+    <div class="rota">/users</div>
+  </div></div>
+  <div class="body">
+    <img class="shot" src="screenshots/page_users.png" alt="Usuários">
+    <p>Gestão de usuários com <strong>abas “Minha Empresa” × “Meus Clientes”</strong> — separa quem administra a operação de quem são usuários dos clientes atendidos. Colunas: Foto, Nome, E-mail, Grupo de Permissão, Ativo.</p>
+    <div class="rec"><span class="lbl">🚀 Recomendação</span>
+    <ul><li>Temos <code>/usuarios</code>. Adotar as duas abas (segmenta usuários próprios × usuários dos clientes) e o vínculo com Grupos de Permissão (E6).</li></ul></div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     BLOCO F — COMANDOS
+====================================================================== -->
+<h3 class="sec-h">Bloco F — Comandos</h3>
+
+<!-- F1 -->
+<div class="feat" id="f22">
+  <div class="head"><div class="n">F1</div><div class="t">
+    <h4>Comandos <span class="pill p-baixa">Manter</span> <span class="pill s-temos">Já temos</span></h4>
+    <div class="rota">/commands</div>
+  </div></div>
+  <div class="body">
+    <div class="duo">
+      <img class="shot" src="screenshots/page_commands.png" alt="Comandos">
+      <img class="shot" src="screenshots/modal_novo_comando.png" alt="Novo comando">
+    </div>
+    <p class="cap">Tela de comandos (histórico + seleção de equipamento) e o modal “Novo comando”.</p>
+    <p>Envio de comandos ao device com <strong>Histórico de Comandos</strong> à esquerda e a área do equipamento à direita. “Novo comando” exige <strong>selecionar o equipamento (mín. 3 caracteres na busca)</strong> antes de liberar os comandos.</p>
+    <div class="block"><span class="lbl din">⚙️ Dinâmica</span>
+    <ul><li>Fluxo idêntico ao nosso <code>/comandos</code> + <code>/sendcommand</code> + polling <code>/commandstatus</code>.</li>
+        <li>Histórico por device com status de entrega (fila offline etc.).</li></ul></div>
+    <div class="rec"><span class="lbl">🚀 Recomendação</span>
+    <ul><li>Manter o nosso, que já cobre proNo 128–34818 e o polling. Alinhar UI (histórico à esquerda, device à direita).</li></ul></div>
+  </div>
+</div>
+
+<!-- ===================== ROADMAP ===================== -->
+<section>
+  <h2 class="mod">Plano de ação</h2>
+  <h3 class="tit">Roadmap sugerido de implementação</h3>
+  <p class="lead">Ordenado por valor competitivo × esforço, aproveitando o que o <code>jimi_webhook</code> já tem (pipeline assíncrono, comandos, webhooks Jimi).</p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Fase</th><th>Entrega</th><th>Depende de</th><th>Por quê</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>Motor de Ocorrências (A3) + tabelas <code>occurrences</code>/<code>alarm_types</code> + integração no <code>pushalarm.php</code></td><td>—</td><td>Núcleo do produto; tudo do Bloco A depende disto</td></tr>
+      <tr><td><strong>2</strong></td><td>Dashboard de Ocorrências (A1) + Relatório de Ocorrências (A2) + Alarmes (A4)</td><td>Fase 1</td><td>Materializa o valor DMS para o operador</td></tr>
+      <tr><td><strong>3</strong></td><td>Vídeo estruturado: Ao Vivo / Playback / Downloads (B1–B3)</td><td><code>pushfileupload</code> já existe</td><td>Diferencial de telemetria de vídeo; encaixa no pipeline assíncrono</td></tr>
+      <tr><td><strong>4</strong></td><td>Equipamentos avançado (E1): OTA, importação em lote, periféricos, streaming</td><td>Canal de comandos</td><td>Escala operacional (provisionamento + manutenção de frota)</td></tr>
+      <tr><td><strong>5</strong></td><td>Relatórios: Posições, Deslocamento, Desatualizados + Exportação assíncrona (D1–D3)</td><td>Fase 1 (p/ Qtd. alarmes)</td><td>Relatórios que os clientes cobram; reuso do padrão de fila</td></tr>
+      <tr><td><strong>6</strong></td><td>Cadastros de apoio: Chips (E2), Motoristas+FaceID (E4), Grupos de Permissão (E6)</td><td>—</td><td>FaceID completa a atribuição de ocorrências por motorista</td></tr>
+      <tr><td><strong>7</strong></td><td>Resumo enriquecido (C1) + BI (C3) + Clientes/Usuários refinados (E5/E7)</td><td>Fases 1–6</td><td>Camada de visão executiva sobre os dados já capturados</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout warn">
+    <strong>Observações de produto captadas na navegação.</strong>
+    <ul style="margin:8px 0 0">
+      <li>Havia um <strong>comunicado de fim das licenças de teste</strong> (a partir de 16/07/2026) — o YUV está migrando para licenciamento pago; sinal de maturidade comercial do modelo.</li>
+      <li><strong>FaceID</strong> aparece como recurso pago/ativável (“fale com seu comercial YUV”) — bom candidato a <em>feature flag</em> por cliente também no nosso produto.</li>
+      <li>Existe um módulo <strong>Checklist</strong> (referenciado no cadastro de Clientes) não acessível pela sidebar deste perfil — provável inspeção veicular pré-viagem; vale um levantamento futuro.</li>
+      <li>Hierarquia <strong>Cliente → Filiais</strong> aparece nos filtros de alarmes/ocorrências — um nível a mais que o nosso <code>customer_id</code> atual.</li>
+    </ul>
+  </div>
+</section>
+
+</div><!-- /wrap -->
+
+<footer>
+  <div class="wrap">
+    <strong>Análise app.yuv.com.br</strong> — benchmark funcional para o projeto <code>jimi_webhook</code>.<br>
+    22 telas + 6 modais/formulários navegados com browser automatizado (Playwright/Chromium), autenticado como flavio@telecomtrack.com.br. Levantamento em 06/07/2026.<br>
+    Evidências (screenshots) em <code>analise_yuv/screenshots/</code>. Este documento é interno e destina-se a planejamento de implementação.
+  </div>
+</footer>
+
+</body>
+</html>

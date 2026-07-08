@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-PHP IoT gateway (v3.1.0) that receives GPS/heartbeat/alarm/event webhooks from the Jimi IoT Hub (`jimicloud.com`), persists them to MySQL, and serves a multi-tenant editorial dashboard (NavTrack-inspired) for live tracking, video playback, command dispatch, reports, and remote device configuration. Pure PHP — **no build step, no package manager, no test framework.**
+PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from the Jimi IoT Hub (`jimicloud.com`), persists them to MySQL, and serves a multi-tenant dashboard for live tracking, video (MDVR), command dispatch, reports, and remote device configuration. Pure PHP — **no build step, no package manager, no test framework.**
+
+**Direção atual (v4.0.0 — "YUV Parity"): o projeto está sendo transformado em uma cópia fiel da plataforma YUV (`app.yuv.com.br`).** O núcleo do produto passa a ser a **gestão de ocorrências de comportamento do motorista (DMS/ADAS)** — alarmes de câmera com IA (distração, uso de celular, sem cinto) que viram ocorrências com fluxo de tratativa, classificação de risco e regras configuráveis por cliente. O gateway de webhooks é preservado; o dashboard e o design são reconstruídos.
+
+- **`PROJETO_YUV.md`** é o blueprint-mestre de implementação (visão, rotas-alvo, modelo de dados, specs de todas as 22 telas, motor de ocorrências, roadmap por fases). **Leia-o antes de implementar qualquer módulo novo.**
+- **`analise_yuv/analise_yuv.html`** é a fonte visual de verdade (screenshots + regras de negócio das 22 telas do YUV).
+- O **design system é o da Coinbase** (`DESIGN-coinbase.md`): azul `#0052ff` como única voltagem, canvas branco, **sidebar dark near-black `#0a0b0d`** com item ativo azul, CTAs pill (100px), números em JetBrains Mono, headings de display em peso 400. Aplica-se sobre a estrutura de produto YUV. Substitui a paleta Cursor (≤3.x). Ver `DESIGN.md`.
 
 Official API reference: https://docs.jimicloud.com/integration/integration.html
 
-**Read `STATUS.md` before continuing development** — it tracks current bugs, fixed issues, and pending work. `AGENTS.md` holds the same architectural detail as this file with the full route/table tables.
+**Read `STATUS.md` before continuing development** — it tracks current bugs, fixed issues, pending work, and the YUV-parity roadmap status. `AGENTS.md` holds the same architectural detail as this file with the full route/table tables.
 
 ## Commands
 
@@ -73,7 +79,7 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 
 - **Command polling**: after dispatch the frontend polls `/commandstatus?command_id=X` — fast (every 3s for 30s) then slow (every 10s for 5min), then times out as "Comando em fila offline".
 
-- **CSS has no build step.** The whole design system (cream canvas `#f7f7f4`, Cursor Orange `#f54e00`, Inter + JetBrains Mono, hairline borders / no shadows) is inlined in `web/layout_base.php`. See `DESIGN.md` for tokens.
+- **CSS has no build step.** The whole design system is inlined in `web/layout_base.php` (+ `web/login_template.php`, `handlers/setup.php`). **O design é o da Coinbase** (`DESIGN-coinbase.md` → `DESIGN.md`): azul `#0052ff` (única voltagem), canvas branco, **sidebar dark near-black `#0a0b0d`** com item ativo azul, CTAs **pill (100px)**, cards com hairline + um único nível de sombra no hover, headings de display Inter peso 400, JetBrains Mono em todo número/IMEI. A navegação (alvo) usa sidebar com grupos-sanfona. (As versões ≤3.x usavam a paleta Cursor creme/laranja — substituída; a paleta roxa YUV foi proposta e descartada em favor da Coinbase.)
 
 ## Key files
 

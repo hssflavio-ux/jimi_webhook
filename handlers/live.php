@@ -53,7 +53,7 @@ include __DIR__ . '/../web/layout_base.php';
     <?php endif; ?>
 </div>
 <div class="device-count" style="margin-top:8px">
-    <span class="dot" style="background:#f54e00"></span> Ignição ligada &nbsp;
+    <span class="dot" style="background:#0052ff"></span> Ignição ligada &nbsp;
     <span class="dot" style="background:#9fbbe0"></span> Parado &nbsp;
     <span style="margin-left:auto" id="device-count-text"></span>
 </div>
@@ -72,7 +72,7 @@ function loadMarkers() {
         var lat = parseFloat(d.last_latitude), lng = parseFloat(d.last_longitude);
         var speed = Math.round(d.last_speed || 0);
         var isMoving = d.last_acc_status == 1;
-        var color = isMoving ? '#f54e00' : '#9fbbe0';
+        var color = isMoving ? '#0052ff' : '#a8acb3';
 
         L.circleMarker([lat, lng], { radius:9, fillColor:color, color:'#fff', weight:2, fillOpacity:0.9 }).addTo(map)
             .bindPopup('<strong>' + (d.device_name || d.imei) + '</strong><br>' + speed + ' km/h<br><a href="/ativos/' + d.imei + '">Detalhes</a>');

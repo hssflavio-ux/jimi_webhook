@@ -1,0 +1,27 @@
+[
+  { "id": "resumo", "href": "/", "group": "Principal", "label": "Resumo" },
+  { "id": "tracking", "href": "/tracking", "group": "Principal", "label": "Rastreamento" },
+  { "id": "bi", "href": "/bi", "group": "Principal", "label": "BI" },
+  { "id": "occ_dashboard", "href": "/occurrences/dashboard", "group": "Principal", "label": "Dashboard de Ocorrências" },
+  { "id": "commands", "href": "/commands", "group": "Principal", "label": "Comandos" },
+  { "id": "report_export", "href": "/report-export", "group": "Principal", "label": "Exportar Relatórios" },
+
+  { "id": "streaming", "href": "/streaming", "group": "Vídeos", "label": "Ao Vivo" },
+  { "id": "playback", "href": "/playback", "group": "Vídeos", "label": "Playback" },
+  { "id": "downloads", "href": "/downloads", "group": "Vídeos", "label": "Downloads" },
+
+  { "id": "positions", "href": "/positions", "group": "Relatórios", "label": "Posições" },
+  { "id": "movement", "href": "/movement", "group": "Relatórios", "label": "Deslocamento" },
+  { "id": "outdated", "href": "/outdated", "group": "Relatórios", "label": "Desatualizados" },
+  { "id": "alarms", "href": "/alarms", "group": "Relatórios", "label": "Alarmes" },
+  { "id": "occurrences", "href": "/occurrences", "group": "Relatórios", "label": "Ocorrências" },
+
+  { "id": "assets", "href": "/assets", "group": "Cadastros", "label": "Ativos" },
+  { "id": "sim_cards", "href": "/sim-cards", "group": "Cadastros", "label": "Chips (SIM)" },
+  { "id": "customers", "href": "/customers", "group": "Cadastros", "label": "Clientes" },
+  { "id": "devices", "href": "/devices", "group": "Cadastros", "label": "Equipamentos" },
+  { "id": "permission_groups", "href": "/permission-groups", "group": "Cadastros", "label": "Grupos de Permissões" },
+  { "id": "drivers", "href": "/drivers", "group": "Cadastros", "label": "Motoristas" },
+  { "id": "occurrence_settings", "href": "/occurrence-settings", "group": "Cadastros", "label": "Configurações de Ocorrências" },
+  { "id": "users", "href": "/users", "group": "Cadastros", "label": "Usuários" }
+]

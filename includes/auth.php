@@ -30,7 +30,22 @@ function auth_init() {
         $_SESSION['customer_id'] = null;
     }
 
+    // Periodic cleanup: ~1% of requests
+    if (mt_rand(1, 100) === 1) {
+        auth_cleanup();
+    }
+
     $GLOBALS['_auth_initialized'] = true;
+}
+
+function auth_cleanup() {
+    try {
+        $db = Database::getInstance()->getConnection();
+        $db->exec("DELETE FROM sessions WHERE expires_at < NOW()");
+        $db->exec("DELETE FROM request_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)");
+    } catch (Exception $e) {
+        error_log('auth_cleanup: ' . $e->getMessage());
+    }
 }
 
 function require_login() {
@@ -185,7 +200,15 @@ function login_user($email, $password) {
 
         $token = _gen_token();
         $GLOBALS['_auth_token'] = $token;
-        setcookie(AUTH_COOKIE, $token, time() + AUTH_LIFETIME, '/', '', false, true);
+        $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+        setcookie(AUTH_COOKIE, $token, [
+            'expires'  => time() + AUTH_LIFETIME,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
 
         $_SESSION['user_id'] = (int)$user['id'];
 
@@ -216,6 +239,14 @@ function logout_user() {
             $stmt->execute(array($token));
         } catch (Exception $e) {}
     }
-    setcookie(AUTH_COOKIE, '', time() - 3600, '/', '', false, true);
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    setcookie(AUTH_COOKIE, '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     $_SESSION = array();
 }

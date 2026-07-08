@@ -833,13 +833,11 @@ CREATE TABLE `v_alarms_enriched` (
 
 -- Copiando estrutura para view jimi_tracker.vw_alarm_types_ambiguous_codes
 -- Criando tabela temporária para evitar erros de dependência de VIEW
-CREATE TABLE `vw_alarm_types_ambiguous_codes` 
-);
+-- [correcao 2026-07-06] stub de VIEW malformado removido (export HeidiSQL sem colunas)
 
 -- Copiando estrutura para view jimi_tracker.vw_alarm_types_unknown_codes
 -- Criando tabela temporária para evitar erros de dependência de VIEW
-CREATE TABLE `vw_alarm_types_unknown_codes` 
-);
+-- [correcao 2026-07-06] stub de VIEW malformado removido (export HeidiSQL sem colunas)
 
 -- Copiando estrutura para trigger jimi_tracker.trg_alarms_before_insert
 SET @OLDTMP_SQL_MODE=@@SQL_MODE, SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
@@ -885,14 +883,10 @@ CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `v_alarms_enriched` AS sele
 ;
 
 -- Removendo tabela temporária e criando a estrutura VIEW final
-DROP TABLE IF EXISTS `vw_alarm_types_ambiguous_codes`;
-CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `vw_alarm_types_ambiguous_codes` AS select `a`.`id` AS `id`,`a`.`alarm_code` AS `alarm_code`,`a`.`protocol` AS `protocol`,`a`.`category` AS `category`,`a`.`severity` AS `severity`,`a`.`alarm_name_pt` AS `alarm_name_pt`,`a`.`alarm_name_en` AS `alarm_name_en`,`a`.`description` AS `description`,`a`.`requires_action` AS `requires_action`,`a`.`created_at` AS `created_at`,`a`.`updated_at` AS `updated_at`,`r`.`doc_ambiguous` AS `doc_ambiguous` from (`alarm_types` `a` join `alarm_types_reference` `r` on((((`a`.`protocol` collate utf8mb4_unicode_ci) = `r`.`protocol`) and ((cast(`a`.`alarm_code` as char charset utf8mb4) collate utf8mb4_unicode_ci) = `r`.`alarm_code`)))) where (`r`.`doc_ambiguous` = 1)
-;
+-- [correcao 2026-07-06] VIEW vw_alarm_types_ambiguous_codes removida: dependia da tabela inexistente alarm_types_reference (nao usada pela aplicacao)
 
 -- Removendo tabela temporária e criando a estrutura VIEW final
-DROP TABLE IF EXISTS `vw_alarm_types_unknown_codes`;
-CREATE ALGORITHM=UNDEFINED SQL SECURITY DEFINER VIEW `vw_alarm_types_unknown_codes` AS select `a`.`id` AS `id`,`a`.`alarm_code` AS `alarm_code`,`a`.`protocol` AS `protocol`,`a`.`category` AS `category`,`a`.`severity` AS `severity`,`a`.`alarm_name_pt` AS `alarm_name_pt`,`a`.`alarm_name_en` AS `alarm_name_en`,`a`.`description` AS `description`,`a`.`requires_action` AS `requires_action`,`a`.`created_at` AS `created_at`,`a`.`updated_at` AS `updated_at` from (`alarm_types` `a` left join `alarm_types_reference` `r` on((((`a`.`protocol` collate utf8mb4_unicode_ci) = `r`.`protocol`) and ((cast(`a`.`alarm_code` as char charset utf8mb4) collate utf8mb4_unicode_ci) = `r`.`alarm_code`)))) where (`r`.`alarm_code` is null)
-;
+-- [correcao 2026-07-06] VIEW vw_alarm_types_unknown_codes removida: dependia da tabela inexistente alarm_types_reference (nao usada pela aplicacao)
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;

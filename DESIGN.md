@@ -1,127 +1,107 @@
 ---
-version: alpha
-name: Cursor-design-analysis
-description: An AI-first code editor whose marketing site reads like a quietly-confident developer-tools brand with a warm-cream editorial canvas (`#f7f7f4`) instead of the typical dark IDE atmosphere. Near-black warm ink (`#26251e`) carries body and display alike — display sits at weight 400 with negative letter-spacing for a magazine feel rather than a bold tech voice. The single brand voltage is **Cursor Orange** (`#f54e00`) reserved for primary CTAs and the wordmark. A signature pastel timeline palette (peach, mint, blue, lavender, gold) marks AI-action stages (Thinking / Reading / Editing / Grepping / Done) — only inside in-product timeline visualizations. Cards use minimal hairlines, no shadows, generous 80px section rhythm. CursorGothic for display/body, JetBrains Mono on every code surface (which is roughly half the page).
+version: 4.0.0
+name: app-design-system
+description: Design system do dashboard jimi_webhook, derivado do sistema Coinbase (ver DESIGN-coinbase.md). Voltagem única Coinbase Blue (#0052ff) para CTAs, links e foco; canvas branco; sidebar dark near-black (#0a0b0d) com item ativo azul; geometria pill (100px) em todo CTA; cards com hairline + um único nível de sombra no hover; tipografia Inter (display peso 400, corpo 400/600/700) com JetBrains Mono em todo número/IMEI/código. Aplica a estética institucional/editorial da Coinbase à estrutura de produto YUV (rastreamento + ocorrências DMS). Substitui a paleta Cursor (≤3.x) e a paleta roxa YUV proposta.
 
 colors:
-  primary: "#f54e00"
-  primary-active: "#d04200"
-  ink: "#26251e"
-  body: "#5a5852"
-  body-strong: "#26251e"
-  muted: "#807d72"
-  muted-soft: "#a09c92"
-  hairline: "#e6e5e0"
-  hairline-soft: "#efeee8"
-  hairline-strong: "#cfcdc4"
-  canvas: "#f7f7f4"
-  canvas-soft: "#fafaf7"
+  primary: "#0052ff"
+  primary-active: "#003ecc"
+  primary-disabled: "#a8b8cc"
+  primary-soft: "#eaf0ff"
+  ink: "#0a0b0d"
+  body: "#5b616e"
+  body-strong: "#0a0b0d"
+  muted: "#7c828a"
+  muted-soft: "#a8acb3"
+  canvas: "#ffffff"
+  surface-soft: "#f7f7f7"
   surface-card: "#ffffff"
-  surface-strong: "#e6e5e0"
+  surface-strong: "#eef0f3"
+  surface-dark: "#0a0b0d"
+  surface-dark-elevated: "#16181c"
+  hairline: "#dee1e6"
+  hairline-soft: "#eef0f3"
   on-primary: "#ffffff"
-  timeline-thinking: "#dfa88f"
-  timeline-grep: "#9fc9a2"
-  timeline-read: "#9fbbe0"
-  timeline-edit: "#c0a8dd"
-  timeline-done: "#c08532"
-  semantic-error: "#cf2d56"
-  semantic-success: "#1f8a65"
+  on-dark: "#ffffff"
+  on-dark-soft: "#a8acb3"
+  success: "#05b169"       # semantic-up (só texto/borda/fundo suave)
+  error: "#cf202f"         # semantic-down
+  accent-yellow: "#f4b000" # ilustrativo/aviso
 
 typography:
-  display-mega:
-    fontFamily: "'CursorGothic', system-ui, 'Helvetica Neue', Helvetica, Arial, sans-serif"
-    fontSize: 72px
-    fontWeight: 400
-    lineHeight: 1.1
-    letterSpacing: -2.16px
   display-lg:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 36px
+    fontFamily: "'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+    fontSize: 40px
     fontWeight: 400
-    lineHeight: 1.2
-    letterSpacing: -0.72px
+    lineHeight: 1.05
+    letterSpacing: -1px
   display-md:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 26px
+    fontFamily: "'Inter', sans-serif"
+    fontSize: 32px
     fontWeight: 400
-    lineHeight: 1.25
-    letterSpacing: -0.325px
-  display-sm:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 22px
-    fontWeight: 400
-    lineHeight: 1.3
-    letterSpacing: -0.11px
+    lineHeight: 1.13
+    letterSpacing: -0.4px
   title-md:
-    fontFamily: "'CursorGothic', sans-serif"
+    fontFamily: "'Inter', sans-serif"
     fontSize: 18px
     fontWeight: 600
-    lineHeight: 1.4
-    letterSpacing: 0
+    lineHeight: 1.33
   title-sm:
-    fontFamily: "'CursorGothic', sans-serif"
+    fontFamily: "'Inter', sans-serif"
     fontSize: 16px
     fontWeight: 600
-    lineHeight: 1.4
-    letterSpacing: 0
+    lineHeight: 1.25
   body-md:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 16px
+    fontFamily: "'Inter', sans-serif"
+    fontSize: 15px
     fontWeight: 400
     lineHeight: 1.5
-    letterSpacing: 0
-  body-tracked:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 16px
-    fontWeight: 400
+  body-strong:
+    fontFamily: "'Inter', sans-serif"
+    fontSize: 15px
+    fontWeight: 700
     lineHeight: 1.5
-    letterSpacing: 0.08px
   body-sm:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 14px
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: 0
-  caption:
-    fontFamily: "'CursorGothic', sans-serif"
+    fontFamily: "'Inter', sans-serif"
     fontSize: 13px
     fontWeight: 400
-    lineHeight: 1.4
-    letterSpacing: 0
-  caption-uppercase:
-    fontFamily: "'CursorGothic', sans-serif"
+    lineHeight: 1.5
+  label:
+    fontFamily: "'Inter', sans-serif"
     fontSize: 11px
     fontWeight: 600
     lineHeight: 1.4
-    letterSpacing: 0.88px
+    letterSpacing: 0.5px
     textTransform: uppercase
-  code:
-    fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
-    fontSize: 13px
-    fontWeight: 400
-    lineHeight: 1.5
-    letterSpacing: 0
-  button:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 14px
-    fontWeight: 500
-    lineHeight: 1.0
-    letterSpacing: 0
-  nav-link:
-    fontFamily: "'CursorGothic', sans-serif"
-    fontSize: 14px
+  number-display:
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace"
+    fontSize: 18px
     fontWeight: 500
     lineHeight: 1.4
-    letterSpacing: 0
+  kpi-number:
+    fontFamily: "'JetBrains Mono', monospace"
+    fontSize: 28px
+    fontWeight: 500
+    lineHeight: 1.1
+    letterSpacing: -0.5px
+  button:
+    fontFamily: "'Inter', sans-serif"
+    fontSize: 14px
+    fontWeight: 600
+    lineHeight: 1.15
+  nav-link:
+    fontFamily: "'Inter', sans-serif"
+    fontSize: 13px
+    fontWeight: 500
+    lineHeight: 1.4
 
 rounded:
-  none: 0px
   xs: 4px
-  sm: 6px
-  md: 8px
-  lg: 12px
-  xl: 16px
-  pill: 9999px
+  sm: 8px
+  md: 12px
+  lg: 16px
+  xl: 24px
+  pill: 100px
   full: 9999px
 
 spacing:
@@ -133,405 +113,193 @@ spacing:
   lg: 24px
   xl: 32px
   xxl: 48px
-  section: 80px
+
+shadow:
+  none: "none"
+  soft: "0 4px 12px rgba(0,0,0,0.04)"   # ÚNICO nível — só em hover de card
 
 components:
-  top-nav:
+  sidebar-dark:
+    backgroundColor: "{colors.surface-dark}"
+    textColor: "{colors.on-dark-soft}"
+    width: 244px
+    note: "Sidebar dark near-black (leva a estética de hero escuro da Coinbase para a navegação do app)."
+  sidebar-item-active:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.sm}"
+  header-light:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.ink}"
-    typography: "{typography.nav-link}"
     height: 64px
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
     typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: 10px 18px
+    rounded: "{rounded.pill}"
+    padding: 10px 20px
     height: 40px
-  button-primary-active:
-    backgroundColor: "{colors.primary-active}"
-    textColor: "{colors.on-primary}"
-    rounded: "{rounded.md}"
   button-secondary:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: 9px 17px
-    height: 40px
-  button-tertiary-text:
-    backgroundColor: transparent
-    textColor: "{colors.ink}"
-    typography: "{typography.button}"
-  button-download:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.button}"
-    rounded: "{rounded.md}"
-    padding: 12px 20px
-    height: 44px
-  hero-band:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-mega}"
-    padding: 80px
-  ide-mockup-card:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.lg}"
-    padding: 0
-  ide-pane:
-    backgroundColor: "{colors.canvas-soft}"
-    textColor: "{colors.body}"
-    typography: "{typography.code}"
-    rounded: "{rounded.md}"
-    padding: 16px
-  feature-card:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.title-md}"
-    rounded: "{rounded.lg}"
-    padding: 24px
-  comparison-card:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.lg}"
-    padding: 24px
-  timeline-pill-thinking:
-    backgroundColor: "{colors.timeline-thinking}"
-    textColor: "{colors.ink}"
-    typography: "{typography.caption-uppercase}"
-    rounded: "{rounded.pill}"
-    padding: 4px 10px
-  timeline-pill-grep:
-    backgroundColor: "{colors.timeline-grep}"
-    textColor: "{colors.ink}"
-    typography: "{typography.caption-uppercase}"
-    rounded: "{rounded.pill}"
-    padding: 4px 10px
-  timeline-pill-read:
-    backgroundColor: "{colors.timeline-read}"
-    textColor: "{colors.ink}"
-    typography: "{typography.caption-uppercase}"
-    rounded: "{rounded.pill}"
-    padding: 4px 10px
-  timeline-pill-edit:
-    backgroundColor: "{colors.timeline-edit}"
-    textColor: "{colors.ink}"
-    typography: "{typography.caption-uppercase}"
-    rounded: "{rounded.pill}"
-    padding: 4px 10px
-  timeline-pill-done:
-    backgroundColor: "{colors.timeline-done}"
-    textColor: "{colors.on-primary}"
-    typography: "{typography.caption-uppercase}"
-    rounded: "{rounded.pill}"
-    padding: 4px 10px
-  code-block:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.code}"
-    rounded: "{rounded.lg}"
-    padding: 20px
-  pricing-tier-card:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.lg}"
-    padding: 32px
-  pricing-tier-featured:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.canvas}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.lg}"
-    padding: 32px
-  text-input:
-    backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.ink}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.md}"
-    padding: 12px 16px
-    height: 44px
-  badge-pill:
     backgroundColor: "{colors.surface-strong}"
     textColor: "{colors.ink}"
-    typography: "{typography.caption-uppercase}"
+    typography: "{typography.button}"
     rounded: "{rounded.pill}"
-    padding: 4px 10px
-  cta-band:
-    backgroundColor: "{colors.canvas}"
-    textColor: "{colors.ink}"
-    typography: "{typography.display-lg}"
-    padding: 96px
-  testimonial-card:
+  button-dark:
+    backgroundColor: "{colors.ink}"
+    textColor: "#ffffff"
+    rounded: "{rounded.pill}"
+  button-disabled:
+    backgroundColor: "{colors.primary-disabled}"
+    textColor: "{colors.on-primary}"
+    rounded: "{rounded.pill}"
+  card:
     backgroundColor: "{colors.surface-card}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-md}"
     rounded: "{rounded.lg}"
-    padding: 24px
-  footer:
+    padding: 20px
+    border: "1px solid {colors.hairline}"
+    shadowHover: "{shadow.soft}"
+  feature-card:
+    backgroundColor: "{colors.surface-card}"
+    rounded: "{rounded.xl}"
+    padding: 32px
+    border: "1px solid {colors.hairline}"
+    note: "Cartão maior (empty-state, hero interno) — raio 24px como no Coinbase marketing."
+  kpi-item:
+    backgroundColor: "{colors.surface-card}"
+    rounded: "{rounded.lg}"
+    padding: 20px
+    numberTypography: "{typography.kpi-number}"
+  text-input:
     backgroundColor: "{colors.canvas}"
-    textColor: "{colors.body}"
-    typography: "{typography.body-sm}"
-    padding: 64px 48px
-  footer-link:
-    backgroundColor: transparent
-    textColor: "{colors.body}"
-    typography: "{typography.body-sm}"
+    border: "1px solid {colors.hairline}"
+    rounded: "{rounded.md}"
+    padding: 11px 14px
+    focus: "border 1px {colors.primary} + box-shadow 0 0 0 1px {colors.primary} (efeito 2px)"
+  badge-pill:
+    rounded: "{rounded.full}"
+    typography: "{typography.label}"
+    padding: 3px 10px
+  price-up:
+    textColor: "{colors.success}"
+    typography: "{typography.number-display}"
+    note: "Só cor de texto — nunca fundo."
+  price-down:
+    textColor: "{colors.error}"
+    typography: "{typography.number-display}"
+  asset-icon-circular:
+    backgroundColor: "{colors.surface-strong}"
+    rounded: "{rounded.full}"
+    size: 32px
 ---
 
-## Overview
+## Visão geral
 
-Cursor's marketing site reads as a quietly-confident developer brand that believes in editorial calm over IDE-darkness. The base canvas is **warm cream** (`{colors.canvas}` — #f7f7f4) holding warm near-black ink (`{colors.ink}` — #26251e) for body and display alike. The single brand voltage is **Cursor Orange** (`{colors.primary}` — #f54e00) reserved for primary CTAs and the wordmark — used scarcely.
+Design system do dashboard `jimi_webhook`, **derivado do sistema Coinbase** (`DESIGN-coinbase.md`). A estética institucional/editorial da Coinbase é aplicada à **estrutura de produto YUV** (rastreamento multi-tenant + gestão de ocorrências DMS descrita em `PROJETO_YUV.md`). Ele **substitui** a paleta Cursor (versões ≤3.x) e a paleta roxa YUV que havia sido proposta.
 
-Type runs **CursorGothic** as the single sans family. Display sits at weight 400 with negative letter-spacing — a magazine-editorial voice rather than tech-bombastic. JetBrains Mono carries every code surface (and code surfaces are roughly half the page).
+**Personalidade**: financeira, calma e quase monocromática. A **única voltagem de marca é o Coinbase Blue `#0052ff`** — usado com parcimônia em CTAs, links e foco. Canvas branco; a sidebar leva a **superfície dark near-black `#0a0b0d`** da Coinbase para a navegação do app (item ativo em azul). Geometria **pill** (100px) em todo CTA; números sempre em **JetBrains Mono**; profundidade por **um único nível de sombra** (hover), nunca camadas decorativas.
 
-The brand's strongest visual signature is the **AI-timeline pill palette**: five pastel pills (peach `{colors.timeline-thinking}`, mint `{colors.timeline-grep}`, blue `{colors.timeline-read}`, lavender `{colors.timeline-edit}`, gold `{colors.timeline-done}`) marking AI-action stages inside in-product timeline visualizations. Used only in product UI — never as system action colors.
+**Diferenças-chave vs. designs anteriores:**
+| Aspecto | Cursor (≤3.x) | YUV (proposto) | **Coinbase (atual)** |
+|---|---|---|---|
+| Voltagem | Laranja `#f54e00` | Roxo `#702fd3` | **Azul `#0052ff`** |
+| Canvas | Creme `#f7f7f4` | Lavanda `#faf9fc` | **Branco `#ffffff`** |
+| Sidebar | Branca | Cor de marca | **Dark near-black `#0a0b0d`** |
+| CTA | Raio 8px | Raio 8–10px | **Pill 100px** |
+| Headings | Peso 400 | Peso 700–800 | **Peso 400 (editorial)** |
+| Números | Inter | Inter | **JetBrains Mono** |
+| Profundidade | Só hairline | Sombra sutil | **1 nível (hover)** |
 
-**Key Characteristics:**
-- Warm cream canvas, not white. Ink is warm (#26251e), not pure black.
-- Single CTA color: `{colors.primary}` (Cursor Orange #f54e00). Used scarcely.
-- Display weight stays at 400 — never bold. Magazine voice.
-- AI timeline pastels: 5 dedicated tokens for in-product agent action stages.
-- Compact 8px CTA radius — developer dialect.
-- Hairline-only depth; no drop shadows.
-- 80px section rhythm.
+## Cores
 
-## Colors
+### Marca e ação
+- **Coinbase Blue** `{colors.primary}` (#0052ff): CTAs primários, links, foco de input, item ativo da sidebar, ênfase inline. **Escasso** — um ou dois momentos azuis por tela.
+- **Blue Active** `{colors.primary-active}` (#003ecc) · **Blue Disabled** `{colors.primary-disabled}` (#a8b8cc) · **Blue Soft** `{colors.primary-soft}` (#eaf0ff, fundo de badge/realce).
 
-### Brand & Accent
-- **Cursor Orange** (`{colors.primary}` — #f54e00): Primary CTA pills, wordmark, hero accent. Used scarcely.
-- **Cursor Orange Active** (`{colors.primary-active}` — #d04200): Press state.
+### Superfície
+- **Canvas** `{colors.canvas}` (#ffffff) · **Surface Soft** `{colors.surface-soft}` (#f7f7f7, bandas alternadas/cabeçalho de tabela) · **Surface Strong** `{colors.surface-strong}` (#eef0f3, botão secundário/chips).
+- **Surface Dark** `{colors.surface-dark}` (#0a0b0d, sidebar/heros) · **Surface Dark Elevated** `{colors.surface-dark-elevated}` (#16181c, hover/campos na sidebar).
 
-### Surface
-- **Canvas** (`{colors.canvas}` — #f7f7f4): Warm cream page floor.
-- **Canvas Soft** (`{colors.canvas-soft}` — #fafaf7): IDE-pane background inside mockups.
-- **Surface Card** (`{colors.surface-card}` — #ffffff): Pure white card surface — slight contrast against the cream canvas.
-- **Surface Strong** (`{colors.surface-strong}` — #e6e5e0): Badges, tag pills.
+### Texto
+- **Ink** `{colors.ink}` (#0a0b0d) · **Body** `{colors.body}` (#5b616e) · **Muted** `{colors.muted}` (#7c828a) · **On Dark** `{colors.on-dark}` (#fff) / **On Dark Soft** `{colors.on-dark-soft}` (#a8acb3).
 
-### Hairlines
-- **Hairline** (`{colors.hairline}` — #e6e5e0): 1px divider.
-- **Hairline Soft** (`{colors.hairline-soft}` — #efeee8): Lighter divider.
-- **Hairline Strong** (`{colors.hairline-strong}` — #cfcdc4): Stronger panel outline.
+### Semântico (herança "trading" da Coinbase)
+- **Sucesso / up** `{colors.success}` (#05b169) e **Erro / down** `{colors.error}` (#cf202f): preferir **cor de texto**; fundo apenas em versões suaves (badges). Nunca use verde/vermelho como fundo de botão.
+- **Accent Yellow** `{colors.accent-yellow}` (#f4b000): ilustrativo/aviso, uso raro.
 
-### Text
-- **Ink** (`{colors.ink}` — #26251e): Display, body emphasis. Warm near-black.
-- **Body** (`{colors.body}` — #5a5852): Default running-text.
-- **Body Strong** (`{colors.body-strong}` — #26251e): Same as ink.
-- **Muted** (`{colors.muted}` — #807d72): Sub-titles.
-- **Muted Soft** (`{colors.muted-soft}` — #a09c92): Disabled text.
-- **On Primary** (`{colors.on-primary}` — #ffffff): White text on Cursor Orange.
+> **Risco DMS** (Ocorrências): mapeado sobre a paleta acima — Baixo = azul `{colors.primary}`, Médio = amarelo `{colors.accent-yellow}`, Alto = vermelho `{colors.error}`.
 
-### Timeline (AI-action signature)
-- **Thinking** (`{colors.timeline-thinking}` — #dfa88f): Peach. Used inside in-product agent timeline only.
-- **Grep** (`{colors.timeline-grep}` — #9fc9a2): Mint.
-- **Read** (`{colors.timeline-read}` — #9fbbe0): Pastel blue.
-- **Edit** (`{colors.timeline-edit}` — #c0a8dd): Lavender.
-- **Done** (`{colors.timeline-done}` — #c08532): Warm gold.
+## Tipografia
 
-### Semantic
-- **Success** (`{colors.semantic-success}` — #1f8a65): Confirmation indicators.
-- **Error** (`{colors.semantic-error}` — #cf2d56): Validation errors.
-
-## Typography
-
-### Font Family
-**CursorGothic** is the licensed display + body family. Fallback: `system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif`. Code surfaces switch to **JetBrains Mono**.
-
-### Hierarchy
-
-| Token | Size | Weight | Line Height | Letter Spacing | Use |
-|---|---|---|---|---|---|
-| `{typography.display-mega}` | 72px | 400 | 1.1 | -2.16px | Homepage hero h1 |
-| `{typography.display-lg}` | 36px | 400 | 1.2 | -0.72px | Section heads |
-| `{typography.display-md}` | 26px | 400 | 1.25 | -0.325px | Sub-section heads |
-| `{typography.display-sm}` | 22px | 400 | 1.3 | -0.11px | Card group titles |
-| `{typography.title-md}` | 18px | 600 | 1.4 | 0 | Component titles |
-| `{typography.title-sm}` | 16px | 600 | 1.4 | 0 | List labels |
-| `{typography.body-md}` | 16px | 400 | 1.5 | 0 | Default body |
-| `{typography.body-tracked}` | 16px | 400 | 1.5 | 0.08px | Tracked editorial body |
-| `{typography.body-sm}` | 14px | 400 | 1.5 | 0 | Footer body |
-| `{typography.caption}` | 13px | 400 | 1.4 | 0 | Photo captions |
-| `{typography.caption-uppercase}` | 11px | 600 | 1.4 | 0.88px | Section labels, timeline pill labels |
-| `{typography.code}` | 13px | 400 | 1.5 | 0 | Code blocks — JetBrains Mono |
-| `{typography.button}` | 14px | 500 | 1.0 | 0 | CTA pill labels |
-| `{typography.nav-link}` | 14px | 500 | 1.4 | 0 | Top-nav menu |
-
-### Principles
-- **Display weight stays at 400.** Magazine voice, never bold.
-- **Negative letter-spacing on display only.** -0.11px to -2.16px tracking.
-- **JetBrains Mono on every code surface.**
-
-### Note on Font Substitutes
-CursorGothic is licensed. Open-source substitute: **Inter** at weight 400 with letter-spacing -1.5%. Or **GT Sectra** for a more editorial feel.
+- **Família**: **Inter** (400/500/600/700) para tudo; **JetBrains Mono** para **todo número** (KPIs, preços, %, IMEI, ICCID, códigos). Substitutos documentados de CoinbaseDisplay/Sans → Inter; CoinbaseMono → JetBrains Mono.
+- **Display peso 400**: títulos de página/hero em `display-md`/`display-lg` ficam em **peso 400** com tracking negativo — voz institucional calma (a escolha tipográfica mais distintiva; não usar 700 em display).
+- **KPIs e tabelas numéricas**: `kpi-number` / `number-display` em JetBrains Mono.
+- **Rótulos de coluna**: `label` (11px/600, uppercase).
 
 ## Layout
 
-### Spacing System
-- **Base unit:** 4px.
-- **Tokens:** `{spacing.xxs}` 4px · `{spacing.xs}` 8px · `{spacing.sm}` 12px · `{spacing.base}` 16px · `{spacing.md}` 20px · `{spacing.lg}` 24px · `{spacing.xl}` 32px · `{spacing.xxl}` 48px · `{spacing.section}` 80px.
-- **Section padding:** 80px.
+### Shell
+Sidebar dark fixa (244px, `surface-dark`) com item ativo azul + área principal em canvas branco. Header claro de 64px (`top-nav-light`) com contador de frota On/Off à esquerda e avatar → `/perfil` à direita.
 
-### Grid & Container
-- Max content width: ~1200px.
-- Editorial body: 12-column grid.
-- Feature card grids: 2-up at desktop for splits, 3-up for benefits.
-- Footer: 5-column at desktop.
+### Grade e ritmo
+- Conteúdo fluido; cards em grid `auto-fill minmax(220px, 1fr)`, 16–24px de gap.
+- Base 4px. Densidade de dashboard: usamos raio **16px (lg)** nos cards de dados; **24px (xl)** fica reservado a cartões grandes (empty-state, feature). CTAs sempre **pill (100px)**; ícones/avatares **full (9999px)**.
 
-### Whitespace Philosophy
-Generous editorial pacing — closer to a print magazine than a tech site. The cream canvas has plenty of breathing room; cards within bands sit close (16-24px gap).
+## Profundidade e formas
 
-## Elevation & Depth
+- **Um único nível de sombra**: `{shadow.soft}` = `0 4px 12px rgba(0,0,0,.04)`, **apenas em hover** de card. Fora disso, superfícies planas com hairline `{colors.hairline}`. Não criar tiers de sombra.
+- **Raio**: CTAs pill (100px); cards de dados 16px; cards grandes 24px; inputs 12px; ícones full.
 
-The system uses **hairline-only depth**. No drop shadows, no elevation tiers. Cards float above the canvas via 1px hairlines and the slight white-on-cream contrast.
+## Componentes
 
-| Level | Treatment | Use |
-|---|---|---|
-| Flat (canvas) | `{colors.canvas}` (#f7f7f4) | Body bands, footer |
-| Card | `{colors.surface-card}` (#ffffff) | Content cards |
-| Hairline border | 1px `{colors.hairline}` | Card outlines, dividers |
-| IDE pane | `{colors.canvas-soft}` (#fafaf7) | Inside IDE mockup cards |
+### Botões (sempre pill)
+- **Primário** azul (`{components.button-primary}`), **Secundário** cinza `surface-strong`, **Escuro** ink `#0a0b0d`. Disabled = azul desbotado. Um CTA primário por contexto.
 
-### Decorative Depth
-- **IDE-mockup cards** are the only "elevated" element. White card on cream canvas with internal pane structure mimicking the actual Cursor editor.
-- **Timeline pastel pills** add chromatic depth without surface elevation.
+### Cartões
+- **Card** branco, hairline, 16px, sombra só no hover. **Feature/empty-state** 24px, 32px de padding.
+- **KPI**: rótulo uppercase + número grande em mono + delta semântico (verde/vermelho).
 
-## Shapes
+### Formulários
+- **Input** branco, borda hairline, 12px; **foco** = borda azul + `box-shadow 0 0 0 1px` (efeito 2px Coinbase Blue).
 
-### Border Radius Scale
+### Selos (badges) e situação
+- Pill `full`, `label`. Situação/risco de ocorrência: `badge-error` (Alto), `badge-info`/azul (Baixo), `badge-warning` (Aguardando), `badge-success` (Resolvida).
 
-| Token | Value | Use |
-|---|---|---|
-| `{rounded.none}` | 0px | Reserved |
-| `{rounded.xs}` | 4px | Inline tags |
-| `{rounded.sm}` | 6px | Compact rows |
-| `{rounded.md}` | 8px | CTA buttons, form inputs |
-| `{rounded.lg}` | 12px | Cards, IDE panes |
-| `{rounded.xl}` | 16px | Larger feature cards (rare) |
-| `{rounded.pill}` | 9999px | Timeline pills, badges |
-| `{rounded.full}` | 9999px | Avatars (rare) |
+### Superfícies de dados / "trading"
+- Preços/variações e IMEI em `number-display` (mono); up/down **só cor de texto**. Ícones de ativo em plaquinha circular `surface-strong` 32px.
 
-## Components
+### Mapa e vídeo
+- **Mapa**: Leaflet + OpenStreetMap (reuso). **Vídeo**: flv.js (reuso). Ambos herdam a paleta (controles/realces em azul).
 
-### Top Navigation
+### Gráficos (sem build step)
+- Séries e pizzas: SVG inline no PHP ou uPlot/Chart.js por CDN. Cor de série primária = Coinbase Blue; up/down em verde/vermelho semânticos.
 
-**`top-nav`** — Background `{colors.canvas}`, text `{colors.ink}`, height 64px. Layout: Cursor wordmark left, primary horizontal menu (Pricing / Features / Enterprise / Blog / Forum / Careers), Sign In + Download primary CTA right.
-
-### Buttons
-
-**`button-primary`** — The signature Cursor Orange CTA. Background `{colors.primary}`, text `{colors.on-primary}`, type `{typography.button}` (14px / 500), padding 10px × 18px, height 40px, rounded `{rounded.md}` (8px).
-
-**`button-primary-active`** — Press state. Background `{colors.primary-active}`.
-
-**`button-secondary`** — White card pill on cream canvas. Background `{colors.surface-card}`, text `{colors.ink}`, 1px `{colors.hairline-strong}` border.
-
-**`button-tertiary-text`** — Inline ink text link.
-
-**`button-download`** — Larger ink-canvas CTA. Background `{colors.ink}`, text `{colors.canvas}`, padding 12px × 20px, height 44px. Used for "Download for macOS" type CTAs.
-
-### Hero & IDE Mockups
-
-**`hero-band`** — Background `{colors.canvas}`, full-width display headline in `{typography.display-mega}` (72px / 400 / -2.16px), subhead in `{typography.body-md}`, two CTAs (`button-download` + `button-tertiary-text`), and a centered IDE-mockup card below the hero copy.
-
-**`ide-mockup-card`** — A white card containing a multi-pane IDE mockup (sidebar + main editor + chat panel + terminal). Background `{colors.surface-card}`, rounded `{rounded.lg}` (12px), 1px `{colors.hairline}` border, no padding (panes fill the card edge-to-edge).
-
-**`ide-pane`** — Individual IDE pane inside the mockup. Background `{colors.canvas-soft}`, text `{colors.body}` in `{typography.code}` (JetBrains Mono 13px), rounded `{rounded.md}` (8px), padding 16px.
-
-### Cards
-
-**`feature-card`** — Background `{colors.surface-card}`, text `{colors.ink}`, type `{typography.title-md}`, rounded `{rounded.lg}`, padding 24px. 1px `{colors.hairline}` border.
-
-**`comparison-card`** — Side-by-side "Cursor vs other tools" card. Same surface and rounding; internally split into 2 columns.
-
-**`testimonial-card`** — Quote card. Background `{colors.surface-card}`, text `{colors.body}`, rounded `{rounded.lg}`, padding 24px.
-
-### AI Timeline (signature)
-
-**`timeline-pill-thinking`** — Peach pill. Background `{colors.timeline-thinking}`, text `{colors.ink}`, type `{typography.caption-uppercase}` (11px / 600 / 0.88px tracking, uppercase), rounded `{rounded.pill}`, padding 4px × 10px. Marks "Thinking" stage in product timeline.
-
-**`timeline-pill-grep`** — Mint pill. Same shape, background `{colors.timeline-grep}`. Marks "Grepping" stage.
-
-**`timeline-pill-read`** — Pastel-blue pill. Background `{colors.timeline-read}`. Marks "Reading" stage.
-
-**`timeline-pill-edit`** — Lavender pill. Background `{colors.timeline-edit}`. Marks "Editing" stage.
-
-**`timeline-pill-done`** — Gold pill. Background `{colors.timeline-done}`, text `{colors.on-primary}` white. Marks "Done" stage.
-
-### Code
-
-**`code-block`** — Inline code block. Background `{colors.surface-card}`, text `{colors.ink}` in `{typography.code}`, rounded `{rounded.lg}`, padding 20px, 1px `{colors.hairline}` border.
-
-### Pricing
-
-**`pricing-tier-card`** — Background `{colors.surface-card}`, rounded `{rounded.lg}`, padding 32px, 1px `{colors.hairline}` border.
-
-**`pricing-tier-featured`** — Featured tier inverts to ink. Background `{colors.ink}`, text `{colors.canvas}`. Same shape, dark inversion signals "highlighted" without colored ribbon.
-
-### Forms & Tags
-
-**`text-input`** — Background `{colors.surface-card}`, text `{colors.ink}`, rounded `{rounded.md}` (8px), padding 12px × 16px, height 44px.
-
-**`badge-pill`** — Small uppercase pill. Background `{colors.surface-strong}`, text `{colors.ink}`, type `{typography.caption-uppercase}`, rounded `{rounded.pill}`, padding 4px × 10px.
-
-### CTA / Footer
-
-**`cta-band`** — Pre-footer "Try Cursor now" band. Background `{colors.canvas}`, centered display headline in `{typography.display-lg}`, single Cursor Orange CTA. 96px vertical padding.
-
-**`footer`** — Closing footer. Background `{colors.canvas}`, text `{colors.body}`. 5-column link list. 64×48px padding.
-
-**`footer-link`** — Background transparent, text `{colors.body}`, type `{typography.body-sm}`.
-
-## Do's and Don'ts
+## Do's e Don'ts
 
 ### Do
-- Reserve `{colors.primary}` (Cursor Orange) for primary CTAs and brand wordmark.
-- Keep display weight at 400. The editorial voice depends on this.
-- Use the cream `{colors.canvas}` page floor — never pure white.
-- Render every code surface (inline, blocks, IDE panes) in JetBrains Mono.
-- Use timeline pastels only inside in-product agent visualizations — never as system action colors.
+- Reserve o **azul `#0052ff`** para CTAs, links, foco e item ativo — escasso.
+- CTA sempre **pill**; número sempre em **JetBrains Mono**; ícone/avatar sempre **full circle**.
+- Mantenha **headings de display em peso 400**.
+- Sidebar **dark**; conteúdo em **canvas branco**.
+- Use verde/vermelho **como cor de texto** (up/down); fundo só em badge suave.
 
 ### Don't
-- Don't introduce a secondary brand action color. Cursor Orange is the only one.
-- Don't drop display to bold weights (700+). Magazine voice depends on 400.
-- Don't add drop shadows. Hairlines + ink-on-cream contrast carry the depth.
-- Don't use timeline pastels on non-timeline UI. They're scoped to the agent timeline only.
-- Don't extract a CTA color from a third-party widget (cookie consent, OneTrust). The brand's CTA is what appears on actual product CTAs.
+- Não introduza uma segunda cor de ação (o azul é a única; verde/vermelho são semânticos).
+- Não use canvas creme/lavanda nem sidebar de cor de marca (herança dos designs anteriores).
+- Não deixe display em peso 700+.
+- Não crie tiers de sombra; há um único nível (hover).
+- Não use cantos retos (0px) em CTAs; não use verde/vermelho como fundo de botão.
 
-## Responsive Behavior
+## Responsivo
 
-### Breakpoints
-
-| Name | Width | Key Changes |
+| Breakpoint | Largura | Mudanças |
 |---|---|---|
-| Mobile | < 640px | Hero h1 72→32px; IDE mockup collapses to single pane preview; feature grid 1-up; nav hamburger. |
-| Tablet | 640–1024px | Hero h1 56px; IDE mockup compresses; feature grid 2-up. |
-| Desktop | 1024–1280px | Full hero h1 72px; full multi-pane IDE mockup; feature grid 3-up. |
-| Wide | > 1280px | Content caps at 1200px. |
+| Mobile | < 768px | Sidebar off-canvas (hambúrguer); grids 1-up; header compacto |
+| Tablet | 768–1024px | Sidebar colapsável para ícones; grids 2-up |
+| Desktop | > 1024px | Sidebar 244px; grids 3–4-up; conteúdo até ~1200px |
 
-### Touch Targets
-- Primary CTA at 40px height — at WCAG AA, padded for AAA.
-- Download CTA at 44px — at AAA.
+## Implementação
 
-### Collapsing Strategy
-- Top nav switches to hamburger below 768px.
-- IDE mockup multi-pane collapses to a single primary pane preview on mobile.
-- Feature grid: 3-up → 2-up → 1-up.
-
-## Iteration Guide
-
-1. Focus on a single component at a time.
-2. CTAs default to `{rounded.md}` (8px). Cards use `{rounded.lg}` (12px).
-3. Variants live as separate entries inside `components:`.
-4. Use `{token.refs}` everywhere — never inline hex.
-5. Hover state never documented.
-6. CursorGothic 400 for display, 400/500/600 for body. JetBrains Mono on every code surface.
-7. Cursor Orange stays scarce.
-8. Timeline pastels stay scoped to in-product agent visualizations.
-
-## Known Gaps
-
-- CursorGothic is a licensed typeface; Inter is the substitute.
-- Animation timings (timeline pill entrance, IDE pane reveal) out of scope.
-- In-app surfaces (code editor, chat panel, agent timeline) only partially captured via marketing IDE mockups.
-- Form validation states beyond focus not visible on captured surfaces.
+- CSS inline em `web/layout_base.php` (`:root` + componentes) — **já migrado** para os tokens acima.
+- Telas de `web/login_template.php` e `handlers/setup.php` — **já migradas** (card 24px, botão pill azul, foco azul).
+- Fonte: Inter `400;500;600;700` + JetBrains Mono via Google Fonts (sem build step).
+- Referência de origem: [`DESIGN-coinbase.md`](DESIGN-coinbase.md). Estrutura de produto: [`PROJETO_YUV.md`](PROJETO_YUV.md).

@@ -9,6 +9,7 @@ define('HANDLER_NAME', 'pushfileupload');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/occurrence_engine.php';
 
 class PushFileUploadHandler extends WebhookHandler {
 
@@ -30,6 +31,7 @@ class PushFileUploadHandler extends WebhookHandler {
         $result      = $item['result'] ?? 'UNKNOWN';
         $rawTime     = $item['gateTime'] ?? $item['uploadTime'] ?? $item['time'] ?? null;
         $eventTime   = sanitize_date($rawTime);
+        $channel     = $item['channel'] ?? $item['chnNo'] ?? $item['channelNumber'] ?? null;
 
         // fileName pode ser lista separada por ponto-e-vírgula
         $fileNames = $fileNameRaw ? explode(';', $fileNameRaw) : ['unknown'];
@@ -44,18 +46,27 @@ class PushFileUploadHandler extends WebhookHandler {
             try {
                 $stmt = $this->db->prepare("
                     INSERT INTO media_files 
-                    (imei, file_name, file_type, file_url, source_type, event_time, raw_data)
-                    VALUES (:imei, :fname, :ftype, :url, 'pushfileupload', :etime, :raw)
+                    (imei, file_name, file_type, file_url, source_type, event_time, channel, download_status, raw_data)
+                    VALUES (:imei, :fname, :ftype, :url, 'pushfileupload', :etime, :ch, :ds, :raw)
                 ");
+                $status = ($result === 'SUCCESS') ? 'disponivel' : 'erro';
                 $stmt->execute([
                     ':imei'  => $imei,
                     ':fname' => $fileName,
                     ':ftype' => $fileType,
                     ':url'   => $fileName,
                     ':etime' => $eventTime,
+                    ':ch'    => $channel,
+                    ':ds'    => $status,
                     ':raw'   => json_encode($item, JSON_UNESCAPED_UNICODE)
                 ]);
+                $mediaId = (int)$this->db->lastInsertId();
                 $savedCount++;
+
+                // Vincular mídia a ocorrências abertas do mesmo IMEI (±3 min)
+                if ($mediaId > 0 && $eventTime && $result === 'SUCCESS') {
+                    link_upload_to_occurrence($this->db, $imei, $eventTime, $mediaId);
+                }
             } catch (PDOException $e) {
                 Logger::error('Erro SQL FileUpload: ' . $e->getMessage(), [
                     'source' => $this->handlerName, 'imei' => $imei, 'file' => $fileName

@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [4.0.0] — Não lançado (iniciativa "YUV Parity")
+
+Reorientação do produto para ser uma **cópia fiel da plataforma YUV** (`app.yuv.com.br`) — plataforma multi-tenant de rastreamento com **telemetria de vídeo e gestão de ocorrências DMS**. Esta entrada cobre o **planejamento e a documentação**; a implementação segue o roadmap por fases de `PROJETO_YUV.md`.
+
+### Added
+- **`PROJETO_YUV.md`** — blueprint-mestre de implementação: visão, modelo de negócio (revendedor/cliente/filial), arquitetura-alvo, mapa de 22 rotas, design system, modelo de dados (migração v4.0.0), **motor de ocorrências** (alarme→ocorrência), spec módulo a módulo das 22 telas, roadmap por fases, critérios de aceite e plano de verificação.
+- **`analise_yuv/analise_yuv.html`** — análise funcional do YUV (22 telas + 6 modais navegados via browser, com screenshots, regras de negócio, dinâmica e análise de lacunas vs. o projeto atual).
+- **Design system YUV** documentado em `DESIGN.md` (ver Changed).
+- **Planejamento de novas tabelas** (v4.0.0): `occurrences`, `occurrence_events`, `occurrence_configs`, `occurrence_config_params`, `drivers`, `sim_cards`, `branches`, `permission_groups`, `trips`, `jobs`, `geocode_cache`, `impersonation_log`.
+- **Planejamento de novos módulos**: Dashboard de Ocorrências (DMS), Relatório de Ocorrências, Configurações de Ocorrências, BI, Exportação assíncrona, Vídeo estruturado (Ao Vivo/Playback/Downloads), Chips, Motoristas (CNH/toxicológico + FaceID), Grupos de Permissões, Equipamentos avançado (OTA firmware, importação em lote), Resumo executivo.
+
+### Changed
+- **Design system Coinbase aplicado** — o skin visual do produto passou a ser o **sistema Coinbase** (`DESIGN-coinbase.md`): Coinbase Blue `#0052ff` como única voltagem, canvas branco, **sidebar dark near-black `#0a0b0d`** com item ativo azul, CTAs **pill (100px)**, cards com hairline + um único nível de sombra (hover), headings de display em peso 400, **JetBrains Mono em todo número/IMEI**. Implementado em `web/layout_base.php`, `web/login_template.php` e `handlers/setup.php`; `DESIGN.md` reescrito como o design system do app derivado da Coinbase.
+- _(Nota: a paleta roxa YUV chegou a ser proposta nesta iniciativa e foi **descartada** em favor do skin Coinbase. A estrutura/IA de produto permanece a do YUV.)_
+- **`CLAUDE.md`, `AGENTS.md`, `STATUS.md`, `README.md`, `PLAN.md`, `llms.txt`** — atualizados para o direcionamento YUV Parity (nova visão, rotas-alvo, tabelas, ponteiros para `PROJETO_YUV.md`).
+- **`STATUS.md`** — nova §0 com o roadmap por fases da iniciativa v4.0.0.
+
+### Fixed
+- **`mysql/jimi_tracker.sql` quebrava num fresh install**: o export do HeidiSQL gerou dois stubs de VIEW malformados (`CREATE TABLE vw_alarm_types_ambiguous_codes` / `vw_alarm_types_unknown_codes` sem colunas → erro de sintaxe) e as duas VIEWs `vw_alarm_types_*` referenciavam a tabela `alarm_types_reference`, que nunca é definida no dump. Os 4 blocos foram removidos (views diagnósticas, não usadas por nenhum handler). O comando documentado `mysql < mysql/jimi_tracker.sql` agora aplica sem erros (validado: 22 tabelas, 3 views, 114 alarm_types).
+- **Ambiente de desenvolvimento local (Windows)**: adicionados `server.php` (router shim que reproduz o front controller do `.htaccess` sob `php -S`) e `scripts/dev-windows.ps1` (sobe MySQL portátil + servidor PHP). Fecha a pendência **F0.1** (PHP CLI/lint indisponível localmente).
+
+### Notes
+- O gateway de webhooks (`handlers/push*.php` + `config/WebhookHandler.php`) e a autenticação por token são **preservados**.
+- As dívidas de segurança da revisão v3.2.x (CSRF, prepared statements, índices, cookie Secure) serão fechadas **na origem** ao reescrever os handlers em cada fase.
+
 ## [3.2.1] — 2026-07-04
 
 ### Security

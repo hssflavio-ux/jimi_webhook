@@ -23,6 +23,7 @@ define('HANDLER_NAME', 'pushalarm');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/occurrence_engine.php';
 
 class PushAlarmHandler extends WebhookHandler {
     
@@ -305,6 +306,31 @@ class PushAlarmHandler extends WebhookHandler {
                 $hasCoords ? $lng : null
             ]);
             
+            $alarmId = (int)$this->db->lastInsertId();
+
+            if (!$isRemoval && $alarmId > 0) {
+                try {
+                    process_alarm_to_occurrence([
+                        'id'          => $alarmId,
+                        'imei'        => $imei,
+                        'alarm_type'  => (string)$mainType,
+                        'alarm_time'  => $alarmTime,
+                        'alarm_name'  => $finalName,
+                        'driver_id'   => $driverId,
+                        'driver_name' => $driverName,
+                        'lat'         => $lat,
+                        'lng'         => $lng,
+                        'file_url'    => $fileUrl,
+                    ]);
+                } catch (Exception $e) {
+                    Logger::error('Occurrence Engine Error: ' . $e->getMessage(), [
+                        'source' => $this->handlerName,
+                        'imei' => $imei,
+                        'alarm_id' => $alarmId,
+                    ]);
+                }
+            }
+
             Logger::info("Alarme Gravado: $alarmName", [
                 'source'   => $this->handlerName,
                 'imei'     => $imei, 
