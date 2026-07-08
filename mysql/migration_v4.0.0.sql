@@ -339,7 +339,7 @@ PREPARE stmt FROM @sql_fk; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 CALL add_column_if_not_exists('devices', 'sim_card_id', "bigint unsigned DEFAULT NULL COMMENT 'FK para sim_cards' AFTER `camera_count`");
 CALL add_column_if_not_exists('devices', 'peripherals', "json DEFAULT NULL COMMENT 'Periféricos instalados' AFTER `sim_card_id`");
 CALL add_column_if_not_exists('devices', 'streaming_rotation', "smallint NOT NULL DEFAULT 0 COMMENT 'Rotação do streaming (0/90/180/270/360)' AFTER `peripherals`");
-CALL add_column_if_not_exists('devices', 'streaming_watermark', "tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Marca d\'água no streaming?' AFTER `streaming_rotation`");
+CALL add_column_if_not_exists('devices', 'streaming_watermark', "tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Marca dagua no streaming' AFTER `streaming_rotation`");
 CALL add_column_if_not_exists('devices', 'firmware_version', "varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Versão do firmware' AFTER `streaming_watermark`");
 CALL add_column_if_not_exists('devices', 'branch_id', "bigint unsigned DEFAULT NULL COMMENT 'FK para branches' AFTER `firmware_version`");
 
