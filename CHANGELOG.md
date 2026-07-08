@@ -5,6 +5,34 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [4.1.0] — 2026-07-08 (Fases M.1–M.5 — Pendências pós-YUV Parity)
+
+### Added
+- **Exportação Excel/PDF (Fase M.1)** — os 5 tipos de relatório do worker agora saem em CSV, **XLSX real** ou **PDF**, com seletor de formato no form de `/exportar` e badge de formato na grade. Implementação **100% PHP puro, sem Composer** (decisão: o projeto é "no package manager"): `includes/export_helper.php` com `XlsxWriter` (Office Open XML mínimo via `ZipArchive`, streaming em disco, cabeçalho azul Coinbase, IMEIs preservados como texto) e `PdfWriter` (PDF 1.4 tabular A4 paisagem, Helvetica core fonts, paginação automática, cap de 20 mil linhas). CSV melhorado: UTF-8 BOM + separador `;` (Excel pt-BR). `/exportardata` responde `format` + `mime_type`.
+- **Migration `mysql/migration_v4.1.0.sql`** — coluna `jobs.format` ENUM('csv','xlsx','pdf') + fix do seed de `occurrence_config_params` (ver Fixed) + versão 4.1.0 em `system_info`. Integrada ao `scripts/deploy.sh`.
+- **Script de replay E2E (Fase M.2)** — `scripts/test_e2e.sh`: ping → pushgps → pushalarm (143) → pushfileupload → verificação MySQL (alarme + ocorrência + mídia + vínculo). 8/8 verde no ambiente dev.
+- **PWA (Fase M.3)** — `manifest.json` (standalone, theme `#0052ff`, background `#0a0b0d`), ícones 192/512 + variantes maskable (`assets/icons/`, gerados com GD), meta tags PWA/apple-touch em `layout_base.php` e `login_template.php`.
+- **Suite Playwright (Fase M.4)** — 40 testes em 6 specs (`tests/`): login (senha errada, redirect, open-redirect R05, rate limiting opt-in), navegação (25 rotas sem erro 500/fatal), CRUD motoristas, webhook→ocorrência via `/pushalarm`, isolamento multi-tenant, exportação e2e (job→worker→download CSV/XLSX/PDF com validação de magic bytes). `playwright.config.js` sobe `php -S` automaticamente; `scripts/run-tests.ps1` para Windows. **Resultado: 37 passed, 0 failed** (3 specs opt-in pulados).
+- **`API_COVERAGE.md`** — mapa completo de webhooks, AJAX e páginas com métodos, parâmetros, auth e respostas.
+
+### Changed
+- **Responsivo mobile (Fase M.3)** — sidebar off-canvas com backdrop + scroll lock + swipe-para-fechar, touch targets ≥44px, header compacto (relógio oculto, nome do cliente truncado), tabelas com scroll interno (`.table-wrap` overflow-x) e `white-space:nowrap` em células, form grids empilhados, login 100% width com inputs 16px (evita zoom iOS). Verificado com emulação iPhone 14: **0px de overflow horizontal**.
+- **`server.php`** — `csv`/`xlsx` adicionados à whitelist de estáticos (downloads de relatórios no dev).
+- **`scripts/worker.php`** — refatorado: as 5 funções `generate*CSV` viraram `buildReportSource()` (headers + statement + mapper) com despacho por formato.
+
+### Fixed
+- **CRÍTICO — Motor de ocorrências nunca disparava via webhook**: `pushalarm.php` capturava `lastInsertId()` **depois** do `CALL update_device_stats_after_alarm`, que reseta o valor para 0 — o gate `$alarmId > 0` nunca passava e `process_alarm_to_occurrence()` jamais era chamado. O ID agora é capturado imediatamente após o INSERT. (Descoberto pelo replay E2E da Fase M.2.)
+- **CRÍTICO — Seed DMS/ADAS órfão**: os nomes dos parâmetros do perfil "Padrão Sistema" (`'Distração'`, `'Fadiga'`, `'SOS'`…) não existiam em `alarm_types`, e o matching do engine exige igualdade exata — nenhum alarme DMS gerava ocorrência. A migration v4.1.0 substitui os 19 parâmetros órfãos por 34 com os nomes reais do catálogo (JIMI 143–160/204–207, JT/T 264-X/265-X, acidentes e informativos).
+- **CRÍTICO — CSRF quebrava todos os POSTs**: o token era gerado em `$_SESSION` sem `session_start()` (o app não usa sessões nativas — `$_SESSION` é por request), então cada request gerava token novo e `csrf_verify()` sempre falhava com 403 — todo CRUD (motoristas, chips, clientes, exportar…) estava inoperante desde a Fase F. O token agora é derivado por HMAC-SHA256 do token de sessão (cookie HttpOnly) + secret do servidor: estável durante o login, impossível de forjar sem o cookie.
+- **`auth_init()` sem valor de retorno** — `/ocorrenciasdata` e `/exportardata` testam `if (!auth_init())` e sempre recebiam `null` → 401 permanente mesmo autenticado. Agora retorna o estado de autenticação.
+- **Rota `/grupos-permissao` 404** — estava em `$simpleRoutes` (montava `grupos-permissao.php`, arquivo inexistente); movida para `$renamedRoutes` → `grupos_permissao.php` (mesma classe do fix de `config-ocorrencias` da Fase L).
+- **Coluna fantasma `devices.last_position_at`** — referenciada em `worker.php` (relatório de devices), `rel_desatualizados.php` (5 buckets) e `metrics_rollup.php`, mas não existe em nenhuma migration; as queries falhavam (mascaradas pelos try-catch da Fase K). Corrigido com `LEFT JOIN device_statistics` → `last_gps_time` (fonte viva mantida pelas procedures).
+- **`Logger.php` deprecation PHP 8.1+** — `date()` recebia float de `microtime(true)`; o warning de conversão implícita vazava HTML nas respostas JSON dos webhooks (headers already sent). Cast para int.
+- **`exportar.php` passava o token CSRF como flag** — `csrf_verify($_POST['csrf_token'])` usava a string como parâmetro `$exit_on_fail`; trocado por `csrf_verify()`.
+
+### Notes
+- Pendências que exigem produção/dispositivo real (documentadas no STATUS.md §11): IoTHub `localhost:10088` (M.2.1–M.2.3), OTA proNo 33027 (M.2.5), execução do `test_e2e.sh` no servidor.
+
 ## [4.0.0] — Não lançado (iniciativa "YUV Parity")
 
 Reorientação do produto para ser uma **cópia fiel da plataforma YUV** (`app.yuv.com.br`) — plataforma multi-tenant de rastreamento com **telemetria de vídeo e gestão de ocorrências DMS**. Esta entrada cobre o **planejamento e a documentação**; a implementação segue o roadmap por fases de `PROJETO_YUV.md`.

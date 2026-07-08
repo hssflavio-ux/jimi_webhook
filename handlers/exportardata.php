@@ -9,6 +9,7 @@
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/export_helper.php';
 
 if (!auth_init()) {
     echo json_encode(['code' => 401, 'message' => 'Não autenticado']);
@@ -19,7 +20,7 @@ $customerId = get_customer_id();
 $db = Database::getInstance()->getConnection();
 
 $jobsStmt = $db->prepare("
-    SELECT id, type, status, result_path, error_message, created_at, updated_at
+    SELECT id, type, status, params, result_path, error_message, created_at, updated_at
     FROM jobs
     WHERE customer_id = :cid OR customer_id IS NULL
     ORDER BY created_at DESC
@@ -29,10 +30,19 @@ $jobsStmt->execute([':cid' => $customerId]);
 $jobs = $jobsStmt->fetchAll();
 
 $data = array_map(function($j) {
+    // Formato: extensão do arquivo gerado > params.format > csv (legado)
+    $params = json_decode($j['params'] ?? '{}', true) ?: [];
+    $format = $j['result_path']
+        ? strtolower(pathinfo($j['result_path'], PATHINFO_EXTENSION))
+        : ($params['format'] ?? 'csv');
+    if (!in_array($format, ['csv', 'xlsx', 'pdf'], true)) $format = 'csv';
+
     return [
         'id'           => (int)$j['id'],
         'type'         => $j['type'],
         'status'       => $j['status'],
+        'format'       => $format,
+        'mime_type'    => export_mime_type($format),
         'result_path'  => $j['result_path'],
         'error_message' => $j['error_message'],
         'created_at'   => $j['created_at'],

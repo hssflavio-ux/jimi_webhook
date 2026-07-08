@@ -4,9 +4,16 @@
 # Logs
 logs/*.log
 
-# Dependências (não usamos composer/npm, mas por segurança)
+# Dependências (não usamos composer; npm só para testes Playwright)
 vendor/
 node_modules/
+
+# Artefatos de testes Playwright
+playwright-report/
+test-results/
+
+# Arquivos gerados em runtime (relatórios, mídia)
+storage/
 
 # IDE
 .vscode/

@@ -1,15 +1,32 @@
-# PRD — Jimi Webhook System v2.0.0
+# PRD — Jimi Webhook System
 
 > **Product Requirements Document**  
-> Gateway IoT para dispositivos Jimi — recepção de webhooks GPS/heartbeat/alarme/evento, persistência MySQL e painel Bootstrap para monitoramento, visualização de mídia, envio de comandos e configuração remota.
+> Gateway IoT para dispositivos Jimi — recepção de webhooks GPS/heartbeat/alarme/evento, persistência MySQL e plataforma multi-tenant de gestão de ocorrências DMS/ADAS.
 
 | Meta | Detalhe |
 |---|---|
-| **Versão** | 2.0.0 |
-| **Data** | 2026-06-10 |
+| **Versão** | 4.1.0 (núcleo do gateway especificado na v2.0.0; produto YUV Parity nas v4.x) |
+| **Data** | 2026-07-08 |
 | **Status** | Produção |
-| **Stakeholders** | Operações de frota, Desenvolvimento |
+| **Stakeholders** | Operações de frota, Revendedores, Desenvolvimento |
 | **Referência API** | [Jimi IoT Hub Integration Docs](https://docs.jimicloud.com/integration/integration.html) |
+
+---
+
+## 0. Adendo v4.x — YUV Parity (leia primeiro)
+
+A partir da **v4.0.0** o produto foi reorientado para ser uma **cópia funcional da plataforma YUV** (`app.yuv.com.br`). O núcleo passou a ser a **gestão de ocorrências de comportamento do motorista (DMS/ADAS)**: alarmes de câmera com IA (distração, uso de celular, fadiga, sem cinto) viram **ocorrências** com fluxo de tratativa (aguardando → em tratativa → resolvida/descartada), classificação de risco (baixo/médio/alto) e regras configuráveis por cliente (`occurrence_configs`). O gateway de webhooks especificado neste PRD permanece o alicerce — o que mudou foi o produto sobre ele.
+
+**A especificação de produto viva das v4.x é o [`PROJETO_YUV.md`](../PROJETO_YUV.md)** (personas revendedor/cliente/filial, mapa de 30 rotas, modelo de dados de 42 tabelas, specs das 22 telas, motor de ocorrências, design system Coinbase). Complementos: [`STATUS.md`](../STATUS.md) (estado real por fase), [`API_COVERAGE.md`](../API_COVERAGE.md) (mapa de endpoints) e [`CHANGELOG.md`](../CHANGELOG.md).
+
+**Personas (v4.x):**
+- **Revendedor** — administra múltiplos clientes (white-label `brand_color`, impersonação auditada, perfis de ocorrência por cliente).
+- **Operador do cliente** — monitora o Dashboard de Ocorrências em tempo real, trata casos (vídeo + alarmes agrupados + mapa), gera relatórios.
+- **Gestor de frota** — consome o Resumo executivo, BI, relatórios exportáveis (CSV/XLSX/PDF desde a v4.1.0) e compliance de motoristas (CNH/toxicológico).
+
+**Fluxo central (v4.x):** device gera alarme → `pushalarm` persiste → motor de ocorrências agrupa/cria por janela de dedup e perfil do cliente → upload de vídeo (`pushfileupload`) é vinculado à ocorrência (±3 min) → operador trata no dashboard (polling 15 s) → relatórios auditam. Fluxo verificado E2E na v4.1.0 (`scripts/test_e2e.sh`, suite Playwright 37/37).
+
+O conteúdo abaixo (seções 1–14) especifica o **núcleo do gateway** como entregue na v2.0.0 e continua válido para os webhooks, idempotência, isolamento JIMI/JT-T e comandos; a camada de dashboard descrita (Bootstrap, 5 abas) foi substituída pelo produto YUV Parity descrito acima.
 
 ---
 

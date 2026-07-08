@@ -31,13 +31,14 @@ if (!$isAdmin && !$filterCust) {
     $params[':fcid'] = (int)$filterCust;
 }
 
-// Bucketização
+// Bucketização — última posição vem de device_statistics.last_gps_time
+// (devices.last_position_at não existe no schema; ver Fase M.2)
 $buckets = [
-    'lt24h'  => ['label' => 'Menos de 24 horas', 'cond' => 'TIMESTAMPDIFF(HOUR, d.last_position_at, NOW()) BETWEEN 0 AND 23'],
-    'gt1d'   => ['label' => 'Mais de 1 dia',     'cond' => 'TIMESTAMPDIFF(DAY, d.last_position_at, NOW()) BETWEEN 1 AND 6'],
-    'gt7d'   => ['label' => 'Mais de 7 dias',    'cond' => 'TIMESTAMPDIFF(DAY, d.last_position_at, NOW()) BETWEEN 7 AND 29'],
-    'gt30d'  => ['label' => 'Mais de 30 dias',   'cond' => 'TIMESTAMPDIFF(DAY, d.last_position_at, NOW()) >= 30'],
-    'never'  => ['label' => 'Nunca posicionados', 'cond' => 'd.last_position_at IS NULL'],
+    'lt24h'  => ['label' => 'Menos de 24 horas', 'cond' => 'TIMESTAMPDIFF(HOUR, ds.last_gps_time, NOW()) BETWEEN 0 AND 23'],
+    'gt1d'   => ['label' => 'Mais de 1 dia',     'cond' => 'TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 1 AND 6'],
+    'gt7d'   => ['label' => 'Mais de 7 dias',    'cond' => 'TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 7 AND 29'],
+    'gt30d'  => ['label' => 'Mais de 30 dias',   'cond' => 'TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) >= 30'],
+    'never'  => ['label' => 'Nunca posicionados', 'cond' => 'ds.last_gps_time IS NULL'],
 ];
 
 $bucketCounts = [];
@@ -45,7 +46,11 @@ $total = 0;
 try {
     foreach ($buckets as $key => $b) {
         $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
-        $stmt = $db->prepare("SELECT COUNT(*) FROM devices d LEFT JOIN customers c ON c.id = d.customer_id $full");
+        $stmt = $db->prepare("
+            SELECT COUNT(*) FROM devices d
+            LEFT JOIN customers c ON c.id = d.customer_id
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            $full");
         $stmt->execute($params);
         $bucketCounts[$key] = (int)$stmt->fetchColumn();
         $total += $bucketCounts[$key];
@@ -60,15 +65,16 @@ if ($detailBucket && isset($buckets[$detailBucket])) {
         $b = $buckets[$detailBucket];
         $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
         $stmt = $db->prepare("
-            SELECT d.imei, d.device_name, d.last_position_at, d.last_communication,
+            SELECT d.imei, d.device_name, ds.last_gps_time AS last_position_at, d.last_communication,
                    COALESCE(c.name, '—') as customer_name,
-                   TIMESTAMPDIFF(HOUR, d.last_position_at, NOW()) as hours_since,
+                   TIMESTAMPDIFF(HOUR, ds.last_gps_time, NOW()) as hours_since,
                    COALESCE(dm.model_name, '—') as model_name
             FROM devices d
             LEFT JOIN customers c ON c.id = d.customer_id
             LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
             $full
-            ORDER BY d.last_position_at IS NULL DESC, d.last_position_at ASC
+            ORDER BY ds.last_gps_time IS NULL DESC, ds.last_gps_time ASC
             LIMIT 200
         ");
         $stmt->execute($params);

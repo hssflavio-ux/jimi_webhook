@@ -2,8 +2,16 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>JIMI — Entrar</title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0052ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="JIMI">
+<link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -41,6 +49,14 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
 .alert-error{background:#fdeaec;color:var(--error);border:1px solid #f5c2c7}
 .footer{text-align:center;margin-top:24px;font-size:12px;color:var(--muted-soft)}
 .footer span{font-family:'JetBrains Mono',monospace}
+/* Mobile: card 100% width, touch targets ≥44px, safe areas */
+@media (max-width:480px){
+    body{align-items:flex-start;padding:16px;padding-top:max(24px,env(safe-area-inset-top))}
+    .login-card{max-width:100%;padding:28px 20px;border-radius:16px;margin-top:6vh}
+    h1{font-size:24px}
+    input[type="email"],input[type="password"]{min-height:48px;font-size:16px}/* 16px evita zoom no iOS */
+    .btn{min-height:48px}
+}
 </style>
 </head>
 <body>

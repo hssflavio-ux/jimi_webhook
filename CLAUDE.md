@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from the Jimi IoT Hub (`jimicloud.com`), persists them to MySQL, and serves a multi-tenant dashboard for live tracking, video (MDVR), command dispatch, reports, and remote device configuration. Pure PHP — **no build step, no package manager, no test framework.**
+PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from the Jimi IoT Hub (`jimicloud.com`), persists them to MySQL, and serves a multi-tenant dashboard for live tracking, video (MDVR), command dispatch, reports, and remote device configuration. Pure PHP — **no build step, no package manager for the app** (npm/Node are used *only* for the Playwright E2E suite in `tests/`; XLSX/PDF export is hand-rolled pure PHP in `includes/export_helper.php`).
 
 **Direção atual (v4.0.0 — "YUV Parity"): o projeto está sendo transformado em uma cópia fiel da plataforma YUV (`app.yuv.com.br`).** O núcleo do produto passa a ser a **gestão de ocorrências de comportamento do motorista (DMS/ADAS)** — alarmes de câmera com IA (distração, uso de celular, sem cinto) que viram ocorrências com fluxo de tratativa, classificação de risco e regras configuráveis por cliente. O gateway de webhooks é preservado; o dashboard e o design são reconstruídos.
 
@@ -23,8 +23,10 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 mysql -u root -p < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql
 
-# Lint a single PHP file (the only "test" available)
+# Lint a single PHP file
 php -l handlers/pushgps.php
 
 # Lint everything (mirrors deploy.sh FASE 4 VERIFY)
@@ -41,9 +43,16 @@ curl http://localhost/ping
 
 # Tail logs (rotated daily)
 tail -f logs/webhook_$(date +%Y-%m-%d).log
+
+# E2E tests (Playwright, needs local MySQL — see scripts/dev-windows.ps1)
+./scripts/run-tests.ps1              # or: npx playwright test
+TEST_EMAIL=... TEST_PASSWORD=...     # authed specs skip without these
+
+# Webhook replay E2E (bash; also runnable on the server)
+bash scripts/test_e2e.sh
 ```
 
-There is no automated test suite. Verify changes by linting with `php -l` and replaying official-doc payloads with `curl` against the webhook endpoints.
+Verification: `php -l` lint + `scripts/test_e2e.sh` (webhook replay with MySQL assertions) + the Playwright suite in `tests/` (40 tests: login, 25 routes, CRUD, webhook→occurrence, multi-tenant, export). Authed specs skip when `TEST_EMAIL`/`TEST_PASSWORD` are unset.
 
 ## Architecture
 

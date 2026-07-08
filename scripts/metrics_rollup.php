@@ -104,14 +104,16 @@ foreach ($customers as $cust) {
     $metrics['speed_ate60']     = $spd['ate60'] ?? 0;
     $metrics['speed_acima60']   = $spd['acima60'] ?? 0;
 
-    // Outdated
+    // Outdated — última posição via device_statistics (devices.last_position_at não existe)
     $out = $db->prepare("
         SELECT
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, last_position_at, NOW()) BETWEEN 0 AND 6 THEN 1 ELSE 0 END) as lt7d,
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, last_position_at, NOW()) BETWEEN 7 AND 29 THEN 1 ELSE 0 END) as gt7d,
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, last_position_at, NOW()) >= 30 THEN 1 ELSE 0 END) as gt30d,
-            SUM(CASE WHEN last_position_at IS NULL THEN 1 ELSE 0 END) as never
-        FROM devices WHERE customer_id = :cid AND is_active = 1
+            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 0 AND 6 THEN 1 ELSE 0 END) as lt7d,
+            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 7 AND 29 THEN 1 ELSE 0 END) as gt7d,
+            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) >= 30 THEN 1 ELSE 0 END) as gt30d,
+            SUM(CASE WHEN ds.last_gps_time IS NULL THEN 1 ELSE 0 END) as never
+        FROM devices d
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        WHERE d.customer_id = :cid AND d.is_active = 1
     ");
     $out->execute([':cid' => $cid]);
     $out = $out->fetch();

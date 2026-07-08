@@ -1,0 +1,13 @@
+{
+    "name": "jimi-webhook-tests",
+    "private": true,
+    "description": "Suite Playwright E2E do JIMI Webhook System (Fase M.4). A aplicação em si é PHP puro sem build step — npm é usado exclusivamente para testes.",
+    "scripts": {
+        "test": "playwright test",
+        "test:headed": "playwright test --headed",
+        "report": "playwright show-report"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.54.0"
+    }
+}

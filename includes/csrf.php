@@ -14,7 +14,19 @@ define('CSRF_TOKEN_KEY', '_csrf_token');
 
 function csrf_generate(): string {
     if (empty($_SESSION[CSRF_TOKEN_KEY])) {
-        $_SESSION[CSRF_TOKEN_KEY] = bin2hex(random_bytes(32));
+        // O app NÃO usa sessões nativas do PHP ($_SESSION é por request, populado
+        // pela auth via cookie-token). O token CSRF precisa ser estável durante a
+        // sessão de login: deriva-se por HMAC do token de sessão (cookie HttpOnly,
+        // ilegível por JS) + secret do servidor. Sem cookie (não logado), token
+        // aleatório — POSTs protegidos exigem login de qualquer forma.
+        $cookieName = defined('AUTH_COOKIE') ? AUTH_COOKIE : 'jimi_token';
+        $sessionToken = $_COOKIE[$cookieName] ?? '';
+        if ($sessionToken !== '') {
+            $secret = getenv('APP_KEY') ?: getenv('WEBHOOK_TOKEN') ?: 'jimi-csrf-fallback-secret';
+            $_SESSION[CSRF_TOKEN_KEY] = hash_hmac('sha256', $sessionToken, $secret);
+        } else {
+            $_SESSION[CSRF_TOKEN_KEY] = bin2hex(random_bytes(32));
+        }
     }
     return $_SESSION[CSRF_TOKEN_KEY];
 }

@@ -251,6 +251,7 @@ class PushAlarmHandler extends WebhookHandler {
             }
 
             $stmt = $this->db->prepare($sql);
+            $insertedAlarmId = 0; // capturado logo após o INSERT — CALL de procedure reseta lastInsertId()
             $stmt->execute([
                 ':imei'            => $imei,
                 ':alarm_type'      => (string)$mainType,
@@ -296,7 +297,8 @@ class PushAlarmHandler extends WebhookHandler {
                 ':voltage'         => $voltage,
                 ':raw_data'        => json_encode($item, JSON_UNESCAPED_UNICODE)
             ]);
-            
+            $insertedAlarmId = (int)$this->db->lastInsertId();
+
             // Atualizar estatísticas do dispositivo via stored procedure
             $hasCoords = ($lat && $lng && $lat != 0 && $lng != 0 && !$isRemoval);
             $this->callProcedure('update_device_stats_after_alarm', [
@@ -304,13 +306,11 @@ class PushAlarmHandler extends WebhookHandler {
                 $hasCoords ? $lat : null,
                 $hasCoords ? $lng : null
             ]);
-            
-            $alarmId = (int)$this->db->lastInsertId();
 
-            if (!$isRemoval && $alarmId > 0) {
+            if (!$isRemoval && $insertedAlarmId > 0) {
                 try {
                     process_alarm_to_occurrence([
-                        'id'          => $alarmId,
+                        'id'          => $insertedAlarmId,
                         'imei'        => $imei,
                         'alarm_type'  => (string)$mainType,
                         'alarm_time'  => $alarmTime,
@@ -325,7 +325,7 @@ class PushAlarmHandler extends WebhookHandler {
                     Logger::error('Occurrence Engine Error: ' . $e->getMessage(), [
                         'source' => $this->handlerName,
                         'imei' => $imei,
-                        'alarm_id' => $alarmId,
+                        'alarm_id' => $insertedAlarmId,
                     ]);
                 }
             }

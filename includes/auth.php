@@ -5,7 +5,8 @@ define('AUTH_COOKIE', 'jimi_token');
 define('AUTH_LIFETIME', 86400);
 
 function auth_init() {
-    if (isset($GLOBALS['_auth_initialized'])) return;
+    // Retorna se há usuário autenticado (endpoints AJAX usam `if (!auth_init())`)
+    if (isset($GLOBALS['_auth_initialized'])) return !empty($_SESSION['user_id']);
 
     if (isset($_COOKIE[AUTH_COOKIE])) {
         $token = $_COOKIE[AUTH_COOKIE];
@@ -36,6 +37,7 @@ function auth_init() {
     }
 
     $GLOBALS['_auth_initialized'] = true;
+    return !empty($_SESSION['user_id']);
 }
 
 function auth_cleanup() {

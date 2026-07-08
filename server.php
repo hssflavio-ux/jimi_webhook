@@ -30,6 +30,7 @@ $staticExt = [
     'png','jpg','jpeg','gif','svg','ico','webp','avif',
     'woff','woff2','ttf','eot',
     'mp4','webm','flv','mp3','pdf',
+    'csv','xlsx',   // downloads de relatórios (storage/reports)
 ];
 
 if ($path !== '/' && $real !== false && is_file($real) && strpos($real, $root) === 0) {

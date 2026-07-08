@@ -65,8 +65,11 @@ if (empty($segments)) {
                       'pushevent'];
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','grupos-permissao','motoristas','checklist'];
-    $renamedRoutes = ['config-ocorrencias' => 'config_ocorrencias.php'];
+                     'chips','equipamentos','motoristas','checklist'];
+    $renamedRoutes = [
+        'config-ocorrencias' => 'config_ocorrencias.php',
+        'grupos-permissao'   => 'grupos_permissao.php',
+    ];
 
     // Subrotas de 2 segmentos por prefixo
     $subrouteMap = [

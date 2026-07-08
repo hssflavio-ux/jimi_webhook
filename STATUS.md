@@ -1,8 +1,8 @@
-# STATUS.md — Jimi Webhook System v4.0.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.1.0 (YUV Parity)
 
-> **Última atualização**: 07/07/2026 — **Fases 0–J + resiliência total. 79 PHP, 0 erros lint.**
+> **Última atualização**: 08/07/2026 — **Fases 0–M concluídas. Suite Playwright 37/37 verde, replay E2E 8/8, 5 bugs críticos corrigidos (ver §11).**
 > **Servidor**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
-> **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe`
+> **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe` + MySQL 8.0.37 portátil em `C:\Users\flavi\mysql` (`scripts/dev-windows.ps1`)
 
 ---
 
@@ -171,6 +171,7 @@ mysql -u root -p < mysql/jimi_tracker.sql                  # schema base
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql # v2.0.0
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql # v3.1.0 (multi-tenant)
 mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql # v4.0.0 (YUV Parity)
+mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql # v4.1.0 (Excel/PDF + fix seed DMS)
 ```
 
 ---
@@ -391,9 +392,9 @@ jimi_webhook/
 - [x] **Importação em lote**: POST real do CSV parseado — **Fase H**
 - [x] **White-label**: brand_color na sidebar — **Fase H**
 - [x] **Vídeo Playback**: envia proNo 34817 ao clicar Requisitar — **Fase L**
-- [ ] **OTA firmware**: testar proNo 33027 end-to-end com dispositivo real
-- [ ] **Relatórios**: exportação Excel/PDF (hoje CSV)
-- [ ] **App mobile PWA**: responsive off-canvas improvements
+- [ ] **OTA firmware**: testar proNo 33027 end-to-end com dispositivo real *(requer device — ver §11.4)*
+- [x] **Relatórios**: exportação Excel/PDF (CSV/XLSX/PDF, PHP puro) — **Fase M.1**
+- [x] **App mobile PWA**: manifest + ícones + off-canvas + touch targets — **Fase M.3**
 
 ### Infra e tooling
 - [x] **Rate limiting no login**: 5 tentativas/15 min + `login_log` — **Fase H**
@@ -405,9 +406,9 @@ jimi_webhook/
 - [x] **Migration fix**: apóstrofo `d'água` → `dagua` — **Fase L**
 - [x] **Legacy pages**: dashboard.php e live.php → redirect — **Fase L**
 - [x] **Deploy scripts**: deploy-v4.sh, crontab-setup.sh, hotfix_login_log.sql — **Fase J**
-- [ ] **Testes automatizados**: Playwright para fluxos críticos (login, ocorrências, webhook replay)
-- [ ] **Verificar end-to-end**: comandos → IoTHub → dispositivo → pushinstructresponse
-- [ ] **Arquivos de mídia**: verificar se `/pushfileupload` popula corretamente para `/video`
+- [x] **Testes automatizados**: Playwright — 40 testes, 6 specs, 37/37 verde — **Fase M.4**
+- [ ] **Verificar end-to-end**: comandos → IoTHub → dispositivo → pushinstructresponse *(script pronto; execução requer servidor — ver §11.4)*
+- [x] **Arquivos de mídia**: `/pushfileupload` → `media_files` → vínculo com ocorrência verificado no replay E2E — **Fase M.2**
 
 ### Dívida técnica (não-crítica)
 - [x] String interpolation em 9 arquivos → prepared statements — **Fase H**
@@ -427,7 +428,51 @@ jimi_webhook/
 
 ---
 
-## 11. Comandos Úteis
+## 11. Iteração v4.1.0 — Fases M.1–M.5 (08/07/2026)
+
+Plano executado: [PLANO_PENDENCIAS_v4.md](PLANO_PENDENCIAS_v4.md). Decisões das questões abertas:
+**(1)** Excel/PDF em **PHP puro** (ZipArchive + writer PDF 1.4 próprios) — Composer não existe no ambiente e o projeto é "no package manager"; **(2)** IoTHub produção não acessível daqui — partes locais executadas, restante documentado em §11.4; **(3)** Playwright instalado via npm/npx (Node 24 local).
+
+### 11.1 Entregas
+
+| Fase | Entrega | Verificação |
+|---|---|---|
+| **M.3 PWA** | `manifest.json` + 4 ícones GD (`assets/icons/`) + meta tags + sidebar off-canvas (backdrop, scroll lock, swipe) + touch targets 44px + tabelas com scroll interno + header mobile compacto + login responsivo | Emulação iPhone 14: manifest/ícones 200, **0px overflow horizontal**, screenshots aprovados |
+| **M.1 Excel/PDF** | `includes/export_helper.php` (XlsxWriter streaming + PdfWriter paginado + `export_mime_type`), `worker.php` com `buildReportSource()` + despacho por formato, seletor no form, `jobs.format` (migration v4.1.0), CSV com BOM + `;` | XLSX: zip válido, 6 parts XML well-formed; PDF: xref 100% correto, 4 páginas/120 linhas; specs Playwright de download 3/3 verdes (magic bytes) |
+| **M.2 E2E** | `scripts/test_e2e.sh` (ping→gps→alarme 143→upload→verificação MySQL) + fix seed DMS na migration v4.1.0 | **8/8 verde** no dev: alarme gravado, ocorrência criada, mídia vinculada (±3 min) |
+| **M.4 Playwright** | `package.json`, `playwright.config.js` (webServer automático), `tests/fixtures/auth.js`, 6 specs / 40 testes, `scripts/run-tests.ps1` | **37 passed, 0 failed, 3 skipped** (opt-in: rate-limit destrutivo; multi-tenant requer 2º cliente) |
+| **M.5 Docs** | `API_COVERAGE.md` novo, README (Testes + doc table), CHANGELOG 4.1.0, este STATUS, PRD, memória de agents | — |
+
+### 11.2 Bugs encontrados e corrigidos (achados da verificação E2E)
+
+| # | Severidade | Bug | Fix |
+|---|---|---|---|
+| 1 | **Crítica** | Motor de ocorrências **nunca disparava via webhook**: `pushalarm.php` lia `lastInsertId()` depois do `CALL update_device_stats_after_alarm` (procedure reseta para 0) → gate `$alarmId > 0` nunca passava | ID capturado imediatamente após o INSERT (`$insertedAlarmId`) |
+| 2 | **Crítica** | Seed `occurrence_config_params` órfão: nomes ('Distração', 'Fadiga', 'SOS'…) não existem em `alarm_types` → nenhum alarme DMS/ADAS gerava ocorrência | Migration v4.1.0: 19 params órfãos substituídos por 34 com nomes reais do catálogo (JIMI + JT/T) |
+| 3 | **Crítica** | CSRF sempre falhava (403 em **todo POST** desde a Fase F): token guardado em `$_SESSION` sem `session_start()` (superglobal é por request) → token novo a cada request | Token derivado por HMAC-SHA256(cookie de sessão, secret) — estável por login, sem estado no servidor |
+| 4 | Alta | `auth_init()` sem `return` → `/ocorrenciasdata` e `/exportardata` respondiam 401 sempre | Retorna `!empty($_SESSION['user_id'])` |
+| 5 | Alta | `/grupos-permissao` 404 (rota com hífen em `$simpleRoutes` montava arquivo inexistente) | Movida para `$renamedRoutes` → `grupos_permissao.php` |
+| 6 | Alta | Coluna fantasma `devices.last_position_at` (não existe em migration alguma) quebrava relatório de devices, `/relatorios/desatualizados` e `metrics_rollup` | `LEFT JOIN device_statistics` → `last_gps_time` |
+| 7 | Média | `Logger.php`: deprecation float→int (PHP 8.1+) vazava HTML nas respostas JSON dos webhooks | Cast `(int)$timestamp` |
+| 8 | Baixa | `exportar.php` passava token CSRF como flag `$exit_on_fail` | `csrf_verify()` |
+
+### 11.3 Ambiente de teste local (usado na verificação)
+
+- MySQL 8.0.37 portátil (`C:\Users\flavi\mysql`) — subir com `scripts/dev-windows.ps1`; migrations v4.0.0 + v4.1.0 aplicadas (42 tabelas, `system_info.version = 4.1.0`)
+- Usuário E2E: `e2e@teste.local` (admin, customer 1 "Frota Principal") — usado por `TEST_EMAIL`/`TEST_PASSWORD`
+- Device de teste: IMEI `868120246598152` (criado pelo `test_e2e.sh`)
+
+### 11.4 Pendências que exigem produção/dispositivo real
+
+- [ ] **M.2.1** Verificar IoTHub no servidor: `curl http://localhost:10088/api/device/status` (via SSH)
+- [ ] **M.2.2/2.3** Comando real proNo 128 via `/sendcommand` + monitorar `pushinstructresponse` nos logs
+- [ ] **M.2.5** OTA firmware proNo 33027 com device real
+- [ ] Rodar `bash scripts/test_e2e.sh` no servidor após aplicar a migration v4.1.0 (`./scripts/deploy.sh` já a aplica)
+- [ ] Specs multi-tenant: exigem credenciais de um segundo cliente (`TEST_EMAIL_B`/`TEST_PASSWORD_B`)
+
+---
+
+## 12. Comandos Úteis
 
 ```bash
 # Lint local (Windows PowerShell)
@@ -446,6 +491,11 @@ mysql -u root -p < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql
+
+# Testes E2E
+./scripts/run-tests.ps1          # Playwright (Windows)
+bash scripts/test_e2e.sh         # replay de webhooks
 
 # Webhook replay (teste)
 curl -X POST http://localhost:8000/pushalarm \

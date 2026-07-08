@@ -8,13 +8,14 @@
 - [user] PHP lint via `C:\Users\flavi\php\php.exe -l` → user-preferences.md
 
 ## Project
-- [project] jimi_webhook v4.0.0 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
+- [project] jimi_webhook v4.1.0 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
 - [project] Design system Coinbase: azul #0052ff, sidebar #0a0b0d, CTAs pill 100px, JetBrains Mono números/IMEI → project-conventions.md
-- [project] Autenticação token cookie `jimi_token` → MySQL `sessions`, sem `session_start()` → project-conventions.md
+- [project] Autenticação token cookie `jimi_token` → MySQL `sessions`, sem `session_start()` — $_SESSION é POR REQUEST (nunca persistir nada nele entre requests) → project-conventions.md
 - [project] PROJETO_YUV.md é o contrato-mestre; STATUS.md é o diário vivo → project-conventions.md
-- [project] Fases 0-L concluídas (79 PHP, 0 erros lint) — todas queries v4 blindadas com try-catch → project-conventions.md
+- [project] Fases 0-M concluídas — suite Playwright 37/37 verde, replay E2E 8/8 → project-conventions.md
 - [project] Servidor produção: 189.22.240.43 Apache 2.4 + PHP 8.3 FPM → project-conventions.md
 - [project] IoTHub na porta 10088 — comandos e vídeo ao vivo dependem disso estar UP → project-conventions.md
+- [project] Dev Windows tem MySQL 8.0.37 portátil em C:\Users\flavi\mysql (subir com scripts/dev-windows.ps1); usuário E2E: e2e@teste.local → project-conventions.md
 
 ## Feedback
 - [feedback] Usuário diz "Continue" para avançar fases (não perguntar se quer continuar) → feedback-history.md
@@ -22,18 +23,19 @@
 - [feedback] Valoriza STATUS.md atualizado como artefato de handoff entre sessões → feedback-history.md
 
 ## Reference
-- [reference] Migration v4.0.0 adiciona 17 tabelas + altera 4 existentes → tech-decisions.md
-- [reference] Motor de ocorrências: pushalarm → occurrence_engine → ocorrências (dedup 10min) → tech-decisions.md
-- [reference] CSRF: `includes/csrf.php` com token por sessão, 8 páginas protegidas → tech-decisions.md
-- [reference] Workers cron: worker.php (jobs), trip_builder.php (haversine), metrics_rollup.php → tech-decisions.md
-- [reference] Deploy: `scripts/deploy-v4.sh` (--check/--migrate/--deploy/--verify), `scripts/crontab-setup.sh` → tech-decisions.md
-- [reference] Resiliência: TODAS queries de tabelas v4 têm try-catch → sistema funciona mesmo sem migration → tech-decisions.md
-- [reference] Router: `$renamedRoutes` map para rotas com nome diferente do arquivo (ex: config-ocorrencias → config_ocorrencias.php) → tech-decisions.md
+- [reference] Migration v4.1.0: jobs.format + fix seed occurrence_config_params (nomes reais de alarm_types) → tech-decisions.md
+- [reference] Motor de ocorrências: pushalarm → occurrence_engine → ocorrências (dedup 10min); matching exige nome EXATO de alarm_types → tech-decisions.md
+- [reference] CSRF: token derivado por HMAC-SHA256(cookie jimi_token, WEBHOOK_TOKEN) — NÃO usar $_SESSION para persistir token (não há session_start) → tech-decisions.md
+- [reference] Exportação: includes/export_helper.php — XLSX via ZipArchive + PDF 1.4 puro-PHP, SEM Composer (decisão: projeto é "no package manager") → tech-decisions.md
+- [reference] pushalarm: capturar lastInsertId() ANTES de callProcedure() — CALL reseta o valor para 0 → tech-decisions.md
+- [reference] devices.last_position_at NÃO existe — última posição vem de device_statistics.last_gps_time (JOIN) → tech-decisions.md
+- [reference] Workers cron: worker.php (jobs csv/xlsx/pdf), trip_builder.php (haversine), metrics_rollup.php → tech-decisions.md
+- [reference] Deploy: scripts/deploy.sh aplica migrations até v4.1.0; deploy-v4.sh (--check/--migrate/--deploy/--verify) → tech-decisions.md
+- [reference] Router: `$renamedRoutes` para rotas com hífen (config-ocorrencias, grupos-permissao) — rota nova com hífen vai ali, não em $simpleRoutes → tech-decisions.md
+- [reference] Testes: npx playwright test (tests/, 40 testes; specs autenticados pulam sem TEST_EMAIL/TEST_PASSWORD); bash scripts/test_e2e.sh (replay webhooks) → tech-decisions.md
 
-## Pendências (não dependem de deploy)
-- Playwright tests para fluxos críticos
+## Pendências (exigem produção/dispositivo — ver STATUS.md §11.4)
+- Verificar IoTHub no servidor (curl localhost:10088) + comando real proNo 128 + pushinstructresponse
 - OTA firmware: testar proNo 33027 com dispositivo real
-- Excel/PDF real (hoje CSV)
-- Verificar IoTHub end-to-end no servidor (curl localhost:10088)
-- PWA responsive improvements
-- API_COVERAGE.md e PRD.md ainda não atualizados para v4.0.0
+- Rodar bash scripts/test_e2e.sh no servidor após deploy (migration v4.1.0 é aplicada pelo deploy.sh)
+- Specs multi-tenant: exigem credenciais de segundo cliente (TEST_EMAIL_B/TEST_PASSWORD_B)

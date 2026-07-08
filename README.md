@@ -1,8 +1,8 @@
-# Jimi Webhook System v4.0.0 — YUV Parity
+# Jimi Webhook System v4.1.0 — YUV Parity
 
 Gateway PHP para dispositivos IoT Jimi — recebe webhooks de GPS/heartbeat/alarme/evento do Jimi IoT Hub (`jimicloud.com`), persiste em MySQL e fornece uma plataforma multi-tenant de rastreamento com telemetria de vídeo (MDVR) e gestão de ocorrências DMS/ADAS.
 
-> **Status (07/2026)**: Fases 0–I concluídas. 80 arquivos PHP, 0 erros de lint. Dashboard com 30 rotas, motor de ocorrências DMS, white-label, rate limiting, logs de auditoria.
+> **Status (07/2026)**: Fases 0–M concluídas. Dashboard com 30 rotas, motor de ocorrências DMS (verificado E2E), exportação CSV/XLSX/PDF, PWA mobile, suite Playwright (37 testes verdes), white-label, rate limiting, logs de auditoria.
 >
 > **Blueprint**: [`PROJETO_YUV.md`](./PROJETO_YUV.md). **Análise visual**: [`analise_yuv/analise_yuv.html`](./analise_yuv/analise_yuv.html).
 
@@ -17,6 +17,7 @@ mysql -u root -p < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql
 
 # 3. Setup pre-commit lint hook
 git config core.hooksPath .githooks
@@ -106,6 +107,41 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 | `IOTHUB_COMMAND_URL` | Endpoint de comandos IoTHub | `http://localhost:10088/api/device/sendInstruct` |
 | `IOTHUB_API_TOKEN` | Token interno da API IoTHub | `123` |
 
+## Testes
+
+O app é PHP puro; **npm/Node são usados exclusivamente para a suite E2E Playwright** (`tests/`).
+
+```powershell
+# Setup (uma vez): instala @playwright/test + Chromium
+npm install
+npx playwright install chromium
+
+# Credenciais de um usuário de teste (specs autenticados são pulados sem elas)
+$env:TEST_EMAIL = 'usuario@teste.local'
+$env:TEST_PASSWORD = 'senha'
+
+# Roda tudo (sobe php -S localhost:8000 automaticamente; requer MySQL local)
+./scripts/run-tests.ps1
+# ou: npx playwright test [--headed] [--grep "Login"]
+npx playwright show-report   # relatório HTML
+```
+
+Variáveis opcionais: `BASE_URL` (alvo ≠ localhost), `TEST_EMAIL_B`/`TEST_PASSWORD_B`
+(spec de isolamento multi-tenant — clientes distintos), `TEST_IMEI` + `WEBHOOK_TOKEN`
+(spec webhook→ocorrência), `RATE_LIMIT_TEST=1` (opt-in — **bloqueia o IP por 15 min**).
+
+Replay E2E de webhooks (bash, usável no servidor):
+
+```bash
+bash scripts/test_e2e.sh                              # local
+BASE_URL=http://SEU_SERVIDOR bash scripts/test_e2e.sh # produção
+```
+
+Cobertura: login/rate-limit/open-redirect, 25 rotas da sidebar, CRUD motoristas,
+pushalarm→motor de ocorrências→dashboard, isolamento multi-tenant e exportação
+completa (job → worker → download CSV/XLSX/PDF). Ver `API_COVERAGE.md` para o mapa
+de endpoints.
+
 ## Contributing
 
 1. Handlers de webhook devem extender `WebhookHandler` (`config/WebhookHandler.php`)
@@ -121,6 +157,7 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 |---|---|
 | **[PROJETO_YUV.md](./PROJETO_YUV.md)** | Blueprint-mestre v4.0.0 |
 | **[STATUS.md](./STATUS.md)** | Status detalhado, bugs, pendências (diário vivo) |
+| [API_COVERAGE.md](./API_COVERAGE.md) | Mapa de endpoints: webhooks, AJAX, páginas (métodos, params, auth) |
 | **[analise_yuv/analise_yuv.html](./analise_yuv/analise_yuv.html)** | Análise visual das 22 telas do YUV |
 | [DESIGN.md](./DESIGN.md) | Design system Coinbase (deriva de DESIGN-coinbase.md) |
 | [AGENTS.md](./AGENTS.md) | Guia para AI agents (arquitetura, gotchas, comandos) |

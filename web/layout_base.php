@@ -115,8 +115,17 @@ function nav_icon($name) {
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>JIMI — <?= htmlspecialchars($page_title) ?></title>
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0052ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JIMI">
+<link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -481,7 +490,9 @@ body {
     background: var(--surface);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-lg);
-    overflow: hidden;
+    overflow-x: auto;              /* tabela larga rola dentro do card, nunca a página */
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -610,7 +621,7 @@ tbody tr:hover { background: var(--canvas-soft); }
 
 /* ── Utilities ───────────────────────────────────────── */
 .text-muted { color: var(--muted); }
-.text-mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+.text-mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: nowrap; }
 .text-right { text-align: right; }
 .mt-16 { margin-top: 16px; }
 .mt-24 { margin-top: 24px; }
@@ -763,13 +774,68 @@ tbody tr:hover { background: var(--canvas-soft); }
 .sidebar.collapsed .sidebar-footer { justify-content: center; }
 .sidebar.collapsed + .main { margin-left: 64px; }
 
-/* ── Responsive ──────────────────────────────────────── */
+/* ── Responsive / PWA off-canvas ─────────────────────── */
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 11, 13, 0.55);
+    z-index: 99;
+    opacity: 0;
+    transition: opacity .25s ease;
+}
+.sidebar-backdrop.show { opacity: 1; }
+
+body.sidebar-locked { overflow: hidden; }
+
 @media (max-width: 768px) {
-    .sidebar { transform: translateX(-100%); transition: transform .2s; }
-    .sidebar.mobile-open { transform: translateX(0); }
+    .sidebar {
+        transform: translateX(-100%);
+        transition: transform .25s cubic-bezier(0.4, 0, 0.2, 1);
+        width: min(300px, 84vw);
+        min-width: 0;
+        box-shadow: none;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+    }
+    .sidebar.mobile-open {
+        transform: translateX(0);
+        box-shadow: 8px 0 32px rgba(0, 0, 0, 0.35);
+    }
+    .sidebar.collapsed { width: min(300px, 84vw); min-width: 0; } /* colapso não se aplica em mobile */
+    .sidebar-backdrop { display: block; pointer-events: none; }
+    .sidebar-backdrop.show { pointer-events: auto; }
+    .sidebar-collapse-btn { display: none; }
     .main { margin-left: 0 !important; }
-    .main-header { padding: 0 16px; }
-    .main-content { padding: 16px; }
+    .main-header { padding: 0 12px; }
+    .main-content { padding: 16px 12px; }
+
+    /* Header compacto: sem relógio, nome do cliente truncado */
+    #server-clock { display: none; }
+    .main-header-meta { min-width: 0; gap: 10px; }
+    .main-header-meta > span:first-of-type {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100px;
+    }
+
+    /* Touch targets ≥ 44×44px (sidebar + header) */
+    .sidebar-nav a,
+    .sidebar-accordion-header { min-height: 44px; padding: 12px; font-size: 14px; }
+    .sidebar-accordion-body a { min-height: 44px; }
+    .sidebar-footer-logout { width: 44px; height: 44px; }
+    .sidebar-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); }
+    .sidebar-customer select { min-height: 44px; }
+    .btn { min-height: 44px; }
+    .btn-sm { min-height: 40px; }
+
+    /* Tabelas: scroll horizontal no container, nunca na página */
+    thead th, tbody td { white-space: nowrap; }
+    .form-row { grid-template-columns: 1fr; }
+    .kpi-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+    .kpi-item { padding: 14px; }
+    .kpi-item-value { font-size: 22px; }
 }
 
 /* ── Hamburger (mobile) ──────────────────────────────── */
@@ -780,7 +846,7 @@ tbody tr:hover { background: var(--canvas-soft); }
     border: none; background: transparent;
     cursor: pointer; color: var(--ink);
 }
-@media (max-width: 768px) { .hamburger { display: inline-flex; } }
+@media (max-width: 768px) { .hamburger { display: inline-flex; width: 44px; height: 44px; } }
 
 </style>
 <?php
@@ -884,6 +950,9 @@ if (!empty($customer['brand_color'])) {
     </div>
 </aside>
 
+<!-- Backdrop mobile (fecha a sidebar off-canvas ao tocar fora) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeMobileSidebar()"></div>
+
 <!-- Main -->
 <main class="main">
     <header class="main-header">
@@ -970,19 +1039,48 @@ function toggleSidebar() {
     }
 })();
 
-// ── Mobile Sidebar ────────────────────────────────────
+// ── Mobile Sidebar (off-canvas + backdrop + scroll lock + swipe) ──
+function openMobileSidebar() {
+    var sb = document.getElementById('sidebar');
+    var bd = document.getElementById('sidebar-backdrop');
+    if (!sb) return;
+    sb.classList.add('mobile-open');
+    if (bd) bd.classList.add('show');
+    document.body.classList.add('sidebar-locked');
+}
+function closeMobileSidebar() {
+    var sb = document.getElementById('sidebar');
+    var bd = document.getElementById('sidebar-backdrop');
+    if (!sb) return;
+    sb.classList.remove('mobile-open');
+    if (bd) bd.classList.remove('show');
+    document.body.classList.remove('sidebar-locked');
+}
 function toggleMobileSidebar() {
     var sb = document.getElementById('sidebar');
     if (!sb) return;
-    sb.classList.toggle('mobile-open');
+    if (sb.classList.contains('mobile-open')) closeMobileSidebar();
+    else openMobileSidebar();
 }
-document.addEventListener('click', function(e) {
+
+// Swipe para a esquerda fecha a sidebar (touch)
+(function() {
     var sb = document.getElementById('sidebar');
-    var hamb = document.querySelector('.hamburger');
-    if (sb && sb.classList.contains('mobile-open') && !sb.contains(e.target) && !hamb.contains(e.target)) {
-        sb.classList.remove('mobile-open');
-    }
-});
+    if (!sb) return;
+    var startX = null, startY = null;
+    sb.addEventListener('touchstart', function(e) {
+        if (!sb.classList.contains('mobile-open')) return;
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+    }, { passive: true });
+    sb.addEventListener('touchend', function(e) {
+        if (startX === null) return;
+        var dx = e.changedTouches[0].clientX - startX;
+        var dy = Math.abs(e.changedTouches[0].clientY - startY);
+        if (dx < -50 && dy < 60) closeMobileSidebar();
+        startX = startY = null;
+    }, { passive: true });
+})();
 
 // ── Fleet Counter Polling ─────────────────────────────
 (function() {

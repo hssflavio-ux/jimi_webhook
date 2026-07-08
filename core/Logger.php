@@ -122,9 +122,9 @@ class Logger {
      * Formata entrada de log em formato estruturado
      */
     private static function formatLogEntry($level, $message, array $context) {
-        // Timestamp com microsegundos
+        // Timestamp com microsegundos (cast evita deprecation float→int no PHP 8.1+)
         $timestamp = microtime(true);
-        $datetime = date('Y-m-d H:i:s', $timestamp);
+        $datetime = date('Y-m-d H:i:s', (int)$timestamp);
         $microseconds = sprintf('%06d', ($timestamp - floor($timestamp)) * 1000000);
         $fullTimestamp = $datetime . '.' . $microseconds;
         

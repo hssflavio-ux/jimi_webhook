@@ -283,6 +283,27 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.0.0 desnecessária"
             fi
         fi
+
+        # v4.1.0 migration (jobs.format + fix seed occurrence_config_params)
+        if [ -f "mysql/migration_v4.1.0.sql" ]; then
+            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                -p"${DB_PASS}" -N -e \
+                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+                2>/dev/null || echo "0")
+
+            if [ "$DB_VERSION" != "4.1.0" ]; then
+                echo "  Aplicando migration_v4.1.0.sql (Excel/PDF + fix seed DMS, versão atual: $DB_VERSION)..."
+                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.1.0.sql 2>/tmp/migrate_err_v41.log; then
+                    echo "  ✓ Migração v4.1.0 aplicada com sucesso"
+                else
+                    echo "  ⚠ AVISO: Erro na migração v4.1.0. Veja /tmp/migrate_err_v41.log"
+                    cat /tmp/migrate_err_v41.log 2>/dev/null || true
+                fi
+            else
+                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.1.0 desnecessária"
+            fi
+        fi
     fi
 fi
 

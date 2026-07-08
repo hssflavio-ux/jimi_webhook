@@ -24,22 +24,31 @@ $msg = '';
 $msgType = '';
 
 // ── Create export job ────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify($_POST['csrf_token'] ?? '')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
     $reportName = trim($_POST['report_name'] ?? '');
     $reportType = $_POST['report_type'] ?? 'alarms';
     $dateFrom   = $_POST['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
     $dateTo     = $_POST['date_to'] ?? date('Y-m-d');
+    $format     = in_array($_POST['format'] ?? 'csv', ['csv', 'xlsx', 'pdf'], true) ? $_POST['format'] : 'csv';
 
     if ($reportName) {
+        // format também vai no params: fallback do worker antes da migration v4.1.0
         $params = json_encode([
             'report_name' => $reportName,
             'report_type' => $reportType,
             'date_from'   => $dateFrom,
             'date_to'     => $dateTo,
+            'format'      => $format,
         ], JSON_UNESCAPED_UNICODE);
 
-        $insert = $db->prepare("INSERT INTO jobs (type, customer_id, params, status, requested_by) VALUES ('report', :cid, :params, 'pendente', :uid)");
-        $insert->execute([':cid' => $customerId, ':params' => $params, ':uid' => $user['id']]);
+        try {
+            $insert = $db->prepare("INSERT INTO jobs (type, format, customer_id, params, status, requested_by) VALUES ('report', :fmt, :cid, :params, 'pendente', :uid)");
+            $insert->execute([':fmt' => $format, ':cid' => $customerId, ':params' => $params, ':uid' => $user['id']]);
+        } catch (Exception $e) {
+            // Coluna jobs.format ainda não existe (pré-migração v4.1.0)
+            $insert = $db->prepare("INSERT INTO jobs (type, customer_id, params, status, requested_by) VALUES ('report', :cid, :params, 'pendente', :uid)");
+            $insert->execute([':cid' => $customerId, ':params' => $params, ':uid' => $user['id']]);
+        }
         $msg = 'Relatório "' . htmlspecialchars($reportName) . '" adicionado à fila de geração.';
         $msgType = 'success';
     } else {
@@ -135,6 +144,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Data Fim</label>
                 <input type="date" name="date_to" value="<?= date('Y-m-d') ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
             </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Formato</label>
+                <select name="format" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <option value="csv">CSV (.csv)</option>
+                    <option value="xlsx">Excel (.xlsx)</option>
+                    <option value="pdf">PDF (.pdf)</option>
+                </select>
+            </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm" style="margin-top:12px;padding:8px 24px;">Gerar Relatório</button>
     </form>
@@ -162,10 +179,17 @@ require_once __DIR__ . '/../web/layout_base.php';
                 $statusBadge = ['pendente'=>'badge-warning','processando'=>'badge-info','concluido'=>'badge-success','falhou'=>'badge-error'];
                 $statusLabel = ['pendente'=>'Pendente','processando'=>'Processando','concluido'=>'Concluído','falhou'=>'Falhou'];
                 $typeLabel = ['report'=>'Relatório','video_download'=>'Vídeo','rollup'=>'Agregação'];
+                $jParams = json_decode($j['params'] ?? '{}', true) ?: [];
+                $jFormat = strtoupper($j['format'] ?? $jParams['format'] ?? 'csv');
             ?>
             <tr>
                 <td>#<?= $j['id'] ?></td>
-                <td><?= $typeLabel[$j['type']] ?? $j['type'] ?></td>
+                <td>
+                    <?= $typeLabel[$j['type']] ?? $j['type'] ?>
+                    <?php if ($j['type'] === 'report'): ?>
+                    <span class="badge" style="font-size:10px;margin-left:4px;"><?= htmlspecialchars($jFormat) ?></span>
+                    <?php endif; ?>
+                </td>
                 <td><?= htmlspecialchars($j['requested_by_name'] ?? '—') ?></td>
                 <td><span class="badge <?= $statusBadge[$j['status']] ?? 'badge' ?>"><?= $statusLabel[$j['status']] ?? $j['status'] ?></span></td>
                 <td class="text-mono"><?= date('d/m/Y H:i', strtotime($j['created_at'])) ?></td>
