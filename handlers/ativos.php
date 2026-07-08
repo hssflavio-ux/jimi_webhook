@@ -25,13 +25,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$devices = $db->query("
+$devicesStmt = $db->prepare("
     SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active,
            s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online,
            COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
     FROM devices d LEFT JOIN device_statistics s ON d.imei=s.imei LEFT JOIN device_models dm ON d.device_model_id=dm.id
-    WHERE d.customer_id=$customer_id ORDER BY d.is_active DESC, d.last_communication DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+    WHERE d.customer_id=:cid ORDER BY d.is_active DESC, d.last_communication DESC
+");
+$devicesStmt->execute([':cid' => $customer_id]);
+$devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY protocol, model_name")->fetchAll(PDO::FETCH_ASSOC);
 

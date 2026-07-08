@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# JIMI Webhook — Pre-commit Lint Hook v4.0.0
+# Syntax-checks all staged PHP files before commit.
+#
+# Setup: git config core.hooksPath .githooks
+# Or copy this file to .git/hooks/pre-commit
+
+set -e
+
+# Try to find PHP: first check known Windows paths, then PATH
+if [ -x "/c/Users/flavi/php/php.exe" ]; then
+    PHP="/c/Users/flavi/php/php.exe"
+elif [ -x "C:/Users/flavi/php/php.exe" ]; then
+    PHP="C:/Users/flavi/php/php.exe"
+elif command -v php &> /dev/null; then
+    PHP="php"
+else
+    echo "[pre-commit] PHP not found — skipping lint check."
+    exit 0
+fi
+
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.php$' || true)
+
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+FAIL=0
+while IFS= read -r file; do
+    OUTPUT=$("$PHP" -l "$file" 2>&1) || true
+    if ! echo "$OUTPUT" | grep -q "No syntax errors"; then
+        echo "  LINT FAIL: $file"
+        echo "  $OUTPUT"
+        FAIL=1
+    fi
+done <<< "$STAGED"
+
+if [ $FAIL -eq 1 ]; then
+    echo ""
+    echo "Pre-commit blocked: fix syntax errors above before committing."
+    exit 1
+fi
+
+echo "[pre-commit] $([ $(echo "$STAGED" | wc -l) -gt 0 ] && echo "$(echo "$STAGED" | wc -l) PHP files" || echo "done") — all clean."
+exit 0

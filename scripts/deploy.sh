@@ -262,6 +262,27 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 echo "  ✓ Banco já está na versão $DB_VERSION — migração v3.1.0 desnecessária"
             fi
         fi
+
+        # v4.0.0 migration
+        if [ -f "mysql/migration_v4.0.0.sql" ]; then
+            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                -p"${DB_PASS}" -N -e \
+                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+                2>/dev/null || echo "0")
+
+            if [ "$DB_VERSION" = "3.1.0" ] || [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
+                echo "  Aplicando migration_v4.0.0.sql (YUV Parity, versão atual: $DB_VERSION)..."
+                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.0.0.sql 2>/tmp/migrate_err_v40.log; then
+                    echo "  ✓ Migração v4.0.0 aplicada com sucesso"
+                else
+                    echo "  ⚠ AVISO: Erro na migração v4.0.0. Veja /tmp/migrate_err_v40.log"
+                    cat /tmp/migrate_err_v40.log 2>/dev/null || true
+                fi
+            else
+                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.0.0 desnecessária"
+            fi
+        fi
     fi
 fi
 
@@ -281,6 +302,14 @@ if [ ! -d logs ]; then
     mkdir -p logs
 fi
 chmod 777 logs
+# Storage — reports e media
+if [ ! -d storage/reports ]; then
+    mkdir -p storage/reports
+fi
+if [ ! -d storage/media ]; then
+    mkdir -p storage/media
+fi
+chmod 777 storage storage/reports storage/media 2>/dev/null || true
 # Manter logs existentes com permissão de escrita
 find logs -type f -exec chmod 666 {} \; 2>/dev/null || true
 echo "  ✓ Permissões configuradas"

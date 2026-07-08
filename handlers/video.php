@@ -16,21 +16,25 @@ $streamUrl = getenv('STREAM_URL') ?: 'http://localhost:8881';
 $fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
 $dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 
-$devices = $db->query("
+$devicesStmt = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.camera_count, dm.protocol
     FROM devices d LEFT JOIN device_models dm ON d.device_model_id=dm.id
-    WHERE d.customer_id=$customer_id ORDER BY d.device_name
-")->fetchAll(PDO::FETCH_ASSOC);
+    WHERE d.customer_id=:cid ORDER BY d.device_name
+");
+$devicesStmt->execute([':cid' => $customer_id]);
+$devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $selectedImei = $_GET['imei'] ?? ($devices[0]['imei'] ?? '');
 $selectedMode = $_GET['mode'] ?? 'live';
 
-$mediaFiles = $db->query("
+$mediaStmt = $db->prepare("
     SELECT mf.id, mf.imei, mf.file_type, mf.file_name, mf.file_url, mf.file_size, mf.created_at, d.device_name
     FROM media_files mf JOIN devices d ON mf.imei=d.imei
-    WHERE d.customer_id=$customer_id AND mf.file_type IN ('video','image','audio')
+    WHERE d.customer_id=:cid AND mf.file_type IN ('video','image','audio')
     ORDER BY mf.created_at DESC LIMIT 50
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$mediaStmt->execute([':cid' => $customer_id]);
+$mediaFiles = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title='Vídeo'; $current_route='video';
 $extra_head = '<script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.min.js"></script>

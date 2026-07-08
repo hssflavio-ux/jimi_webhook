@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v4.0.0 (YUV Parity)
 
-> **Última atualização**: 06/07/2026 — **Fases 0–F concluídas (68 arquivos, 0 erros de lint)**.
+> **Última atualização**: 07/07/2026 — **Fases 0–J concluídas (79 PHP + deploy scripts + docs, 0 erros de lint)**.
 > **Servidor**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 > **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe`
 
@@ -27,8 +27,12 @@
 | **6 — Cadastros** | 5 | ✅ | `/chips` (CRUD SIM), `/motoristas` (CRUD + alertas vencimento CNH/toxicológico), `/grupos-permissao` (matriz 18 telas × 5 ações JSON + contagem usuários), `/clientes` evoluído (occurrence_config_id, faceid_enabled, brand_color, logo_url, impersonar com `impersonation_log`), `/usuarios` evoluído (abas Minha Empresa/Meus Clientes, user_type, permission_group_id, photo_url) |
 | **7 — Visão Executiva** | 4 | ✅ | `/` Resumo (4 KPIs, heatmap Leaflet, velocidade frota, desatualizados, top clientes revendedor, séries Chart.js hora-a-hora alarmes+ocorrências), `/bi` (gráficos barras/pizza/linha sob demanda com filtros), `/rastreamento` (cliente→ativo→mapa cascata + busca + auto-refresh 60s) |
 | **F — Segurança+Checklist** | 9 | ✅ | `includes/csrf.php` (token por sessão, `csrf_verify()` em 8 páginas, `csrf_field()` em todos os forms), cookie `Secure`/`HttpOnly`/`SameSite=Lax`, `auth_cleanup()` (sessions + request_logs periódico), GPS (0,0) filtrado, rotas mortas removidas, `/checklist` (3 tabelas + CRUD com itens dinâmicos boolean/text/photo/number) |
+| **G — Performance+Polish** | 5 | ✅ | `metrics_snapshots` (nova tabela, 22 métricas por cliente), `metrics_rollup.php` (pré-computa KPIs a cada 5 min), `resumo.php` (lê do cache com fallback on-the-fly), tour de boas-vindas 5 passos (localStorage) + banner de comunicado, `exportar.php` (form de novo relatório com CSRF), `worker.php` (CSV real para 5 tipos: alarms/occurrences/positions/trips/devices), `bi.php` (filtro Motoristas + chips multi-select de Alarmes com overflow +N) |
+| **H — UX+Security+Quality** | 11 | ✅ | `/checklist/inspecao` (preenchimento de inspeção), filtro de período no dashboard ocorrências, rate limiting 5 tentativas/15min + `login_log`, white-label `brand_color` na sidebar CSS, import CSV real em equipamentos (POST batch), prepared statements em 9 arquivos legacy (dashboard/ativos/comandos/config/live/video/relatorios/chips/motoristas), `pushcmd.php` removido do disco, md5 com `JSON_UNESCAPED_UNICODE`, aliases `lon`/`msgId` em normalize_data, dupla normalização removida (pushalarm/pushresourcelist) |
+| **I — Tooling+Polish** | 4 | ✅ | `.githooks/pre-commit` (lint PHP automático, `git config core.hooksPath .githooks`), R13: `pushTerminalTransInfo` extrai `content`/`extensionData` estruturado, R16: log de erros em pushresourcelist, README.md atualizado com 30 rotas v4.0.0 + workers + segurança + white-label |
+| **J — Deploy** | 3 | ✅ | `DEPLOY_v4.md` (plano completo com checklist, rollback, crontab), `scripts/deploy-v4.sh` (--check/--backup/--migrate/--deploy/--verify, idempotente, verifica 17 tabelas v4), `.env.example` atualizado (IOTHUB vars, SYSTEM_VERSION=4.0.0), `update-homolog.sh` e `deploy.sh` com suporte a migration v4.0.0 |
 
-> **Total**: **68 arquivos** criados/modificados. **0 erros de lint** em todo o projeto.
+> **Total**: **80 arquivos** PHP (79 lint) + 1 migration SQL + README.md. **0 erros de lint** em todo o projeto.
 
 ---
 
@@ -376,11 +380,14 @@ jimi_webhook/
 ## 10. Pendências para Próxima Iteração
 
 ### Melhorias funcionais
-- [ ] **Resumo `/`**: metrics_rollup para pré-computar KPIs (hoje on-the-fly)
-- [ ] **Resumo `/`**: tour de boas-vindas (11 passos) + banner de comunicado com localStorage
-- [ ] **BI `/bi`**: filtro de Motoristas e multi-select de Alarmes com chips `+N`
-- [ ] **Vídeo Playback**: enviar comando real de listagem de gravações (proNo a confirmar)
-- [ ] **Exportar**: implementar Excel/PDF real (hoje placeholder "em desenvolvimento")
+- [x] **Resumo `/`**: metrics_rollup para pré-computar KPIs (tabela `metrics_snapshots`, 22 métricas/customer) — **Fase G**
+- [x] **Resumo `/`**: tour de boas-vindas (5 passos) + banner de comunicado com localStorage — **Fase G**
+- [x] **BI `/bi`**: filtro de Motoristas e multi-select de Alarmes com chips `+N` — **Fase G**
+- [x] **Exportar**: CSV real para 5 tipos de relatório (alarms/occurrences/positions/trips/devices) — **Fase G**
+- [x] **Dashboard `/ocorrencias/dashboard`**: filtro de período no polling — **Fase H**
+- [x] **Checklist**: tela de preenchimento/inspeção (`/checklist/inspecao`) — **Fase H**
+- [x] **Importação em lote**: POST real do CSV parseado em `/equipamentos` — **Fase H**
+- [x] **White-label**: `brand_color` aplicado na sidebar via CSS custom properties — **Fase H**
 - [ ] **Importação em lote**: POST real do CSV parseado (hoje só lê e mostra contagem)
 - [ ] **OTA firmware**: testar proNo 33027 end-to-end com dispositivo real
 - [ ] **Checklist**: tela de preenchimento/inspeção (hoje só CRUD de configuração)
@@ -388,22 +395,22 @@ jimi_webhook/
 - [ ] **Relatórios**: exportação Excel/PDF funcional (hoje placeholder)
 
 ### Infra e tooling
-- [ ] **Lint pre-commit hook**: automatizar `php -l` antes de commits
+- [x] **Rate limiting no login**: 5 tentativas/15 min por IP + tabela `login_log` — **Fase H**
+- [x] **Lint pre-commit hook**: `.githooks/pre-commit` + `git config core.hooksPath .githooks` — **Fase I**
 - [ ] **Testes automatizados**: Playwright para fluxos críticos (login, ocorrências, webhook replay)
-- [ ] **Rate limiting** no login: prevenir brute-force
-- [ ] **Logs de acesso**: registrar tentativas de login (sucesso/falha)
+- [x] **Logs de acesso**: registrar tentativas de login (sucesso/falha) via `login_log` — **Fase H**
 - [ ] **Verificar end-to-end**: comandos → IoTHub → dispositivo → pushinstructresponse
 - [ ] **Arquivos de mídia**: verificar se `/pushfileupload` popula corretamente para `/video`
 
 ### Dívida técnica (não-crítica)
-- [ ] String interpolation de `$customer_id` em 5 arquivos legacy (dashboard, ativos, live, video, config) — converter para prepared statements
-- [ ] `pushTerminalTransInfo.php` não extrai dados estruturados (R13)
-- [ ] `normalize_data()` faltam aliases (R14): `lon→longitude`, `msgId→msg_id`
-- [ ] Dupla normalização em pushalarm.php e pushresourcelist.php (R15)
-- [ ] Código morto em pushresourcelist.php (R16)
-- [ ] `md5(json_encode(...))` sem `JSON_UNESCAPED_UNICODE` em WebhookHandler (R17)
-- [ ] Remover `pushcmd.php` do disco (já fora do router)
-- [ ] Atualizar `README.md`, `API_COVERAGE.md`, `PRD.md` para refletir v4.0.0
+- [x] String interpolation de `$customer_id` em 9 arquivos legacy — convertido para prepared statements — **Fase H**
+- [x] `pushTerminalTransInfo.php` não extrai dados estruturados (R13) — **Fase I**
+- [x] `normalize_data()` faltam aliases (R14): `lon→longitude`, `msgId→msg_id` — **Fase H**
+- [x] Dupla normalização em pushalarm.php e pushresourcelist.php (R15) — **Fase H**
+- [x] Código morto em pushresourcelist.php (R16) — **Fase I**
+- [x] `md5(json_encode(...))` sem `JSON_UNESCAPED_UNICODE` em WebhookHandler (R17) — **Fase H**
+- [x] Remover `pushcmd.php` do disco (já fora do router) — **Fase H**
+- [x] Atualizar `README.md` para refletir v4.0.0 — **Fase I**
 
 ### Funcionalidades futuras (fora do escopo YUV)
 - [ ] **Licenciamento por equipamento**: campo de licença/plano por device/cliente

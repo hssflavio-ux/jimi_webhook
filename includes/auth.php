@@ -185,18 +185,38 @@ function _gen_token() {
 }
 
 function login_user($email, $password) {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
     try {
         $db = Database::getInstance()->getConnection();
+
+        // Rate limiting: max 5 failed attempts per IP in 15 minutes
+        $rateStmt = $db->prepare("
+            SELECT COUNT(*) FROM login_log
+            WHERE ip_address = :ip AND success = 0 AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+        ");
+        $rateStmt->execute([':ip' => $ip]);
+        $failedCount = (int)$rateStmt->fetchColumn();
+
+        if ($failedCount >= 5) {
+            return array('success' => false, 'error' => 'Muitas tentativas. Tente novamente em 15 minutos.');
+        }
+
         $stmt = $db->prepare("SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ?");
         $stmt->execute(array($email));
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || empty($user['is_active'])) {
+            _log_login($db, $email, $ip, $ua, false);
             return array('success' => false, 'error' => 'Usuário não encontrado ou inativo.');
         }
         if (!password_verify($password, $user['password_hash'])) {
+            _log_login($db, $email, $ip, $ua, false);
             return array('success' => false, 'error' => 'Senha incorreta.');
         }
+
+        _log_login($db, $email, $ip, $ua, true);
 
         $token = _gen_token();
         $GLOBALS['_auth_token'] = $token;
@@ -227,6 +247,15 @@ function login_user($email, $password) {
     } catch (Exception $e) {
         error_log('login_user: ' . $e->getMessage());
         return array('success' => false, 'error' => 'Erro interno: ' . $e->getMessage());
+    }
+}
+
+function _log_login($db, $email, $ip, $ua, $success) {
+    try {
+        $stmt = $db->prepare("INSERT INTO login_log (email, ip_address, success, user_agent) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$email, $ip, $success ? 1 : 0, mb_substr($ua ?? '', 0, 500)]);
+    } catch (Exception $e) {
+        error_log('_log_login: ' . $e->getMessage());
     }
 }
 

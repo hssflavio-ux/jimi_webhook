@@ -17,7 +17,6 @@ class PushTerminalTransInfoHandler extends WebhookHandler {
     }
 
     protected function processItem($item) {
-        // Extrair IMEI
         $imei = $item['deviceImei'] ?? $item['imei'] ?? null;
         if (!$imei) {
             Logger::warning('TerminalTransInfo ignorado: IMEI ausente', [
@@ -26,15 +25,18 @@ class PushTerminalTransInfoHandler extends WebhookHandler {
             return false;
         }
 
-        // Campos documentados: postTime, gpsTime, extensionId, lat, lng, content
         $extensionId = $item['extensionId'] ?? $item['extension_id'] ?? null;
-        $description = $extensionId ? "extensionId:{$extensionId}" : null;
+        $content     = $item['content'] ?? $item['extensionData'] ?? null;
 
-        // postTime é o campo primário de tempo documentado
         $rawTime   = $item['postTime'] ?? $item['gpsTime'] ?? null;
         $eventTime = sanitize_date($rawTime);
 
-        // Persistir na tabela device_events como evento genérico
+        $description = $extensionId ? "extensionId:{$extensionId}" : 'terminal_trans_info';
+        if ($content) {
+            $contentShort = is_string($content) ? mb_strimwidth($content, 0, 200, '…') : json_encode($content, JSON_UNESCAPED_UNICODE);
+            $description .= " | content:{$contentShort}";
+        }
+
         try {
             $stmt = $this->db->prepare("
                 INSERT INTO device_events (imei, event_type, event_time, description, raw_data)
@@ -51,7 +53,8 @@ class PushTerminalTransInfoHandler extends WebhookHandler {
             Logger::info('TerminalTransInfo registrado', [
                 'source' => $this->handlerName,
                 'imei' => $imei,
-                'extension_id' => $extensionId
+                'extension_id' => $extensionId,
+                'has_content' => !empty($content)
             ]);
 
             return true;

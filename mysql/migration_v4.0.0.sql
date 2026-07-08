@@ -423,6 +423,33 @@ ON DUPLICATE KEY UPDATE `version` = '4.0.0', `last_update` = NOW();
 -- Remover rotas mortas (R08, R09): apagar handlers obsoletos
 -- (Feito em PHP — não há registros no banco para limpar)
 
+-- 1.12 Snapshots de métricas pré-computadas (KPIs Resumo/BI)
+CREATE TABLE IF NOT EXISTS `metrics_snapshots` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `customer_id` bigint unsigned NOT NULL,
+    `metric_key` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Chave da métrica (devices_total, devices_online, ocurrences_waiting, alarms_today, etc.)',
+    `metric_value` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    `snapshot_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Momento do snapshot',
+    PRIMARY KEY (`id`),
+    KEY `idx_ms_customer_key` (`customer_id`, `metric_key`),
+    KEY `idx_ms_snapshot` (`snapshot_at`),
+    CONSTRAINT `fk_ms_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Métricas pré-computadas por cliente (KPIs Resumo/BI)';
+
+-- 1.13 Log de tentativas de login (rate limiting + auditoria)
+CREATE TABLE IF NOT EXISTS `login_log` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `email` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+    `ip_address` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+    `success` tinyint(1) NOT NULL DEFAULT 0,
+    `user_agent` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_ll_email` (`email`),
+    KEY `idx_ll_ip_time` (`ip_address`, `created_at`),
+    KEY `idx_ll_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Log de tentativas de login para rate limiting e auditoria';
+
 -- ============================================================
 -- Limpeza de procedures auxiliares
 -- ============================================================

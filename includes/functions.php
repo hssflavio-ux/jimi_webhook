@@ -27,7 +27,7 @@
  */
 function normalize_data($item) {
     if (!is_array($item)) return [];
-    $map = ['deviceImei' => 'imei', 'lat' => 'latitude', 'lng' => 'longitude', 'gpsSpeed' => 'speed', 'heading' => 'direction', 'gpsTime' => 'gps_time', 'gateTime' => 'gateway_time', 'alarmTime' => 'alarm_time', 'eventTime' => 'event_time', 'alarmType' => 'alarm_type', 'eventType' => 'event_type', 'satelliteNum' => 'satellites', 'gsmSignal' => 'gsm', 'power' => 'battery'];
+    $map = ['deviceImei' => 'imei', 'lat' => 'latitude', 'lng' => 'longitude', 'lon' => 'longitude', 'gpsSpeed' => 'speed', 'heading' => 'direction', 'gpsTime' => 'gps_time', 'gateTime' => 'gateway_time', 'alarmTime' => 'alarm_time', 'eventTime' => 'event_time', 'alarmType' => 'alarm_type', 'eventType' => 'event_type', 'satelliteNum' => 'satellites', 'gsmSignal' => 'gsm', 'power' => 'battery', 'msgId' => 'msg_id'];
     foreach ($map as $alias => $standard) {
         if (isset($item[$alias]) && !isset($item[$standard])) $item[$standard] = $item[$alias];
     }

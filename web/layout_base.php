@@ -82,6 +82,15 @@ if ($current_route === 'live') $current_route = 'rastreamento';
 if ($current_route === 'video') $current_route = 'video_aovivo';
 if ($current_route === 'relatorios') $current_route = 'rel_alarmes';
 
+function brand_adjust_hex($hex, $percent) {
+    $hex = ltrim($hex, '#');
+    if (strlen($hex) === 3) $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+    $r = max(0, min(255, hexdec(substr($hex, 0, 2)) + $percent));
+    $g = max(0, min(255, hexdec(substr($hex, 2, 2)) + $percent));
+    $b = max(0, min(255, hexdec(substr($hex, 4, 2)) + $percent));
+    return sprintf('#%02x%02x%02x', $r, $g, $b);
+}
+
 function nav_icon($name) {
     $icons = [
         'grid'     => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -774,6 +783,14 @@ tbody tr:hover { background: var(--canvas-soft); }
 @media (max-width: 768px) { .hamburger { display: inline-flex; } }
 
 </style>
+<?php
+if (!empty($customer['brand_color'])) {
+    $brd = $customer['brand_color'];
+    $brd_soft  = brand_adjust_hex($brd, 200);
+    $brd_act   = brand_adjust_hex($brd, -30);
+    echo "<style>:root{--primary:{$brd};--primary-active:{$brd_act};--primary-soft:{$brd_soft};--info:{$brd};--blue:{$brd};}</style>";
+}
+?>
 <?= $extra_head ?? '' ?>
 </head>
 <body class="<?= $body_class ?? '' ?>">

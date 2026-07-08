@@ -59,13 +59,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$where = $is_admin ? '1=1' : "d.customer_id = " . (int)$customer_id;
-$drivers = $db->query("
+$params = [];
+$where = $is_admin ? '1=1' : "d.customer_id = :cid";
+if (!$is_admin) $params[':cid'] = $customer_id;
+$drvStmt = $db->prepare("
     SELECT d.*
     FROM drivers d
     WHERE $where
     ORDER BY d.name
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$drvStmt->execute($params);
+$drivers = $drvStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $cnh_categories = ['A', 'B', 'AB', 'C', 'D', 'E'];
 

@@ -175,6 +175,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <p class="text-muted" style="font-size:12px;margin-top:4px;">Inspeções veiculares com perguntas configuráveis.</p>
     </div>
     <a href="?action=novo" class="btn btn-primary btn-sm">+ Novo Checklist</a>
+    <a href="/checklist/inspecao" class="btn btn-outline btn-sm" style="color:var(--primary);">Preencher Inspeção</a>
 </div>
 <div class="table-wrap">
     <table>

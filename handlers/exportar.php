@@ -4,18 +4,49 @@
  * Rota: /exportar
  *
  * Fila de geração assíncrona de relatórios pesados.
- * Grade: Nome, Tipo PDF/Excel, Status, Data Criação, download.
+ * Grade: Nome, Tipo, Status, Data Criação, download.
+ * Novo: formulário para solicitar geração de relatório.
  * Polling via /exportardata.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
+$user = get_jimi_user();
 
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
+
+$msg = '';
+$msgType = '';
+
+// ── Create export job ────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify($_POST['csrf_token'] ?? '')) {
+    $reportName = trim($_POST['report_name'] ?? '');
+    $reportType = $_POST['report_type'] ?? 'alarms';
+    $dateFrom   = $_POST['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
+    $dateTo     = $_POST['date_to'] ?? date('Y-m-d');
+
+    if ($reportName) {
+        $params = json_encode([
+            'report_name' => $reportName,
+            'report_type' => $reportType,
+            'date_from'   => $dateFrom,
+            'date_to'     => $dateTo,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $insert = $db->prepare("INSERT INTO jobs (type, customer_id, params, status, requested_by) VALUES ('report', :cid, :params, 'pendente', :uid)");
+        $insert->execute([':cid' => $customerId, ':params' => $params, ':uid' => $user['id']]);
+        $msg = 'Relatório "' . htmlspecialchars($reportName) . '" adicionado à fila de geração.';
+        $msgType = 'success';
+    } else {
+        $msg = 'Informe um nome para o relatório.';
+        $msgType = 'error';
+    }
+}
 
 $countStmt = $db->prepare("SELECT COUNT(*) FROM jobs j WHERE j.customer_id = :cid OR j.customer_id IS NULL");
 $countStmt->execute([':cid' => $customerId]);
@@ -34,21 +65,34 @@ $jobs = $db->prepare("
 $jobs->execute([':cid' => $customerId]);
 $jobs = $jobs->fetchAll();
 
+// Device list for export filter
+$devices = $db->prepare("SELECT imei, COALESCE(device_name, imei) as label FROM devices WHERE customer_id = :cid ORDER BY label");
+$devices->execute([':cid' => $customerId ?? 1]);
+$devices = $devices->fetchAll();
+
 $page_title = 'Exportar Relatórios';
 $current_route = 'exportar';
 
 $extra_head = '<style>
 .spinner-inline{display:inline-block;width:10px;height:10px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:4px;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg)}}
+.export-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+@media(max-width:600px){.export-form-grid{grid-template-columns:1fr;}}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
+
+<?php if ($msg): ?>
+<div class="alert alert-<?= $msgType ?>" style="margin-bottom:16px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;<?= $msgType==='success'?'background:#e8f5e9;color:#05b169;border:1px solid #a5d6a7;':'background:#fdecea;color:#cf202f;border:1px solid #f5c6cb;' ?>">
+    <?= $msg ?>
+</div>
+<?php endif; ?>
 
 <div class="flex-between mb-16">
     <div>
         <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Exportar Relatórios</h2>
         <p class="text-muted" style="font-size:12px;margin-top:4px;">
-            Geração assíncrona de relatórios. O arquivo fica disponível para download quando concluído.
+            Geração assíncrona de relatórios. Os arquivos ficam disponíveis para download quando concluídos.
         </p>
     </div>
     <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);">
@@ -57,6 +101,40 @@ require_once __DIR__ . '/../web/layout_base.php';
     </label>
 </div>
 
+<!-- ═══════ New Export Form ═══════ -->
+<div class="card mb-24" style="padding:16px 20px;">
+    <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px;">Novo Relatório</h4>
+    <form method="POST">
+        <?= csrf_field() ?>
+        <div class="export-form-grid">
+            <div>
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Nome do Relatório</label>
+                <input type="text" name="report_name" required placeholder="Ex: Alarmes Julho 2026" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo</label>
+                <select name="report_type" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <option value="alarms">Alarmes</option>
+                    <option value="occurrences">Ocorrências</option>
+                    <option value="positions">Posições GPS</option>
+                    <option value="trips">Viagens (Deslocamento)</option>
+                    <option value="devices">Equipamentos</option>
+                </select>
+            </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Data Início</label>
+                <input type="date" name="date_from" value="<?= date('Y-m-d', strtotime('-30 days')) ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            </div>
+            <div>
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Data Fim</label>
+                <input type="date" name="date_to" value="<?= date('Y-m-d') ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" style="margin-top:12px;padding:8px 24px;">Gerar Relatório</button>
+    </form>
+</div>
+
+<!-- ═══════ Jobs Grid ═══════ -->
 <div class="table-wrap">
     <table>
         <thead>

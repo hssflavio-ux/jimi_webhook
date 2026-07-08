@@ -21,6 +21,43 @@ $messageType = '';
 
 // ── POST: Create/Update ─────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    // ── Batch Import ─────────────────────────────────────────
+    if ($action === 'import_batch') {
+        csrf_verify();
+        $devicesJson = $_POST['devices'] ?? '';
+        $devicesData = json_decode($devicesJson, true);
+        if (!is_array($devicesData) || empty($devicesData)) {
+            $message = 'Nenhum dispositivo válido no arquivo.';
+            $messageType = 'error';
+        } else {
+            $imported = 0; $skipped = 0;
+            $checkStmt = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei");
+            $insertStmt = $db->prepare("
+                INSERT INTO devices (imei, device_name, customer_id, is_active, streaming_rotation, streaming_watermark, firmware_version, camera_count)
+                VALUES (:imei, :name, :cid, 1, 0, 0, :fw, 1)
+            ");
+            foreach ($devicesData as $d) {
+                $imei = trim($d['imei'] ?? '');
+                $name = trim($d['name'] ?? '');
+                if (!$imei) { $skipped++; continue; }
+                $checkStmt->execute([':imei' => $imei]);
+                if ($checkStmt->fetchColumn() > 0) { $skipped++; continue; }
+                $insertStmt->execute([
+                    ':imei' => $imei,
+                    ':name' => $name ?: $imei,
+                    ':cid'  => $customerId ?? 1,
+                    ':fw'   => trim($d['firmware'] ?? '') ?: null,
+                ]);
+                $imported++;
+            }
+            $message = "$imported importado(s), $skipped ignorado(s) (IMEI duplicado ou inválido).";
+            $messageType = $imported > 0 ? 'success' : 'warning';
+        }
+    }
+    // ── Single Create/Update ─────────────────────────────────
+    else {
     csrf_verify();
     $imei = trim($_POST['imei'] ?? '');
     $deviceName = trim($_POST['device_name'] ?? '');
@@ -84,6 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
         }
     }
+    } // fi import_batch else
 }
 
 // ── Filters ─────────────────────────────────────────────────────
@@ -484,6 +522,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <label>Arquivo CSV</label>
             <input type="file" id="import-file" accept=".csv">
         </div>
+        <?= csrf_field() ?>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
             <button class="btn btn-outline btn-sm" onclick="closeImportModal()">Cancelar</button>
             <button class="btn btn-primary btn-sm" onclick="submitImport()">Importar</button>
@@ -531,15 +570,40 @@ function submitImport() {
     reader.onload = function(e) {
         var lines = e.target.result.split('\n');
         var results = [];
-        var success = 0;
         for (var i = 1; i < lines.length; i++) {
             var cols = lines[i].split(',');
             if (cols.length < 2 || !cols[0].trim()) continue;
-            results.push({imei: cols[0].trim(), name: (cols[1]||'').trim(), model: (cols[2]||'').trim()});
-            success++;
+            results.push({
+                imei: cols[0].trim(),
+                name: (cols[1] || '').trim(),
+                model: (cols[2] || '').trim(),
+                firmware: (cols[4] || '').trim()
+            });
+        }
+        if (results.length === 0) {
+            document.getElementById('import-result').innerHTML =
+                '<div class="badge badge-error">Nenhuma linha válida encontrada.</div>';
+            return;
         }
         document.getElementById('import-result').innerHTML =
-            '<div class="badge badge-success">' + success + ' linha(s) detectada(s). Implementação via POST pendente.</div>';
+            '<div class="badge badge-info"><span class="spinner-inline"></span>Importando ' + results.length + ' dispositivo(s)...</div>';
+
+        var formData = new FormData();
+        formData.append('_csrf_token', document.querySelector('input[name="_csrf_token"]').value);
+        formData.append('action', 'import_batch');
+        formData.append('devices', JSON.stringify(results));
+
+        fetch('', { method: 'POST', body: formData })
+            .then(function(r) { return r.text(); })
+            .then(function(html) {
+                document.getElementById('import-result').innerHTML =
+                    '<div class="badge badge-success">Importação concluída. Recarregando...</div>';
+                setTimeout(function() { location.reload(); }, 1500);
+            })
+            .catch(function() {
+                document.getElementById('import-result').innerHTML =
+                    '<div class="badge badge-error">Erro de rede.</div>';
+            });
     };
     reader.readAsText(file);
 }

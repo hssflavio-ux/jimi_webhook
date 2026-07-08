@@ -34,7 +34,9 @@ $alarmCategories = $db->query("SELECT DISTINCT category FROM alarm_types WHERE c
 $alarmSeverities = ['critical', 'warning', 'info'];
 
 // Dispositivos do cliente para dropdown
-$devices = $db->query("SELECT imei, device_name FROM devices WHERE customer_id = $customer_id ORDER BY device_name")->fetchAll(PDO::FETCH_ASSOC);
+$devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
+$devStmt->execute([':cid' => $customer_id]);
+$devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // ── Dados por tipo de relatório ─────────────────────────
 $rows = [];
@@ -42,14 +44,14 @@ $total = 0;
 $columns = [];
 
 if ($reportType === 'alarmes') {
-    $where = "d.customer_id = $customer_id";
-    if ($imeiFilter) $where .= " AND a.imei = " . $db->quote($imeiFilter);
-    $where .= " AND a.created_at >= " . $db->quote($dateFrom . ' 00:00:00');
-    $where .= " AND a.created_at <= " . $db->quote($dateTo . ' 23:59:59');
-    if ($alarmSev) $where .= " AND COALESCE(at.severity,'info') = " . $db->quote($alarmSev);
-    if ($alarmCat) $where .= " AND at.category = " . $db->quote($alarmCat);
+    $where = "d.customer_id = :cid";
+    $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+    $where .= " AND a.created_at >= :df AND a.created_at <= :dt";
+    if ($imeiFilter) { $where .= " AND a.imei = :imei"; $params[':imei'] = $imeiFilter; }
+    if ($alarmSev) { $where .= " AND COALESCE(at.severity,'info') = :sev"; $params[':sev'] = $alarmSev; }
+    if ($alarmCat) { $where .= " AND at.category = :cat"; $params[':cat'] = $alarmCat; }
 
-    $rows = $db->query("
+    $stmt = $db->prepare("
         SELECT a.id, a.imei, a.alarm_name, a.alarm_time, a.created_at, a.msg_class,
                a.alarm_label, a.latitude, a.longitude, a.speed, a.file_url,
                COALESCE(at.severity, 'info') AS severity,
@@ -63,41 +65,47 @@ if ($reportType === 'alarmes') {
         )
         WHERE $where
         ORDER BY a.created_at DESC LIMIT 200
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
     $columns = ['Data/Hora', 'Dispositivo', 'Alarme', 'Protocolo', 'Severidade', 'Velocidade', 'Mapa'];
 
 } elseif ($reportType === 'trajetos') {
-    $where = "d.customer_id = $customer_id";
-    if ($imeiFilter) $where .= " AND g.imei = " . $db->quote($imeiFilter);
-    $where .= " AND g.gps_time >= " . $db->quote($dateFrom . ' 00:00:00');
-    $where .= " AND g.gps_time <= " . $db->quote($dateTo . ' 23:59:59');
+    $where = "d.customer_id = :cid";
+    $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+    $where .= " AND g.gps_time >= :df AND g.gps_time <= :dt";
+    if ($imeiFilter) { $where .= " AND g.imei = :imei"; $params[':imei'] = $imeiFilter; }
 
-    $rows = $db->query("
+    $stmt = $db->prepare("
         SELECT g.gps_time, g.imei, g.latitude, g.longitude, g.speed, g.direction, g.altitude, g.satellites,
                d.device_name
         FROM gps_data g
         JOIN devices d ON g.imei = d.imei
         WHERE $where
         ORDER BY g.gps_time DESC LIMIT 200
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
     $columns = ['Data/Hora', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade', 'Direção', 'Mapa'];
 
 } elseif ($reportType === 'comandos') {
-    $where = "d.customer_id = $customer_id";
-    if ($imeiFilter) $where .= " AND c.imei = " . $db->quote($imeiFilter);
-    $where .= " AND c.created_at >= " . $db->quote($dateFrom . ' 00:00:00');
-    $where .= " AND c.created_at <= " . $db->quote($dateTo . ' 23:59:59');
+    $where = "d.customer_id = :cid";
+    $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+    $where .= " AND c.created_at >= :df AND c.created_at <= :dt";
+    if ($imeiFilter) { $where .= " AND c.imei = :imei"; $params[':imei'] = $imeiFilter; }
 
-    $rows = $db->query("
+    $stmt = $db->prepare("
         SELECT c.id, c.imei, c.command_content, c.command_type, c.status,
                c.response_payload, c.created_at, d.device_name
         FROM commands c
         JOIN devices d ON c.imei = d.imei
         WHERE $where
         ORDER BY c.created_at DESC LIMIT 200
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
     $columns = ['Data/Hora', 'Dispositivo', 'Comando', 'Status', 'Resposta'];
 }

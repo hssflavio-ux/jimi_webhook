@@ -22,7 +22,6 @@ class PushResourceListHandler extends WebhookHandler {
     }
 
     protected function processItem($item) {
-        $item = normalize_data($item);
 
         // 1. Decodificação de Payload (String JSON dentro de POST)
         if (isset($item['data_list']) && is_string($item['data_list'])) {
@@ -133,7 +132,8 @@ class PushResourceListHandler extends WebhookHandler {
                 'imei' => $imei,
                 'total' => count($resourceList),
                 'gravados' => $inserted,
-                'duplicados' => $duplicates
+                'duplicados' => $duplicates,
+                'erros' => $errors
             ]);
             
             return true;

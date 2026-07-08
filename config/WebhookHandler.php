@@ -45,7 +45,7 @@ abstract class WebhookHandler {
             ]);
 
             // Hash de idempotência do payload (Prevenção Replay Attacks)
-            $payloadHash = md5(json_encode($data['data_list'] ?? []));
+            $payloadHash = md5(json_encode($data['data_list'] ?? [], JSON_UNESCAPED_UNICODE));
             Logger::info('REQUEST RECEIVED', [
                 'source' => $this->handlerName,
                 'token_valid' => ($data['token'] ?? '') === $this->validToken,

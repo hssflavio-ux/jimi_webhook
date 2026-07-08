@@ -12,7 +12,7 @@
 - [project] Design system Coinbase: azul #0052ff, sidebar #0a0b0d, CTAs pill 100px, JetBrains Mono números/IMEI → project-conventions.md
 - [project] Autenticação token cookie `jimi_token` → MySQL `sessions`, sem `session_start()` → project-conventions.md
 - [project] PROJETO_YUV.md é o contrato-mestre; STATUS.md é o diário vivo → project-conventions.md
-- [project] Todas as 8 fases concluídas (68 arquivos, 0 erros lint) → project-conventions.md
+- [project] Fases 0-J concluídas — latest: J (Deploy scripts v4.0.0) → project-conventions.md
 - [project] Servidor produção: 189.22.240.43 Apache 2.4 + PHP 8.3 FPM → project-conventions.md
 
 ## Feedback

@@ -12,14 +12,16 @@ $customer_id = get_customer_id();
 $db = Database::getInstance()->getConnection();
 $tz_brt = new DateTimeZone('America/Sao_Paulo');
 
-$devices = $db->query("
+$devicesStmt = $db->prepare("
     SELECT d.imei, d.device_name, d.last_communication,
            s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status
     FROM devices d
     LEFT JOIN device_statistics s ON d.imei = s.imei
-    WHERE d.customer_id = $customer_id AND d.is_active = 1
+    WHERE d.customer_id = :cid AND d.is_active = 1
     ORDER BY d.last_communication DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$devicesStmt->execute([':cid' => $customer_id]);
+$devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $hasGpsData = false;
 foreach ($devices as $d) {

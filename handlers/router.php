@@ -84,6 +84,9 @@ if (empty($segments)) {
         'ocorrencias' => [
             'dashboard' => 'ocorrencias_dashboard.php',
         ],
+        'checklist' => [
+            'inspecao' => 'checklist_inspection.php',
+        ],
     ];
 
     if (in_array($first, $simpleRoutes)) {

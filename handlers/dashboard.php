@@ -19,22 +19,35 @@ function fmt_brt_short($dt) { global $tz_utc, $tz_brt; if (!$dt) return '-'; $d 
 $db = Database::getInstance()->getConnection();
 
 // KPI
-$totalDevices  = $db->query("SELECT COUNT(*) FROM devices WHERE customer_id = $customer_id AND is_active = 1")->fetchColumn();
-$onlineDevices = $db->query("SELECT COUNT(*) FROM devices d JOIN device_statistics s ON d.imei=s.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND s.is_online=1")->fetchColumn();
-$alarmsToday   = $db->query("SELECT COUNT(*) FROM alarms a JOIN devices d ON a.imei=d.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND a.created_at>=DATE(NOW())")->fetchColumn();
-$cmdsToday     = $db->query("SELECT COUNT(*) FROM commands c JOIN devices d ON c.imei=d.imei WHERE d.customer_id=$customer_id AND d.is_active=1 AND c.created_at>=DATE(NOW())")->fetchColumn();
+$totalDevices  = $db->prepare("SELECT COUNT(*) FROM devices WHERE customer_id = :cid AND is_active = 1");
+$totalDevices->execute([':cid' => $customer_id]);
+$totalDevices  = $totalDevices->fetchColumn();
+
+$onlineDevices = $db->prepare("SELECT COUNT(*) FROM devices d JOIN device_statistics s ON d.imei=s.imei WHERE d.customer_id=:cid AND d.is_active=1 AND s.is_online=1");
+$onlineDevices->execute([':cid' => $customer_id]);
+$onlineDevices = $onlineDevices->fetchColumn();
+
+$alarmsToday   = $db->prepare("SELECT COUNT(*) FROM alarms a JOIN devices d ON a.imei=d.imei WHERE d.customer_id=:cid AND d.is_active=1 AND a.created_at>=DATE(NOW())");
+$alarmsToday->execute([':cid' => $customer_id]);
+$alarmsToday   = $alarmsToday->fetchColumn();
+
+$cmdsToday     = $db->prepare("SELECT COUNT(*) FROM commands c JOIN devices d ON c.imei=d.imei WHERE d.customer_id=:cid AND d.is_active=1 AND c.created_at>=DATE(NOW())");
+$cmdsToday->execute([':cid' => $customer_id]);
+$cmdsToday     = $cmdsToday->fetchColumn();
 
 // Devices
-$devices = $db->query("
+$devicesStmt = $db->prepare("
     SELECT d.imei, d.device_name, d.last_communication,
            s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online,
            COALESCE(dm.model_name, d.device_model, '-') AS model_display
     FROM devices d
     LEFT JOIN device_statistics s ON d.imei = s.imei
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = $customer_id AND d.is_active = 1
+    WHERE d.customer_id = :cid AND d.is_active = 1
     ORDER BY d.last_communication DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$devicesStmt->execute([':cid' => $customer_id]);
+$devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $devicesJson = json_encode($devices);
 

@@ -13,14 +13,16 @@ $customer_id = get_customer_id();
 $db = Database::getInstance()->getConnection();
 $dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 
-$devices = $db->query("
+$devicesStmt = $db->prepare("
     SELECT d.imei, d.device_name, COALESCE(dm.model_name, d.device_model, '-') AS model_display,
            COALESCE(dm.protocol, 'JIMI') AS protocol
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = $customer_id
+    WHERE d.customer_id = :cid
     ORDER BY d.device_name
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$devicesStmt->execute([':cid' => $customer_id]);
+$devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title    = 'Configuração';
 $current_route = 'config';

@@ -55,16 +55,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$where = $is_admin ? '1=1' : "s.customer_id = " . (int)$customer_id;
-$sim_cards = $db->query("
+$params = [];
+$where = $is_admin ? '1=1' : "s.customer_id = :cid";
+if (!$is_admin) $params[':cid'] = $customer_id;
+$simCardsStmt = $db->prepare("
     SELECT s.*, d.device_name
     FROM sim_cards s
     LEFT JOIN devices d ON d.imei = s.imei
     WHERE $where
     ORDER BY s.created_at DESC
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$simCardsStmt->execute($params);
+$sim_cards = $simCardsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-$devices = $db->query("SELECT imei, device_name FROM devices WHERE customer_id = " . (int)$customer_id . " AND is_active = 1 ORDER BY device_name")->fetchAll(PDO::FETCH_ASSOC);
+$devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
+$devStmt->execute([':cid' => $customer_id]);
+$devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $editChip = null;
 if (!empty($_GET['edit'])) {

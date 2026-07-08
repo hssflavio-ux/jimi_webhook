@@ -265,6 +265,16 @@ require_once __DIR__ . '/../web/layout_base.php';
         </select>
     </div>
     <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">De</label>
+        <input type="date" id="filter-date-from" onchange="refreshData()" value="<?= date('Y-m-d') ?>"
+               style="padding:7px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+    </div>
+    <div>
+        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Até</label>
+        <input type="date" id="filter-date-to" onchange="refreshData()" value="<?= date('Y-m-d') ?>"
+               style="padding:7px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+    </div>
+    <div>
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Busca</label>
         <input type="text" id="filter-search" placeholder="IMEI ou motorista..." oninput="debounceSearch()"
                style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:180px;">
@@ -338,10 +348,14 @@ function goToPage(p) {
 function refreshData() {
     var status = document.getElementById('filter-status').value;
     var risk = document.getElementById('filter-risk').value;
+    var dateFrom = document.getElementById('filter-date-from').value;
+    var dateTo = document.getElementById('filter-date-to').value;
     var search = document.getElementById('filter-search').value;
     var params = 'page=' + currentPage + '&per_page=20';
     if (status) params += '&status=' + encodeURIComponent(status);
     if (risk) params += '&risk=' + encodeURIComponent(risk);
+    if (dateFrom) params += '&date_from=' + encodeURIComponent(dateFrom);
+    if (dateTo) params += '&date_to=' + encodeURIComponent(dateTo);
     if (search) params += '&search=' + encodeURIComponent(search);
 
     fetch('/ocorrenciasdata?' + params)

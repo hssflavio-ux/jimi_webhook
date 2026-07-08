@@ -38,7 +38,6 @@ class PushAlarmHandler extends WebhookHandler {
      * @return bool Verdadeiro se o item foi processado com sucesso
      */
     protected function processItem($item) {
-        $item = normalize_data($item);
         $imei = $item['imei'] ?? null;
         
         if (!$imei) {

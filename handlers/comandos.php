@@ -27,23 +27,27 @@ function fmt_brt_cmd($dt) {
 
 $dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 
-$devices = $db->query("
+$devices = $db->prepare("
     SELECT d.imei, d.device_name, COALESCE(dm.model_name, d.device_model, '-') AS model_display,
            COALESCE(dm.protocol, 'JIMI') AS protocol, COALESCE(dm.camera_count, 1) AS camera_count
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = $customer_id AND d.is_active = 1
+    WHERE d.customer_id = :cid AND d.is_active = 1
     ORDER BY d.device_name
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$devices->execute([':cid' => $customer_id]);
+$devices = $devices->fetchAll(PDO::FETCH_ASSOC);
 
-$commands = $db->query("
+$commands = $db->prepare("
     SELECT c.id, c.imei, c.command_content, c.status, c.response_payload, c.created_at, c.updated_at,
            d.device_name
     FROM commands c
     JOIN devices d ON c.imei = d.imei
-    WHERE d.customer_id = $customer_id
+    WHERE d.customer_id = :cid
     ORDER BY c.created_at DESC LIMIT 50
-")->fetchAll(PDO::FETCH_ASSOC);
+");
+$commands->execute([':cid' => $customer_id]);
+$commands = $commands->fetchAll(PDO::FETCH_ASSOC);
 
 $deviceJson = json_encode($devices);
 $page_title    = 'Comandos';
