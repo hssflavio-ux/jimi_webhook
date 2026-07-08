@@ -10,11 +10,12 @@
 #   5. MySQL            — verifica alarme + ocorrência criada + mídia vinculada
 #
 # Uso:
-#   ./scripts/test_e2e.sh                          # local (localhost:8000)
-#   BASE_URL=http://189.22.240.43 ./scripts/test_e2e.sh   # produção
+#   ./scripts/test_e2e.sh                          # auto-detecta o servidor local
+#   BASE_URL=http://189.22.240.43 ./scripts/test_e2e.sh   # alvo explícito
 #
 # Variáveis (todas opcionais):
-#   BASE_URL   — default http://localhost:8000
+#   BASE_URL   — default: auto-detecta via /ping em http://localhost (Apache,
+#                servidor homolog/produção) e http://localhost:8000 (php -S dev)
 #   TOKEN      — default lido do .env (WEBHOOK_TOKEN)
 #   TEST_IMEI  — default 868120246598152
 #   SKIP_DB    — 1 = pula a verificação MySQL (só replay HTTP)
@@ -25,9 +26,25 @@
 set -u
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BASE_URL="${BASE_URL:-http://localhost:8000}"
 TEST_IMEI="${TEST_IMEI:-868120246598152}"
 SKIP_DB="${SKIP_DB:-0}"
+
+# ── Auto-detecção do BASE_URL (quando não informado) ──────────
+# Servidor homolog/produção: Apache na porta 80. Dev: php -S na 8000.
+if [ -z "${BASE_URL:-}" ]; then
+    for candidate in "http://localhost" "http://localhost:8000" "http://127.0.0.1:8000"; do
+        if curl -sS -m 5 "$candidate/ping" 2>/dev/null | grep -q '"pong"'; then
+            BASE_URL="$candidate"
+            break
+        fi
+    done
+    if [ -z "${BASE_URL:-}" ]; then
+        echo "ERRO: nenhum servidor respondeu ao /ping em http://localhost nem :8000." >&2
+        echo "      Suba o servidor (Apache ou 'php -S localhost:8000 server.php')" >&2
+        echo "      ou informe o alvo: BASE_URL=http://host[:porta] $0" >&2
+        exit 1
+    fi
+fi
 
 # ── Lê .env (mesmo parser manual do config/database.php) ──
 env_get() {
