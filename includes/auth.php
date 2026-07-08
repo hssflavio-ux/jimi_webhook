@@ -125,7 +125,16 @@ function get_customer() {
         $stmt = $db->prepare("SELECT id, name, document, email, phone, is_active FROM customers WHERE id = ?");
         $stmt->execute(array($cid));
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ? $row : null;
+        if (!$row) return null;
+        try {
+            $extStmt = $db->prepare("SELECT brand_color, logo_url, occurrence_config_id, faceid_enabled FROM customers WHERE id = ?");
+            $extStmt->execute(array($cid));
+            $ext = $extStmt->fetch(PDO::FETCH_ASSOC);
+            if ($ext) $row = array_merge($row, $ext);
+        } catch (Exception $e) {
+            // v4 columns may not exist yet — silent fallback
+        }
+        return $row;
     } catch (Exception $e) {
         return null;
     }

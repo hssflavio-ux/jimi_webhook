@@ -21,14 +21,18 @@ $user = get_jimi_user();
 $isReseller = ($user['user_type'] ?? '') === 'revendedor';
 
 function get_metric($db, $cid, $key, $fallback = 0) {
-    $stmt = $db->prepare("
-        SELECT metric_value FROM metrics_snapshots
-        WHERE customer_id = :cid AND metric_key = :key
-        ORDER BY snapshot_at DESC LIMIT 1
-    ");
-    $stmt->execute([':cid' => $cid, ':key' => $key]);
-    $row = $stmt->fetch();
-    return $row ? $row['metric_value'] : $fallback;
+    try {
+        $stmt = $db->prepare("
+            SELECT metric_value FROM metrics_snapshots
+            WHERE customer_id = :cid AND metric_key = :key
+            ORDER BY snapshot_at DESC LIMIT 1
+        ");
+        $stmt->execute([':cid' => $cid, ':key' => $key]);
+        $row = $stmt->fetch();
+        return $row ? $row['metric_value'] : $fallback;
+    } catch (Exception $e) {
+        return $fallback;
+    }
 }
 
 // ── KPIs from cache (or on-the-fly if stale) ─────────────────

@@ -59,7 +59,7 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
     <?php endif; ?>
 
     <form method="post">
-        <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirect ?? '/dashboard') ?>">
+        <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirect ?? '/') ?>">
         <div class="fg">
             <label for="email">E-mail</label>
             <input type="email" id="email" name="email" required autofocus autocomplete="email">
@@ -71,7 +71,7 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
         <button type="submit" class="btn btn-primary">Entrar</button>
     </form>
     <div class="footer">
-        <span>v<?= getenv('SYSTEM_VERSION') ?: '3.1.0' ?></span>
+        <span>v<?= getenv('SYSTEM_VERSION') ?: '4.0.0' ?></span>
     </div>
 </div>
 </body>

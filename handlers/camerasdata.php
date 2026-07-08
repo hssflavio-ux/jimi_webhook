@@ -82,16 +82,26 @@ try {
     }
 
     // ── 2. Dispositivos (sempre filtrado pelo cliente da sessão, apenas ativos) ─
-    $stmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.last_communication,
-               s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
-        FROM devices d
-        LEFT JOIN device_statistics s ON d.imei = s.imei
-        WHERE d.is_active = 1
-          AND d.customer_id = ?
-        ORDER BY d.last_communication DESC
-    ");
-    $stmt->execute([$customerId]);
+    try {
+        $stmt = $db->prepare("
+            SELECT d.imei, d.device_name, d.last_communication,
+                   s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
+            FROM devices d
+            LEFT JOIN device_statistics s ON d.imei = s.imei
+            WHERE d.is_active = 1 AND d.customer_id = ?
+            ORDER BY d.last_communication DESC
+        ");
+        $stmt->execute([$customerId]);
+    } catch (Exception $e) {
+        $stmt = $db->prepare("
+            SELECT d.imei, d.device_name, d.last_communication,
+                   NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status, NULL as is_online
+            FROM devices d
+            WHERE d.is_active = 1 AND d.customer_id = ?
+            ORDER BY d.last_communication DESC
+        ");
+        $stmt->execute([$customerId]);
+    }
 
     $devices = [];
     while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {

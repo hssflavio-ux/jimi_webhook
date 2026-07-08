@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Login v3.1.0
+ * JIMI Webhook System — Login v4.0.0
  * Endpoint: /login
  */
 require_once __DIR__ . '/../config/database.php';
@@ -11,17 +11,17 @@ require_once __DIR__ . '/../config/database.php';
  * variações com backslash aceitas por browsers (/\evil.com) e CR/LF.
  *
  * @param mixed $path Valor bruto vindo de $_GET/$_POST
- * @returns string Path local seguro (fallback: /dashboard)
+ * @returns string Path local seguro (fallback: /)
  */
 function safe_redirect_path($path) {
-    if (!is_string($path) || $path === '' || $path[0] !== '/') return '/dashboard';
-    if (isset($path[1]) && $path[1] === '/') return '/dashboard';
-    if (strpbrk($path, "\\\r\n") !== false) return '/dashboard';
+    if (!is_string($path) || $path === '' || $path[0] !== '/') return '/';
+    if (isset($path[1]) && $path[1] === '/') return '/';
+    if (strpbrk($path, "\\\r\n") !== false) return '/';
     return $path;
 }
 
 $error = null;
-$redirect = safe_redirect_path(isset($_GET['redirect']) ? $_GET['redirect'] : '/dashboard');
+$redirect = safe_redirect_path(isset($_GET['redirect']) ? $_GET['redirect'] : '/');
 
 try {
     $db = Database::getInstance()->getConnection();
@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $email    = isset($_POST['email']) ? trim($_POST['email']) : '';
     $password = isset($_POST['password']) ? $_POST['password'] : '';
-    $redirect = safe_redirect_path(isset($_POST['redirect']) ? $_POST['redirect'] : '/dashboard');
+    $redirect = safe_redirect_path(isset($_POST['redirect']) ? $_POST['redirect'] : '/');
 
     if ($email && $password) {
         $result = login_user($email, $password);

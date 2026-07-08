@@ -1,6 +1,6 @@
 # STATUS.md — Jimi Webhook System v4.0.0 (YUV Parity)
 
-> **Última atualização**: 07/07/2026 — **Fases 0–J concluídas (79 PHP + deploy scripts + docs, 0 erros de lint)**.
+> **Última atualização**: 07/07/2026 — **Fases 0–J + Hotfix resiliência (79 PHP, 0 erros lint)**.
 > **Servidor**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 + MySQL)
 > **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe`
 

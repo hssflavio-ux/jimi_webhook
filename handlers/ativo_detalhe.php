@@ -26,18 +26,32 @@ function fmt_brt_dt($dt) {
 }
 
 // Carregar dados do ativo
-$asset = $db->prepare("
-    SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
-           s.is_online, s.total_distance, s.total_gps_count, s.total_alarm_count,
-           COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-           COALESCE(dm.protocol, '') AS protocol
-    FROM devices d
-    LEFT JOIN device_statistics s ON d.imei = s.imei
-    LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.imei = ? AND d.customer_id = ?
-");
-$asset->execute([$imei, $customer_id]);
-$asset = $asset->fetch(PDO::FETCH_ASSOC);
+try {
+    $asset = $db->prepare("
+        SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
+               s.is_online, s.total_distance, s.total_gps_count, s.total_alarm_count,
+               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+               COALESCE(dm.protocol, '') AS protocol
+        FROM devices d
+        LEFT JOIN device_statistics s ON d.imei = s.imei
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        WHERE d.imei = ? AND d.customer_id = ?
+    ");
+    $asset->execute([$imei, $customer_id]);
+    $asset = $asset->fetch(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    $asset = $db->prepare("
+        SELECT d.*, NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status,
+               NULL as is_online, NULL as total_distance, NULL as total_gps_count, NULL as total_alarm_count,
+               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+               COALESCE(dm.protocol, '') AS protocol
+        FROM devices d
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        WHERE d.imei = ? AND d.customer_id = ?
+    ");
+    $asset->execute([$imei, $customer_id]);
+    $asset = $asset->fetch(PDO::FETCH_ASSOC);
+}
 
 if (!$asset) {
     http_response_code(404);
