@@ -192,15 +192,20 @@ function login_user($email, $password) {
         $db = Database::getInstance()->getConnection();
 
         // Rate limiting: max 5 failed attempts per IP in 15 minutes
-        $rateStmt = $db->prepare("
-            SELECT COUNT(*) FROM login_log
-            WHERE ip_address = :ip AND success = 0 AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
-        ");
-        $rateStmt->execute([':ip' => $ip]);
-        $failedCount = (int)$rateStmt->fetchColumn();
+        // Graceful fallback if login_log table doesn't exist yet
+        try {
+            $rateStmt = $db->prepare("
+                SELECT COUNT(*) FROM login_log
+                WHERE ip_address = :ip AND success = 0 AND created_at > DATE_SUB(NOW(), INTERVAL 15 MINUTE)
+            ");
+            $rateStmt->execute([':ip' => $ip]);
+            $failedCount = (int)$rateStmt->fetchColumn();
 
-        if ($failedCount >= 5) {
-            return array('success' => false, 'error' => 'Muitas tentativas. Tente novamente em 15 minutos.');
+            if ($failedCount >= 5) {
+                return array('success' => false, 'error' => 'Muitas tentativas. Tente novamente em 15 minutos.');
+            }
+        } catch (Exception $e) {
+            error_log('login_user rate-limit skip: ' . $e->getMessage());
         }
 
         $stmt = $db->prepare("SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ?");
