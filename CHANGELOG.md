@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [4.1.1] — 2026-07-09 (Diagnóstico no servidor — comandos IoTHub e respostas offline)
+
+Diagnóstico via SSH no servidor de homologação fechou os itens M.2.1–M.2.3 (IoTHub + comandos + respostas).
+
+### Fixed
+- **Comandos marcados "failed" que na verdade foram aceitos**: o `tracker-instruction-server` segura a resposta HTTP por até 30s aguardando o device ("processSendInstruct await timeout"); o `sendcommand.php` abortava aos 15s (`CURLOPT_TIMEOUT`) e reportava "IoTHub inacessível". Timeout elevado para 35s, timeout distinguido de conexão recusada na mensagem, `curl_error` no log estruturado.
+- **Respostas de comandos offline perdidas (nunca chegavam)**: evidência no access log — `POST / 302` vindos de `172.16.13.13` (okhttp, rede dos containers): o `offlineCmdPushURL` estava configurado **sem path** (`http://10.1.0.43`), o callback caía na raiz e morria no redirect de login. Além disso, o corpo do callback (§2.4) é um **objeto único sem `data_list`** e o `WebhookHandler` o descartava como "empty data". Correções: `offlineCmdPushURL=http://10.1.0.43/pushinstructresponse` no docker-compose do IoTHub (serviços `api` e `tracker-instruction-server` recriados), suporte opt-in a payload de objeto único no `WebhookHandler` (hash de idempotência calculado sobre a lista final), flag habilitada em `pushinstructresponse.php`, alias camelCase `pushInstructResponse` no router.
+- **`/rastreamento` sem nenhum device (e 500 na versão pré-4.1.0)**: `ORDER BY d.is_online` referenciava o alias com prefixo de tabela → unknown column; a exceção era engolida pelo try-catch e a tela renderizava vazia. Corrigido para o alias puro.
+- **`.env` do servidor sem `IOTHUB_COMMAND_URL`/`IOTHUB_API_TOKEN`** — adicionadas com `http://10.1.0.43:10088` (IP da LAN, pedido do operador; consistente com o `pushURL` dos containers). `.env.example` atualizado com a orientação.
+
+### Verified (servidor de homologação, 09/07/2026)
+- Comando real proNo 128 (STATUS) → device `860112070347838` respondeu em ~1s com telemetria completa (`commands.status=sent`, `response_payload` populado) — **M.2.2 ✓**
+- IoTHub `:10088` UP e acessível (localhost e 10.1.0.43) — **M.2.1 ✓**
+- Rota `http://10.1.0.43/pushinstructresponse` alcançável da rede docker (401 sem token; processa e grava em `command_responses` com token — validado com payload §2.4 simulado) — **M.2.3 ✓** (callback real será observado no próximo comando com device offline)
+- Vídeos: `dvr-upload` (:23010) serve `/iothub/dvr-upload/uploadFile` interna e externamente (HTTP 200, 21 MB testado); o app monta `FILE_STORAGE_URL + file_url` — **Apache não precisa de acesso direto ao diretório**.
+
 ## [4.1.0] — 2026-07-08 (Fases M.1–M.5 — Pendências pós-YUV Parity)
 
 ### Added

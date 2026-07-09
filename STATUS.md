@@ -464,11 +464,16 @@ Plano executado: [PLANO_PENDENCIAS_v4.md](PLANO_PENDENCIAS_v4.md). Decisões das
 
 ### 11.4 Pendências que exigem produção/dispositivo real
 
-- [ ] **M.2.1** Verificar IoTHub no servidor: `curl http://localhost:10088/api/device/status` (via SSH)
-- [ ] **M.2.2/2.3** Comando real proNo 128 via `/sendcommand` + monitorar `pushinstructresponse` nos logs
+- [x] **M.2.1** IoTHub verificado no servidor (09/07): `tracker-instruction-server` UP, `:10088` responde via localhost e `10.1.0.43`
+- [x] **M.2.2** Comando real proNo 128 (STATUS) → device `860112070347838` respondeu em ~1s com telemetria (`commands` id 18, `status=sent`)
+- [x] **M.2.3** Recepção de respostas **corrigida** (v4.1.1): `offlineCmdPushURL` ganhou o path `/pushinstructresponse` no docker-compose (postava na raiz → 302 login → perdido) + `WebhookHandler` aceita payload de objeto único (§2.4). Mecanismo validado com payload simulado; callback real será observado no próximo comando com device offline
 - [ ] **M.2.5** OTA firmware proNo 33027 com device real
-- [ ] Rodar `bash scripts/test_e2e.sh` no servidor após aplicar a migration v4.1.0 (`./scripts/deploy.sh` já a aplica)
+- [x] `test_e2e.sh` executado no servidor pelo operador ("ok em todos os testes")
 - [ ] Specs multi-tenant: exigem credenciais de um segundo cliente (`TEST_EMAIL_B`/`TEST_PASSWORD_B`)
+
+### 11.5 Diagnóstico no servidor (09/07/2026 — sessão SSH)
+
+Ver CHANGELOG [4.1.1]. Resumo: comando "failed" era timeout de 15s vs espera de 30s do IoTHub (não inacessibilidade); respostas offline caíam em `POST /` (302) por `offlineCmdPushURL` sem path; `/rastreamento` vazio por `ORDER BY d.is_online` (alias com prefixo). Vídeos OK: `dvr-upload` (:23010) serve `/iothub/dvr-upload/uploadFile` interna/externamente — Apache **não** precisa acessar o diretório. Mudanças no servidor: `.env` (+IOTHUB_COMMAND_URL=http://10.1.0.43:10088, backup `.env.bak-*`), `/iothub/docker-compose.yml` (backup `.bak-*`, serviços `api` e `tracker-instruction-server` recriados). Arquivos untracked pré-existentes no servidor (não tocados): `handlers/pushterminalrealtimestatus.php`, `includes/config.php`.
 
 ---
 
