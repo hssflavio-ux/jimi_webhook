@@ -251,11 +251,20 @@ if ($curlError || $httpCode === 0) {
                 ?? $iothubResp['resultMsg'] ?? "code={$iothubCode} (sem msg)";
 
     if ($iothubCode === 0) {
-        // Sucesso: IoTHub aceitou o comando
-        // Se device estiver online  → entregue imediatamente
-        // Se device estiver offline → entregue quando reconectar (assíncrono via /pushInstructResponse)
-        $dbStatus  = 'sent';
-        $resultMsg = $iothubMsg ?: 'Comando aceito pelo IoTHub';
+        // Sucesso: IoTHub aceitou o comando.
+        // Se o device respondeu SINCRONAMENTE (online), data._content traz a
+        // resposta → status 'executed' já aqui, senão o polling do dashboard
+        // nunca sai de 'sent' e termina em falso "timeout/fila offline".
+        // Se virou fila offline (data._code=600), fica 'sent' aguardando o
+        // callback em /pushinstructresponse.
+        $syncContent = $iothubResp['data']['_content'] ?? null;
+        if ($syncContent !== null && $syncContent !== '') {
+            $dbStatus  = 'executed';
+            $resultMsg = 'Dispositivo respondeu: ' . $syncContent;
+        } else {
+            $dbStatus  = 'sent';
+            $resultMsg = $iothubMsg ?: 'Comando aceito pelo IoTHub';
+        }
 
     } else {
         // BUG #5 CORRIGIDO: agora exibe o código real em vez de -1 genérico
@@ -271,10 +280,10 @@ try {
     $stmt = $db->prepare("
         INSERT INTO commands
             (imei, command_content, command_type, status, operator,
-             api_type, response_payload, created_at, updated_at)
+             api_type, response_payload, response_time, created_at, updated_at)
         VALUES
             (:imei, :cmd, 'request', :status, 'dashboard',
-             :api_type, :resp, NOW(), NOW())
+             :api_type, :resp, :rtime, NOW(), NOW())
     ");
     $stmt->execute([
         ':imei'     => $imei,
@@ -282,6 +291,7 @@ try {
         ':status'   => $dbStatus,
         ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
         ':resp'     => $rawResp ?: null,   // Guarda rawResp completo para auditoria
+        ':rtime'    => ($dbStatus === 'executed') ? date('Y-m-d H:i:s') : null,
     ]);
     $insertedId = $db->lastInsertId();
 

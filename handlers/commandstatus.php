@@ -91,12 +91,16 @@ try {
 
     $commands = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        // Extrai mensagem de resposta legível do JSON armazenado
+        // Extrai mensagem de resposta legível do JSON armazenado.
+        // Prioridade: resposta real do device (data._content / data._msg,
+        // formato sendInstruct síncrono) > campos legados > msg genérico.
         $respDisplay = null;
         if ($row['response_payload']) {
             $decoded = json_decode($row['response_payload'], true);
             if (is_array($decoded)) {
-                $respDisplay = $decoded['resultContent']
+                $respDisplay = $decoded['data']['_content']
+                    ?? $decoded['data']['_msg']
+                    ?? $decoded['resultContent']
                     ?? $decoded['content']
                     ?? $decoded['msg']
                     ?? $decoded['message']
