@@ -7,6 +7,7 @@
  * POST → valida e insere novo dispositivo
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 
 $customer_id = get_customer_id();
@@ -18,6 +19,7 @@ $error   = null;
 $success = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
     $nome        = trim($_POST['device_name'] ?? '');
     $imei        = trim($_POST['imei'] ?? '');
     $modelo_id   = (int)($_POST['device_model_id'] ?? 0);
@@ -31,10 +33,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($cameras < 1 || $cameras > 16) {
         $error = 'Quantidade de câmeras deve ser entre 1 e 16.';
     } else {
-        $exists = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = ?");
-        $exists->execute([$imei]);
-        if ($exists->fetchColumn() > 0) {
-            $error = 'Já existe um dispositivo cadastrado com este IMEI.';
+        // O gateway auto-cria a linha do device (customer_id NULL) assim que ele
+        // transmite telemetria, ANTES do cadastro. O cadastro deve ADOTAR essa
+        // linha órfã (e reativar soft-deletados do próprio cliente), não recusá-la.
+        $existsStmt = $db->prepare("SELECT id, customer_id, is_active FROM devices WHERE imei = ? LIMIT 1");
+        $existsStmt->execute([$imei]);
+        $existing = $existsStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($existing && !is_null($existing['customer_id']) && (int)$existing['customer_id'] !== (int)$customer_id) {
+            // Multi-tenant: IMEI de outro cliente nunca é adotável por aqui
+            $error = 'Este IMEI já está vinculado a outro cliente. Contate o administrador.';
+        } elseif ($existing && !is_null($existing['customer_id']) && (int)$existing['is_active'] === 1) {
+            $error = 'Já existe um dispositivo ativo cadastrado com este IMEI (veja na lista de Ativos).';
+        } elseif ($existing) {
+            // Órfão do gateway ou soft-deletado deste cliente → adota/reativa
+            $stmt = $db->prepare("
+                UPDATE devices
+                SET device_name = ?, customer_id = ?, device_model_id = ?, camera_count = ?,
+                    activation_date = ?, created_by = ?, is_active = 1
+                WHERE id = ?
+            ");
+            $stmt->execute([
+                $nome,
+                $customer_id,
+                $modelo_id,
+                $cameras,
+                $ativacao ?: null,
+                $_SESSION['user_id'],
+                $existing['id']
+            ]);
+            $success = true;
         } else {
             $stmt = $db->prepare("
                 INSERT INTO devices (imei, device_name, customer_id, device_model_id, camera_count, activation_date, created_by, is_active)
@@ -92,6 +120,7 @@ include __DIR__ . '/../web/layout_base.php';
 
 <div class="card" style="max-width:600px">
     <form method="post">
+        <?= csrf_field() ?>
         <div class="form-row">
             <div class="form-group">
                 <label for="device_name">Nome do Dispositivo *</label>
