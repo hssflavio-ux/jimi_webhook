@@ -21,7 +21,7 @@ $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
 $dateFrom  = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
-$dateTo    = $_GET['date_to'] ?? date('Y-m-d');
+$dateTo    = $_GET['date_to'] ?? brt_today();
 $filterCust   = $_GET['customer_id'] ?? null;
 $filterImei  = $_GET['imei'] ?? null;
 $filterType  = $_GET['alarm_type'] ?? null;
@@ -32,7 +32,8 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 
 $where = 'WHERE o.last_alarm_at BETWEEN :df AND :dt';
-$params = [':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+[$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
+$params = [':df' => $utcFrom, ':dt' => $utcTo];
 
 if (!$isAdmin && !$filterCust) {
     if ($customerId) {
@@ -203,7 +204,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td><?= htmlspecialchars($r['alarm_type']) ?></td>
-                <td class="text-mono"><?= date('d/m/Y H:i', strtotime($r['last_alarm_at'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($r['last_alarm_at']) ?></td>
                 <td><?= (int)$r['alarm_count'] ?></td>
                 <td><span class="badge <?= $riskBadges[$r['risk']] ?? 'badge' ?>"><?= ucfirst($r['risk']) ?></span></td>
                 <td><?= $r['false_positive'] ? '<span class="badge badge-warning">Sim</span>' : 'Não' ?></td>

@@ -80,7 +80,7 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 
 - **JIMI vs JT/T 808 protocol isolation is strict** (see `docs/adr/ADR-001.md`). `msgClass=0` is JIMI, `msgClass=1` is JT/T 808 — never mix them. Command presets and config flows are protocol-sensitive.
 
-- **Timezone**: all DB timestamps are UTC (connection forces `time_zone = '+00:00'`); the dashboard converts to BRT (America/Sao_Paulo) at display time only.
+- **Timezone**: all DB timestamps are UTC (connection forces `time_zone = '+00:00'`; devices transmit GMT 0; PHP runs UTC); the dashboard converts to BRT (America/Sao_Paulo) at display time only — **always via `fmt_brt()`** (`includes/functions.php`). Date filters typed by the user are BRT days: convert to UTC windows with `brt_day_range_to_utc()`; "today" defaults use `brt_today()`. Pure DATE columns (`activation_date`, `cnh_expires_at`…) must NOT go through `fmt_brt()` (day would shift). Hourly/daily SQL groupings use `CONVERT_TZ(col, '+00:00', '-03:00')`.
 
 - **`.env` loading is manual.** `config/database.php` parses `.env` line-by-line into `putenv()` (no dotenv library). Read config with `getenv()`. The PDO singleton (`Database::getInstance()`) is the only DB connection.
 

@@ -150,7 +150,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <?= htmlspecialchars($rec['file_name'] ?? 'Gravação') ?>
                     </div>
                     <div class="timeline-time">
-                        <?= date('d/m/Y H:i:s', strtotime($rec['event_time'] ?? $rec['created_at'])) ?>
+                        <?= fmt_brt($rec['event_time'] ?? $rec['created_at'], 'd/m/Y H:i:s') ?>
                         <?php if ($rec['file_size']): ?>
                         · <?= number_format($rec['file_size']/1024/1024, 1) ?> MB
                         <?php endif; ?>

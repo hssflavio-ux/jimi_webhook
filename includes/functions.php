@@ -183,3 +183,71 @@ function detect_media_type($fileName) {
     if (in_array($ext, ['mp3','amr','wav','aac','ogg','wma','flac'])) return 'audio';
     return 'other';
 }
+
+/**
+ * Converte um datetime UTC (formato do banco — a conexão PDO força
+ * time_zone '+00:00' e os devices transmitem em GMT 0) para o horário
+ * local de exibição do sistema (America/Sao_Paulo, GMT-3).
+ *
+ * REGRA DO SISTEMA: armazenar SEMPRE UTC; converter para BRT SOMENTE
+ * na exibição — sempre através deste helper.
+ * Atenção: colunas DATE puras (activation_date, cnh_expires_at…) NÃO
+ * devem passar por aqui (a conversão deslocaria o dia).
+ *
+ * @param string|null $utcDatetime Datetime UTC ('Y-m-d H:i:s' ou parseável)
+ * @param string      $format      Formato de saída (default 'd/m/Y H:i')
+ * @param string      $fallback    Retorno quando vazio/inválido (default '—')
+ * @return string
+ *
+ * @example fmt_brt('2026-07-09 02:15:00')            // '08/07/2026 23:15'
+ * @example fmt_brt($row['gps_time'], 'd/m/Y H:i:s')  // com segundos
+ */
+function fmt_brt($utcDatetime, $format = 'd/m/Y H:i', $fallback = '—') {
+    if (!$utcDatetime || $utcDatetime === '0000-00-00 00:00:00') return $fallback;
+    try {
+        $d = new DateTime($utcDatetime, new DateTimeZone('UTC'));
+        $d->setTimezone(new DateTimeZone('America/Sao_Paulo'));
+        return $d->format($format);
+    } catch (Exception $e) {
+        return (string)$utcDatetime;
+    }
+}
+
+/**
+ * Converte um intervalo de DIAS locais (BRT), como digitado nos filtros
+ * de data do dashboard, para o intervalo UTC equivalente a ser comparado
+ * com as colunas do banco (que estão em UTC).
+ *
+ * @param string $dateFrom Dia inicial local ('Y-m-d')
+ * @param string $dateTo   Dia final local ('Y-m-d')
+ * @return array [utc_from 'Y-m-d H:i:s', utc_to 'Y-m-d H:i:s']
+ *
+ * @example brt_day_range_to_utc('2026-07-08', '2026-07-08')
+ *          // ['2026-07-08 03:00:00', '2026-07-09 02:59:59']
+ */
+function brt_day_range_to_utc($dateFrom, $dateTo) {
+    $tzBrt = new DateTimeZone('America/Sao_Paulo');
+    $tzUtc = new DateTimeZone('UTC');
+    try {
+        $from = new DateTime($dateFrom . ' 00:00:00', $tzBrt);
+        $to   = new DateTime($dateTo . ' 23:59:59', $tzBrt);
+        $from->setTimezone($tzUtc);
+        $to->setTimezone($tzUtc);
+        return [$from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')];
+    } catch (Exception $e) {
+        return [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'];
+    }
+}
+
+/**
+ * Dia de "hoje" no fuso local de exibição (para defaults de filtros de data).
+ *
+ * @param string      $format Formato (default 'Y-m-d')
+ * @param string|null $modify Modificador relativo opcional (ex: '-30 days')
+ * @return string
+ */
+function brt_today($format = 'Y-m-d', $modify = null) {
+    $d = new DateTime('now', new DateTimeZone('America/Sao_Paulo'));
+    if ($modify) $d->modify($modify);
+    return $d->format($format);
+}

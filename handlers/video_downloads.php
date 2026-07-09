@@ -117,7 +117,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $f['channel'] ? 'CH' . $f['channel'] : '—' ?></td>
                 <td><span class="badge"><?= htmlspecialchars($f['file_type'] ?? '—') ?></span></td>
                 <td><?= $f['file_size'] ? number_format($f['file_size']/1024/1024, 1) . ' MB' : '—' ?></td>
-                <td class="text-mono"><?= date('d/m/Y H:i', strtotime($f['created_at'] ?? $f['event_time'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($f['created_at'] ?? $f['event_time']) ?></td>
                 <td>
                     <?php if ($isAvailable): ?>
                     <span class="badge badge-success">Disponível</span>

@@ -446,7 +446,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td><?= htmlspecialchars($d['customer_name'] ?? '—') ?></td>
                 <td class="text-mono" style="font-size:12px;">
-                    <?= $d['last_communication'] ? date('d/m/Y H:i', strtotime($d['last_communication'])) : 'Nunca' ?>
+                    <?= $d['last_communication'] ? fmt_brt($d['last_communication']) : 'Nunca' ?>
                 </td>
                 <td>
                     <?php if ($d['is_online']): ?>

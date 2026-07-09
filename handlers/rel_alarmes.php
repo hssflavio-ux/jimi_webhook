@@ -18,8 +18,8 @@ $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
-$dateFrom    = $_GET['date_from'] ?? date('Y-m-d');
-$dateTo      = $_GET['date_to'] ?? date('Y-m-d');
+$dateFrom    = $_GET['date_from'] ?? brt_today();
+$dateTo      = $_GET['date_to'] ?? brt_today();
 $filterCust  = $_GET['customer_id'] ?? null;
 $filterImei  = $_GET['imei'] ?? null;
 $filterType  = $_GET['alarm_type'] ?? null;
@@ -35,7 +35,8 @@ if (!in_array($sort, $validSorts)) $sort = 'alarm_time';
 $order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
 
 $where = 'WHERE a.alarm_time BETWEEN :df AND :dt';
-$params = [':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+[$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
+$params = [':df' => $utcFrom, ':dt' => $utcTo];
 
 if (!$isAdmin && !$filterCust) {
     if ($customerId) {
@@ -178,7 +179,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 $proto = (int)($r['msg_class'] ?? 0) === 0 ? 'JIMI' : 'JT/T';
             ?>
             <tr>
-                <td class="text-mono"><?= date('d/m/Y H:i:s', strtotime($r['alarm_time'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($r['alarm_time'], 'd/m/Y H:i:s') ?></td>
                 <td><?= htmlspecialchars($r['customer_name']) ?></td>
                 <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
                 <td><span class="text-mono"><?= htmlspecialchars($r['alarm_type']) ?></span></td>

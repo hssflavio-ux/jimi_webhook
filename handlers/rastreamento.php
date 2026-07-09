@@ -115,7 +115,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 var mapData = <?= json_encode(array_map(function($p) {
     return ['imei'=>$p['imei'],'lat'=>(float)$p['latitude'],'lng'=>(float)$p['longitude'],
             'name'=>$p['device_name'],'speed'=>(float)$p['speed'],'ignition'=>$p['ignition'],
-            'online'=>(bool)$p['is_online'],'time'=>$p['gps_time']];
+            'online'=>(bool)$p['is_online'],'time'=>fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
 }, $positions)) ?>;
 
 var map = L.map('tracking-map');

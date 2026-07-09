@@ -19,7 +19,7 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 
 $selImei  = $_GET['imei'] ?? '';
 $dateFrom = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
-$dateTo   = $_GET['date_to'] ?? date('Y-m-d');
+$dateTo   = $_GET['date_to'] ?? brt_today();
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 $generated = !empty($_GET['gerar']);
@@ -30,7 +30,8 @@ $totalPages = 1;
 
 if ($generated) {
     $where = 'WHERE t.started_at BETWEEN :df AND :dt';
-    $params = [':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+    [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
+    $params = [':df' => $utcFrom, ':dt' => $utcTo];
 
     if ($customerId) {
         $where .= ' AND t.customer_id = :cid';
@@ -133,8 +134,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
                 <td><?= htmlspecialchars($r['device_name']) ?></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
-                <td class="text-mono"><?= date('d/m/Y H:i', strtotime($r['started_at'])) ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['start_addr']??'—', 0, 40)) ?></span></td>
-                <td class="text-mono"><?= $r['ended_at'] ? date('d/m/Y H:i', strtotime($r['ended_at'])) : '—' ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['end_addr']??'—', 0, 40)) ?></span></td>
+                <td class="text-mono"><?= fmt_brt($r['started_at']) ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['start_addr']??'—', 0, 40)) ?></span></td>
+                <td class="text-mono"><?= $r['ended_at'] ? fmt_brt($r['ended_at']) : '—' ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['end_addr']??'—', 0, 40)) ?></span></td>
                 <td><?= $durStr ?></td>
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>

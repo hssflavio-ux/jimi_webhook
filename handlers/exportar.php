@@ -27,8 +27,8 @@ $msgType = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
     $reportName = trim($_POST['report_name'] ?? '');
     $reportType = $_POST['report_type'] ?? 'alarms';
-    $dateFrom   = $_POST['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
-    $dateTo     = $_POST['date_to'] ?? date('Y-m-d');
+    $dateFrom   = $_POST['date_from'] ?? brt_today('Y-m-d', '-30 days');
+    $dateTo     = $_POST['date_to'] ?? brt_today();
     $format     = in_array($_POST['format'] ?? 'csv', ['csv', 'xlsx', 'pdf'], true) ? $_POST['format'] : 'csv';
 
     if ($reportName) {
@@ -138,11 +138,11 @@ require_once __DIR__ . '/../web/layout_base.php';
             </div>
             <div>
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Data Início</label>
-                <input type="date" name="date_from" value="<?= date('Y-m-d', strtotime('-30 days')) ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <input type="date" name="date_from" value="<?= brt_today('Y-m-d', '-30 days') ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
             </div>
             <div>
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Data Fim</label>
-                <input type="date" name="date_to" value="<?= date('Y-m-d') ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <input type="date" name="date_to" value="<?= brt_today() ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
             </div>
             <div>
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Formato</label>
@@ -192,8 +192,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td><?= htmlspecialchars($j['requested_by_name'] ?? '—') ?></td>
                 <td><span class="badge <?= $statusBadge[$j['status']] ?? 'badge' ?>"><?= $statusLabel[$j['status']] ?? $j['status'] ?></span></td>
-                <td class="text-mono"><?= date('d/m/Y H:i', strtotime($j['created_at'])) ?></td>
-                <td class="text-mono"><?= date('d/m/Y H:i', strtotime($j['updated_at'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($j['created_at']) ?></td>
+                <td class="text-mono"><?= fmt_brt($j['updated_at']) ?></td>
                 <td style="text-align:center;">
                     <?php if ($j['status'] === 'concluido' && $j['result_path']): ?>
                     <a href="<?= htmlspecialchars($j['result_path']) ?>" class="btn btn-primary btn-sm" style="padding:4px 12px;font-size:12px;">Baixar</a>

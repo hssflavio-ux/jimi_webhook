@@ -21,7 +21,7 @@ $filterImei     = $_GET['imei'] ?? '';
 $filterMotorista = $_GET['driver_id'] ?? '';
 $filterAlarmes  = isset($_GET['alarm_types']) ? explode(',', $_GET['alarm_types']) : [];
 $dateFrom       = $_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
-$dateTo         = $_GET['date_to'] ?? date('Y-m-d');
+$dateTo         = $_GET['date_to'] ?? brt_today();
 $generated      = !empty($_GET['gerar']);
 
 // Download data
@@ -55,8 +55,8 @@ if ($generated) {
         }
         $cWhere .= ' AND a.alarm_type IN (' . implode(',', $placeholders) . ')';
     }
-    $cParams[':df'] = $dateFrom . ' 00:00:00';
-    $cParams[':dt'] = $dateTo . ' 23:59:59';
+    // Dias digitados são BRT; colunas do banco são UTC
+    [$cParams[':df'], $cParams[':dt']] = brt_day_range_to_utc($dateFrom, $dateTo);
 
     // Alarms by type (top 10)
     $alarmsByType = $db->prepare("
@@ -81,13 +81,13 @@ if ($generated) {
     $occByRisk->execute($cParams2);
     $chartData['occ_by_risk'] = $occByRisk->fetchAll();
 
-    // Alarms by day
+    // Alarms by day — dias em BRT (banco em UTC)
     $alarmsByDay = $db->prepare("
-        SELECT DATE(alarm_time) as dt, COUNT(*) as cnt
+        SELECT DATE(CONVERT_TZ(alarm_time, '+00:00', '-03:00')) as dt, COUNT(*) as cnt
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
         WHERE a.alarm_time BETWEEN :df AND :dt $cWhere
-        GROUP BY DATE(alarm_time) ORDER BY dt
+        GROUP BY dt ORDER BY dt
     ");
     $alarmsByDay->execute($cParams);
     $chartData['alarms_by_day'] = $alarmsByDay->fetchAll();

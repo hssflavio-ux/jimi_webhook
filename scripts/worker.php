@@ -10,6 +10,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/export_helper.php';
 
 $db = Database::getInstance()->getConnection();
@@ -55,8 +56,11 @@ echo 'Worker executado: ' . count($jobs) . " jobs processados.\n";
 function processReportJob($db, $job): array {
     $params = json_decode($job['params'] ?? '{}', true);
     $reportType = $params['report_type'] ?? 'alarms';
-    $dateFrom   = ($params['date_from'] ?? date('Y-m-d', strtotime('-30 days'))) . ' 00:00:00';
-    $dateTo     = ($params['date_to'] ?? date('Y-m-d')) . ' 23:59:59';
+    // Dias do form são BRT; colunas do banco são UTC
+    [$dateFrom, $dateTo] = brt_day_range_to_utc(
+        $params['date_from'] ?? brt_today('Y-m-d', '-30 days'),
+        $params['date_to'] ?? brt_today()
+    );
     $cid        = $job['customer_id'];
     $reportName = $params['report_name'] ?? 'Relatório';
 
@@ -86,7 +90,7 @@ function processReportJob($db, $job): array {
 
         case 'pdf':
             $subtitle = 'Período: ' . substr($dateFrom, 0, 10) . ' a ' . substr($dateTo, 0, 10)
-                      . ' — gerado em ' . date('d/m/Y H:i') . ' UTC';
+                      . ' — gerado em ' . brt_today('d/m/Y H:i') . ' BRT';
             $writer = new PdfWriter($filepath, $reportName, $headers, $subtitle);
             while ($row = $stmt->fetch()) {
                 $writer->writeRow($mapper($row));
@@ -134,7 +138,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             return [
                 ['IMEI', 'Dispositivo', 'Tipo Alarme', 'Data/Hora', 'Latitude', 'Longitude', 'Velocidade (km/h)'],
                 $stmt,
-                fn($r) => [$r['imei'], $r['device_name'], $r['alarm_type'], $r['alarm_time'], $r['latitude'], $r['longitude'], $r['speed']],
+                fn($r) => [$r['imei'], $r['device_name'], $r['alarm_type'], fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'), $r['latitude'], $r['longitude'], $r['speed']],
             ];
 
         case 'occurrences':
@@ -151,7 +155,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 ['ID', 'IMEI', 'Tipo Alarme', 'Risco', 'Status', 'Qtd Alarmes', 'Primeiro Alarme', 'Último Alarme', 'Tratado por', 'Notas'],
                 $stmt,
                 fn($r) => [$r['id'], $r['imei'], $r['alarm_type'], $r['risk'], $r['status'], $r['alarm_count'],
-                           $r['first_alarm_at'], $r['last_alarm_at'], $r['treated_by'] ?? '—', $r['treatment_notes'] ?? ''],
+                           fmt_brt($r['first_alarm_at'], 'd/m/Y H:i:s'), fmt_brt($r['last_alarm_at'], 'd/m/Y H:i:s'), $r['treated_by'] ?? '—', $r['treatment_notes'] ?? ''],
             ];
 
         case 'positions':
@@ -167,7 +171,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             return [
                 ['IMEI', 'Dispositivo', 'Data/Hora', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'Bateria (%)'],
                 $stmt,
-                fn($r) => [$r['imei'], $r['device_name'], $r['gps_time'], $r['latitude'], $r['longitude'],
+                fn($r) => [$r['imei'], $r['device_name'], fmt_brt($r['gps_time'], 'd/m/Y H:i:s'), $r['latitude'], $r['longitude'],
                            $r['speed'], $r['ignition'], $r['battery']],
             ];
 
@@ -184,7 +188,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 $stmt,
                 function($r) {
                     $duration = $r['duration_s'] ? gmdate('H:i:s', $r['duration_s']) : '';
-                    return [$r['id'], $r['imei'], $r['started_at'], $r['ended_at'] ?? '', $duration,
+                    return [$r['id'], $r['imei'], fmt_brt($r['started_at']), $r['ended_at'] ? fmt_brt($r['ended_at']) : '', $duration,
                             $r['distance_km'] ?? '', $r['max_speed'] ?? '', $r['alarm_count'],
                             $r['start_addr'] ?? '', $r['end_addr'] ?? ''];
                 },
@@ -206,8 +210,8 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 ['IMEI', 'Nome', 'Modelo', 'Ativo', 'Última Comunicação', 'Última Posição', 'Câmeras', 'Firmware'],
                 $stmt,
                 fn($r) => [$r['imei'], $r['device_name'] ?? $r['imei'], $r['model_name'] ?? '',
-                           $r['is_active'] ? 'Sim' : 'Não', $r['last_communication'] ?? '',
-                           $r['last_position_at'] ?? '', $r['camera_count'] ?? 0, $r['firmware_version'] ?? ''],
+                           $r['is_active'] ? 'Sim' : 'Não', fmt_brt($r['last_communication'], 'd/m/Y H:i', ''),
+                           fmt_brt($r['last_position_at'], 'd/m/Y H:i', ''), $r['camera_count'] ?? 0, $r['firmware_version'] ?? ''],
             ];
     }
     return null;

@@ -255,7 +255,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     </div>
                     <div style="display:flex;justify-content:space-between;margin-top:4px;">
                         <span style="color:var(--success);"><?= $passed ?>/<?= $total ?> OK</span>
-                        <span style="color:var(--muted-soft);"><?= date('d/m/Y H:i', strtotime($h['inspected_at'])) ?></span>
+                        <span style="color:var(--muted-soft);"><?= fmt_brt($h['inspected_at']) ?></span>
                     </div>
                     <?php if ($h['notes']): ?>
                     <div style="margin-top:4px;font-size:11px;color:var(--muted-soft);"><?= htmlspecialchars(mb_strimwidth($h['notes'], 0, 80, '…')) ?></div>

@@ -17,8 +17,8 @@ $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
 $selImei    = $_GET['imei'] ?? '';
-$dateFrom   = $_GET['date_from'] ?? date('Y-m-d');
-$dateTo     = $_GET['date_to'] ?? date('Y-m-d');
+$dateFrom   = $_GET['date_from'] ?? brt_today();
+$dateTo     = $_GET['date_to'] ?? brt_today();
 $interval   = $_GET['interval'] ?? 'all';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
@@ -33,7 +33,8 @@ $geoCache = [];
 if ($generated && $selImei) {
     try {
         $where = 'WHERE imei = :imei AND gps_time BETWEEN :df AND :dt';
-        $params = [':imei' => $selImei, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
+        [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
+        $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo];
 
         if ($interval === 'sampled') {
             $where .= ' AND MOD(id, 10) = 0';
@@ -131,7 +132,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <?php else: ?>
             <?php foreach ($rows as $r): ?>
             <tr>
-                <td class="text-mono"><?= date('d/m/Y H:i:s', strtotime($r['gps_time'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($r['gps_time'], 'd/m/Y H:i:s') ?></td>
                 <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
                 <td><?= htmlspecialchars($r['device_name']) ?></td>
                 <td class="text-mono"><?= number_format((float)$r['latitude'], 6) ?></td>

@@ -16,11 +16,18 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 $db = Database::getInstance()->getConnection();
 $snapTime = date('Y-m-d H:i:s');
 
 $customers = $db->query("SELECT id FROM customers WHERE is_active = 1")->fetchAll();
+
+// Fronteiras de dia em BRT (banco em UTC)
+[$todayUtc, ]     = brt_day_range_to_utc(brt_today(), brt_today());
+[$yesterdayUtc, ] = brt_day_range_to_utc(brt_today('Y-m-d', '-1 day'), brt_today('Y-m-d', '-1 day'));
+[$d7Utc, ]        = brt_day_range_to_utc(brt_today('Y-m-d', '-7 days'), brt_today('Y-m-d', '-7 days'));
+[$d30Utc, ]       = brt_day_range_to_utc(brt_today('Y-m-d', '-30 days'), brt_today('Y-m-d', '-30 days'));
 
 foreach ($customers as $cust) {
     $cid = (int)$cust['id'];
@@ -55,14 +62,14 @@ foreach ($customers as $cust) {
     // Alarms: today, yesterday, 7d, 30d
     $alarms = $db->prepare("
         SELECT
-            SUM(CASE WHEN alarm_time >= CURDATE() THEN 1 ELSE 0 END) as today,
-            SUM(CASE WHEN alarm_time >= CURDATE() - INTERVAL 1 DAY AND alarm_time < CURDATE() THEN 1 ELSE 0 END) as yesterday,
-            SUM(CASE WHEN alarm_time >= CURDATE() - INTERVAL 7 DAY THEN 1 ELSE 0 END) as d7,
-            SUM(CASE WHEN alarm_time >= CURDATE() - INTERVAL 30 DAY THEN 1 ELSE 0 END) as d30
+            SUM(CASE WHEN alarm_time >= :t0 THEN 1 ELSE 0 END) as today,
+            SUM(CASE WHEN alarm_time >= :y0 AND alarm_time < :t0b THEN 1 ELSE 0 END) as yesterday,
+            SUM(CASE WHEN alarm_time >= :d7 THEN 1 ELSE 0 END) as d7,
+            SUM(CASE WHEN alarm_time >= :d30 THEN 1 ELSE 0 END) as d30
         FROM alarms a
         JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
     ");
-    $alarms->execute([':cid' => $cid]);
+    $alarms->execute([':cid' => $cid, ':t0' => $todayUtc, ':t0b' => $todayUtc, ':y0' => $yesterdayUtc, ':d7' => $d7Utc, ':d30' => $d30Utc]);
     $alarms = $alarms->fetch();
     $metrics['alarms_today']     = $alarms['today'] ?? 0;
     $metrics['alarms_yesterday'] = $alarms['yesterday'] ?? 0;
@@ -72,13 +79,13 @@ foreach ($customers as $cust) {
     // Ocurrences: today, yesterday, 7d, 30d
     $o = $db->prepare("
         SELECT
-            SUM(CASE WHEN first_alarm_at >= CURDATE() THEN 1 ELSE 0 END) as today,
-            SUM(CASE WHEN first_alarm_at >= CURDATE() - INTERVAL 1 DAY AND first_alarm_at < CURDATE() THEN 1 ELSE 0 END) as yesterday,
-            SUM(CASE WHEN first_alarm_at >= CURDATE() - INTERVAL 7 DAY THEN 1 ELSE 0 END) as d7,
-            SUM(CASE WHEN first_alarm_at >= CURDATE() - INTERVAL 30 DAY THEN 1 ELSE 0 END) as d30
+            SUM(CASE WHEN first_alarm_at >= :t0 THEN 1 ELSE 0 END) as today,
+            SUM(CASE WHEN first_alarm_at >= :y0 AND first_alarm_at < :t0b THEN 1 ELSE 0 END) as yesterday,
+            SUM(CASE WHEN first_alarm_at >= :d7 THEN 1 ELSE 0 END) as d7,
+            SUM(CASE WHEN first_alarm_at >= :d30 THEN 1 ELSE 0 END) as d30
         FROM occurrences WHERE customer_id = :cid
     ");
-    $o->execute([':cid' => $cid]);
+    $o->execute([':cid' => $cid, ':t0' => $todayUtc, ':t0b' => $todayUtc, ':y0' => $yesterdayUtc, ':d7' => $d7Utc, ':d30' => $d30Utc]);
     $o = $o->fetch();
     $metrics['occurrences_today']     = $o['today'] ?? 0;
     $metrics['occurrences_yesterday'] = $o['yesterday'] ?? 0;

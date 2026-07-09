@@ -142,28 +142,32 @@ if ($isReseller) {
 }
 
 // ── Charts: alarmes + ocorrências hoje (hora-a-hora) ─────────
+// "Hoje" e horas em BRT (banco em UTC): início do dia local em UTC +
+// hora local via CONVERT_TZ com offset fixo (não requer tz tables)
+[$todayStartUtc, ] = brt_day_range_to_utc(brt_today(), brt_today());
+
 $alarmsHourly = [];
 try {
     $alarmsToday = $db->prepare("
-        SELECT HOUR(alarm_time) as hr, COUNT(*) as cnt
+        SELECT HOUR(CONVERT_TZ(alarm_time, '+00:00', '-03:00')) as hr, COUNT(*) as cnt
         FROM alarms a
         JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
-        WHERE a.alarm_time >= CURDATE()
-        GROUP BY HOUR(alarm_time) ORDER BY hr
+        WHERE a.alarm_time >= :ts
+        GROUP BY hr ORDER BY hr
     ");
-    $alarmsToday->execute([':cid' => $customerId ?? 1]);
+    $alarmsToday->execute([':cid' => $customerId ?? 1, ':ts' => $todayStartUtc]);
     $alarmsHourly = $alarmsToday->fetchAll();
 } catch (Exception $e) {}
 
 $occsHourly = [];
 try {
     $occsToday = $db->prepare("
-        SELECT HOUR(first_alarm_at) as hr, COUNT(*) as cnt
+        SELECT HOUR(CONVERT_TZ(first_alarm_at, '+00:00', '-03:00')) as hr, COUNT(*) as cnt
         FROM occurrences
-        WHERE customer_id = :cid AND first_alarm_at >= CURDATE()
-        GROUP BY HOUR(first_alarm_at) ORDER BY hr
+        WHERE customer_id = :cid AND first_alarm_at >= :ts
+        GROUP BY hr ORDER BY hr
     ");
-    $occsToday->execute([':cid' => $customerId ?? 1]);
+    $occsToday->execute([':cid' => $customerId ?? 1, ':ts' => $todayStartUtc]);
     $occsHourly = $occsToday->fetchAll();
 } catch (Exception $e) {}
 

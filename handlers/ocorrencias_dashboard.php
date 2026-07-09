@@ -108,7 +108,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <p class="text-muted" style="font-size:12px;">
                 <?= htmlspecialchars($detailOcc['customer_name']) ?> ·
                 IMEI: <span class="text-mono"><?= htmlspecialchars($detailOcc['imei']) ?></span> ·
-                <?= date('d/m/Y H:i', strtotime($detailOcc['last_alarm_at'])) ?>
+                <?= fmt_brt($detailOcc['last_alarm_at']) ?>
             </p>
         </div>
         <a href="/ocorrencias/dashboard" class="btn btn-outline btn-sm">Fechar</a>
@@ -123,8 +123,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php $status=$detailOcc['risk']; $type='risk'; require __DIR__.'/../web/components/status_pill.php'; ?>
                 </td></tr>
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Motorista:</td><td><?= htmlspecialchars($detailOcc['driver_name'] ?? 'Não identificado') ?></td></tr>
-                <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Primeiro alarme:</td><td><?= date('d/m/Y H:i:s', strtotime($detailOcc['first_alarm_at'])) ?></td></tr>
-                <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Último alarme:</td><td><?= date('d/m/Y H:i:s', strtotime($detailOcc['last_alarm_at'])) ?></td></tr>
+                <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Primeiro alarme:</td><td><?= fmt_brt($detailOcc['first_alarm_at'], 'd/m/Y H:i:s') ?></td></tr>
+                <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Último alarme:</td><td><?= fmt_brt($detailOcc['last_alarm_at'], 'd/m/Y H:i:s') ?></td></tr>
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Alarmes agrupados:</td><td><?= (int)$detailOcc['alarm_count'] ?></td></tr>
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Falso positivo:</td><td><?= $detailOcc['false_positive'] ? 'Sim' : 'Não' ?></td></tr>
             </table>
@@ -162,7 +162,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <?php foreach ($detailEvents as $ev): ?>
             <tr>
                 <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>
-                <td class="text-mono"><?= date('d/m/Y H:i:s', strtotime($ev['alarm_time'])) ?></td>
+                <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
                 <td>
                     <?php if ($ev['file_url']): ?>
                     <a href="<?= htmlspecialchars($ev['file_url']) ?>" target="_blank" class="badge badge-primary">Ver</a>
@@ -209,7 +209,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </p>
         <?php if (!empty($detailOcc['treated_by'])): ?>
         <p style="font-size:11px;color:var(--muted);margin-top:4px;">
-            Tratado em <?= date('d/m/Y H:i', strtotime($detailOcc['treated_at'] ?? '')) ?>
+            Tratado em <?= fmt_brt($detailOcc['treated_at'] ?? '') ?>
         </p>
         <?php endif; ?>
     </div>
@@ -270,12 +270,12 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
     <div>
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">De</label>
-        <input type="date" id="filter-date-from" onchange="refreshData()" value="<?= date('Y-m-d') ?>"
+        <input type="date" id="filter-date-from" onchange="refreshData()" value="<?= brt_today() ?>"
                style="padding:7px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
     </div>
     <div>
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Até</label>
-        <input type="date" id="filter-date-to" onchange="refreshData()" value="<?= date('Y-m-d') ?>"
+        <input type="date" id="filter-date-to" onchange="refreshData()" value="<?= brt_today() ?>"
                style="padding:7px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
     </div>
     <div>

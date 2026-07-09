@@ -24,8 +24,8 @@ $status    = $_GET['status'] ?? null;
 $risk      = $_GET['risk'] ?? null;
 $page      = max(1, (int)($_GET['page'] ?? 1));
 $perPage   = min(50, max(5, (int)($_GET['per_page'] ?? 20)));
-$dateFrom  = $_GET['date_from'] ?? date('Y-m-d');
-$dateTo    = $_GET['date_to'] ?? date('Y-m-d');
+$dateFrom  = $_GET['date_from'] ?? brt_today();
+$dateTo    = $_GET['date_to'] ?? brt_today();
 $search    = $_GET['search'] ?? '';
 
 try {
@@ -49,8 +49,8 @@ try {
         $params[':q'] = "%$search%";
         $params[':q2'] = "%$search%";
     }
-    $params[':df'] = $dateFrom . ' 00:00:00';
-    $params[':dt'] = $dateTo . ' 23:59:59';
+    // Dias digitados são BRT; colunas do banco são UTC
+    [$params[':df'], $params[':dt']] = brt_day_range_to_utc($dateFrom, $dateTo);
     $whereDates = ' AND o.last_alarm_at BETWEEN :df AND :dt';
 
     // KPIs

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/functions.php'; // fmt_brt() e helpers de data para todo o dashboard
 
 define('AUTH_COOKIE', 'jimi_token');
 define('AUTH_LIFETIME', 86400);

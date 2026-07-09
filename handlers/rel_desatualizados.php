@@ -161,7 +161,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= htmlspecialchars($d['device_name'] ?? '—') ?></td>
                 <td><?= htmlspecialchars($d['model_name']) ?></td>
                 <td><?= htmlspecialchars($d['customer_name']) ?></td>
-                <td><?= $d['last_position_at'] ? date('d/m/Y H:i', strtotime($d['last_position_at'])) : '<span class="badge badge-error">Nunca</span>' ?></td>
+                <td><?= $d['last_position_at'] ? fmt_brt($d['last_position_at']) : '<span class="badge badge-error">Nunca</span>' ?></td>
                 <td><?= $d['hours_since'] !== null ? number_format($d['hours_since'], 0) . 'h' : '—' ?></td>
             </tr>
             <?php endforeach; endif; ?>
