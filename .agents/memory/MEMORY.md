@@ -8,13 +8,14 @@
 - [user] PHP lint via `C:\Users\flavi\php\php.exe -l` → user-preferences.md
 
 ## Project
-- [project] jimi_webhook v4.1.0 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
+- [project] jimi_webhook v4.1.1 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
 - [project] Design system Coinbase: azul #0052ff, sidebar #0a0b0d, CTAs pill 100px, JetBrains Mono números/IMEI → project-conventions.md
 - [project] Autenticação token cookie `jimi_token` → MySQL `sessions`, sem `session_start()` — $_SESSION é POR REQUEST (nunca persistir nada nele entre requests) → project-conventions.md
-- [project] PROJETO_YUV.md é o contrato-mestre; STATUS.md é o diário vivo → project-conventions.md
-- [project] Fases 0-M concluídas — suite Playwright 37/37 verde, replay E2E 8/8 → project-conventions.md
-- [project] Servidor produção: 189.22.240.43 Apache 2.4 + PHP 8.3 FPM → project-conventions.md
-- [project] IoTHub na porta 10088 — comandos e vídeo ao vivo dependem disso estar UP → project-conventions.md
+- [project] PROJETO_YUV.md é o contrato-mestre; STATUS.md é o diário vivo (estado atual: §12) → project-conventions.md
+- [project] Fases 0-M + iteração v4.1.1 concluídas — comandos ponta-a-ponta OK (síncrono + callback offline real), BRT em todo o dashboard, Playwright 37/37 → project-conventions.md
+- [project] Servidor homolog: 189.22.240.43 (host `iothub`) Apache/FPM no HOST + 16 containers IoTHub; containers só alcançam o host via IP LAN 10.1.0.43 (nunca localhost) → project-conventions.md
+- [project] IoTHub: comandos via :10088 (segura resposta até 30s aguardando device — timeout do app é 35s); vídeos servidos pelo dvr-upload :23010 (Apache NÃO acessa /iothub/dvr-upload) → project-conventions.md
+- [project] Devices reais no homolog: 860112070347838 (JC181) e 869058070151343 (JC182), ambos JTT serverFlagId=0 → project-conventions.md
 - [project] Dev Windows tem MySQL 8.0.37 portátil em C:\Users\flavi\mysql (subir com scripts/dev-windows.ps1); usuário E2E: e2e@teste.local → project-conventions.md
 
 ## Feedback
@@ -23,6 +24,9 @@
 - [feedback] Valoriza STATUS.md atualizado como artefato de handoff entre sessões → feedback-history.md
 
 ## Reference
+- [reference] TIMEZONE: armazenar UTC, exibir BRT SEMPRE via fmt_brt(); filtros de dia via brt_day_range_to_utc(); defaults brt_today(); GROUP BY hora/dia via CONVERT_TZ(col,'+00:00','-03:00'); colunas DATE puras NÃO convertem → tech-decisions.md
+- [reference] Gateway auto-cria devices órfãos (customer_id NULL) na 1ª telemetria — cadastro em /ativos/novo ADOTA a linha (nunca recusar por COUNT global de IMEI) → tech-decisions.md
+- [reference] Resposta síncrona de comando vem no HTTP response do sendInstruct (data._content) → status 'executed' imediato; offline (_code 600) fica 'sent' até callback em /pushinstructresponse (objeto único §2.4, allowSingleObjectPayload) → tech-decisions.md
 - [reference] Migration v4.1.0: jobs.format + fix seed occurrence_config_params (nomes reais de alarm_types) → tech-decisions.md
 - [reference] Motor de ocorrências: pushalarm → occurrence_engine → ocorrências (dedup 10min); matching exige nome EXATO de alarm_types → tech-decisions.md
 - [reference] CSRF: token derivado por HMAC-SHA256(cookie jimi_token, WEBHOOK_TOKEN) — NÃO usar $_SESSION para persistir token (não há session_start) → tech-decisions.md
