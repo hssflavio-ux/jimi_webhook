@@ -194,18 +194,25 @@ $postFields = http_build_query([
 ]);
 
 // ── Chamada cURL ao IoTHub ────────────────────────────────────────────────────
+//
+// TIMEOUT 35s (era 15s): quando o device demora/está offline, o
+// tracker-instruction-server SEGURA a resposta HTTP por até 30s
+// ("processSendInstruct await timeout") antes de responder que o comando
+// virou fila offline. Com 15s o PHP abortava no meio da espera e o comando
+// era marcado "failed" mesmo tendo sido aceito e enfileirado pelo IoTHub.
 $ch = curl_init($iothubUrl);
 curl_setopt_array($ch, [
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => $postFields,
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 15,
+    CURLOPT_TIMEOUT        => 35,
     CURLOPT_CONNECTTIMEOUT => 5,
     CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
 ]);
 
 $rawResp   = curl_exec($ch);
 $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlErrno = curl_errno($ch);
 $curlError = curl_error($ch);
 curl_close($ch);
 
@@ -217,10 +224,18 @@ $dbStatus   = 'failed';
 $resultMsg  = 'Falha desconhecida';
 
 if ($curlError || $httpCode === 0) {
-    // Falha de conectividade: IoTHub não acessível (container down, porta fechada)
-    $dbStatus  = 'failed';
-    $resultMsg = 'IoTHub inacessível — verifique se tracker-instruction-server está UP. '
-               . 'Detalhe: ' . ($curlError ?: "HTTP code=$httpCode");
+    $dbStatus = 'failed';
+    if ($curlErrno === CURLE_OPERATION_TIMEDOUT) {
+        // Timeout ≠ inacessível: o IoTHub recebeu o comando mas não respondeu
+        // a tempo (device lento). O comando pode ter sido enfileirado offline.
+        $resultMsg = 'IoTHub não respondeu a tempo — se o dispositivo estiver '
+                   . 'offline, o comando foi enfileirado e será entregue na '
+                   . 'reconexão. Detalhe: ' . $curlError;
+    } else {
+        // Falha de conectividade real (container down, porta fechada)
+        $resultMsg = 'IoTHub inacessível — verifique se tracker-instruction-server está UP. '
+                   . 'Detalhe: ' . ($curlError ?: "HTTP code=$httpCode");
+    }
 
 } else {
     // IoTHub respondeu com HTTP 200 — decodifica o body JSON
@@ -282,6 +297,7 @@ try {
         'http_code'    => $httpCode,
         'iothub_url'   => $iothubUrl,
         'iothub_resp'  => substr((string)($rawResp ?: ''), 0, 300),
+        'curl_error'   => $curlError ?: null,
         'request_id'   => $requestId,
     ]);
 

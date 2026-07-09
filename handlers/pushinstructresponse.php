@@ -12,6 +12,9 @@ require_once __DIR__ . '/../config/WebhookHandler.php';
 
 class PushInstructResponseHandler extends WebhookHandler {
 
+    // Callback de comando offline (§2.4) chega como objeto único, sem data_list
+    protected $allowSingleObjectPayload = true;
+
     public function __construct() {
         parent::__construct(HANDLER_NAME);
     }

@@ -17,7 +17,16 @@ require_once __DIR__ . '/../core/Logger.php';
 abstract class WebhookHandler {
     protected $db, $handlerName, $startTime, $validToken;
     protected $requestMeta = [];
-    
+
+    /**
+     * Alguns pushes do IoTHub NÃO usam o envelope data_list — o corpo é um
+     * objeto único (ex.: resposta de comando offline, doc §2.4:
+     * {code, msg, data:{_imei,...}, token}). Handlers desses endpoints setam
+     * true para que o corpo seja tratado como um item único em vez de ser
+     * descartado como "empty data".
+     */
+    protected $allowSingleObjectPayload = false;
+
     public function __construct($handlerName) {
         $this->handlerName = $handlerName;
         $this->startTime = microtime(true);
@@ -44,12 +53,21 @@ abstract class WebhookHandler {
                 'data_keys' => array_keys($data)
             ]);
 
+            $dataList = $data['data_list'] ?? [];
+
+            // Payload de objeto único (sem data_list) — ex.: callback de comando
+            // offline (§2.4). O corpo inteiro (menos o token) vira o item.
+            if (empty($dataList) && $this->allowSingleObjectPayload) {
+                $single = array_diff_key($data, array_flip(['token', 'raw_input']));
+                if (!empty($single)) $dataList = [$single];
+            }
+
             // Hash de idempotência do payload (Prevenção Replay Attacks)
-            $payloadHash = md5(json_encode($data['data_list'] ?? [], JSON_UNESCAPED_UNICODE));
+            $payloadHash = md5(json_encode($dataList, JSON_UNESCAPED_UNICODE));
             Logger::info('REQUEST RECEIVED', [
                 'source' => $this->handlerName,
                 'token_valid' => ($data['token'] ?? '') === $this->validToken,
-                'data_count' => count($data['data_list'] ?? []),
+                'data_count' => count($dataList),
                 'payload_hash' => $payloadHash
             ]);
 
@@ -58,7 +76,6 @@ abstract class WebhookHandler {
             // Armazenar metadados do request para acesso pelos handlers filhos (ex: msgType)
             $this->requestMeta = array_diff_key($data, array_flip(['token', 'data_list']));
 
-            $dataList = $data['data_list'] ?? [];
             if (empty($dataList)) {
                 $this->sendEarlySuccess('success (empty data)');
                 exit;

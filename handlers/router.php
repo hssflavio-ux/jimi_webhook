@@ -69,6 +69,8 @@ if (empty($segments)) {
     $renamedRoutes = [
         'config-ocorrencias' => 'config_ocorrencias.php',
         'grupos-permissao'   => 'grupos_permissao.php',
+        // IoTHub pode postar o callback offline em camelCase (doc §2.4)
+        'pushInstructResponse' => 'pushinstructresponse.php',
     ];
 
     // Subrotas de 2 segmentos por prefixo

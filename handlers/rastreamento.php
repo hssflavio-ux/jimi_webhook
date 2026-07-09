@@ -28,7 +28,7 @@ try {
         FROM devices d
         LEFT JOIN device_models dm ON d.device_model_id = dm.id
         WHERE d.customer_id = :cid AND d.is_active = 1
-        ORDER BY d.is_online DESC, d.device_name ASC
+        ORDER BY is_online DESC, d.device_name ASC
     ");
     $devStmt->execute([':cid' => $selCustomerId]);
     $devices = $devStmt->fetchAll();
