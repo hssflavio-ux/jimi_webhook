@@ -251,3 +251,29 @@ function brt_today($format = 'Y-m-d', $modify = null) {
     if ($modify) $d->modify($modify);
     return $d->format($format);
 }
+
+/**
+ * Configuração de streaming de vídeo ao vivo/playback (JT/T 1078 via IoTHub).
+ *
+ * O comando 37121 (0x9101) instrui o DEVICE a publicar o stream RTP no
+ * media server do IoTHub — portanto videoIP/videoTCPPort devem ser o
+ * endereço que o DEVICE alcança (IP público do servidor), nunca o
+ * hostname visto pelo navegador. Portas padrão do iothub-media:
+ * 10002 (ingest ao vivo), 10003 (ingest playback 0x9201), 8881 (saída HTTP-FLV).
+ * Ref: docs.jimicloud.com/test/test.html §2.2.
+ *
+ * Overrides via .env: VIDEO_INGEST_IP, VIDEO_INGEST_PORT, VIDEO_PLAYBACK_PORT.
+ * Sem override, o IP é extraído do host de STREAM_URL.
+ *
+ * @return array{flv_base:string, ingest_ip:string, ingest_port:string, playback_port:string}
+ */
+function video_stream_config() {
+    $flvBase = rtrim(getenv('STREAM_URL') ?: 'http://localhost:8881', '/');
+    $host = parse_url($flvBase, PHP_URL_HOST) ?: 'localhost';
+    return [
+        'flv_base'      => $flvBase,
+        'ingest_ip'     => getenv('VIDEO_INGEST_IP') ?: $host,
+        'ingest_port'   => (string)(getenv('VIDEO_INGEST_PORT') ?: '10002'),
+        'playback_port' => (string)(getenv('VIDEO_PLAYBACK_PORT') ?: '10003'),
+    ];
+}

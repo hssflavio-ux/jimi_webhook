@@ -15,8 +15,9 @@ $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
-$streamUrl = rtrim(getenv('STREAM_URL') ?: 'http://localhost:8881', '/');
-$dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
+// flv_base = saída HTTP-FLV (navegador); ingest_ip/port = onde o DEVICE publica o RTP (37121)
+$vsc = video_stream_config();
+$streamUrl = $vsc['flv_base'];
 
 // Devices with model info and streaming config
 $devices = $db->prepare("
@@ -133,13 +134,23 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <script>
 var streamUrl = <?= json_encode($streamUrl) ?>;
-var dashToken = <?= json_encode($dashToken) ?>;
+var ingestIp = <?= json_encode($vsc['ingest_ip']) ?>;
+var ingestPort = <?= json_encode($vsc['ingest_port']) ?>;
 var selImei = <?= json_encode($selectedImei) ?>;
 var selCh = 1;
 var curPlayer = null;
 var maxCams = 1;
 var rotation = 0;
 var watermark = 0;
+
+// Controle das tentativas de conexão ao FLV (o device leva alguns
+// segundos entre aceitar o 37121 e publicar o stream no media server)
+var MAX_ATTEMPTS = 8;
+var RETRY_MS = 3000;
+var WATCHDOG_MS = 8000;
+var attemptTimer = null;
+var watchdogTimer = null;
+var playSession = 0; // invalida callbacks de sessões de play antigas
 
 function onDeviceChange() {
     var sel = document.getElementById('dev-sel');
@@ -171,13 +182,22 @@ function selChannel(ch) {
     });
 }
 
-function stopPlayer() {
+function destroyFlv() {
     if (curPlayer) {
-        try { if (curPlayer.destroy) curPlayer.destroy(); } catch(e) {}
+        try { curPlayer.unload(); curPlayer.detachMediaElement(); } catch(e) {}
+        try { curPlayer.destroy(); } catch(e) {}
         curPlayer = null;
     }
+}
+
+function stopPlayer() {
+    playSession++;
+    if (attemptTimer)  { clearTimeout(attemptTimer);  attemptTimer = null; }
+    if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+    destroyFlv();
     var v = document.getElementById('vid-player');
     v.pause(); v.removeAttribute('src'); v.style.display = 'none';
+    v.style.transform = ''; v.muted = false;
     document.getElementById('vid-placeholder').style.display = '';
     document.getElementById('stream-bar').className = 'stream-bar';
     document.getElementById('btn-start').style.display = '';
@@ -187,69 +207,117 @@ function stopPlayer() {
 
 function startLive() {
     stopPlayer();
+    var mySession = playSession;
     var bar = document.getElementById('stream-bar');
     var txt = document.getElementById('stream-bar-text');
-    bar.className = 'stream-bar sending';
-    txt.innerHTML = '<span class="spinner"></span> Enviando comando de streaming...';
 
+    if (typeof flvjs === 'undefined' || !flvjs.isSupported()) {
+        bar.className = 'stream-bar error';
+        txt.textContent = 'Navegador não suporta flv.js. Use Chrome ou Firefox.';
+        return;
+    }
+
+    bar.className = 'stream-bar sending';
+    txt.innerHTML = '<span class="spinner"></span> Enviando comando de streaming ao dispositivo...';
+
+    // proNo 37121 (0x9101): manda o device publicar o RTP no media server
+    // do IoTHub (ingest 10002). videoIP/porta vêm do servidor (.env), pois é
+    // o DEVICE quem precisa alcançar esse endereço, não o navegador.
     fetch('/sendcommand', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-Dashboard-Token': dashToken},
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             imei: selImei,
             proNo: 37121,
             serverFlagId: 0,
             content: JSON.stringify({
-                dataType: "1",
-                codeStreamType: "0",
+                dataType: 0,
+                codeStreamType: 0,
                 channel: String(selCh),
-                videoIP: window.location.hostname,
-                videoTCPPort: "0",
-                videoUDPPort: "0"
+                videoIP: ingestIp,
+                videoTCPPort: ingestPort,
+                videoUDPPort: 0
             })
         })
     }).then(function(r) { return r.json(); }).then(function(d) {
-        if (d.code === 0) {
-            var flvUrl = streamUrl + '/' + selCh + '/' + selImei + '.flv';
-            txt.textContent = 'Conectando ao stream: ' + flvUrl;
-            playFlvUrl(flvUrl);
+        if (playSession !== mySession) return;
+        if (d.offline_queued) {
+            bar.className = 'stream-bar error';
+            txt.textContent = 'Dispositivo offline: o comando foi enfileirado e será entregue na reconexão — a transmissão não vai iniciar agora.';
+        } else if (d.code === 0) {
+            connectAttempt(mySession, 1);
         } else {
             bar.className = 'stream-bar error';
-            txt.textContent = 'Erro: ' + (d.iothub_msg || d.msg || 'Dispositivo offline?');
+            txt.textContent = 'Erro: ' + (d.iothub_msg || d.msg || 'Falha ao enviar comando');
         }
     }).catch(function(e) {
+        if (playSession !== mySession) return;
         bar.className = 'stream-bar error';
         txt.textContent = 'Erro de rede ao enviar comando.';
     });
 }
 
-function playFlvUrl(url) {
+function connectAttempt(mySession, attempt) {
+    if (playSession !== mySession) return;
+    var url = streamUrl + '/' + selCh + '/' + selImei + '.flv';
     var bar = document.getElementById('stream-bar');
     var txt = document.getElementById('stream-bar-text');
     var v = document.getElementById('vid-player');
+    var settled = false;
 
-    if (typeof flvjs !== 'undefined' && flvjs.isSupported()) {
-        curPlayer = flvjs.createPlayer({type: 'flv', url: url, isLive: true});
-        curPlayer.attachMediaElement(v);
-        curPlayer.load();
-        curPlayer.play().then(function() {
-            document.getElementById('vid-placeholder').style.display = 'none';
-            v.style.display = 'block';
-            bar.className = 'stream-bar playing';
-            txt.textContent = 'Ao Vivo: ' + url;
+    bar.className = 'stream-bar sending';
+    txt.innerHTML = '<span class="spinner"></span> Conectando ao stream (tentativa ' + attempt + '/' + MAX_ATTEMPTS +
+                    ')... o dispositivo leva alguns segundos para publicar o vídeo.';
 
-            if (rotation !== 0) v.style.transform = 'rotate(' + rotation + 'deg)';
-            if (watermark) document.getElementById('watermark').style.display = 'block';
-
-            document.getElementById('btn-start').style.display = 'none';
-            document.getElementById('btn-stop').style.display = '';
-        }).catch(function(e) {
+    function fail() {
+        if (playSession !== mySession || settled) return;
+        settled = true;
+        if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+        destroyFlv();
+        if (attempt < MAX_ATTEMPTS) {
+            attemptTimer = setTimeout(function() { connectAttempt(mySession, attempt + 1); }, RETRY_MS);
+        } else {
             bar.className = 'stream-bar error';
-            txt.textContent = 'Player error: ' + e.message;
+            txt.textContent = 'Stream não ficou disponível em ' + url +
+                              '. Verifique se o dispositivo está online, com sinal de dados e com a câmera do canal CH' + selCh + ' habilitada, e tente novamente.';
+        }
+    }
+
+    function success() {
+        if (playSession !== mySession || settled) return;
+        settled = true;
+        if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
+        document.getElementById('vid-placeholder').style.display = 'none';
+        v.style.display = 'block';
+        bar.className = 'stream-bar playing';
+        txt.textContent = 'Ao Vivo — CH' + selCh + ': ' + url +
+                          (v.muted ? ' (sem áudio — ative no controle de volume do player)' : '');
+
+        if (rotation !== 0) v.style.transform = 'rotate(' + rotation + 'deg)';
+        if (watermark) document.getElementById('watermark').style.display = 'block';
+
+        document.getElementById('btn-start').style.display = 'none';
+        document.getElementById('btn-stop').style.display = '';
+    }
+
+    destroyFlv();
+    curPlayer = flvjs.createPlayer({type: 'flv', url: url, isLive: true}, {enableStashBuffer: false});
+    curPlayer.on(flvjs.Events.ERROR, fail); // 404/conexão recusada enquanto o device não publica
+    curPlayer.attachMediaElement(v);
+    curPlayer.load();
+    watchdogTimer = setTimeout(fail, WATCHDOG_MS); // sem dados nem erro → tenta de novo
+
+    var p = curPlayer.play();
+    if (p && p.then) {
+        p.then(success).catch(function(err) {
+            // Autoplay bloqueado pelo navegador: repete sem áudio
+            if (err && err.name === 'NotAllowedError' && curPlayer) {
+                v.muted = true;
+                var p2 = curPlayer.play();
+                if (p2 && p2.then) p2.then(success).catch(function() { fail(); });
+            }
+            // Demais erros: Events.ERROR ou o watchdog decidem o retry
         });
-    } else {
-        bar.className = 'stream-bar error';
-        txt.textContent = 'Navegador não suporta flv.js. Use Chrome ou Firefox.';
     }
 }
 

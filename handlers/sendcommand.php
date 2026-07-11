@@ -329,14 +329,23 @@ try {
 //   0  = sucesso
 //   -1 = IoTHub inacessível
 //   outros = erro específico retornado pelo IoTHub
+// Fila offline: IoTHub aceitou mas o device não estava conectado
+// (data._code=600) — o comando só será entregue na reconexão. Fluxos de
+// tempo real (ex.: vídeo ao vivo) usam isso para não esperar um stream
+// que não vai começar.
+$offlineQueued = ($iothubCode === 0)
+    && (int)($iothubResp['data']['_code'] ?? 0) === 600;
+
 echo json_encode([
-    'code'         => ($dbStatus === 'sent') ? 0 : $iothubCode,
-    'msg'          => $resultMsg,
-    'command_id'   => $insertedId,
-    'iothub_code'  => $iothubCode,
-    'iothub_msg'   => $iothubMsg,
-    'http_status'  => $httpCode,
-    'request_id'   => $requestId,
-    'endpoint'     => $iothubUrl,     // JS verifica que contém '10088'
-    'server_flag'  => $serverFlagId,  // Para debug: confirma qual gateway foi usado
+    'code'           => ($dbStatus === 'sent') ? 0 : $iothubCode,
+    'msg'            => $resultMsg,
+    'command_id'     => $insertedId,
+    'status'         => $dbStatus,        // sent | executed | failed
+    'offline_queued' => $offlineQueued,
+    'iothub_code'    => $iothubCode,
+    'iothub_msg'     => $iothubMsg,
+    'http_status'    => $httpCode,
+    'request_id'     => $requestId,
+    'endpoint'       => $iothubUrl,     // JS verifica que contém '10088'
+    'server_flag'    => $serverFlagId,  // Para debug: confirma qual gateway foi usado
 ], JSON_UNESCAPED_UNICODE);

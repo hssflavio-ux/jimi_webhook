@@ -513,11 +513,28 @@ case 'comandos':
     </div>
 </div>
 <script>
+<?php
+// Endereços que o DEVICE alcança (streams e upload) — mesmos presets de comandos.php
+$vsc = video_stream_config();
+$fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+$fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
+$fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
+?>
 var jttPresets = {
-    'streaming':     { proNo: 37121, content: '{"channelId":1,"mediaType":0,"streamType":0}' },
-    'video_upload':  { proNo: 128,   content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}' },
+    // 37121 (0x9101): device publica o RTP no media server do IoTHub — IP/porta do .env
+    'streaming':     { proNo: 37121, content: <?= json_encode(json_encode([
+                           'dataType' => 0, 'codeStreamType' => 0, 'channel' => '1',
+                           'videoIP' => $vsc['ingest_ip'], 'videoTCPPort' => $vsc['ingest_port'], 'videoUDPPort' => 0,
+                       ], JSON_UNESCAPED_SLASHES)) ?> },
+    'video_upload':  { proNo: 128,   content: <?= json_encode('VIDEOUPLOAD,' . $fsHost . ',' . $fsPort . ',ALARM_LABEL,1-2-3') ?> },
     'resources':     { proNo: 37381, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}' },
-    'playback':      { proNo: 37377, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0,"playbackType":0,"speed":1}' },
+    'playback':      { proNo: 37377, content: <?= json_encode(json_encode([
+                           'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
+                           'tcpPort' => (int)$vsc['playback_port'], 'udpPort' => 0, 'channel' => 1,
+                           'resourceType' => 0, 'codeType' => 0, 'storageType' => 0,
+                           'playMethod' => 0, 'forwardRewind' => 0,
+                           'beginTime' => '', 'endTime' => '', 'instructionID' => '',
+                       ], JSON_UNESCAPED_SLASHES)) ?> },
     'ftp_upload':    { proNo: 37382, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}' },
     'alarm_ack':     { proNo: 33283, content: '{"alarmSerialNo":0}' },
     'tts':           { proNo: 33536, content: '{"text":"","volume":5}' },
@@ -530,7 +547,11 @@ function fillJttPreset(key) {
     var p = jttPresets[key];
     if (p) {
         document.getElementById('cmd-proNo').value = p.proNo;
-        document.getElementById('cmd-content-jtt').value = JSON.stringify(p.content, null, 2);
+        // p.content já é uma string JSON — stringify direto geraria string quotada
+        var pretty;
+        try { pretty = JSON.stringify(JSON.parse(p.content), null, 2); }
+        catch (e) { pretty = p.content; }
+        document.getElementById('cmd-content-jtt').value = pretty;
     }
 }
 </script>

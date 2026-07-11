@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [4.1.2] — 2026-07-11 (Vídeo ao vivo — payload de streaming e player resiliente)
+
+Correção da abertura dos vídeos ao vivo. Causa-raiz: o comando que instrui o device a **publicar** o stream mandava um endereço inalcançável, então o media server nunca recebia RTP e o player travava em "Conectando".
+
+### Fixed
+- **Vídeo ao vivo nunca abria (payload 37121 quebrado)**: `video_aovivo.php` enviava `videoIP: window.location.hostname` (o host visto pelo **navegador**) e `videoTCPPort: "0"`. O comando 0x9101 instrui o **device** a publicar o RTP no media server do IoTHub — o endereço tem que ser o que o **device** alcança (IP público do servidor) e a porta de ingest do `iothub-media` (**10002**), não `0`. Com porta 0 / host do navegador, o device não publicava nada e o `.flv` em `:8881` ficava eternamente sem dados. Também havia `dataType:"1"` (string, "áudio") onde o correto é `0` (vídeo). Corrigido para `dataType:0, codeStreamType:0, videoIP:<IP do servidor>, videoTCPPort:"10002", videoUDPPort:0`.
+- **Helper central `video_stream_config()`** (`includes/functions.php`): deriva `flv_base` (saída HTTP-FLV para o navegador) e `ingest_ip`/`ingest_port`/`playback_port` (endereço que o device alcança). O IP sai do host de `STREAM_URL` por padrão, com overrides `VIDEO_INGEST_IP`/`VIDEO_INGEST_PORT`/`VIDEO_PLAYBACK_PORT` no `.env`. Usado por `video_aovivo.php`, `comandos.php` e `ativo_detalhe.php` — presets de streaming/playback deixam de ser hard-coded e ficam consistentes.
+- **Player FLV frágil (1 tentativa única)**: o device leva de 5 a 30s entre aceitar o comando e efetivamente publicar o stream; o código antigo tentava conectar uma vez e, se o `.flv` ainda não tinha dados, ou travava em "Conectando" para sempre ou morria no primeiro erro do flv.js. Novo player com **retry** (8 tentativas × 3s), **watchdog** de 8s por tentativa (conexão pendurada sem dados também dispara nova tentativa), tratamento do `flvjs.Events.ERROR` (404 enquanto o device não publica), **autoplay com fallback mudo** (contorna o bloqueio de autoplay dos navegadores), destruição limpa do player entre tentativas e mensagem de falha acionável ao esgotar. Verificado com câmera real: a 1ª tentativa (janela curta) pegava 0 bytes; a retry pega o stream quando o device publica.
+- **Aviso de fila offline no vídeo**: `sendcommand.php` passou a expor `status` e `offline_queued` (device desconectado → `data._code=600`) na resposta JSON. O vídeo ao vivo detecta isso e avisa que a transmissão não vai iniciar agora (em vez de esperar um stream que nunca vem).
+- **"Requisitar Gravações" enviava o comando errado** (`video_playback.php`): mandava proNo **34817** (comando de **foto**) com um payload de mídia gravada. Corrigido para **34818** (0x8802, upload de mídia armazenada) com `mediaType:2` (vídeo), `beginTime`/`endTime` no formato JT/T `yyMMddHHmmss` em GMT 0. O filtro de período do banco passou a usar `brt_day_range_to_utc()` (dia digitado é BRT; coluna é UTC) e o fetch ganhou `keepalive` (o form navega em seguida e cancelaria a requisição).
+- **Preset "Streaming" da tela de Comandos gerava JSON inválido para 37121** (`comandos.php`, `ativo_detalhe.php`): era `{"channelId":1,"mediaType":0,"streamType":0}` — campos que o 0x9101 ignora, sem `videoIP`/porta. Agora usa o payload correto do `video_stream_config()`. Preset "Playback" (37377/0x9201) também corrigido: incluía `serverAddress`/`tcpPort` (porta de playback 10003) que faltavam. Preset "Upload de Vídeo" (texto proNo 128) passou a montar `VIDEOUPLOAD,<host>,<porta>,...` a partir de `FILE_STORAGE_URL`.
+- **`/video` legado**: `video.php` (player unificado v3.x com o mesmo payload 37121 quebrado) virou redirect para `/video/aovivo` (ou `/video/downloads` no modo gravações), preservando `?imei=`.
+
+### Verified (servidor de homologação, 2026-07-11)
+- Comando **37121 corrigido** → câmera online `869058070151343` (JC182): IoTHub respondeu `code:0, _content:"ok"` em ~1s.
+- **Stream ao vivo capturado**: `GET http://189.22.240.43:8881/1/869058070151343.flv` retornou **2 MB de vídeo FLV válido** (assinatura `FLV`, versão 1, flags `0x5` = áudio+vídeo, primeira tag type 18 = metadata) em 28s. A 1ª tentativa com janela curta pegou 0 bytes (device ainda não publicando) — comprova a necessidade do retry/watchdog.
+- Lint 7/7 arquivos alterados sem erro. Playwright: navegação **25/25 verde** (inclui `/video/aovivo`, `/video/playback`, `/video/downloads` renderizando sem erro).
+
 ## [4.1.1] — 2026-07-09 (Diagnóstico no servidor — comandos IoTHub e respostas offline)
 
 Diagnóstico via SSH no servidor de homologação fechou os itens M.2.1–M.2.3 (IoTHub + comandos + respostas).

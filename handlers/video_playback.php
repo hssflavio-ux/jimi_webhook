@@ -7,8 +7,9 @@
  *   1. Selecionar Equipamento + canal + Período → [Requisitar]
  *   2. Escolher arquivo na timeline → Play ou Download
  *
- * Requisitar envia comando de "listar gravações" ao device e consulta
- * media_files já recebidos para o período.
+ * Requisitar envia proNo 34818 (upload de mídia armazenada) ao device e
+ * consulta media_files já recebidos para o período — os novos arquivos
+ * chegam de forma assíncrona via /pushfileupload.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -16,7 +17,6 @@ require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
-$dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 $fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
 
 $devices = $db->prepare("
@@ -37,6 +37,8 @@ $requested  = !empty($_GET['request']);
 
 $recordings = [];
 if ($requested && $selImei) {
+    // Dias digitados são BRT; colunas do banco são UTC
+    list($utcFrom, $utcTo) = brt_day_range_to_utc($dateFrom, $dateTo);
     $stmt = $db->prepare("
         SELECT id, file_name, file_url, file_type, file_size, event_time, channel, download_status, created_at
         FROM media_files
@@ -49,8 +51,8 @@ if ($requested && $selImei) {
     $stmt->execute([
         ':imei' => $selImei,
         ':ch'   => $selChannel,
-        ':df'   => $dateFrom . ' 00:00:00',
-        ':dt'   => $dateTo . ' 23:59:59',
+        ':df'   => $utcFrom,
+        ':dt'   => $utcTo,
     ]);
     $recordings = $stmt->fetchAll();
 }
@@ -169,7 +171,6 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <script>
 var fileStorageUrl = <?= json_encode($fileStorageUrl) ?>;
-var dashToken = <?= json_encode($dashToken) ?>;
 var selImei = <?= json_encode($selImei) ?>;
 var selChannel = <?= $selChannel ?>;
 
@@ -199,22 +200,37 @@ function selectRecording(el, rec) {
     }
 }
 
+// Formato de data JT/T: yyMMddHHmmss em GMT 0 (dias digitados são BRT/-03)
+function jttUtcCompact(dayStr, endOfDay) {
+    var d = new Date(dayStr + 'T' + (endOfDay ? '23:59:59' : '00:00:00') + '-03:00');
+    if (isNaN(d.getTime())) return '';
+    function p(n) { return String(n).padStart(2, '0'); }
+    return String(d.getUTCFullYear()).slice(2) + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) +
+           p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds());
+}
+
 function onSubmitRequest(e) {
     var imei = document.getElementById('pb-imei').value;
     var channel = document.querySelector('select[name=channel]').value;
-    if (imei) {
+    var from = document.querySelector('input[name=date_from]').value;
+    var to = document.querySelector('input[name=date_to]').value;
+    if (imei && from && to) {
+        // proNo 34818 (0x8802 — upload de mídia armazenada): mediaType 2 = vídeo.
+        // keepalive: o form navega logo em seguida e cancelaria o fetch.
         fetch('/sendcommand', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
+            keepalive: true,
             body: JSON.stringify({
                 imei: imei,
-                proNo: 34817,
+                proNo: 34818,
                 serverFlagId: 0,
                 content: JSON.stringify({
-                    channel: String(channel),
-                    beginTime: document.querySelector('input[name=date_from]').value + ' 00:00:00',
-                    endTime: document.querySelector('input[name=date_to]').value + ' 23:59:59',
-                    mediaType: '2'
+                    mediaType: 2,
+                    channel: Number(channel) || 1,
+                    eventCode: 0,
+                    beginTime: jttUtcCompact(from, false),
+                    endTime: jttUtcCompact(to, true)
                 })
             })
         }).catch(function(){});

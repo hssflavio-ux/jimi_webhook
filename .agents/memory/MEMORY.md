@@ -24,6 +24,7 @@
 - [feedback] Valoriza STATUS.md atualizado como artefato de handoff entre sessões → feedback-history.md
 
 ## Reference
+- [reference] VÍDEO AO VIVO (37121/0x9101): o comando manda o DEVICE PUBLICAR o RTP no media server — videoIP/videoTCPPort devem ser o endereço que o DEVICE alcança (IP público do servidor + porta ingest 10002), NUNCA window.location.hostname nem porta 0. dataType:0=vídeo. Usar helper video_stream_config() (flv_base saída FLV :8881; ingest_ip/port; playback_port 10003; overrides VIDEO_INGEST_IP/PORT no .env). FLV URL: STREAM_URL/{canal}/{imei}.flv. Player precisa RETRY (device leva 5–30s para publicar) — 1 tentativa única falha. Validado com JC182 real (2 MB FLV capturado). → tech-decisions.md
 - [reference] TIMEZONE: armazenar UTC, exibir BRT SEMPRE via fmt_brt(); filtros de dia via brt_day_range_to_utc(); defaults brt_today(); GROUP BY hora/dia via CONVERT_TZ(col,'+00:00','-03:00'); colunas DATE puras NÃO convertem → tech-decisions.md
 - [reference] Gateway auto-cria devices órfãos (customer_id NULL) na 1ª telemetria — cadastro em /ativos/novo ADOTA a linha (nunca recusar por COUNT global de IMEI) → tech-decisions.md
 - [reference] Resposta síncrona de comando vem no HTTP response do sendInstruct (data._content) → status 'executed' imediato; offline (_code 600) fica 'sent' até callback em /pushinstructresponse (objeto único §2.4, allowSingleObjectPayload) → tech-decisions.md

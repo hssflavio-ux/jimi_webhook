@@ -27,6 +27,12 @@ function fmt_brt_cmd($dt) {
 
 $dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 
+// Endereços que o DEVICE alcança para publicar streams / subir arquivos
+$vsc = video_stream_config();
+$fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+$fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
+$fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
+
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, COALESCE(dm.model_name, d.device_model, '-') AS model_display,
            COALESCE(dm.protocol, 'JIMI') AS protocol, COALESCE(dm.camera_count, 1) AS camera_count
@@ -203,10 +209,22 @@ var jimiPresets = {
 };
 
 var jttPresets = {
-    'streaming':     { proNo: 37121, content: '{"channelId":1,"mediaType":0,"streamType":0}', label: 'Streaming (CH1)' },
-    'video_upload':  { proNo: 128,   content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}', label: 'Upload de Vídeo' },
+    // 37121 (0x9101): device publica o RTP no media server do IoTHub — IP/porta do .env
+    'streaming':     { proNo: 37121, content: <?= json_encode(json_encode([
+                           'dataType' => 0, 'codeStreamType' => 0, 'channel' => '1',
+                           'videoIP' => $vsc['ingest_ip'], 'videoTCPPort' => $vsc['ingest_port'], 'videoUDPPort' => 0,
+                       ], JSON_UNESCAPED_SLASHES)) ?>, label: 'Streaming ao Vivo (CH1)' },
+    // Texto proNo 128: VIDEOUPLOAD,ip,porta,label_do_alarme,canais
+    'video_upload':  { proNo: 128,   content: <?= json_encode('VIDEOUPLOAD,' . $fsHost . ',' . $fsPort . ',ALARM_LABEL,1-2-3') ?>, label: 'Upload de Vídeo (texto)' },
     'resources':     { proNo: 37381, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}', label: 'Listar Recursos' },
-    'playback':      { proNo: 37377, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0,"playbackType":0,"speed":1}', label: 'Playback' },
+    // 37377 (0x9201): playback remoto — device envia o histórico para a porta de playback
+    'playback':      { proNo: 37377, content: <?= json_encode(json_encode([
+                           'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
+                           'tcpPort' => (int)$vsc['playback_port'], 'udpPort' => 0, 'channel' => 1,
+                           'resourceType' => 0, 'codeType' => 0, 'storageType' => 0,
+                           'playMethod' => 0, 'forwardRewind' => 0,
+                           'beginTime' => '', 'endTime' => '', 'instructionID' => '',
+                       ], JSON_UNESCAPED_SLASHES)) ?>, label: 'Playback (0x9201)' },
     'ftp_upload':    { proNo: 37382, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}', label: 'Upload FTP' },
     'alarm_ack':     { proNo: 33283, content: '{"alarmSerialNo":0}', label: 'Confirmar Alarme' },
     'tts':           { proNo: 33536, content: '{"text":"","volume":5}', label: 'TTS (Voz)' },
