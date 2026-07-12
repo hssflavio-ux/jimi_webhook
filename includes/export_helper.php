@@ -432,3 +432,63 @@ function export_mime_type(string $format): string
         default => 'text/csv; charset=utf-8',
     };
 }
+
+/**
+ * Limite de linhas do export síncrono dos relatórios (acima disso, usar a fila /exportar).
+ */
+const SYNC_EXPORT_MAX_ROWS = 10000;
+
+/**
+ * Gera um export síncrono (xlsx|pdf|csv) e envia ao browser, encerrando a request.
+ *
+ * Usado pelos botões "Exportar Excel/PDF" dos relatórios (padrão YUV §9.2):
+ * a MESMA query da grade (sem paginação) alimenta o arquivo. O chamador deve
+ * limitar as linhas a SYNC_EXPORT_MAX_ROWS.
+ *
+ * @param string   $format   xlsx|pdf|csv
+ * @param string   $basename Nome-base do arquivo (sem extensão)
+ * @param string[] $headers  Cabeçalhos das colunas
+ * @param iterable $rows     Linhas (arrays de escalares, mesma ordem dos headers)
+ * @param string   $title    Título (PDF)
+ * @param string   $subtitle Subtítulo/contexto (PDF)
+ * @returns void  Nunca retorna — emite o arquivo e dá exit
+ */
+function stream_export(string $format, string $basename, array $headers, iterable $rows, string $title = '', string $subtitle = ''): void
+{
+    $format = in_array($format, ['xlsx', 'pdf', 'csv'], true) ? $format : 'csv';
+    $safe   = preg_replace('/[^A-Za-z0-9_\-]/', '_', $basename) ?: 'relatorio';
+    $file   = $safe . '_' . date('Ymd_His') . '.' . $format;
+
+    if (ob_get_level()) ob_end_clean();
+
+    if ($format === 'csv') {
+        header('Content-Type: ' . export_mime_type('csv'));
+        header('Content-Disposition: attachment; filename="' . $file . '"');
+        $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF"); // BOM UTF-8 (Excel pt-BR)
+        fputcsv($out, $headers, ';');
+        foreach ($rows as $row) fputcsv($out, $row, ';');
+        fclose($out);
+        exit;
+    }
+
+    $tmp = tempnam(sys_get_temp_dir(), 'exp_');
+    $ok  = $format === 'xlsx'
+        ? generate_xlsx($headers, $rows, $tmp)
+        : generate_pdf($headers, $rows, $tmp, $title ?: $safe, $subtitle);
+
+    if (!$ok || !is_file($tmp) || filesize($tmp) === 0) {
+        @unlink($tmp);
+        http_response_code(500);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'Falha ao gerar o arquivo de exportação.';
+        exit;
+    }
+
+    header('Content-Type: ' . export_mime_type($format));
+    header('Content-Disposition: attachment; filename="' . $file . '"');
+    header('Content-Length: ' . filesize($tmp));
+    readfile($tmp);
+    @unlink($tmp);
+    exit;
+}

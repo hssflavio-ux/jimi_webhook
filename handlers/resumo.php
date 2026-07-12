@@ -74,8 +74,10 @@ if ($devTotal == 0 && $devActive == 0 && $devOnline == 0 && $devOffline == 0) {
 }
 
 // ── GPS Heatmap (always on-the-fly, last 2h) ─────────────────
+// Pulado no modo ajax=kpis (o polling de KPIs não precisa das posições)
 $gpsData = [];
 try {
+    if (($_GET['ajax'] ?? '') === 'kpis') throw new Exception('skip');
     $gpsRows = $db->prepare("
         SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                COALESCE(d.device_name, g.imei) as device_name
@@ -113,7 +115,7 @@ if ($spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
                 COUNT(*) as total
             FROM gps_data g
             JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-            WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.ignition = 1
+            WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
         ");
         $speedStmt->execute([':cid' => $customerId ?? 1]);
         $speedDist = $speedStmt->fetch();
@@ -126,55 +128,180 @@ if ($spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
 $speedTotal = $spdParados + $spdAte20 + $spdAte60 + $spdAcima60;
 $outTotal   = $outLt7d + $outGt7d + $outGt30d + $outNever;
 
-// ── Top clientes (revendedor only) ───────────────────────────
-$topCustomers = [];
+// ── D1 (v4.2.0 — YUV): Ociosidade (ignição ligada + parado, últimos 30 min) ──
+$idleCount = 0;
+try {
+    $idleStmt = $db->prepare("
+        SELECT COUNT(DISTINCT g.imei) FROM gps_data g
+        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
+        WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1 AND g.speed = 0
+    ");
+    $idleStmt->execute([':cid' => $customerId ?? 1]);
+    $idleCount = (int)$idleStmt->fetchColumn();
+} catch (Exception $e) {}
+
+// ── D1: Status de Equipamentos por modelo (on/off) ──────────
+$modelStatus = [];
+try {
+    $modelStmt = $db->prepare("
+        SELECT COALESCE(dm.model_name, d.device_model, '—') as model,
+               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as on_cnt,
+               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) > 5 OR d.last_communication IS NULL THEN 1 ELSE 0 END) as off_cnt
+        FROM devices d
+        LEFT JOIN device_models dm ON dm.id = d.device_model_id
+        WHERE d.customer_id = :cid AND d.is_active = 1
+        GROUP BY model ORDER BY (on_cnt + off_cnt) DESC LIMIT 6
+    ");
+    $modelStmt->execute([':cid' => $customerId ?? 1]);
+    $modelStatus = $modelStmt->fetchAll();
+} catch (Exception $e) {}
+
+// ── D1: auto-refresh dos KPIs sem reload ────────────────────
+if (($_GET['ajax'] ?? '') === 'kpis') {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['code' => 0, 'kpis' => [
+        'dev'  => "$devActive/$devTotal",
+        'on'   => (int)$devOnline, 'off' => (int)$devOffline,
+        'occ'  => (int)$occTotal, 'occ_waiting' => (int)$occWaiting,
+        'out'  => (int)$outTotal, 'out_gt7d' => (int)$outGt7d, 'out_never' => (int)$outNever,
+        'idle' => $idleCount,
+    ]], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ── D1: Visão por clientes — 3 eixos Top 3 (revendedor) ──────
+$topByDevices = $topByOccs = $topByOutdated = [];
 if ($isReseller) {
     try {
-        $topCustomers = $db->query("
-            SELECT c.name, COUNT(d.id) as dev_count,
-                   (SELECT COUNT(*) FROM occurrences o WHERE o.customer_id = c.id) as occ_count
+        $topByDevices = $db->query("
+            SELECT c.name, COUNT(d.id) as cnt
             FROM customers c
             LEFT JOIN devices d ON d.customer_id = c.id AND d.is_active = 1
             WHERE c.is_active = 1
-            GROUP BY c.id ORDER BY dev_count DESC LIMIT 5
+            GROUP BY c.id ORDER BY cnt DESC LIMIT 3
+        ")->fetchAll();
+    } catch (Exception $e) {}
+    try {
+        $topByOccs = $db->query("
+            SELECT c.name, COUNT(o.id) as cnt
+            FROM customers c
+            JOIN occurrences o ON o.customer_id = c.id
+            WHERE c.is_active = 1
+            GROUP BY c.id ORDER BY cnt DESC LIMIT 3
+        ")->fetchAll();
+    } catch (Exception $e) {}
+    try {
+        $topByOutdated = $db->query("
+            SELECT c.name, COUNT(*) as cnt
+            FROM customers c
+            JOIN devices d ON d.customer_id = c.id AND d.is_active = 1
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            WHERE c.is_active = 1
+              AND (ds.last_gps_time IS NULL OR ds.last_gps_time < DATE_SUB(NOW(), INTERVAL 7 DAY))
+            GROUP BY c.id ORDER BY cnt DESC LIMIT 3
         ")->fetchAll();
     } catch (Exception $e) {}
 }
 
-// ── Charts: alarmes + ocorrências hoje (hora-a-hora) ─────────
-// "Hoje" e horas em BRT (banco em UTC): início do dia local em UTC +
-// hora local via CONVERT_TZ com offset fixo (não requer tz tables)
-[$todayStartUtc, ] = brt_day_range_to_utc(brt_today(), brt_today());
+// ── D1: Séries temporais com toggle Hoje / 7 dias / Mês ──────
+// Buckets em BRT (banco UTC): hora local (hoje) ou dia local (7d/mês)
+$periodo = $_GET['periodo'] ?? 'hoje';
+if (!in_array($periodo, ['hoje', '7d', 'mes'], true)) $periodo = 'hoje';
 
-$alarmsHourly = [];
+if ($periodo === 'hoje') {
+    [$seriesStartUtc, ] = brt_day_range_to_utc(brt_today(), brt_today());
+    $bucketFmt = "HOUR(CONVERT_TZ(%s, '+00:00', '-03:00'))";
+    $seriesLabels = [];
+    for ($h = 0; $h < 24; $h++) $seriesLabels[] = str_pad((string)$h, 2, '0', STR_PAD_LEFT);
+} else {
+    $daysBack = $periodo === '7d' ? 6 : 29;
+    $firstDay = date('Y-m-d', strtotime(brt_today() . " -$daysBack days"));
+    [$seriesStartUtc, ] = brt_day_range_to_utc($firstDay, brt_today());
+    $bucketFmt = "DATE_FORMAT(CONVERT_TZ(%s, '+00:00', '-03:00'), '%%d/%%m')";
+    $seriesLabels = [];
+    for ($i = $daysBack; $i >= 0; $i--) {
+        $seriesLabels[] = date('d/m', strtotime(brt_today() . " -$i days"));
+    }
+}
+
+$labelIndex = array_flip($seriesLabels);
+$aVals = array_fill(0, count($seriesLabels), 0);
+$oVals = array_fill(0, count($seriesLabels), 0);
+
 try {
-    $alarmsToday = $db->prepare("
-        SELECT HOUR(CONVERT_TZ(alarm_time, '+00:00', '-03:00')) as hr, COUNT(*) as cnt
+    $stmt = $db->prepare("
+        SELECT " . sprintf($bucketFmt, 'a.alarm_time') . " as bk, COUNT(*) as cnt
         FROM alarms a
         JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
         WHERE a.alarm_time >= :ts
-        GROUP BY hr ORDER BY hr
+        GROUP BY bk
     ");
-    $alarmsToday->execute([':cid' => $customerId ?? 1, ':ts' => $todayStartUtc]);
-    $alarmsHourly = $alarmsToday->fetchAll();
+    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    while ($r = $stmt->fetch()) {
+        $bk = $periodo === 'hoje' ? str_pad((string)$r['bk'], 2, '0', STR_PAD_LEFT) : $r['bk'];
+        if (isset($labelIndex[$bk])) $aVals[$labelIndex[$bk]] = (int)$r['cnt'];
+    }
 } catch (Exception $e) {}
 
-$occsHourly = [];
 try {
-    $occsToday = $db->prepare("
-        SELECT HOUR(CONVERT_TZ(first_alarm_at, '+00:00', '-03:00')) as hr, COUNT(*) as cnt
+    $stmt = $db->prepare("
+        SELECT " . sprintf($bucketFmt, 'first_alarm_at') . " as bk, COUNT(*) as cnt
         FROM occurrences
         WHERE customer_id = :cid AND first_alarm_at >= :ts
-        GROUP BY hr ORDER BY hr
+        GROUP BY bk
     ");
-    $occsToday->execute([':cid' => $customerId ?? 1, ':ts' => $todayStartUtc]);
-    $occsHourly = $occsToday->fetchAll();
+    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    while ($r = $stmt->fetch()) {
+        $bk = $periodo === 'hoje' ? str_pad((string)$r['bk'], 2, '0', STR_PAD_LEFT) : $r['bk'];
+        if (isset($labelIndex[$bk])) $oVals[$labelIndex[$bk]] = (int)$r['cnt'];
+    }
 } catch (Exception $e) {}
+
+$alarmsTotal = array_sum($aVals);
+$occsTotal   = array_sum($oVals);
+$periodLabel = ['hoje' => 'Hoje', '7d' => 'Últimos 7 dias', 'mes' => 'Último mês'][$periodo];
+
+// ── D1: Top 3 placas com mais alarmes (período das séries) ───
+$topPlates = [];
+try {
+    $stmt = $db->prepare("
+        SELECT COALESCE(d.device_name, a.imei) as name, COUNT(*) as cnt
+        FROM alarms a
+        JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+        WHERE a.alarm_time >= :ts
+        GROUP BY a.imei, name ORDER BY cnt DESC LIMIT 3
+    ");
+    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    $topPlates = $stmt->fetchAll();
+} catch (Exception $e) {}
+
+// ── D1: Top 3 motoristas (exige FaceID do cliente — senão upsell) ──
+$faceidEnabled = false;
+$topDrivers = [];
+try {
+    $stmt = $db->prepare("SELECT faceid_enabled FROM customers WHERE id = :cid");
+    $stmt->execute([':cid' => $customerId ?? 1]);
+    $faceidEnabled = (bool)$stmt->fetchColumn();
+} catch (Exception $e) {}
+if ($faceidEnabled) {
+    try {
+        $stmt = $db->prepare("
+            SELECT dr.name, COUNT(*) as cnt
+            FROM occurrences o
+            JOIN drivers dr ON dr.id = o.driver_id
+            WHERE o.customer_id = :cid AND o.first_alarm_at >= :ts
+            GROUP BY dr.id ORDER BY cnt DESC LIMIT 3
+        ");
+        $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+        $topDrivers = $stmt->fetchAll();
+    } catch (Exception $e) {}
+}
 
 $page_title = 'Resumo';
 $current_route = 'resumo';
 $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 #heatmap-map{height:360px;border-radius:var(--radius-lg);border:1px solid var(--hairline);}
@@ -204,25 +331,29 @@ require_once __DIR__ . '/../web/layout_base.php';
     <span class="announce-close" onclick="dismissBanner()">&times;</span>
 </div>
 
-<!-- ═══════ KPIs ═══════ -->
+<!-- ═══════ KPIs (auto-refresh 30s via ?ajax=kpis) ═══════ -->
+<div class="flex-between mb-8">
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Tempo real</span>
+    <button class="btn btn-outline btn-sm" onclick="localStorage.removeItem('jimi_tour_seen_v4');location.reload();">Ver tutorial</button>
+</div>
 <div class="kpi-grid">
     <div class="kpi-item">
         <div class="kpi-item-label">Equipamentos</div>
-        <div class="kpi-item-value"><?= $devActive ?>/<?= $devTotal ?></div>
+        <div class="kpi-item-value" id="kpi-dev"><?= $devActive ?>/<?= $devTotal ?></div>
         <div class="kpi-item-delta">ativos</div>
     </div>
     <div class="kpi-item">
         <div class="kpi-item-label">Conectividade</div>
-        <div class="kpi-item-value">On <span style="color:var(--success);"><?= $devOnline ?></span> / Off <span style="color:var(--error);"><?= $devOffline ?></span></div>
+        <div class="kpi-item-value">On <span style="color:var(--success);" id="kpi-on"><?= $devOnline ?></span> / Off <span style="color:var(--error);" id="kpi-off"><?= $devOffline ?></span></div>
     </div>
     <div class="kpi-item">
         <div class="kpi-item-label">Ocorrências</div>
-        <div class="kpi-item-value"><?= $occTotal ?> <span style="font-size:16px;font-weight:400;color:var(--warning);">(<?= $occWaiting ?> aguardando)</span></div>
+        <div class="kpi-item-value"><span id="kpi-occ"><?= $occTotal ?></span> <span style="font-size:16px;font-weight:400;color:var(--warning);">(<span id="kpi-occ-w"><?= $occWaiting ?></span> aguardando)</span></div>
     </div>
     <div class="kpi-item">
         <div class="kpi-item-label">Desatualizados</div>
-        <div class="kpi-item-value"><?= $outTotal ?></div>
-        <div class="kpi-item-delta">+7d: <?= $outGt7d ?> · Nunca: <?= $outNever ?></div>
+        <div class="kpi-item-value" id="kpi-out"><?= $outTotal ?></div>
+        <div class="kpi-item-delta">+7d: <span id="kpi-out7"><?= $outGt7d ?></span> · Nunca: <span id="kpi-outn"><?= $outNever ?></span></div>
     </div>
 </div>
 
@@ -290,32 +421,120 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
-<!-- ═══════ Visão por Clientes ═══════ -->
-<?php if ($isReseller && !empty($topCustomers)): ?>
-<div class="card mb-24" style="padding:16px;">
-    <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px;">Top Clientes por Equipamentos</h4>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:12px;">
-        <?php foreach ($topCustomers as $tc): ?>
-        <div style="padding:12px;border:1px solid var(--hairline-soft);border-radius:var(--radius-sm);">
-            <div style="font-size:13px;font-weight:600;color:var(--ink);"><?= htmlspecialchars($tc['name']) ?></div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px;">
-                <?= $tc['dev_count'] ?> dispositivos · <?= $tc['occ_count'] ?> ocorrências
+<!-- ═══════ Operação em Tempo Real: Ociosidade + Status por Modelo ═══════ -->
+<div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:24px;">
+    <div class="card" style="padding:16px;">
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">Ociosidade</h4>
+        <div class="kpi-item-value" id="kpi-idle" style="font-size:28px;"><?= $idleCount ?></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px;">veículo(s) com ignição ligada e parados (últimos 30 min)</div>
+    </div>
+    <div class="card" style="padding:16px;">
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">Status de Equipamentos por Modelo</h4>
+        <?php if (empty($modelStatus)): ?>
+        <p class="text-muted" style="font-size:12px;">Sem equipamentos cadastrados.</p>
+        <?php else: foreach ($modelStatus as $ms):
+            $msTotal = (int)$ms['on_cnt'] + (int)$ms['off_cnt'];
+            $msPct = $msTotal > 0 ? round($ms['on_cnt'] / $msTotal * 100) : 0;
+        ?>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:600;color:var(--ink);min-width:80px;"><?= htmlspecialchars($ms['model']) ?></span>
+            <div style="flex:1;height:8px;border-radius:4px;background:var(--surface-strong);overflow:hidden;">
+                <div style="width:<?= $msPct ?>%;height:100%;background:var(--success);"></div>
             </div>
+            <span style="font-size:11px;color:var(--muted);white-space:nowrap;">
+                <span style="color:var(--success);">✓ <?= (int)$ms['on_cnt'] ?></span>
+                <span style="color:var(--error);margin-left:4px;">✗ <?= (int)$ms['off_cnt'] ?></span>
+                · <?= $msPct ?>% online
+            </span>
+        </div>
+        <?php endforeach; endif; ?>
+    </div>
+</div>
+
+<!-- ═══════ Visão por Clientes (3 eixos Top 3 — revendedor) ═══════ -->
+<?php if ($isReseller): ?>
+<div class="card mb-24" style="padding:16px;">
+    <div class="flex-between mb-12">
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Visão por Clientes</h4>
+        <span class="badge badge-primary" style="font-size:10px;">Perfil revendedor</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;">
+        <?php
+        $axes = [
+            ['Top 3 por equipamentos ativos', $topByDevices],
+            ['Top 3 por ocorrências', $topByOccs],
+            ['Top 3 por desatualizados', $topByOutdated],
+        ];
+        foreach ($axes as [$axTitle, $axRows]): ?>
+        <div style="padding:12px;border:1px solid var(--hairline-soft);border-radius:var(--radius-sm);">
+            <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;"><?= $axTitle ?></div>
+            <?php if (empty($axRows)): ?>
+            <div style="font-size:12px;color:var(--muted);">Sem dados.</div>
+            <?php else: foreach ($axRows as $i => $r): ?>
+            <div class="flex-between" style="font-size:13px;padding:3px 0;">
+                <span><span style="color:var(--muted);font-size:11px;margin-right:6px;"><?= $i + 1 ?>º</span><?= htmlspecialchars($r['name']) ?></span>
+                <span class="text-mono" style="font-weight:600;"><?= (int)$r['cnt'] ?></span>
+            </div>
+            <?php endforeach; endif; ?>
         </div>
         <?php endforeach; ?>
     </div>
 </div>
 <?php endif; ?>
 
-<!-- ═══════ Séries Temporais ═══════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+<!-- ═══════ Séries Temporais (toggle Hoje/7d/Mês) ═══════ -->
+<div class="flex-between mb-8">
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Dados temporais</span>
+    <div class="flex" style="gap:0;">
+        <a href="?periodo=hoje" class="btn btn-sm <?= $periodo==='hoje'?'btn-primary':'btn-outline' ?>" style="border-radius:var(--radius-pill) 0 0 var(--radius-pill);">Hoje</a>
+        <a href="?periodo=7d" class="btn btn-sm <?= $periodo==='7d'?'btn-primary':'btn-outline' ?>" style="border-radius:0;">Últimos 7 dias</a>
+        <a href="?periodo=mes" class="btn btn-sm <?= $periodo==='mes'?'btn-primary':'btn-outline' ?>" style="border-radius:0 var(--radius-pill) var(--radius-pill) 0;">Último mês</a>
+    </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
     <div class="card" style="padding:16px;">
-        <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Alarmes Hoje</h4>
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Alarmes — <?= $periodLabel ?>
+            <span class="text-mono" style="font-size:22px;font-weight:600;display:block;margin-top:2px;"><?= $alarmsTotal ?></span>
+        </h4>
         <div class="chart-box"><canvas id="chart-alarms"></canvas></div>
     </div>
     <div class="card" style="padding:16px;">
-        <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Ocorrências Hoje</h4>
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Ocorrências — <?= $periodLabel ?>
+            <span class="text-mono" style="font-size:22px;font-weight:600;display:block;margin-top:2px;"><?= $occsTotal ?></span>
+        </h4>
         <div class="chart-box"><canvas id="chart-occs"></canvas></div>
+    </div>
+</div>
+
+<!-- ═══════ Alarmes por placa e motoristas ═══════ -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+    <div class="card" style="padding:16px;">
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px;">Top 3 placas com mais alarmes</h4>
+        <?php if (empty($topPlates)): ?>
+        <p class="text-muted" style="font-size:12px;">Nenhum alarme no período.</p>
+        <?php else: foreach ($topPlates as $i => $tp): ?>
+        <div class="flex-between" style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--hairline-soft);">
+            <span><span style="color:var(--muted);font-size:11px;margin-right:6px;"><?= $i + 1 ?>º</span><?= htmlspecialchars($tp['name']) ?></span>
+            <span class="text-mono" style="font-weight:600;"><?= (int)$tp['cnt'] ?></span>
+        </div>
+        <?php endforeach; endif; ?>
+    </div>
+    <div class="card" style="padding:16px;">
+        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px;">Top 3 motoristas com mais alarmes</h4>
+        <?php if (!$faceidEnabled): ?>
+        <div style="text-align:center;padding:16px 8px;color:var(--muted);font-size:12px;">
+            <div style="font-size:24px;margin-bottom:6px;">🪪</div>
+            Nenhum alarme por motorista neste período.<br>
+            Para exibir este ranking, habilite o <strong>FaceID</strong> na frota (Cadastros → Clientes).
+        </div>
+        <?php elseif (empty($topDrivers)): ?>
+        <p class="text-muted" style="font-size:12px;">Nenhuma ocorrência atribuída a motorista no período.</p>
+        <?php else: foreach ($topDrivers as $i => $td): ?>
+        <div class="flex-between" style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--hairline-soft);">
+            <span><span style="color:var(--muted);font-size:11px;margin-right:6px;"><?= $i + 1 ?>º</span><?= htmlspecialchars($td['name']) ?></span>
+            <span class="text-mono" style="font-weight:600;"><?= (int)$td['cnt'] ?></span>
+        </div>
+        <?php endforeach; endif; ?>
     </div>
 </div>
 
@@ -397,28 +616,31 @@ function dismissBanner() {
     var map = L.map(container);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(map);
     var bounds = [];
+    var heatPoints = [];
     data.forEach(function(p) {
         var lat = parseFloat(p.latitude), lng = parseFloat(p.longitude);
         if (lat && lng && lat !== 0) {
             bounds.push([lat, lng]);
+            heatPoints.push([lat, lng, 0.6]);
             L.circleMarker([lat, lng], {
-                radius: 4, color: '#0052ff', fillColor: '#0052ff', fillOpacity: 0.4, weight: 1
+                radius: 3, color: '#0052ff', fillColor: '#0052ff', fillOpacity: 0.25, weight: 1
             }).addTo(map).bindPopup(p.device_name + '<br>' + (p.speed||0) + ' km/h');
         }
     });
+    // D1 (YUV): camada de calor real (leaflet.heat via CDN)
+    if (heatPoints.length > 0 && typeof L.heatLayer === 'function') {
+        L.heatLayer(heatPoints, {radius: 22, blur: 18, maxZoom: 15}).addTo(map);
+    }
     if (bounds.length > 0) map.fitBounds(bounds);
     else map.setView([-15.78, -47.93], 5);
     setTimeout(function() { map.invalidateSize(); }, 200);
 })();
 
-// ── Charts ───────────────────────────────────────────────────
+// ── Charts (labels do período selecionado — Hoje/7d/Mês) ─────
 (function() {
-    var hours = ['00','01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23'];
-    var alarmData = <?= json_encode($alarmsHourly) ?>;
-    var occData = <?= json_encode($occsHourly) ?>;
-    var aVals = Array(24).fill(0), oVals = Array(24).fill(0);
-    alarmData.forEach(function(r) { aVals[parseInt(r.hr)] = parseInt(r.cnt); });
-    occData.forEach(function(r) { oVals[parseInt(r.hr)] = parseInt(r.cnt); });
+    var hours = <?= json_encode($seriesLabels) ?>;
+    var aVals = <?= json_encode($aVals) ?>;
+    var oVals = <?= json_encode($oVals) ?>;
 
     function makeChart(canvasId, label, values, color) {
         return new Chart(document.getElementById(canvasId), {
@@ -437,6 +659,20 @@ function dismissBanner() {
     makeChart('chart-alarms', 'Alarmes', aVals, 'rgba(0,82,255,0.7)');
     makeChart('chart-occs', 'Ocorrências', oVals, 'rgba(244,176,0,0.7)');
 })();
+
+// ── D1: auto-refresh 30s dos KPIs (sem reload) ───────────────
+setInterval(function() {
+    fetch('/?ajax=kpis').then(function(r) { return r.json(); }).then(function(resp) {
+        if (!resp || resp.code !== 0) return;
+        var k = resp.kpis;
+        function set(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; }
+        set('kpi-dev', k.dev);
+        set('kpi-on', k.on); set('kpi-off', k.off);
+        set('kpi-occ', k.occ); set('kpi-occ-w', k.occ_waiting);
+        set('kpi-out', k.out); set('kpi-out7', k.out_gt7d); set('kpi-outn', k.out_never);
+        set('kpi-idle', k.idle);
+    }).catch(function() {});
+}, 30000);
 </script>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

@@ -22,6 +22,8 @@ $messageType = '';
 // ── POST: Create/Update ─────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+    // RBAC ação fina (v4.2.0 — Fase B2): import/create → create; edit → edit
+    require_permission('equipamentos', in_array($action, ['import_batch', 'create'], true) ? 'create' : 'edit');
 
     // ── Batch Import ─────────────────────────────────────────
     if ($action === 'import_batch') {
@@ -33,26 +35,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $messageType = 'error';
         } else {
             $imported = 0; $skipped = 0;
+            $importErrors = [];
+            // B6 (YUV): resolve Modelo por nome (case-insensitive) e Canais do CSV
+            $modelMap = [];
+            foreach ($db->query("SELECT id, model_name, camera_count FROM device_models")->fetchAll() as $m) {
+                $modelMap[mb_strtolower(trim($m['model_name']))] = $m;
+            }
             $checkStmt = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei");
             $insertStmt = $db->prepare("
-                INSERT INTO devices (imei, device_name, customer_id, is_active, streaming_rotation, streaming_watermark, firmware_version, camera_count)
-                VALUES (:imei, :name, :cid, 1, 0, 0, :fw, 1)
+                INSERT INTO devices (imei, device_name, customer_id, is_active, streaming_rotation, streaming_watermark, firmware_version, camera_count, device_model_id)
+                VALUES (:imei, :name, :cid, 1, 0, 0, :fw, :cam, :mid)
             ");
-            foreach ($devicesData as $d) {
+            foreach ($devicesData as $idx => $d) {
+                $line = $idx + 2; // linha do CSV (1 = cabeçalho)
                 $imei = trim($d['imei'] ?? '');
                 $name = trim($d['name'] ?? '');
-                if (!$imei) { $skipped++; continue; }
+                if (!preg_match('/^\d{15,17}$/', $imei)) {
+                    $skipped++; $importErrors[] = "linha $line: IMEI inválido"; continue;
+                }
                 $checkStmt->execute([':imei' => $imei]);
-                if ($checkStmt->fetchColumn() > 0) { $skipped++; continue; }
+                if ($checkStmt->fetchColumn() > 0) {
+                    $skipped++; $importErrors[] = "linha $line: IMEI $imei já cadastrado"; continue;
+                }
+                $modelKey = mb_strtolower(trim($d['model'] ?? ''));
+                $model = $modelKey !== '' ? ($modelMap[$modelKey] ?? null) : null;
+                if ($modelKey !== '' && !$model) {
+                    $importErrors[] = "linha $line: modelo \"" . trim($d['model']) . "\" desconhecido (importado sem modelo)";
+                }
+                $channels = (int)($d['channels'] ?? 0);
                 $insertStmt->execute([
                     ':imei' => $imei,
                     ':name' => $name ?: $imei,
                     ':cid'  => $customerId ?? 1,
                     ':fw'   => trim($d['firmware'] ?? '') ?: null,
+                    ':cam'  => $channels > 0 ? $channels : (int)($model['camera_count'] ?? 1),
+                    ':mid'  => $model['id'] ?? null,
                 ]);
                 $imported++;
             }
-            $message = "$imported importado(s), $skipped ignorado(s) (IMEI duplicado ou inválido).";
+            $message = "$imported importado(s), $skipped ignorado(s).";
+            if ($importErrors) {
+                $message .= ' Avisos: ' . implode('; ', array_slice($importErrors, 0, 10))
+                          . (count($importErrors) > 10 ? ' (+' . (count($importErrors) - 10) . ')' : '');
+            }
             $messageType = $imported > 0 ? 'success' : 'warning';
         }
     }
@@ -164,29 +189,100 @@ if ($filterSearch) {
     $params[':q2'] = "%$filterSearch%";
 }
 
+// Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('equipamentos', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expRows = [];
+    try {
+        $expStmt = $db->prepare("
+            SELECT d.imei, d.device_name, d.is_active, d.last_communication,
+                   d.peripherals, d.firmware_version,
+                   dm.model_name, c.name as customer_name,
+                   sc.msisdn as chip_msisdn, ds.battery_level,
+                   CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+            FROM devices d
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            LEFT JOIN customers c ON c.id = d.customer_id
+            LEFT JOIN sim_cards sc ON sc.imei = d.imei AND sc.is_active = 1
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            $where
+            ORDER BY d.is_active DESC, d.device_name ASC
+            LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($params);
+        while ($r = $expStmt->fetch()) {
+            $periph = $r['peripherals'] ? implode(', ', (array)json_decode($r['peripherals'], true)) : '—';
+            $expRows[] = [
+                $r['imei'],
+                $r['device_name'] ?? '—',
+                $r['model_name'] ?? '—',
+                $r['customer_name'] ?? '—',
+                $r['chip_msisdn'] ?? '—',
+                $r['last_communication'] ? fmt_brt($r['last_communication']) : '—',
+                $r['battery_level'] !== null ? (int)$r['battery_level'] . '%' : '—',
+                $r['firmware_version'] ?? '—',
+                $periph,
+                $r['is_online'] ? 'Online' : 'Offline',
+                $r['is_active'] ? 'Ativo' : 'Inativo',
+            ];
+        }
+    } catch (Exception $e) { /* tabelas v4 ausentes → export vazio */ }
+    stream_export($export, 'equipamentos',
+        ['IMEI', 'Nome', 'Modelo', 'Cliente', 'Chip', 'Último Heartbeat', 'Bateria', 'Firmware', 'Periféricos', 'Situação', 'Status'],
+        $expRows, 'Equipamentos');
+}
+
 $countStmt = $db->prepare("SELECT COUNT(*) FROM devices d $where");
 $countStmt->execute($params);
 $totalRows = (int)$countStmt->fetchColumn();
 $totalPages = max(1, ceil($totalRows / $perPage));
 $offset = ($page - 1) * $perPage;
 
-$devicesStmt = $db->prepare("
-    SELECT d.imei, d.device_name, d.device_model, d.is_active,
-           d.last_communication, d.peripherals, d.streaming_rotation,
-           d.streaming_watermark, d.firmware_version, d.branch_id,
-           d.created_at,
-           dm.model_name, dm.camera_count, dm.protocol,
-           c.name as customer_name,
-           CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
-    FROM devices d
-    LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    LEFT JOIN customers c ON c.id = d.customer_id
-    $where
-    ORDER BY d.is_active DESC, d.device_name ASC
-    LIMIT $perPage OFFSET $offset
-");
-$devicesStmt->execute($params);
-$devices = $devicesStmt->fetchAll();
+// B5 (YUV): Chip (sim_cards) e Bateria (device_statistics) na grade
+try {
+    $devicesStmt = $db->prepare("
+        SELECT d.imei, d.device_name, d.device_model, d.is_active,
+               d.last_communication, d.peripherals, d.streaming_rotation,
+               d.streaming_watermark, d.firmware_version, d.branch_id,
+               d.created_at,
+               dm.model_name, dm.camera_count, dm.protocol,
+               c.name as customer_name,
+               sc.msisdn as chip_msisdn,
+               ds.battery_level,
+               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+        FROM devices d
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN customers c ON c.id = d.customer_id
+        LEFT JOIN sim_cards sc ON sc.imei = d.imei AND sc.is_active = 1
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        $where
+        ORDER BY d.is_active DESC, d.device_name ASC
+        LIMIT $perPage OFFSET $offset
+    ");
+    $devicesStmt->execute($params);
+    $devices = $devicesStmt->fetchAll();
+} catch (Exception $e) {
+    // sim_cards/device_statistics ausentes (schema antigo) → grade sem chip/bateria
+    $devicesStmt = $db->prepare("
+        SELECT d.imei, d.device_name, d.device_model, d.is_active,
+               d.last_communication, d.peripherals, d.streaming_rotation,
+               d.streaming_watermark, d.firmware_version, d.branch_id,
+               d.created_at,
+               dm.model_name, dm.camera_count, dm.protocol,
+               c.name as customer_name,
+               NULL as chip_msisdn, NULL as battery_level,
+               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+        FROM devices d
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN customers c ON c.id = d.customer_id
+        $where
+        ORDER BY d.is_active DESC, d.device_name ASC
+        LIMIT $perPage OFFSET $offset
+    ");
+    $devicesStmt->execute($params);
+    $devices = $devicesStmt->fetchAll();
+}
 
 // Dropdowns
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
@@ -359,7 +455,9 @@ require_once __DIR__ . '/../web/layout_base.php';
         <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= $totalRows ?>)</span>
     </h2>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="btn btn-outline btn-sm" onclick="alert('Export Excel em desenvolvimento')">Exportar Excel</button>
+        <?php $expQ = $_GET; unset($expQ['page'], $expQ['export'], $expQ['action']); $expBase = http_build_query($expQ); ?>
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
         <a href="?action=novo" class="btn btn-primary btn-sm">+ Cadastrar</a>
         <button class="btn btn-outline btn-sm" onclick="showFirmwareModal()">Atualizar Firmware</button>
         <button class="btn btn-outline btn-sm" onclick="showImportModal()">Importar em Lote</button>
@@ -424,7 +522,10 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Nome</th>
                 <th>Modelo</th>
                 <th>Cliente</th>
+                <th>Chip</th>
                 <th>Último Heartbeat</th>
+                <th>Bateria</th>
+                <th>Periféricos</th>
                 <th>Situação</th>
                 <th>Status</th>
                 <th style="text-align:center;">Ações</th>
@@ -432,7 +533,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($devices)): ?>
-            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
+            <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
             <?php else: ?>
             <?php foreach ($devices as $d): ?>
             <tr>
@@ -445,8 +546,17 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php endif; ?>
                 </td>
                 <td><?= htmlspecialchars($d['customer_name'] ?? '—') ?></td>
+                <td class="text-mono" style="font-size:12px;"><?= htmlspecialchars($d['chip_msisdn'] ?? '—') ?></td>
                 <td class="text-mono" style="font-size:12px;">
                     <?= $d['last_communication'] ? fmt_brt($d['last_communication']) : 'Nunca' ?>
+                </td>
+                <td class="text-mono" style="font-size:12px;"><?= $d['battery_level'] !== null ? (int)$d['battery_level'] . '%' : '—' ?></td>
+                <td>
+                    <?php
+                    $periphArr = $d['peripherals'] ? (array)json_decode($d['peripherals'], true) : [];
+                    if ($periphArr): ?>
+                    <span class="badge" title="<?= htmlspecialchars(implode(', ', $periphArr)) ?>"><?= count($periphArr) ?> perif.</span>
+                    <?php else: echo '—'; endif; ?>
                 </td>
                 <td>
                     <?php if ($d['is_online']): ?>
@@ -555,7 +665,7 @@ function submitFirmware() {
     if (!imei) { alert('Informe o IMEI'); return; }
     fetch('/sendcommand', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
         body: JSON.stringify({imei: imei, proNo: 33027, content: JSON.stringify({firmware_url: url || ''})})
     }).then(function(r) { return r.json(); }).then(function(d) {
         alert(d.code === 0 ? 'Comando de firmware enviado.' : 'Erro: ' + (d.msg || d.iothub_msg));
@@ -580,6 +690,7 @@ function submitImport() {
                 imei: cols[0].trim(),
                 name: (cols[1] || '').trim(),
                 model: (cols[2] || '').trim(),
+                channels: (cols[3] || '').trim(),
                 firmware: (cols[4] || '').trim()
             });
         }

@@ -219,7 +219,7 @@ function onSubmitRequest(e) {
         // keepalive: o form navega logo em seguida e cancelaria o fetch.
         fetch('/sendcommand', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
             keepalive: true,
             body: JSON.stringify({
                 imei: imei,

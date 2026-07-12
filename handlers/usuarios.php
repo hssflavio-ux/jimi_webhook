@@ -23,6 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
     $id = (int)($_POST['id'] ?? 0);
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('usuarios', ($action === 'toggle' || $id > 0) ? 'edit' : 'create');
 
     if ($action === 'toggle') {
         if ($id === (int)$currentUser['id']) {
@@ -88,33 +90,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── List ──────────────────────────────────────────────────────
-if ($tab === 'clientes') {
-    $users = $db->query("
-        SELECT u.*, GROUP_CONCAT(c.name SEPARATOR ', ') AS customer_names
-        FROM users u
-        LEFT JOIN customer_users cu ON cu.user_id = u.id
-        LEFT JOIN customers c ON c.id = cu.customer_id
-        WHERE u.user_type = 'cliente' OR u.user_type IS NULL
-        GROUP BY u.id ORDER BY u.name
-    ")->fetchAll();
-} else {
-    $users = $db->query("
-        SELECT u.*, GROUP_CONCAT(c.name SEPARATOR ', ') AS customer_names
-        FROM users u
-        LEFT JOIN customer_users cu ON cu.user_id = u.id
-        LEFT JOIN customers c ON c.id = cu.customer_id
-        WHERE u.user_type = 'revendedor'
-        GROUP BY u.id ORDER BY u.name
-    ")->fetchAll();
+// ── List (Fase C: busca + export) ────────────────────────────
+$q = trim($_GET['q'] ?? '');
+$typeWhere = $tab === 'clientes' ? "(u.user_type = 'cliente' OR u.user_type IS NULL)" : "u.user_type = 'revendedor'";
+$listParams = [];
+if ($q !== '') {
+    $typeWhere .= " AND (u.name LIKE :q1 OR u.email LIKE :q2)";
+    $listParams[':q1'] = "%$q%";
+    $listParams[':q2'] = "%$q%";
 }
+$listStmt = $db->prepare("
+    SELECT u.*, GROUP_CONCAT(c.name SEPARATOR ', ') AS customer_names
+    FROM users u
+    LEFT JOIN customer_users cu ON cu.user_id = u.id
+    LEFT JOIN customers c ON c.id = cu.customer_id
+    WHERE $typeWhere
+    GROUP BY u.id ORDER BY u.name
+");
+$listStmt->execute($listParams);
+$users = $listStmt->fetchAll();
 
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name")->fetchAll();
 $permGroups = [];
 try {
     $permGroups = $db->query("SELECT id, name, user_type FROM permission_groups ORDER BY name")->fetchAll();
 } catch (Exception $e) {}
+$pgNames = array_column($permGroups, 'name', 'id');
 $roleLabels = ['admin' => 'Administrador', 'operator' => 'Operador', 'viewer' => 'Visualizador'];
+
+// Export síncrono (Fase C)
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('usuarios', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expRows = [];
+    foreach ($users as $u) {
+        $expRows[] = [
+            $u['name'] ?? '—',
+            $u['email'] ?? '—',
+            $roleLabels[$u['role'] ?? ''] ?? ($u['role'] ?? '—'),
+            $u['user_type'] === 'revendedor' ? 'Revendedor' : 'Cliente',
+            $pgNames[$u['permission_group_id'] ?? 0] ?? '—',
+            $u['customer_names'] ?? '—',
+            $u['is_active'] ? 'Ativo' : 'Inativo',
+        ];
+    }
+    stream_export($export, 'usuarios_' . $tab,
+        ['Nome', 'E-mail', 'Papel', 'Tipo', 'Grupo de Permissão', 'Cliente(s)', 'Status'],
+        $expRows, 'Usuários — ' . ($tab === 'clientes' ? 'Meus Clientes' : 'Minha Empresa'));
+}
 
 $editUser = null; $editCustomerId = null;
 if (!empty($_GET['edit'])) {
@@ -140,10 +164,23 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
-<!-- Tabs -->
-<div class="flex" style="gap:0;margin-bottom:16px;">
-    <a href="?tab=empresa" class="btn btn-sm <?= $tab==='empresa'?'btn-primary':'btn-outline' ?>" style="border-radius:var(--radius-pill) 0 0 var(--radius-pill);">Minha Empresa</a>
-    <a href="?tab=clientes" class="btn btn-sm <?= $tab==='clientes'?'btn-primary':'btn-outline' ?>" style="border-radius:0 var(--radius-pill) var(--radius-pill) 0;">Meus Clientes</a>
+<!-- Tabs + busca + export (Fase C) -->
+<div class="flex-between" style="margin-bottom:16px;gap:8px;flex-wrap:wrap;">
+    <div class="flex" style="gap:0;">
+        <a href="?tab=empresa" class="btn btn-sm <?= $tab==='empresa'?'btn-primary':'btn-outline' ?>" style="border-radius:var(--radius-pill) 0 0 var(--radius-pill);">Minha Empresa</a>
+        <a href="?tab=clientes" class="btn btn-sm <?= $tab==='clientes'?'btn-primary':'btn-outline' ?>" style="border-radius:0 var(--radius-pill) var(--radius-pill) 0;">Meus Clientes</a>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <form method="GET" style="display:flex;gap:6px;">
+            <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar nome ou e-mail..."
+                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:220px;">
+            <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
+        </form>
+        <?php $expQ = $_GET; unset($expQ['export']); $expBase = http_build_query($expQ); ?>
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 400px;gap:16px">
@@ -164,7 +201,7 @@ include __DIR__ . '/../web/layout_base.php';
                     <td>
                         <?= $u['user_type'] === 'revendedor' ? '<span class="badge badge-primary">Revendedor</span>' : htmlspecialchars($roleLabels[$u['role']] ?? $u['role']) ?>
                     </td>
-                    <td><?= htmlspecialchars($u['permission_group_id'] ?? '—') ?></td>
+                    <td><?= htmlspecialchars($pgNames[$u['permission_group_id'] ?? 0] ?? '—') ?></td>
                     <td><?= htmlspecialchars($u['customer_names'] ?? '—') ?></td>
                     <td><?= $u['is_active'] ? '<span class="badge badge-success">Ativo</span>' : '<span class="badge">Inativo</span>' ?></td>
                     <td>
@@ -172,6 +209,7 @@ include __DIR__ . '/../web/layout_base.php';
                             <a href="?edit=<?= $u['id'] ?>&tab=<?= $tab ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
                             <?php if ((int)$u['id'] !== (int)$currentUser['id']): ?>
                             <form method="post" style="display:inline" onsubmit="return confirm('<?= $u['is_active']?'Desativar':'Ativar' ?>?')">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="toggle">
                                 <input type="hidden" name="id" value="<?= $u['id'] ?>">
                                 <input type="hidden" name="is_active" value="<?= $u['is_active']?0:1 ?>">

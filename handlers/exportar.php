@@ -163,6 +163,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>ID</th>
+                <th>Nome</th>
                 <th>Tipo</th>
                 <th>Solicitante</th>
                 <th>Status</th>
@@ -173,7 +174,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody id="export-tbody">
             <?php if (empty($jobs)): ?>
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum relatório na fila</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Nenhum relatório na fila</td></tr>
             <?php else: ?>
             <?php foreach ($jobs as $j):
                 $statusBadge = ['pendente'=>'badge-warning','processando'=>'badge-info','concluido'=>'badge-success','falhou'=>'badge-error'];
@@ -182,8 +183,9 @@ require_once __DIR__ . '/../web/layout_base.php';
                 $jParams = json_decode($j['params'] ?? '{}', true) ?: [];
                 $jFormat = strtoupper($j['format'] ?? $jParams['format'] ?? 'csv');
             ?>
-            <tr>
+            <tr data-job-id="<?= $j['id'] ?>" data-status="<?= htmlspecialchars($j['status']) ?>">
                 <td>#<?= $j['id'] ?></td>
+                <td><?= htmlspecialchars($jParams['report_name'] ?? '—') ?></td>
                 <td>
                     <?= $typeLabel[$j['type']] ?? $j['type'] ?>
                     <?php if ($j['type'] === 'report'): ?>
@@ -231,7 +233,20 @@ function togglePoll() {
 }
 function startPoll() {
     stopPoll();
-    pollTimer = setInterval(function() { location.reload(); }, 30000);
+    // D3 (v4.2.0): polling real via /exportardata — só recarrega quando algum
+    // status mudou (sem flicker de reload cego a cada 30s)
+    pollTimer = setInterval(function() {
+        fetch('/exportardata').then(function(r) { return r.json(); }).then(function(resp) {
+            if (!resp || resp.code !== 0) return;
+            var changed = false;
+            (resp.data.jobs || []).forEach(function(job) {
+                var tr = document.querySelector('tr[data-job-id="' + job.id + '"]');
+                if (tr && tr.dataset.status !== job.status) changed = true;
+                if (!tr) changed = true; // job novo na fila
+            });
+            if (changed) location.reload();
+        }).catch(function() {});
+    }, 10000);
 }
 function stopPoll() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 startPoll();

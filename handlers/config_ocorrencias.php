@@ -29,6 +29,8 @@ $messageType = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $configId = !empty($_POST['config_id']) ? (int)$_POST['config_id'] : null;
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('config-ocorrencias', $configId ? 'edit' : 'create');
     $name = trim($_POST['name'] ?? '');
     $isDefault = !empty($_POST['is_default']) ? 1 : 0;
 
@@ -92,6 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ── GET: Excluir ───────────────────────────────────────────────
 $action = $_GET['action'] ?? '';
 if ($action === 'excluir' && !empty($_GET['id'])) {
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('config-ocorrencias', 'delete');
     $delId = (int)$_GET['id'];
     $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM customers WHERE occurrence_config_id = :id");
     $stmt->execute([':id' => $delId]);
@@ -266,7 +270,11 @@ require_once __DIR__ . '/../web/layout_base.php';
     <a href="?action=novo" class="btn btn-primary btn-sm">+ Novo Perfil</a>
 </div>
 
-<div class="table-wrap">
+<div class="mb-12">
+    <input type="text" placeholder="Pesquisar perfil..." oninput="yuvTableFilter(this, 'occ-table')"
+           style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:260px;">
+</div>
+<div class="table-wrap" id="occ-table">
     <table>
         <thead>
             <tr>

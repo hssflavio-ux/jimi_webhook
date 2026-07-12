@@ -28,6 +28,8 @@ $filterType  = $_GET['alarm_type'] ?? null;
 $filterStatus = $_GET['status'] ?? null;
 $filterFP    = $_GET['false_positive'] ?? null;
 $filterRisk  = $_GET['risk'] ?? null;
+$filterBranch = $_GET['branch_id'] ?? null;   // B4: filtro de Filial (YUV)
+$filterDriver = $_GET['driver_id'] ?? null;   // B4: filtro de Motorista (YUV)
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 
@@ -63,6 +65,52 @@ if ($filterFP !== null && $filterFP !== '') {
 if ($filterRisk) {
     $where .= ' AND o.risk = :risk';
     $params[':risk'] = $filterRisk;
+}
+if ($filterBranch) {
+    $where .= ' AND o.branch_id = :bid';
+    $params[':bid'] = (int)$filterBranch;
+}
+if ($filterDriver) {
+    $where .= ' AND o.driver_id = :did';
+    $params[':did'] = (int)$filterDriver;
+}
+
+// Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('relatorios', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $statusLabels = ['aguardando'=>'Aguardando','em_tratativa'=>'Em Tratativa','resolvida'=>'Resolvida','descartada'=>'Descartada'];
+    $expRows = [];
+    try {
+        $expStmt = $db->prepare("
+            SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name
+            FROM occurrences o
+            LEFT JOIN customers c ON c.id = o.customer_id
+            LEFT JOIN drivers dr ON dr.id = o.driver_id
+            LEFT JOIN branches b ON b.id = o.branch_id
+            $where
+            ORDER BY o.last_alarm_at DESC
+            LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($params);
+        while ($r = $expStmt->fetch()) {
+            $expRows[] = [
+                $r['customer_name'],
+                $r['branch_name'] ?? '—',
+                $r['imei'],
+                $r['driver_name'],
+                $r['alarm_type'],
+                fmt_brt($r['last_alarm_at']),
+                (int)$r['alarm_count'],
+                ucfirst($r['risk']),
+                $r['false_positive'] ? 'Sim' : 'Não',
+                $statusLabels[$r['status']] ?? $r['status'],
+            ];
+        }
+    } catch (Exception $e) { /* tabela v4 ausente → export vazio */ }
+    stream_export($export, 'relatorio_ocorrencias',
+        ['Cliente', 'Filial', 'IMEI', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
+        $expRows, 'Relatório de Ocorrências', "Período (BRT): $dateFrom a $dateTo");
 }
 
 // Count
@@ -100,12 +148,28 @@ try {
     $alarmTypes = [];
 }
 
+// B4 (YUV): opções dos filtros de Filial e Motorista
+$branchList = [];
+$driverList = [];
+try {
+    $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
+} catch (Exception $e) {}
+try {
+    $drvStmt = $db->prepare("SELECT id, name FROM drivers WHERE is_active=1" . ($isAdmin ? '' : ' AND customer_id = :cid') . " ORDER BY name");
+    $drvStmt->execute($isAdmin ? [] : [':cid' => $customerId]);
+    $driverList = $drvStmt->fetchAll();
+} catch (Exception $e) {}
+
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Ocorrências</h2>
-    <button class="btn btn-outline btn-sm" onclick="alert('Export Excel em desenvolvimento')">Exportar Excel</button>
+    <div style="display:flex;gap:8px;">
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
 </div>
 
 <div class="card mb-24" style="padding:16px 20px;">
@@ -162,6 +226,28 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <option value="0" <?= $filterFP === '0' ? 'selected' : '' ?>>Não</option>
             </select>
         </div>
+        <?php if ($branchList): ?>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Filial</label>
+            <select name="branch_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <option value="">Todas</option>
+                <?php foreach ($branchList as $b): ?>
+                <option value="<?= $b['id'] ?>" <?= $filterBranch == $b['id'] ? 'selected' : '' ?>><?= htmlspecialchars($b['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
+        <?php if ($driverList): ?>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Motorista</label>
+            <select name="driver_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <option value="">Todos</option>
+                <?php foreach ($driverList as $d): ?>
+                <option value="<?= $d['id'] ?>" <?= $filterDriver == $d['id'] ? 'selected' : '' ?>><?= htmlspecialchars($d['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período</label>
             <div style="display:flex;gap:4px;">

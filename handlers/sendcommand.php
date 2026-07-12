@@ -56,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 // compartilhado WEBHOOK_TOKEN, que permitia enviar comandos para qualquer IMEI
 // de qualquer cliente; o header X-Dashboard-Token legado é ignorado) ──────────
 require_ajax_session();
+
+// CSRF: endpoint autenticado por cookie → exige token (header X-CSRF-Token nos
+// fetches do dashboard; ver web/layout_base.php que expõe window.CSRF_TOKEN)
+require_once __DIR__ . '/../includes/csrf.php';
+csrf_verify();
+
 $customerId = (int)get_customer_id();
 if (!$customerId) {
     http_response_code(403);

@@ -39,6 +39,7 @@ $data = array_map(function($j) {
 
     return [
         'id'           => (int)$j['id'],
+        'name'         => $params['report_name'] ?? null,
         'type'         => $j['type'],
         'status'       => $j['status'],
         'format'       => $format,

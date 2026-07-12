@@ -22,6 +22,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
     $name   = trim($_POST['name'] ?? '');
+    // RBAC ação fina (v4.2.0 — Fase B2); impersonate já é gated por $isReseller
+    if ($action === 'delete') {
+        require_permission('clientes', 'delete');
+    } elseif ($action !== 'impersonate') {
+        require_permission('clientes', $id > 0 ? 'edit' : 'create');
+    }
 
     if ($action === 'delete' && $id > 1) {
         $stmt = $db->prepare("UPDATE customers SET is_active = 0 WHERE id = ? AND id > 1");
@@ -60,20 +66,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── List ──────────────────────────────────────────────────────
+// ── List (Fase C: busca + export) ────────────────────────────
+$q = trim($_GET['q'] ?? '');
+$listWhere = 'WHERE c.is_active = 1';
+$listParams = [];
+if ($q !== '') {
+    $listWhere .= ' AND (c.name LIKE :q1 OR c.email LIKE :q2 OR c.document LIKE :q3)';
+    foreach (['q1', 'q2', 'q3'] as $k) $listParams[":$k"] = "%$q%";
+}
+
+$listSql = "
+    SELECT c.*, COUNT(d.id) AS device_count,
+           oc.name as occ_config_name,
+           cc.name as checklist_config_name
+    FROM customers c
+    LEFT JOIN devices d ON c.id = d.customer_id
+    LEFT JOIN occurrence_configs oc ON oc.id = c.occurrence_config_id
+    LEFT JOIN checklist_configs cc ON cc.id = c.checklist_config_id
+    $listWhere
+    GROUP BY c.id
+    ORDER BY c.name";
+
+// Export síncrono
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('clientes', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expRows = [];
+    try {
+        $expStmt = $db->prepare($listSql . ' LIMIT ' . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($listParams);
+        while ($c = $expStmt->fetch()) {
+            $expRows[] = [
+                $c['name'], $c['email'] ?? '—', $c['document'] ?? '—',
+                $c['occ_config_name'] ?? 'Padrão', $c['checklist_config_name'] ?? '—',
+                $c['faceid_enabled'] ? 'Sim' : 'Não', (int)$c['device_count'],
+            ];
+        }
+    } catch (Exception $e) {}
+    stream_export($export, 'clientes',
+        ['Nome', 'E-mail', 'Documento', 'Config. Ocorrência', 'Config. Checklist', 'FaceID', 'Dispositivos'],
+        $expRows, 'Clientes');
+}
+
 $customers = [];
 try {
-    $customers = $db->query("
-        SELECT c.*, COUNT(d.id) AS device_count,
-               oc.name as occ_config_name
-        FROM customers c
-        LEFT JOIN devices d ON c.id = d.customer_id
-        LEFT JOIN occurrence_configs oc ON oc.id = c.occurrence_config_id
-        WHERE c.is_active = 1
-        GROUP BY c.id
-        ORDER BY c.name
-    ")->fetchAll();
-} catch (Exception $e) {}
+    $listStmt = $db->prepare($listSql);
+    $listStmt->execute($listParams);
+    $customers = $listStmt->fetchAll();
+} catch (Exception $e) {
+    // checklist_configs pode não existir (schema antigo) → query sem o JOIN
+    try {
+        $listStmt = $db->prepare(str_replace(
+            ["cc.name as checklist_config_name", "LEFT JOIN checklist_configs cc ON cc.id = c.checklist_config_id"],
+            ["NULL as checklist_config_name", ""],
+            $listSql));
+        $listStmt->execute($listParams);
+        $customers = $listStmt->fetchAll();
+    } catch (Exception $e2) {}
+}
 
 $occConfigs = [];
 try {
@@ -99,10 +150,23 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div style="display:grid;grid-template-columns:1fr 400px;gap:16px">
+    <div>
+    <div class="flex-between mb-12" style="gap:8px;flex-wrap:wrap;">
+        <form method="GET" style="display:flex;gap:6px;">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar nome, e-mail, documento..."
+                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:280px;">
+            <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
+        </form>
+        <div style="display:flex;gap:6px;">
+            <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+            <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        </div>
+    </div>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Cliente</th><th>Config. Ocorr.</th><th>FaceID</th><th>Dispositivos</th><th style="text-align:center;">Ações</th></tr></thead>
+            <thead><tr><th>Cliente</th><th>E-mail</th><th>Config. Ocorr.</th><th>Config. Checklist</th><th>FaceID</th><th>Dispositivos</th><th style="text-align:center;">Ações</th></tr></thead>
             <tbody>
                 <?php foreach ($customers as $c): ?>
                 <tr>
@@ -112,7 +176,9 @@ include __DIR__ . '/../web/layout_base.php';
                         <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:<?= htmlspecialchars($c['brand_color']) ?>;margin-left:6px;vertical-align:middle;"></span>
                         <?php endif; ?>
                     </td>
+                    <td style="font-size:12px;"><?= htmlspecialchars($c['email'] ?? '—') ?></td>
                     <td><?= htmlspecialchars($c['occ_config_name'] ?? 'Padrão') ?></td>
+                    <td><?= htmlspecialchars($c['checklist_config_name'] ?? '—') ?></td>
                     <td><?= $c['faceid_enabled'] ? '<span class="badge badge-primary">Ativo</span>' : '<span class="badge">Desativado</span>' ?></td>
                     <td><?= $c['device_count'] ?></td>
                     <td style="text-align:center;">
@@ -120,6 +186,7 @@ include __DIR__ . '/../web/layout_base.php';
                             <a href="?edit=<?= $c['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
                             <?php if ($isReseller): ?>
                             <form method="post" style="display:inline">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="impersonate">
                                 <input type="hidden" name="id" value="<?= $c['id'] ?>">
                                 <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;color:var(--primary);">Entrar como</button>
@@ -127,6 +194,7 @@ include __DIR__ . '/../web/layout_base.php';
                             <?php endif; ?>
                             <?php if ($c['id'] > 1): ?>
                             <form method="post" style="display:inline" onsubmit="return confirm('Desativar cliente?')">
+                                <?= csrf_field() ?>
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= $c['id'] ?>">
                                 <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;color:var(--error);">Desativar</button>
@@ -138,6 +206,7 @@ include __DIR__ . '/../web/layout_base.php';
                 <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
     </div>
 
     <div class="card">

@@ -41,6 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
     $id     = (int)($_POST['id'] ?? 0);
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('grupos-permissao', $action === 'delete' ? 'delete' : ($id > 0 ? 'edit' : 'create'));
 
     if ($action === 'delete' && $id > 0) {
         $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE permission_group_id = ?");
@@ -133,7 +135,12 @@ include __DIR__ . '/../web/layout_base.php';
 <?php endif; ?>
 
 <div style="display:grid;grid-template-columns:1fr 540px;gap:16px">
-    <div class="table-wrap">
+    <div>
+    <div class="mb-12">
+        <input type="text" placeholder="Pesquisar grupo..." oninput="yuvTableFilter(this, 'pg-table')"
+               style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:260px;">
+    </div>
+    <div class="table-wrap" id="pg-table">
         <table>
             <thead><tr><th>Nome</th><th>Tipo de Usuário</th><th>Qtd. de Usuários</th><th></th></tr></thead>
             <tbody>
@@ -164,6 +171,7 @@ include __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
     </div>
 
     <div class="card">

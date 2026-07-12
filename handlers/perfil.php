@@ -6,6 +6,7 @@
  * Qualquer usuário logado: visualiza dados pessoais e troca a própria senha.
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_login();
 
 $db      = Database::getInstance()->getConnection();
@@ -15,6 +16,7 @@ $error   = null;
 $success = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
     $currentPassword = $_POST['current_password'] ?? '';
     $newPassword     = $_POST['new_password'] ?? '';
     $confirmPassword = $_POST['confirm_password'] ?? '';
@@ -76,6 +78,7 @@ include __DIR__ . '/../web/layout_base.php';
     <div class="card">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Alterar Senha</h4>
         <form method="post">
+            <?= csrf_field() ?>
             <div class="form-group">
                 <label>Senha Atual *</label>
                 <input type="password" name="current_password" required>

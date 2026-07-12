@@ -32,15 +32,51 @@ $geoCache = [];
 
 if ($generated && $selImei) {
     try {
-        $where = 'WHERE imei = :imei AND gps_time BETWEEN :df AND :dt';
+        // Prefixo g. obrigatório: as queries da grade/export fazem JOIN com devices
+        // (imei/id existem nas duas tabelas → coluna ambígua quebrava o relatório)
+        $where = 'WHERE g.imei = :imei AND g.gps_time BETWEEN :df AND :dt';
         [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
         $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo];
 
         if ($interval === 'sampled') {
-            $where .= ' AND MOD(id, 10) = 0';
+            $where .= ' AND MOD(g.id, 10) = 0';
         }
 
-        $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data $where");
+        // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+        $export = $_GET['export'] ?? '';
+        if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+            require_permission('relatorios', 'export');
+            require_once __DIR__ . '/../includes/export_helper.php';
+            $expStmt = $db->prepare("
+                SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
+                       g.acc AS ignition, g.status AS gps_status, g.gsm_signal,
+                       COALESCE(d.device_name, g.imei) as device_name
+                FROM gps_data g
+                LEFT JOIN devices d ON d.imei = g.imei
+                $where
+                ORDER BY g.gps_time DESC
+                LIMIT " . SYNC_EXPORT_MAX_ROWS);
+            $expStmt->execute($params);
+            $expRows = [];
+            while ($r = $expStmt->fetch()) {
+                $expRows[] = [
+                    fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
+                    $r['imei'],
+                    $r['device_name'],
+                    $r['latitude'],
+                    $r['longitude'],
+                    $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
+                    $r['ignition'] ? 'Ligada' : 'Desligada',
+                    in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
+                    $r['gsm_signal'] ?? '—',
+                ];
+            }
+            stream_export($export, 'relatorio_posicoes',
+                ['Data/Hora', 'IMEI', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
+                $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo");
+        }
+
+        $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data g $where");
         $countStmt->execute($params);
         $totalRows = (int)$countStmt->fetchColumn();
         $totalPages = max(1, ceil($totalRows / $perPage));
@@ -48,6 +84,7 @@ if ($generated && $selImei) {
 
         $stmt = $db->prepare("
             SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
+                   g.acc AS ignition, g.status AS gps_status,
                    COALESCE(d.device_name, g.imei) as device_name
             FROM gps_data g
             LEFT JOIN devices d ON d.imei = g.imei
@@ -62,6 +99,22 @@ if ($generated && $selImei) {
             if ($r['latitude'] && $r['longitude'] && $r['latitude'] != 0) {
                 $hasCoords[] = ['lat' => (float)$r['latitude'], 'lng' => (float)$r['longitude'], 'imei' => $r['imei'], 'name' => $r['device_name']];
             }
+        }
+
+        // Endereço geocodificado (B3 — padrão YUV): lote cache-only para a página
+        // + resolve no máx. 3 misses inline (rate limit Nominatim 1 req/s) — o
+        // cache enche progressivamente a cada visualização.
+        $geoCache = geocode_cache_lookup(array_map(
+            fn($r) => [(float)$r['latitude'], (float)$r['longitude']], $rows));
+        $inlineBudget = 3;
+        foreach ($rows as $r) {
+            $lat = round((float)$r['latitude'], 6);
+            $lng = round((float)$r['longitude'], 6);
+            $key = $lat . ',' . $lng;
+            if ($lat == 0 || isset($geoCache[$key]) || $inlineBudget <= 0) continue;
+            $addr = reverse_geocode($lat, $lng);
+            if ($addr !== null) $geoCache[$key] = $addr;
+            $inlineBudget--;
         }
     } catch (Exception $e) {}
 }
@@ -79,9 +132,15 @@ $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Posições</h2>
-    <button class="btn btn-outline btn-sm" onclick="alert('Export Excel em desenvolvimento')">Exportar Excel</button>
+    <?php if ($generated && $selImei): ?>
+    <div style="display:flex;gap:8px;">
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="card mb-24" style="padding:16px 20px;">
@@ -124,22 +183,30 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="table-wrap">
     <table>
         <thead>
-            <tr><th>Data/Hora</th><th>IMEI</th><th>Dispositivo</th><th>Latitude</th><th>Longitude</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
+            <tr><th>Data/Hora</th><th>IMEI</th><th>Dispositivo</th><th>Endereço</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);"><?= $generated ? 'Nenhuma posição encontrada' : 'Selecione um ativo e clique em Gerar' ?></td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);"><?= $generated ? 'Nenhuma posição encontrada' : 'Selecione um ativo e clique em Gerar' ?></td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r): ?>
             <tr>
                 <td class="text-mono"><?= fmt_brt($r['gps_time'], 'd/m/Y H:i:s') ?></td>
                 <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
                 <td><?= htmlspecialchars($r['device_name']) ?></td>
-                <td class="text-mono"><?= number_format((float)$r['latitude'], 6) ?></td>
-                <td class="text-mono"><?= number_format((float)$r['longitude'], 6) ?></td>
+                <td style="max-width:320px;">
+                    <?php
+                    $geoKey = round((float)$r['latitude'], 6) . ',' . round((float)$r['longitude'], 6);
+                    if (isset($geoCache[$geoKey])): ?>
+                        <span style="font-size:12px;"><?= htmlspecialchars($geoCache[$geoKey]) ?></span>
+                    <?php elseif ((float)$r['latitude'] != 0): ?>
+                        <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16" target="_blank"
+                           class="text-mono" style="font-size:12px;"><?= number_format((float)$r['latitude'], 6) ?>, <?= number_format((float)$r['longitude'], 6) ?></a>
+                    <?php else: echo '—'; endif; ?>
+                </td>
                 <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= $r['ignition'] ? '<span class="badge badge-success">Ligada</span>' : '<span class="badge">Desligada</span>' ?></td>
-                <td><?= $r['gps_status'] === 'A' ? '<span class="badge badge-success">Válido</span>' : '<span class="badge">' . htmlspecialchars($r['gps_status']??'—') . '</span>' ?></td>
+                <td><?= in_array($r['gps_status'] ?? '', ['A', 'VALID'], true) ? '<span class="badge badge-success">Válido</span>' : '<span class="badge">' . htmlspecialchars($r['gps_status'] ?? '—') . '</span>' ?></td>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>

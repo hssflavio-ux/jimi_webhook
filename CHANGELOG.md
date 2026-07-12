@@ -5,6 +5,42 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.2.0 (Aderência YUV — Fases A–D completas)
+
+Execução do `PLANO_ADERENCIA_YUV.md` (revisão de aderência contra a plataforma YUV capturada em 06/07/2026 + inventário do código real). Progresso e ponto de retomada em `PLANO_ADERENCIA_YUV.md` §0.
+
+### Added
+- **Export síncrono Excel/PDF/CSV nos relatórios (B1 — padrão YUV §9.2)**: novo `stream_export()` em `includes/export_helper.php` (reusa os writers XLSX/PDF puros da fila; CSV com BOM + `;`; limite `SYNC_EXPORT_MAX_ROWS=10000`). Botões **Exportar Excel/PDF** reais (a mesma query da grade, sem paginação, respeitando os filtros ativos) em `rel_alarmes`, `rel_ocorrencias`, `rel_posicoes`, `rel_deslocamento`, `rel_desatualizados` (por faixa) e `equipamentos` — todos os `alert('em desenvolvimento')` removidos.
+- **RBAC efetivo (B2 — completo)**: `get_user_permissions()`, `can()` e `require_permission()` em `includes/auth.php` (matriz JSON de `permission_groups`, com suporte ao wildcard `"*"` do seed Administrador; usuário sem grupo → sem restrição, compat com role legado). Sidebar (`layout_base.php`) esconde itens sem permissão `view`; **router** aplica `require_permission(tela,'view')` centralizadamente via mapa handler→tela (webhooks/AJAX/login fora do mapa); **gates de ação fina** (`create`/`edit`/`delete`) nos POSTs de todos os cadastros (ativos, ativos_novo, chips, clientes, equipamentos incl. import, motoristas, usuarios, grupos_permissao, config_ocorrencias incl. delete via GET) e gate de `export` nos 6 blocos de export síncrono.
+- **Endereço geocodificado no Relatório de Posições (B3)**: coluna Endereço substitui Lat/Long (fallback: link OSM com as coordenadas); novo `geocode_cache_lookup()` (lote, cache-only) + resolução inline de até 3 misses por página (respeita rate limit Nominatim; o cache enche progressivamente).
+- **Filtros padrão YUV (B4)**: novo componente `web/components/chips_multiselect.php` (chips com overflow `+N`, extraído do bi.php). `rel_alarmes`: multiselect de Tipos de Alarme (IN) + filtro Filial; `rel_ocorrencias`: filtros Filial e Motorista. Exports respeitam os novos filtros.
+- **Grade de Equipamentos completa (B5)**: colunas **Chip** (JOIN `sim_cards`), **Bateria** (`device_statistics.battery_level`) e **Periféricos** (badge com contagem + tooltip), na grade e no export, com fallback resiliente para schema antigo.
+- **Import em lote completo (B6)**: CSV importa Modelo (resolvido por nome) e Canais (fallback: `camera_count` do modelo); validação de IMEI 15–17 dígitos; avisos por linha (IMEI inválido/duplicado, modelo desconhecido).
+- **Resumo enriquecido (D1 — paridade YUV `page_resumo`)**: card **Ociosidade** (ignição ligada + parado, últimos 30 min); **Status de Equipamentos por Modelo** (barras on/off + % online); **mapa de calor real** (`leaflet.heat` via CDN sobre as posições de 2h, mantendo os pontos clicáveis); séries temporais com **toggle Hoje / Últimos 7 dias / Último mês** (buckets hora/dia em BRT + total do período); **Top 3 placas com mais alarmes** e **Top 3 motoristas** (com CTA de upsell FaceID quando o recurso está desabilitado, como no YUV); **Visão por Clientes em 3 eixos Top 3** (equipamentos ativos / ocorrências / desatualizados); **auto-refresh 30s dos KPIs** via `/?ajax=kpis` (JSON leve, sem reload); botão **"Ver tutorial"** que reexibe o tour.
+- **Rastreamento sem reload (D2)**: modo `?ajax=1` no handler devolve as posições em JSON; o mapa atualiza os pins in-place a cada 30s (posição, cor online/offline, popup) em vez de `location.reload()` a cada 60s.
+- **Exportar com polling real (D3)**: poll de 10s via `/exportardata` que só recarrega quando algum status de job muda; coluna **Nome** do relatório na grade (de `params.report_name`, também exposto no JSON).
+- **Indicador de impersonação (D4)**: banner âmbar sob o header quando o revendedor está operando como um cliente + botão "Voltar ao meu perfil" (novo modo `exit_impersonation` no `/customer_switch` fecha o `impersonation_log.ended_at` e restaura o contexto); `/customer_switch` também passou a exigir CSRF.
+- **Padrão de grade CRUD nos cadastros (Fase C — YUV §9.1)**: busca server-side + Exportar Excel/PDF + paginação (25/pág) em `chips`, `motoristas` e `ativos`; busca + export em `clientes` (novas colunas **E-mail** e **Config. Checklist**) e `usuarios` (por aba Minha Empresa/Meus Clientes); busca client-side (`yuvTableFilter` global) em `grupos-permissao` e `config-ocorrencias`; `motoristas` com colunas **Foto** e **Nascimento**. Todos os exports com gate RBAC `export`.
+
+### Fixed
+- **Rota morta `/clientes/{id}`** (A1): despachava para `cliente_detalhe.php`, que não existe → agora 404 explícito (R08 residual).
+- **`/checklist/inspecao` inacessível** (A2): `checklist` estava em `$simpleRoutes` E no `$subrouteMap`; o primeiro vencia e a tela de inspeção nunca abria. `checklist` saiu de `$simpleRoutes` (o fallback do subrouteMap continua servindo `/checklist`).
+- **CSRF remanescente — R11 fechado de vez** (A3): `csrf_verify()`+`csrf_field()` em `ativos.php` (editar/remover) e `perfil.php` (troca de senha); **`/sendcommand` agora exige token** — `layout_base.php` expõe `window.CSRF_TOKEN` (+ meta tag) e os 6 callers (`comandos`, `ativo_detalhe`, `config`, `equipamentos` FOTA, `video_aovivo`, `video_playback`) enviam `X-CSRF-Token`.
+- **Toggle de usuário quebrado desde a Fase F**: o form ativar/desativar de `usuarios.php` não tinha `csrf_field()` com `csrf_verify()` ativo no POST → 403 sempre. Corrigido.
+- **`usuarios.php` mostrava o ID do grupo** em vez do nome (A4): resolvido com mapa id→nome.
+- **Relatório de Posições sempre vazio**: `$where` usava `imei`/`id` sem prefixo e a query da grade faz JOIN com `devices` → erro de **coluna ambígua** engolido pelo try-catch da Fase K → zero resultados. Prefixado `g.` (grade, count, amostragem `MOD(g.id,10)`).
+- **Ignição/GPS sempre "Desligada"/vazio em Posições**: a grade lia `$r['ignition']`/`$r['gps_status']` que não vinham no SELECT. Aliases `g.acc AS ignition, g.status AS gps_status` + aceite do status `VALID`.
+- **`get_jimi_user()` sem colunas v4**: não selecionava `user_type`/`permission_group_id`/`photo_url`, então os checks `user_type==='revendedor'` (visão por clientes do Resumo, abas de Usuários) nunca ativavam. Incluídas no SELECT com fallback para schema antigo.
+- **Cache de geocodificação nunca dava hit**: `reverse_geocode()` comparava o float recebido (8 casas) com a coluna `DECIMAL(9,6)` → toda consulta repetida chamava a API Nominatim de novo. Coordenadas agora arredondadas a 6 casas antes do SELECT/INSERT.
+- **"Entrar como" e "Desativar" em Clientes quebrados (403) desde a Fase F**: os dois forms inline não tinham `csrf_field()` com `csrf_verify()` ativo no POST — mesma família do bug do toggle de Usuários. Corrigido.
+- **Rastreamento sem nenhum pin no mapa**: a query de posições usava `g.ignition` — coluna que **não existe** em `gps_data` (é `acc`) → a exceção era engolida pelo try-catch e `$positions` ficava vazio silenciosamente. Corrigido com `g.acc AS ignition`.
+- **"Velocidade da Frota" do Resumo nunca populava on-the-fly**: mesmo bug de coluna (`g.ignition` → `g.acc`) no fallback quando o cache `metrics_snapshots` está vazio.
+
+### Verified
+- `php -l`: verde em todos os arquivos alterados.
+- Smoke test HTTP (server dev + MySQL portátil): `/ping` 200; telas protegidas 302→login (RBAC central não quebrou fluxo sem grupo); `/clientes/9` 404; `/checklist` e `/checklist/inspecao` resolvem.
+- **Suite Playwright completa com login: 36 passed / 0 failed / 4 skipped** (2 rodadas — pós-Fase A+B1+B2/view e pós-B2-completo+B3; credenciais E2E provisionadas no MySQL local de dev). Skips: rate-limit destrutivo (opt-in) e multi-tenant (exige 2º cliente).
+
 ## [4.1.2] — 2026-07-11 (Vídeo ao vivo — payload de streaming e player resiliente)
 
 Correção da abertura dos vídeos ao vivo. Causa-raiz: o comando que instrui o device a **publicar** o stream mandava um endereço inalcançável, então o media server nunca recebia RTP e o player travava em "Conectando".

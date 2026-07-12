@@ -610,7 +610,7 @@ function setParam() {
 function sendConfigCmd(proNo, content) {
     fetch('/sendcommand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': '<?= $dashToken ?>' },
+        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': '<?= $dashToken ?>', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
         body: JSON.stringify({ imei: '<?= $imei ?>', proNo: proNo, content: content, serverFlagId: 0 })
     }).then(r => r.json()).then(d => {
         document.getElementById('query-result').innerHTML = '<pre style="font-size:11px">' + JSON.stringify(d, null, 2) + '</pre>';

@@ -225,7 +225,7 @@ function startLive() {
     // o DEVICE quem precisa alcançar esse endereço, não o navegador.
     fetch('/sendcommand', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
         body: JSON.stringify({
             imei: selImei,
             proNo: 37121,

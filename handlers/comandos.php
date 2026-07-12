@@ -336,7 +336,7 @@ function sendCommand(e) {
 
     fetch('/sendcommand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': dashToken },
+        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': dashToken, 'X-CSRF-Token': window.CSRF_TOKEN || '' },
         body: JSON.stringify({ imei: imei, proNo: parseInt(proNo), content: content, serverFlagId: parseInt(serverFlagId) })
     }).then(function(r) { return r.json(); })
     .then(function(data) {

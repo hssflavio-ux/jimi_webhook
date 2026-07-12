@@ -38,7 +38,7 @@ try {
 $positions = [];
 try {
     $posStmt = $db->prepare("
-        SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time, g.ignition,
+        SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time, g.acc AS ignition,
                COALESCE(d.device_name, g.imei) as device_name,
                CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
         FROM devices d
@@ -50,6 +50,17 @@ try {
     $posStmt->execute([':cid' => $selCustomerId]);
     $positions = $posStmt->fetchAll();
 } catch (Exception $e) {}
+
+// D2 (v4.2.0 — YUV): modo AJAX para auto-refresh sem reload
+if (!empty($_GET['ajax'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['code' => 0, 'positions' => array_map(function ($p) {
+        return ['imei' => $p['imei'], 'lat' => (float)$p['latitude'], 'lng' => (float)$p['longitude'],
+                'name' => $p['device_name'], 'speed' => (float)$p['speed'], 'ignition' => $p['ignition'],
+                'online' => (bool)$p['is_online'], 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
+    }, $positions)], JSON_UNESCAPED_UNICODE);
+    exit;
+}
 
 $page_title = 'Rastreamento';
 $current_route = 'rastreamento';
@@ -123,13 +134,17 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'
 var markers = {};
 var bounds = [];
 
+function popupHtml(p) {
+    return '<b>' + (p.name||'') + '</b><br>IMEI: ' + p.imei + '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
+}
+
 mapData.forEach(function(p) {
     if (p.lat && p.lng && p.lat !== 0) {
         bounds.push([p.lat, p.lng]);
         var color = p.online ? '#05b169' : '#a8acb3';
         var m = L.circleMarker([p.lat, p.lng], {radius:6, color:color, fillColor:color, fillOpacity:0.6, weight:1})
             .addTo(map)
-            .bindPopup('<b>' + (p.name||'') + '</b><br>IMEI: ' + p.imei + '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition?'Ligada':'Desligada') + '<br>' + (p.time||''));
+            .bindPopup(popupHtml(p));
         markers[p.imei] = m;
     }
 });
@@ -164,7 +179,28 @@ function filterDevices() {
 }
 
 setTimeout(function() { map.invalidateSize(); }, 300);
-setInterval(function() { location.reload(); }, 60000);
+
+// D2 (v4.2.0 — YUV): auto-refresh 30s sem reload — atualiza pins in-place
+setInterval(function() {
+    var url = new URL(location.href);
+    url.searchParams.set('ajax', '1');
+    fetch(url.toString()).then(function(r) { return r.json(); }).then(function(resp) {
+        if (!resp || resp.code !== 0) return;
+        (resp.positions || []).forEach(function(p) {
+            if (!p.lat || p.lat === 0) return;
+            var color = p.online ? '#05b169' : '#a8acb3';
+            var m = markers[p.imei];
+            if (m) {
+                m.setLatLng([p.lat, p.lng]);
+                m.setStyle({color: color, fillColor: color});
+                m.setPopupContent(popupHtml(p));
+            } else {
+                markers[p.imei] = L.circleMarker([p.lat, p.lng], {radius:6, color:color, fillColor:color, fillOpacity:0.6, weight:1})
+                    .addTo(map).bindPopup(popupHtml(p));
+            }
+        });
+    }).catch(function() {});
+}, 30000);
 </script>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

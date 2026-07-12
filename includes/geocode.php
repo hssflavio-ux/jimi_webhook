@@ -20,6 +20,11 @@ function reverse_geocode(float $lat, float $lng): ?string
         return null;
     }
 
+    // geocode_cache usa DECIMAL(9,6): sem arredondar, um lat/lng de 8 casas
+    // nunca casa com a linha cacheada (6 casas) e a API era rechamada sempre
+    $lat = round($lat, 6);
+    $lng = round($lng, 6);
+
     $db = Database::getInstance()->getConnection();
 
     $stmt = $db->prepare("SELECT address FROM geocode_cache WHERE lat = :lat AND lng = :lng LIMIT 1");
@@ -57,4 +62,41 @@ function reverse_geocode(float $lat, float $lng): ?string
     }
 
     return $address;
+}
+
+/**
+ * Lookup em lote SOMENTE no cache (nenhuma chamada HTTP) — para grades.
+ *
+ * @param array $points Lista de pares [lat, lng]
+ * @returns array Mapa "lat,lng" (6 casas decimais) → endereço
+ */
+function geocode_cache_lookup(array $points): array
+{
+    if (empty($points)) return [];
+    $db = Database::getInstance()->getConnection();
+
+    $conds = [];
+    $params = [];
+    $seen = [];
+    foreach ($points as $p) {
+        $lat = round((float)$p[0], 6);
+        $lng = round((float)$p[1], 6);
+        $key = $lat . ',' . $lng;
+        if ($lat == 0 || isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $conds[] = '(lat = ? AND lng = ?)';
+        $params[] = $lat;
+        $params[] = $lng;
+    }
+    if (empty($conds)) return [];
+
+    $map = [];
+    try {
+        $stmt = $db->prepare("SELECT lat, lng, address FROM geocode_cache WHERE " . implode(' OR ', $conds));
+        $stmt->execute($params);
+        while ($row = $stmt->fetch()) {
+            $map[round((float)$row['lat'], 6) . ',' . round((float)$row['lng'], 6)] = $row['address'];
+        }
+    } catch (Exception $e) {}
+    return $map;
 }

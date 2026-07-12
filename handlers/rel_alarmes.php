@@ -22,7 +22,10 @@ $dateFrom    = $_GET['date_from'] ?? brt_today();
 $dateTo      = $_GET['date_to'] ?? brt_today();
 $filterCust  = $_GET['customer_id'] ?? null;
 $filterImei  = $_GET['imei'] ?? null;
+// Multiselect de tipos (chips, CSV) + retrocompat com o antigo campo texto alarm_type
+$filterTypes = array_values(array_filter(array_map('trim', explode(',', $_GET['alarm_types'] ?? ''))));
 $filterType  = $_GET['alarm_type'] ?? null;
+$filterBranch = $_GET['branch_id'] ?? null;
 $filterStatus = $_GET['alarm_status'] ?? null;
 $sort        = $_GET['sort'] ?? 'alarm_time';
 $order       = $_GET['order'] ?? 'DESC';
@@ -51,14 +54,60 @@ if ($filterImei) {
     $where .= ' AND a.imei LIKE :imei';
     $params[':imei'] = "%$filterImei%";
 }
-if ($filterType) {
+if ($filterTypes) {
+    $ph = [];
+    foreach ($filterTypes as $i => $t) {
+        $ph[] = ":at$i";
+        $params[":at$i"] = $t;
+    }
+    $where .= ' AND a.alarm_name IN (' . implode(',', $ph) . ')';
+} elseif ($filterType) {
     $where .= ' AND (a.alarm_type = :atype OR a.alarm_name LIKE :aname)';
     $params[':atype'] = $filterType;
     $params[':aname'] = "%$filterType%";
 }
+if ($filterBranch) {
+    $where .= ' AND d.branch_id = :bid';
+    $params[':bid'] = (int)$filterBranch;
+}
 if ($filterStatus) {
     $where .= ' AND a.status = :st';
     $params[':st'] = $filterStatus;
+}
+
+// Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('relatorios', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expStmt = $db->prepare("
+        SELECT a.imei, a.alarm_type, a.alarm_name, a.alarm_time, a.status, a.msg_class,
+               a.speed, a.latitude, a.longitude, COALESCE(c.name, '—') as customer_name
+        FROM alarms a
+        LEFT JOIN devices d ON d.imei = a.imei
+        LEFT JOIN customers c ON c.id = d.customer_id
+        $where
+        ORDER BY a.$sort $order
+        LIMIT " . SYNC_EXPORT_MAX_ROWS);
+    $expStmt->execute($params);
+    $expRows = [];
+    while ($r = $expStmt->fetch()) {
+        $expRows[] = [
+            fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'),
+            $r['customer_name'],
+            $r['imei'],
+            $r['alarm_type'],
+            $r['alarm_name'] ?? '—',
+            ((int)($r['msg_class'] ?? 0) === 0 ? 'JIMI' : 'JT/T'),
+            $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
+            $r['status'],
+            $r['latitude'],
+            $r['longitude'],
+        ];
+    }
+    stream_export($export, 'relatorio_alarmes',
+        ['Data/Hora', 'Cliente', 'IMEI', 'Código', 'Nome do Alarme', 'Protocolo', 'Velocidade (km/h)', 'Status', 'Latitude', 'Longitude'],
+        $expRows, 'Relatório de Alarmes', "Período (BRT): $dateFrom a $dateTo");
 }
 
 // Count
@@ -94,6 +143,11 @@ $customers = $custStmt->fetchAll();
 
 $types = $db->query("SELECT DISTINCT alarm_name FROM alarms WHERE alarm_name IS NOT NULL ORDER BY alarm_name")->fetchAll();
 
+$branchList = [];
+try {
+    $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
+} catch (Exception $e) {}
+
 // Sort helper
 function sort_link($col, $label, $currentSort, $currentOrder) {
     $newOrder = ($currentSort === $col && $currentOrder === 'ASC') ? 'DESC' : 'ASC';
@@ -108,9 +162,13 @@ function sort_link($col, $label, $currentSort, $currentOrder) {
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Alarmes</h2>
-    <button class="btn btn-outline btn-sm" onclick="alert('Export Excel em desenvolvimento')">Exportar Excel</button>
+    <div style="display:flex;gap:8px;">
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
 </div>
 
 <div class="card mb-24" style="padding:16px 20px;">
@@ -131,10 +189,26 @@ require_once __DIR__ . '/../web/layout_base.php';
             <input type="text" name="imei" value="<?= htmlspecialchars($filterImei ?? '') ?>" placeholder="Buscar..."
                    style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
         </div>
+        <?php if ($branchList): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo/Nome</label>
-            <input type="text" name="alarm_type" value="<?= htmlspecialchars($filterType ?? '') ?>" placeholder="Código ou nome..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:160px;">
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Filial</label>
+            <select name="branch_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <option value="">Todas</option>
+                <?php foreach ($branchList as $b): ?>
+                <option value="<?= $b['id'] ?>" <?= $filterBranch == $b['id'] ? 'selected' : '' ?>><?= htmlspecialchars($b['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
+        <div style="flex-basis:100%;">
+            <?php
+            $chips_id = 'alarmtypes';
+            $chips_label = 'Tipos de Alarme';
+            $chips_param = 'alarm_types';
+            $chips_options = array_column($types, 'alarm_name');
+            $chips_selected = $filterTypes;
+            include __DIR__ . '/../web/components/chips_multiselect.php';
+            ?>
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>

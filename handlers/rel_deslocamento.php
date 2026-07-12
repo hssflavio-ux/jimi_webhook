@@ -42,6 +42,45 @@ if ($generated) {
         $params[':imei'] = $selImei;
     }
 
+    // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+    $export = $_GET['export'] ?? '';
+    if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+        require_permission('relatorios', 'export');
+        require_once __DIR__ . '/../includes/export_helper.php';
+        $expRows = [];
+        try {
+            $expStmt = $db->prepare("
+                SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
+                       COALESCE(dr.name, '—') as driver_name
+                FROM trips t
+                LEFT JOIN devices d ON d.imei = t.imei
+                LEFT JOIN drivers dr ON dr.id = t.driver_id
+                $where
+                ORDER BY t.started_at DESC
+                LIMIT " . SYNC_EXPORT_MAX_ROWS);
+            $expStmt->execute($params);
+            while ($r = $expStmt->fetch()) {
+                $duration = (int)($r['duration_s'] ?? 0);
+                $expRows[] = [
+                    $r['imei'],
+                    $r['device_name'],
+                    $r['driver_name'],
+                    fmt_brt($r['started_at']),
+                    $r['start_addr'] ?? '—',
+                    $r['ended_at'] ? fmt_brt($r['ended_at']) : '—',
+                    $r['end_addr'] ?? '—',
+                    $duration > 0 ? sprintf('%dh%02dm', floor($duration / 3600), floor(($duration % 3600) / 60)) : '—',
+                    $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
+                    $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
+                    (int)($r['alarm_count'] ?? 0),
+                ];
+            }
+        } catch (Exception $e) { /* tabela trips ausente → export vazio */ }
+        stream_export($export, 'relatorio_deslocamento',
+            ['IMEI', 'Dispositivo', 'Motorista', 'Início', 'Local Início', 'Término', 'Local Fim', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes'],
+            $expRows, 'Relatório de Deslocamento', "Período (BRT): $dateFrom a $dateTo");
+    }
+
     try {
         $countStmt = $db->prepare("SELECT COUNT(*) FROM trips t $where");
         $countStmt->execute($params);
@@ -75,9 +114,15 @@ $current_route = 'rel_deslocamento';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Deslocamento</h2>
-    <button class="btn btn-outline btn-sm" onclick="alert('Export Excel em desenvolvimento')">Exportar Excel</button>
+    <?php if ($generated): ?>
+    <div style="display:flex;gap:8px;">
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
+    <?php endif; ?>
 </div>
 
 <div class="card mb-24" style="padding:16px 20px;">

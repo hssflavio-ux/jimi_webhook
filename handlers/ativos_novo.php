@@ -20,6 +20,8 @@ $success = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('ativos', 'create');
     $nome        = trim($_POST['device_name'] ?? '');
     $imei        = trim($_POST['imei'] ?? '');
     $modelo_id   = (int)($_POST['device_model_id'] ?? 0);

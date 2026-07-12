@@ -6,6 +6,43 @@
 
 ---
 
+## 0. PROGRESSO DE EXECUÇÃO (checkpoint 11/07/2026 — sessão 3)
+
+> **Fases A e B COMPLETAS.** Retomar do item marcado ⏭️.
+
+| Item | Status | Observações |
+|---|---|---|
+| **A1** rota morta `/clientes/{id}` | ✅ Feito | Router devolve 404; smoke test OK |
+| **A2** `/checklist/inspecao` sombreada | ✅ Feito | `checklist` saiu de `$simpleRoutes`; fallback do subrouteMap serve `/checklist` |
+| **A3** CSRF (4 handlers + `/sendcommand`) | ✅ Feito | `ativos`, `perfil`, toggle de `usuarios` com `csrf_field`; **`/sendcommand` agora exige `X-CSRF-Token`** — token exposto em `window.CSRF_TOKEN` pelo `layout_base.php` e enviado nos 6 callers (`comandos`, `ativo_detalhe`, `config`, `equipamentos`, `video_aovivo`, `video_playback`) |
+| **A4** nome do grupo em `usuarios.php` | ✅ Feito | Mapa `$pgNames` via `array_column` |
+| **B1** export síncrono Excel/PDF | ✅ Feito | `stream_export()` novo em `export_helper.php`; ligado em `rel_alarmes`, `rel_ocorrencias`, `rel_posicoes`, `rel_deslocamento`, `rel_desatualizados` (por faixa) e `equipamentos`; botões Excel+PDF padrão YUV; limite `SYNC_EXPORT_MAX_ROWS=10000` |
+| **B2** RBAC efetivo | ✅ Feito | Helpers em `auth.php` (wildcard `"*"` do seed), sidebar filtrada, enforcement central de `view` no router, **gates de ação fina** (`create`/`edit`/`delete`) nos POSTs de `ativos`, `ativos_novo`, `chips`, `clientes` (impersonate segue gated por revendedor), `equipamentos` (incl. import), `motoristas`, `usuarios`, `grupos_permissao`, `config_ocorrencias` (incl. delete via GET) e `require_permission('relatorios'/'equipamentos','export')` nos 6 blocos de export. Falta apenas: spec Playwright com usuário restrito (teste automatizado do RBAC) |
+| **B3** geocode em Posições | ✅ Feito | Coluna Endereço substitui Lat/Long (fallback: link OSM com coords); `geocode_cache_lookup()` em lote (cache-only) + máx. 3 misses resolvidos inline/página; **bug corrigido**: `reverse_geocode` comparava float 8 casas com DECIMAL(9,6) → cache nunca dava hit e a API era rechamada sempre |
+| **B4** filtros chips/Filiais/Motoristas | ✅ Feito | Novo componente `web/components/chips_multiselect.php` (chips + overflow `+N`, extraído do bi.php); `rel_alarmes` com chips de Tipo de Alarme (IN) + filtro Filial; `rel_ocorrencias` com filtros Filial e Motorista; exports respeitam os novos filtros (mesmo `$where`) |
+| **B5** colunas Equipamentos | ✅ Feito | Grade com **Chip** (JOIN `sim_cards`), **Bateria** (`device_statistics.battery_level`) e **Periféricos** (badge com contagem + tooltip); export idem; fallback resiliente p/ schema antigo |
+| **B6** import em lote completo | ✅ Feito | CSV agora importa **Modelo** (resolvido por nome, case-insensitive) e **Canais** (fallback: camera_count do modelo); validação de IMEI 15–17 dígitos; **avisos por linha** (IMEI inválido/duplicado, modelo desconhecido) |
+| **C** grades CRUD (busca/export/paginação) | ✅ Feito | `chips`/`motoristas`/`ativos`: busca server-side + export Excel/PDF + paginação 25/pág; `clientes`: busca + export + colunas **E-mail** e **Config. Checklist** (JOIN resiliente) + **fix CSRF nos forms "Entrar como"/"Desativar" (estavam 403 desde a Fase F)**; `usuarios`: busca + export por aba; `grupos-permissao`/`config-ocorrencias`: busca client-side (`yuvTableFilter` global no layout); `motoristas` ganhou colunas **Foto** (thumb/inicial) e **Nascimento**. *Adiado: campos veiculares Modelo/Ano em Ativos (exige migration — agrupar na próxima migration v4.2.0)* |
+| **D2** Rastreamento sem reload | ✅ Feito | Modo `?ajax=1` no handler + pins atualizados in-place a cada 30s; **bug corrigido**: query usava `g.ignition` (coluna inexistente — é `acc`) → exceção engolida → **mapa sempre sem pins** |
+| **D3** Exportar com polling real | ✅ Feito | Poll 10s via `/exportardata` (recarrega só quando um status muda); coluna **Nome** do relatório na grade; `name` exposto no JSON |
+| **D4** Indicador de impersonação | ✅ Feito | Banner âmbar sob o header ("operando como X") + botão "Voltar ao meu perfil" (fecha `impersonation_log.ended_at` via `exit_impersonation` no `/customer_switch`, que também ganhou CSRF) |
+| **D1** Resumo enriquecido | ✅ Feito | Ociosidade (acc=1 + vel 0, 30 min), Status por modelo (barras on/off + % online), **heatmap real** (`leaflet.heat` CDN sobre os pontos de 2h), séries com **toggle Hoje/7d/Mês** (buckets hora/dia BRT + total do período no card), **Top 3 placas** e **Top 3 motoristas** (com upsell FaceID quando desabilitado — paridade YUV), **Visão por clientes em 3 eixos Top 3** (equipamentos/ocorrências/desatualizados), **auto-refresh 30s dos KPIs** via `?ajax=kpis` (sem reload, pula a query do heatmap), botão **"Ver tutorial"** (reseta o tour). **Bug corrigido**: fallback de velocidade usava `g.ignition` (coluna inexistente — é `acc`) → "Velocidade da Frota" nunca populava on-the-fly |
+
+> **FASES A–D DO PLANO: 100% CONCLUÍDAS.** O que resta no plano depende do operador (§7 verificação ao vivo, credenciais multi-tenant, OTA com device, deploy homolog) ou é opcional/futuro (§8: campos veiculares em Ativos via migration, timeline gráfica do Playback, spec Playwright de RBAC restrito).
+| **§7** verificação ao vivo YUV | ⛔ Bloqueada | Extensão Chrome não conectada (depende do operador) |
+
+**Bugs extras encontrados e corrigidos durante a execução** (não estavam no plano):
+1. `rel_posicoes.php`: `$where` sem prefixo `g.` com JOIN em `devices` → **coluna ambígua → exceção engolida → relatório sempre vazio**. Corrigido (+ `MOD(g.id,10)`).
+2. `rel_posicoes.php`: grade referenciava `$r['ignition']`/`$r['gps_status']` que não vinham no SELECT (ignição sempre "Desligada"). Corrigido com aliases `g.acc AS ignition, g.status AS gps_status` e aceite de `VALID`.
+3. `usuarios.php`: form de toggle **sem** `csrf_field()` com `csrf_verify()` ativo → ativar/desativar usuário retornava 403 desde a Fase F. Corrigido.
+4. `get_jimi_user()` não selecionava `user_type`/`permission_group_id`/`photo_url` → checks `user_type==='revendedor'` (visão revendedor no Resumo, abas de usuários) **nunca ativavam**. Corrigido com fallback para schemas antigos.
+
+**Verificação (sessão 3)**: `php -l` verde em todos os arquivos tocados; **suite Playwright completa rodando localmente: 36 passed / 0 failed / 4 skipped** (2 rodadas; credenciais E2E provisionadas no MySQL local — usuário `e2e@teste.local`, senha resetada no banco de dev; specs pulados: rate-limit destrutivo e multi-tenant que exigem 2º cliente). Terceira rodada validando B4/B5/B6 disparada ao final da sessão.
+
+**Como retomar**: começar pela **Fase C** (grades CRUD: Pesquisar + Exportar + paginação nos 7 cadastros, reusando `stream_export()` e o padrão de busca de `equipamentos.php`; colunas YUV faltantes da tabela §4), depois **Fase D** (§5). Itens de teste que restam: spec Playwright de RBAC com usuário restrito; specs multi-tenant (dependem de credenciais B).
+
+---
+
 ## 1. Veredito geral
 
 A paridade estrutural está **alta**: as 22 rotas YUV existem, todas com implementação real (nenhum stub de página), o motor de ocorrências funciona ponta-a-ponta (alarme → regra → ocorrência → tratativa → relatório, validado no E2E), o vídeo estruturado (Ao Vivo/Playback/Downloads) opera com dispositivo real e a navegação (sidebar-sanfona + header On/Off + colapsar) espelha a IA do YUV.

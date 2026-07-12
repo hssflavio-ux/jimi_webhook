@@ -18,6 +18,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
 
 if (!isset($page_title))    $page_title    = 'Painel';
 if (!isset($current_route)) $current_route = 'dashboard';
@@ -76,6 +77,21 @@ $navBottom = [
     ['route' => 'exportar', 'label' => 'Exportar', 'icon' => 'download', 'href' => '/exportar'],
 ];
 
+// ── RBAC (v4.2.0 — Fase B2): esconde itens de nav sem permissão 'view' ──
+// Mapa rota-de-nav → chave de tela da matriz (grupos_permissao.php);
+// relatórios compartilham a chave única 'relatorios'.
+$permRouteMap = ['ocorrencias' => 'ocorrencias_dashboard'];
+$navCanView = function ($route) use ($permRouteMap) {
+    $screen = $permRouteMap[$route] ?? (strpos($route, 'rel_') === 0 ? 'relatorios' : $route);
+    return can($screen, 'view');
+};
+$navPrincipal = array_values(array_filter($navPrincipal, fn($l) => $navCanView($l['route'])));
+foreach ($navGroups as $gk => $g) {
+    $navGroups[$gk]['items'] = array_values(array_filter($g['items'], fn($l) => $navCanView($l['route'])));
+    if (empty($navGroups[$gk]['items'])) unset($navGroups[$gk]);
+}
+$navBottom = array_values(array_filter($navBottom, fn($l) => $navCanView($l['route'])));
+
 // Legacy compatibility: also match 'dashboard' → 'resumo', 'live' → 'rastreamento'
 if ($current_route === 'dashboard') $current_route = 'resumo';
 if ($current_route === 'live') $current_route = 'rastreamento';
@@ -125,6 +141,17 @@ function nav_icon($name) {
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="JIMI">
 <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+<meta name="csrf-token" content="<?= htmlspecialchars(csrf_token()) ?>">
+<script>
+window.CSRF_TOKEN = <?= json_encode(csrf_token()) ?>;
+// Busca client-side para grades pequenas (Fase C — padrão CRUD YUV)
+function yuvTableFilter(input, wrapId) {
+    var q = input.value.toLowerCase();
+    document.querySelectorAll('#' + wrapId + ' tbody tr').forEach(function (tr) {
+        tr.style.display = tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+    });
+}
+</script>
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -989,16 +1016,43 @@ if (!empty($customer['brand_color'])) {
         </div>
     </header>
 
+    <?php
+    // D4 (v4.2.0 — YUV): banner de impersonação ativa (revendedor operando como cliente)
+    $impersonating = false;
+    if (($user['user_type'] ?? '') === 'revendedor' && !empty($customer['id'])) {
+        try {
+            $impStmt = Database::getInstance()->getConnection()->prepare(
+                "SELECT COUNT(*) FROM impersonation_log WHERE reseller_user_id = ? AND customer_id = ? AND ended_at IS NULL");
+            $impStmt->execute([$user['id'] ?? 0, $customer['id']]);
+            $impersonating = (int)$impStmt->fetchColumn() > 0;
+        } catch (Exception $e) {}
+    }
+    if ($impersonating): ?>
+    <div style="background:#fff6e0;border-bottom:1px solid #f2e1ad;color:#a97800;padding:8px 24px;font-size:13px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <span>Você está operando como <strong><?= htmlspecialchars($customer['name'] ?? '') ?></strong> (impersonação ativa — auditada).</span>
+        <button onclick="exitImpersonation()" class="btn btn-outline btn-sm" style="white-space:nowrap;">Voltar ao meu perfil</button>
+    </div>
+    <?php endif; ?>
+
     <div class="main-content">
 
 <script>
 function switchCustomer(id) {
     fetch('/customer_switch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
         body: JSON.stringify({ customer_id: parseInt(id) })
     }).then(r => r.json()).then(data => {
         if (data.code === 0) location.reload();
+    });
+}
+function exitImpersonation() {
+    fetch('/customer_switch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ exit_impersonation: 1 })
+    }).then(r => r.json()).then(data => {
+        if (data.code === 0) location.href = '/';
     });
 }
 

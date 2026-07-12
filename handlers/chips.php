@@ -18,6 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action  = $_POST['action'] ?? '';
     $id      = (int)($_POST['id'] ?? 0);
+    // RBAC ação fina (v4.2.0 — Fase B2)
+    require_permission('chips', $action === 'delete' ? 'delete' : ($id > 0 ? 'edit' : 'create'));
 
     if ($action === 'delete' && $id > 0) {
         $stmt = $db->prepare("DELETE FROM sim_cards WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
@@ -55,20 +57,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Fase C (padrão CRUD YUV §9.1): busca + paginação + export
+$q = trim($_GET['q'] ?? '');
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 25;
+
+$params = [];
 $where = $is_admin ? '1=1' : "s.customer_id = :cid";
 if (!$is_admin) $params[':cid'] = $customer_id;
+if ($q !== '') {
+    $where .= " AND (s.carrier LIKE :q1 OR s.msisdn LIKE :q2 OR s.iccid LIKE :q3 OR s.imei LIKE :q4)";
+    foreach (['q1', 'q2', 'q3', 'q4'] as $k) $params[":$k"] = "%$q%";
+}
+
+// Export síncrono
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('chips', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expRows = [];
+    try {
+        $expStmt = $db->prepare("
+            SELECT s.*, d.device_name FROM sim_cards s
+            LEFT JOIN devices d ON d.imei = s.imei
+            WHERE $where ORDER BY s.created_at DESC
+            LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($params);
+        while ($c = $expStmt->fetch(PDO::FETCH_ASSOC)) {
+            $expRows[] = [
+                $c['carrier'] ?? '—', $c['msisdn'] ?? '—', $c['iccid'] ?? '—',
+                $c['imei'] ?? '—', $c['device_name'] ?? '—',
+                $c['is_active'] ? 'Ativo' : 'Inativo',
+            ];
+        }
+    } catch (Exception $e) {}
+    stream_export($export, 'chips',
+        ['Operadora', 'Número (MSISDN)', 'ICCID', 'IMEI', 'Equipamento', 'Status'],
+        $expRows, 'Chips (SIM)');
+}
+
 $sim_cards = [];
+$totalRows = 0;
 try {
+    $countStmt = $db->prepare("SELECT COUNT(*) FROM sim_cards s WHERE $where");
+    $countStmt->execute($params);
+    $totalRows = (int)$countStmt->fetchColumn();
+
+    $offset = ($page - 1) * $perPage;
     $simCardsStmt = $db->prepare("
         SELECT s.*, d.device_name
         FROM sim_cards s
         LEFT JOIN devices d ON d.imei = s.imei
         WHERE $where
         ORDER BY s.created_at DESC
+        LIMIT $perPage OFFSET $offset
     ");
     $simCardsStmt->execute($params);
     $sim_cards = $simCardsStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {}
+$totalPages = max(1, (int)ceil($totalRows / $perPage));
 
 $devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
 $devStmt->execute([':cid' => $customer_id]);
@@ -93,7 +140,20 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div style="display:grid;grid-template-columns:1fr 380px;gap:16px">
+    <div>
+    <div class="flex-between mb-12" style="gap:8px;flex-wrap:wrap;">
+        <form method="GET" style="display:flex;gap:6px;">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar operadora, número, ICCID, IMEI..."
+                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:280px;">
+            <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
+        </form>
+        <div style="display:flex;gap:6px;">
+            <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+            <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        </div>
+    </div>
     <div class="table-wrap">
         <table>
             <thead><tr><th>Operadora</th><th>Número (MSISDN)</th><th>ICCID</th><th>IMEI (vinculado)</th><th>Status</th><th></th></tr></thead>
@@ -127,10 +187,20 @@ include __DIR__ . '/../web/layout_base.php';
                 </tr>
                 <?php endforeach; ?>
                 <?php if (empty($sim_cards)): ?>
-                <tr><td colspan="6"><div class="empty-state"><h3>Nenhum chip</h3><p>Cadastre um chip SIM para começar.</p></div></td></tr>
+                <tr><td colspan="6"><div class="empty-state"><h3>Nenhum chip</h3><p><?= $q !== '' ? 'Nenhum resultado para a busca.' : 'Cadastre um chip SIM para começar.' ?></p></div></td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
+    </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="flex-between mt-12" style="font-size:13px;color:var(--muted);">
+        <span>Página <?= $page ?> de <?= $totalPages ?> (<?= $totalRows ?> chips)</span>
+        <div style="display:flex;gap:4px;">
+            <?php if ($page > 1): ?><a href="?<?= $expBase ?>&page=<?= $page-1 ?>" class="btn btn-outline btn-sm">&laquo;</a><?php endif; ?>
+            <?php if ($page < $totalPages): ?><a href="?<?= $expBase ?>&page=<?= $page+1 ?>" class="btn btn-outline btn-sm">&raquo;</a><?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
     </div>
 
     <div class="card">

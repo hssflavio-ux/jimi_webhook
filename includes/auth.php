@@ -106,12 +106,82 @@ function get_jimi_user() {
     if (empty($_SESSION['user_id'])) return null;
     try {
         $db = Database::getInstance()->getConnection();
-        $stmt = $db->prepare("SELECT id, email, name, role, is_active FROM users WHERE id = ?");
+        // user_type/permission_group_id/photo_url (v4.0.0) entram no SELECT — vários
+        // handlers testam $user['user_type'] === 'revendedor' (visões de revendedor)
+        $stmt = $db->prepare("SELECT id, email, name, role, is_active, user_type, permission_group_id, photo_url FROM users WHERE id = ?");
         $stmt->execute(array($_SESSION['user_id']));
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         return $row ? $row : null;
     } catch (Exception $e) {
-        return null;
+        // Colunas v4 podem não existir em bancos antigos — fallback ao SELECT legado
+        try {
+            $db = Database::getInstance()->getConnection();
+            $stmt = $db->prepare("SELECT id, email, name, role, is_active FROM users WHERE id = ?");
+            $stmt->execute(array($_SESSION['user_id']));
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $row ? $row : null;
+        } catch (Exception $e2) {
+            return null;
+        }
+    }
+}
+
+/**
+ * RBAC efetivo (v4.2.0 — Fase B2 do PLANO_ADERENCIA_YUV).
+ *
+ * Lê a matriz JSON de permission_groups.permissions do grupo do usuário logado:
+ *   { "<tela>": ["view","create","edit","delete","export"], ... }
+ * (chaves de tela conforme handlers/grupos_permissao.php — relatórios agrupados
+ * na chave única 'relatorios').
+ *
+ * @returns array|null Matriz decodificada, ou NULL se o usuário não tem grupo
+ *                     (sem grupo → sem restrição; vale o role legado admin/operator/viewer)
+ */
+function get_user_permissions() {
+    auth_init();
+    if (empty($_SESSION['user_id'])) return null;
+    if (array_key_exists('_jimi_permissions', $GLOBALS)) return $GLOBALS['_jimi_permissions'];
+    $GLOBALS['_jimi_permissions'] = null;
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT pg.permissions FROM users u
+                              JOIN permission_groups pg ON pg.id = u.permission_group_id
+                              WHERE u.id = ?");
+        $stmt->execute(array($_SESSION['user_id']));
+        $json = $stmt->fetchColumn();
+        if ($json) {
+            $decoded = json_decode($json, true);
+            if (is_array($decoded)) $GLOBALS['_jimi_permissions'] = $decoded;
+        }
+    } catch (Exception $e) {}
+    return $GLOBALS['_jimi_permissions'];
+}
+
+/**
+ * O usuário logado pode executar a ação na tela?
+ *
+ * @param string $screen Chave da tela (ex.: 'ativos', 'relatorios', 'usuarios')
+ * @param string $action view|create|edit|delete|export
+ * @returns bool
+ */
+function can($screen, $action = 'view') {
+    $perms = get_user_permissions();
+    if ($perms === null) return true; // sem grupo de permissão → sem restrição
+    // Wildcard do seed "Administrador" (migration v4.0.0): {"*": ["view",...]}
+    if (!empty($perms['*']) && in_array($action, (array)$perms['*'], true)) return true;
+    return !empty($perms[$screen]) && in_array($action, (array)$perms[$screen], true);
+}
+
+/**
+ * Bloqueia a request (403) se o usuário não tiver a permissão. Usar no topo
+ * dos handlers de tela (view) e antes de processar POSTs (create/edit/delete).
+ */
+function require_permission($screen, $action = 'view') {
+    require_login();
+    if (!can($screen, $action)) {
+        http_response_code(403);
+        echo '<h1>403 — Acesso negado</h1><p>Seu grupo de permissão não autoriza esta ação. Contate o administrador.</p>';
+        exit;
     }
 }
 

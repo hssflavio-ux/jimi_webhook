@@ -63,9 +63,11 @@ if (empty($segments)) {
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
                       'pushevent'];
+    // NOTA: 'checklist' fica fora daqui de propósito — resolve via $subrouteMap
+    // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas','checklist'];
+                     'chips','equipamentos','motoristas'];
     $renamedRoutes = [
         'config-ocorrencias' => 'config_ocorrencias.php',
         'grupos-permissao'   => 'grupos_permissao.php',
@@ -136,11 +138,12 @@ if (empty($segments)) {
 
     } elseif ($first === 'clientes') {
         if ($second) {
-            $handler = 'cliente_detalhe.php';
-            $params['customer_id'] = $second;
-        } else {
-            $handler = 'clientes.php';
+            // Rota morta removida na v4.2.0: cliente_detalhe.php nunca existiu (R08 residual)
+            http_response_code(404);
+            echo '<h1>404 — Página não encontrada</h1>';
+            exit;
         }
+        $handler = 'clientes.php';
 
     } else {
         http_response_code(404);
@@ -155,6 +158,42 @@ if (!file_exists($handlerPath)) {
     http_response_code(404);
     echo '<h1>404 — Handler não encontrado</h1>';
     exit;
+}
+
+// ── RBAC central (v4.2.0 — Fase B2 do PLANO_ADERENCIA_YUV) ──
+// Telas do dashboard exigem permissão 'view' do grupo do usuário (matriz de
+// grupos_permissao.php). Usuário sem grupo → sem restrição (role legado).
+// Webhooks, AJAX, login/logout/setup/ping ficam de fora deste mapa.
+// Ações finas (create/edit/delete/export) são verificadas nos handlers.
+$screenByHandler = [
+    'resumo.php'                => 'resumo',
+    'rastreamento.php'          => 'rastreamento',
+    'bi.php'                    => 'bi',
+    'ocorrencias_dashboard.php' => 'ocorrencias_dashboard',
+    'comandos.php'              => 'comandos',
+    'exportar.php'              => 'exportar',
+    'video_aovivo.php'          => 'video_aovivo',
+    'video_playback.php'        => 'video_playback',
+    'video_downloads.php'       => 'video_downloads',
+    'rel_posicoes.php'          => 'relatorios',
+    'rel_deslocamento.php'      => 'relatorios',
+    'rel_desatualizados.php'    => 'relatorios',
+    'rel_alarmes.php'           => 'relatorios',
+    'rel_ocorrencias.php'       => 'relatorios',
+    'ativos.php'                => 'ativos',
+    'ativos_novo.php'           => 'ativos',
+    'ativo_detalhe.php'         => 'ativos',
+    'chips.php'                 => 'chips',
+    'clientes.php'              => 'clientes',
+    'equipamentos.php'          => 'equipamentos',
+    'grupos_permissao.php'      => 'grupos-permissao',
+    'motoristas.php'            => 'motoristas',
+    'config_ocorrencias.php'    => 'config-ocorrencias',
+    'usuarios.php'              => 'usuarios',
+];
+if (isset($screenByHandler[$handler])) {
+    require_once __DIR__ . '/../includes/auth.php';
+    require_permission($screenByHandler[$handler], 'view');
 }
 
 foreach ($params as $key => $value) {

@@ -105,7 +105,7 @@ function getSetImei() { return document.getElementById('cfg-imei-set').value; }
 function sendCfg(imei, proNo, content) {
     return fetch('/sendcommand', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': dashToken },
+        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': dashToken, 'X-CSRF-Token': window.CSRF_TOKEN || '' },
         body: JSON.stringify({ imei: imei, proNo: proNo, content: content, serverFlagId: 0 })
     }).then(function(r) { return r.json(); });
 }

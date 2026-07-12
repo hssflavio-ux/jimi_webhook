@@ -82,6 +82,44 @@ if ($detailBucket && isset($buckets[$detailBucket])) {
     } catch (Exception $e) {}
 }
 
+// Export síncrono da faixa selecionada (padrão YUV: cada faixa com Detalhes + Export)
+$export = $_GET['export'] ?? '';
+if ($detailBucket && isset($buckets[$detailBucket]) && in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('relatorios', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expRows = [];
+    try {
+        $b = $buckets[$detailBucket];
+        $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
+        $expStmt = $db->prepare("
+            SELECT d.imei, d.device_name, ds.last_gps_time AS last_position_at,
+                   COALESCE(c.name, '—') as customer_name,
+                   TIMESTAMPDIFF(HOUR, ds.last_gps_time, NOW()) as hours_since,
+                   COALESCE(dm.model_name, '—') as model_name
+            FROM devices d
+            LEFT JOIN customers c ON c.id = d.customer_id
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            $full
+            ORDER BY ds.last_gps_time IS NULL DESC, ds.last_gps_time ASC
+            LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($params);
+        while ($d = $expStmt->fetch()) {
+            $expRows[] = [
+                $d['imei'],
+                $d['device_name'] ?? '—',
+                $d['model_name'],
+                $d['customer_name'],
+                $d['last_position_at'] ? fmt_brt($d['last_position_at']) : 'Nunca',
+                $d['hours_since'] !== null ? (int)$d['hours_since'] : '—',
+            ];
+        }
+    } catch (Exception $e) { /* tabelas ausentes → export vazio */ }
+    stream_export($export, 'desatualizados_' . $detailBucket,
+        ['IMEI', 'Nome', 'Modelo', 'Cliente', 'Última Posição', 'Horas Desde'],
+        $expRows, 'Desatualizados — ' . $buckets[$detailBucket]['label']);
+}
+
 $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
 
 $page_title = 'Relatório de Desatualizados';
@@ -146,7 +184,12 @@ require_once __DIR__ . '/../web/layout_base.php';
         Detalhes: <?= $buckets[$detailBucket]['label'] ?>
         <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= count($detailRows) ?>)</span>
     </h3>
-    <a href="/relatorios/desatualizados<?= $filterCust ? '?customer_id='.$filterCust : '' ?>" class="btn btn-outline btn-sm">Voltar</a>
+    <div style="display:flex;gap:8px;">
+        <?php $expQ = $_GET; unset($expQ['export']); $expBase = http_build_query($expQ); ?>
+        <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <a href="/relatorios/desatualizados<?= $filterCust ? '?customer_id='.$filterCust : '' ?>" class="btn btn-outline btn-sm">Voltar</a>
+    </div>
 </div>
 
 <div class="table-wrap">
