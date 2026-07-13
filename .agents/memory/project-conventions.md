@@ -1,7 +1,7 @@
 ---
 type: project
 created: 2026-07-06
-updated: 2026-07-06
+updated: 2026-07-12
 ---
 
 # Project Conventions — jimi_webhook v4.0.0
@@ -11,6 +11,12 @@ updated: 2026-07-06
 - **Cópia fiel do**: YUV (`app.yuv.com.br`)
 - **Nome**: Jimi Webhook System v4.0.0 "YUV Parity"
 - **Servidor produção**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 FPM + MySQL)
+
+## Deploy (homolog 189.22.240.43)
+- **Repo canônico**: `hssflavio-ux/jimi_webhook` — o repo `Flaviohses/jimi_webhook` é legado e NÃO recebe os pushes do dev (causou homolog desatualizado até 12/07/2026)
+- **Servidor puxa de**: `git@github.com:hssflavio-ux/jimi_webhook.git` com deploy key dedicada `/root/.ssh/github_hssflavio` (read-only, via `core.sshCommand` do repo em `/var/www/jimi_webhook`)
+- **Executar deploy**: `ssh administrador@189.22.240.43` (chave da máquina dev instalada) → `sudo ./scripts/deploy.sh` (sudo exige senha; a chave GitHub fica no root)
+- **Usuário E2E no homolog**: `e2e@teste.local` / `E2e-Playwright-2026` (admin, customer 1) — para Playwright com `BASE_URL=http://189.22.240.43`
 
 ## Tech Stack (imutável)
 - **PHP 8.3 puro** — sem Laravel, sem Symfony, sem build step, sem npm/webpack
