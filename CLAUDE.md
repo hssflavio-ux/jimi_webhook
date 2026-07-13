@@ -97,7 +97,7 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 - `config/database.php` — PDO singleton + `.env` parser
 - `includes/auth.php` — `require_login()`, `require_admin()`, `get_jimi_user()`, `get_customer_id()`, `login_user()`, `set_customer_context()`
 - `includes/functions.php` — `get_webhook_data()`, `normalize_data()`
-- `core/Logger.php` — static logger (daily rotation, DEBUG→CRITICAL, auto-purge >30 days)
+- `core/Logger.php` — static logger (daily file naming, DEBUG→CRITICAL; level via `LOG_LEVEL` in `.env` — `DEBUG` enables raw webhook payloads; purge/rotation via cron `scripts/log_cleanup.php`, `LOG_RETENTION_DAYS`/`LOG_MAX_SIZE_MB`)
 - `web/layout_base.php` / `layout_ativo_sidebar.php` / `layout_base_close.php` — dashboard shell (sidebar + header + content)
 - `mysql/jimi_tracker.sql` + `migration_v2.0.0.sql` + `migration_v3.1.0.sql` — schema (22 tables; v3.1.0 added `customers`, `users`, `customer_users`, `sessions`, `device_models`)
 

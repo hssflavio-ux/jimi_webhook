@@ -23,6 +23,7 @@ class Logger {
     private static $logDir = __DIR__ . '/../logs';
     private static $logLevel = self::INFO; // Nível mínimo para logar
     private static $requestId = null;
+    private static $envLevelApplied = false;
     
     /**
      * Inicializa logger com request ID único
@@ -86,6 +87,17 @@ class Logger {
      * Método principal de logging
      */
     private static function log($level, $message, array $context = []) {
+        // LOG_LEVEL do .env aplicado lazy: o .env só é parseado no primeiro
+        // Database::getInstance() (config/database.php), que normalmente ocorre
+        // depois do load deste arquivo — reavalia até a variável existir
+        if (!self::$envLevelApplied) {
+            $envLevel = getenv('LOG_LEVEL');
+            if ($envLevel !== false && $envLevel !== '') {
+                self::setLogLevel(strtoupper(trim($envLevel)));
+                self::$envLevelApplied = true;
+            }
+        }
+
         // Verificar se deve logar baseado no nível
         if (!self::shouldLog($level)) {
             return;
@@ -244,10 +256,17 @@ class Logger {
     
     /**
      * Limpar logs antigos (> 30 dias)
+     *
+     * Cobre TODOS os logs do diretório (webhook_*, worker, órfãos de writers
+     * antigos) e os .log.old gerados pela rotação por tamanho do
+     * scripts/log_cleanup.php — não apenas webhook_*.log.
      */
     public static function cleanOldLogs($daysToKeep = 30) {
         try {
-            $files = glob(self::$logDir . '/webhook_*.log');
+            $files = array_merge(
+                glob(self::$logDir . '/*.log') ?: [],
+                glob(self::$logDir . '/*.log.old') ?: []
+            );
             $cutoffTime = time() - ($daysToKeep * 24 * 60 * 60);
             
             foreach ($files as $file) {

@@ -1,9 +1,33 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php'; // fmt_brt() e helpers de data para todo o dashboard
+require_once __DIR__ . '/../core/Logger.php';
 
 define('AUTH_COOKIE', 'jimi_token');
 define('AUTH_LIFETIME', 86400);
+
+// ── Handler global de erros do dashboard ─────────────────────────────────────
+// Páginas e endpoints AJAX incluem este arquivo; os webhooks (push*) não — eles
+// têm o try/catch próprio do WebhookHandler. Sem isto, exceção não tratada ou
+// fatal em página vira tela branca sem rastro no log da aplicação (só no error
+// log do FPM). Registra apenas exceção não capturada + erro fatal — warnings e
+// notices continuam fora para não poluir.
+set_exception_handler(function ($e) {
+    Logger::error('Exceção não tratada no dashboard', [
+        'class'   => get_class($e),
+        'message' => $e->getMessage(),
+        'file'    => $e->getFile(),
+        'line'    => $e->getLine(),
+    ]);
+    if (!headers_sent()) http_response_code(500);
+    echo 'Erro interno — o detalhe foi registrado no log.';
+});
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        Logger::critical('Erro fatal PHP no dashboard', $err);
+    }
+});
 
 function auth_init() {
     // Retorna se há usuário autenticado (endpoints AJAX usam `if (!auth_init())`)

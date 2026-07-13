@@ -48,3 +48,10 @@ updated: 2026-07-06
 - **Gotchas do 37381**: janela `beginTime/endTime` GMT-0 compacta (yyMMddHHmmss) **não pode cruzar o dia** — fatiar o período por dia UTC (a tela fatia com cap de 15 segmentos); campos `channel` (doc) + `channelId` (compat) + alarmFlag/resourceType/codeType/storageType=0 + instructionID
 - **Push §1.11** (`{imei,totalNum,instructionID,resourceList[]}`): pode vir SEM envelope data_list → `allowSingleObjectPayload=true` no handler; `resourceType` segue o 0x1205: **0=áudio+vídeo** (mapear para `video` — 0=imagem é do 0x0800, outro push)
 - **Timeline**: `resource_lists` ("No cartão") ∪ `media_files` ("Disponível") com merge por janela ±120s; botão Extrair por gravação; auto-refresh 6×8s sem reenviar o comando; serverFlagId por protocolo do device
+
+## Observabilidade: LOG_LEVEL, rotação real e handler global (13/07/2026)
+- **LOG_LEVEL no .env**: aplicado LAZY no primeiro log (core/Logger.php) — o .env só é parseado dentro do 1º `Database::getInstance()`, DEPOIS do load do Logger; ler env no init() não funciona. DEBUG liga RAW_WEBHOOK_DATA (payload bruto de webhook)
+- **Purga/rotação**: `scripts/log_cleanup.php` no cron diário 03:10 (crontab-setup.sh). Rotação por tamanho para logs de append contínuo (worker.log etc. — mtime sempre fresco, purge por idade nunca os pegaria) → `.old`; depois `cleanOldLogs()` por idade em `*.log` + `*.log.old`. Env: LOG_RETENTION_DAYS (30), LOG_MAX_SIZE_MB (10)
+- **Decisão**: log_cleanup NÃO usa a classe Database (o construtor dá `exit` em falha de conexão — limpeza de log deve rodar com banco fora); parse próprio do .env
+- **Handler global do dashboard** (auth.php): set_exception_handler → ERROR + 500 neutro; shutdown p/ fatais → CRITICAL; só páginas/AJAX (webhooks têm o try/catch do WebhookHandler); warnings/notices de fora
+- **Gotcha de teste**: `php -r` NÃO dispara set_exception_handler neste build (código eval'd) — sempre testar handler com arquivo .php real

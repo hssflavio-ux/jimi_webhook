@@ -20,6 +20,7 @@ WORKER_ENTRIES=(
     "scripts/worker.php:worker.log:1 min:*/1 * * * *"
     "scripts/trip_builder.php:trip_builder.log:15 min:*/15 * * * *"
     "scripts/metrics_rollup.php:metrics.log:5 min:*/5 * * * *"
+    "scripts/log_cleanup.php:log_cleanup.log:24 h (3h10):10 3 * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'
