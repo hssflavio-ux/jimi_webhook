@@ -503,3 +503,8 @@ class PushAlarmHandler extends WebhookHandler {
 
 $handler = new PushAlarmHandler();
 $handler->handle();
+
+// Pós-commit (ainda em background do FPM): despacha as solicitações
+// automáticas de vídeo de evento agendadas pelo motor de ocorrências.
+// Fora da transação — o IoTHub pode segurar a resposta por até 35s.
+flush_pending_video_requests();

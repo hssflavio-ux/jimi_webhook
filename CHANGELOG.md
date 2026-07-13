@@ -5,6 +5,11 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.2.1
+
+### Added
+- **Gatilho automático de vídeo de evento (DMS/ADAS, câmeras JT/T)**: ao criar uma ocorrência nova sem mídia vinculada, o motor de ocorrências agenda automaticamente a solicitação de upload da multimídia armazenada do device (`proNo 34818`/0x8802, `mediaType 2`, janela `±AUTO_VIDEO_WINDOW_SECS` ao redor do alarme em GMT-0 compacto, canal `AUTO_VIDEO_CHANNEL` — 0 = todos). O despacho HTTP roda **pós-commit** (fim do `pushalarm.php`, fora da transação do webhook) via novo helper reutilizável `includes/iothub_command.php` (`iothub_dispatch_command()`, mesmo contrato/semântica de status do `sendcommand.php`, registra em `commands` com `operator='auto_video'`). Guarda anti-rajada de 1 solicitação por device a cada 2 min; kill-switch `AUTO_VIDEO_REQUEST=0`. O vídeo chega assíncrono via `pushfileupload` e o `link_upload_to_occurrence()` (±3 min) já o anexa à ocorrência — o frontend (detalhe da ocorrência / playback) o serve por `FILE_STORAGE_URL + file_url` com canal/`event_time` reais do webhook de chegada.
+
 ## [Unreleased] — 4.2.0 (Aderência YUV — Fases A–D completas)
 
 Execução do `PLANO_ADERENCIA_YUV.md` (revisão de aderência contra a plataforma YUV capturada em 06/07/2026 + inventário do código real). Progresso e ponto de retomada em `PLANO_ADERENCIA_YUV.md` §0.

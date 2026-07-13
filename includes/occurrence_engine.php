@@ -22,6 +22,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/iothub_command.php';
 
 define('OCCURRENCE_DEFAULT_WINDOW_MINUTES', 10);
 
@@ -73,7 +74,17 @@ function process_alarm_to_occurrence(array $alarm): ?int
 
     $mediaId = link_media_to_occurrence($db, $imei, $alarmTime, $alarm);
 
-    return create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId);
+    $occId = create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId);
+
+    // Gatilho automático de vídeo do evento: ocorrência nova sem mídia vinculada
+    // em câmera JT/T → agenda solicitação de upload da multimídia armazenada
+    // (proNo 34818). O despacho HTTP acontece FORA da transação do webhook,
+    // via flush_pending_video_requests() no fim do pushalarm.php.
+    if ($occId && $mediaId === null) {
+        queue_event_video_request($db, $imei, $alarmTime, $occId);
+    }
+
+    return $occId;
 }
 
 function get_occurrence_config_for_imei(PDO $db, string $imei): ?int
@@ -255,4 +266,149 @@ function link_upload_to_occurrence(PDO $db, string $imei, string $eventTime, int
         return $occId;
     }
     return null;
+}
+
+/**
+ * Agenda a solicitação automática do vídeo do evento (proNo 34818 = 0x8802,
+ * multimídia armazenada) para o device de uma ocorrência recém-criada.
+ *
+ * Apenas AGENDA (fila em memória do request): o despacho HTTP ao IoTHub segura
+ * a resposta por até 35s e não pode rodar dentro da transação do webhook —
+ * quem envia é flush_pending_video_requests(), chamado pós-commit.
+ *
+ * Elegibilidade: device com modelo de protocolo JTT e camera_count >= 1
+ * (34818 é instrução JT/T — devices JIMI ficam de fora, ADR-001).
+ * Kill-switch: AUTO_VIDEO_REQUEST=0 no .env.
+ *
+ * @param PDO    $db           Conexão ativa
+ * @param string $imei         IMEI do device
+ * @param string $alarmTime    Hora do alarme (UTC, formato Y-m-d H:i:s)
+ * @param int    $occurrenceId Ocorrência que motivou a solicitação (para log)
+ * @returns void
+ */
+function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int $occurrenceId): void
+{
+    // Kill-switch: '0' é falsy em PHP — comparar explicitamente, sem `?:`
+    $autoFlag = getenv('AUTO_VIDEO_REQUEST');
+    if ($autoFlag !== false && trim($autoFlag) === '0') {
+        return;
+    }
+
+    try {
+        $stmt = $db->prepare(
+            "SELECT dm.protocol, dm.camera_count
+             FROM devices d
+             JOIN device_models dm ON dm.id = d.device_model_id
+             WHERE d.imei = :imei
+             LIMIT 1"
+        );
+        $stmt->execute([':imei' => $imei]);
+        $model = $stmt->fetch();
+    } catch (Exception $e) {
+        Logger::error('Auto-vídeo: falha ao consultar modelo do device', [
+            'imei' => $imei, 'error' => $e->getMessage(),
+        ]);
+        return;
+    }
+
+    if (!$model || $model['protocol'] !== 'JTT' || (int)$model['camera_count'] < 1) {
+        return;
+    }
+
+    try {
+        $t = new DateTime($alarmTime, new DateTimeZone('UTC'));
+    } catch (Exception $e) {
+        return;
+    }
+
+    // Janela do evento em GMT-0 no formato compacto JT/T (yyMMddHHmmss) —
+    // mesma convenção validada em video_playback.php
+    $win   = max(10, (int)(getenv('AUTO_VIDEO_WINDOW_SECS') ?: 60));
+    $begin = (clone $t)->modify("-{$win} seconds")->format('ymdHis');
+    $end   = (clone $t)->modify("+{$win} seconds")->format('ymdHis');
+
+    // 0 = todos os canais (a mídia chega com o canal real no pushfileupload,
+    // que é o que a tela de playback usa para filtrar)
+    $channel = (int)(getenv('AUTO_VIDEO_CHANNEL') ?: 0);
+
+    // channel + channelId: firmwares/exemplos divergem no nome do campo
+    // (video_playback usa channel; presets 37381/37382 usam channelId).
+    // O IoTHub ignora chaves extras — enviar ambos cobre as duas variantes.
+    $content = json_encode([
+        'mediaType' => 2,
+        'channel'   => $channel,
+        'channelId' => $channel,
+        'eventCode' => 0,
+        'beginTime' => $begin,
+        'endTime'   => $end,
+    ], JSON_UNESCAPED_SLASHES);
+
+    $GLOBALS['_pending_video_requests'][] = [
+        'imei'          => $imei,
+        'content'       => $content,
+        'occurrence_id' => $occurrenceId,
+    ];
+}
+
+/**
+ * Despacha as solicitações de vídeo agendadas por queue_event_video_request().
+ *
+ * DEVE ser chamado FORA da transação do webhook (pós handle()/commit) — o
+ * IoTHub pode segurar a resposta HTTP por até 35s aguardando o device, e esse
+ * tempo não pode estender locks de alarms/occurrences.
+ *
+ * Guarda anti-rajada: no máximo 1 solicitação automática por device a cada
+ * 2 minutos (rajadas de alarmes de tipos diferentes criam várias ocorrências
+ * com janelas de vídeo sobrepostas — uma solicitação cobre todas).
+ *
+ * @returns void
+ */
+function flush_pending_video_requests(): void
+{
+    $pending = $GLOBALS['_pending_video_requests'] ?? [];
+    if (empty($pending)) {
+        return;
+    }
+    $GLOBALS['_pending_video_requests'] = [];
+
+    try {
+        $db = Database::getInstance()->getConnection();
+    } catch (Exception $e) {
+        return;
+    }
+
+    foreach ($pending as $req) {
+        try {
+            $stmt = $db->prepare(
+                "SELECT COUNT(*) FROM commands
+                 WHERE imei = :imei
+                   AND operator = 'auto_video'
+                   AND created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)"
+            );
+            $stmt->execute([':imei' => $req['imei']]);
+            if ((int)$stmt->fetchColumn() > 0) {
+                Logger::info('Auto-vídeo: pulado (anti-rajada 2 min)', [
+                    'imei' => $req['imei'], 'occurrence_id' => $req['occurrence_id'],
+                ]);
+                continue;
+            }
+
+            $result = iothub_dispatch_command($req['imei'], 34818, $req['content'], [
+                'operator' => 'auto_video',
+                'timeout'  => (int)(getenv('AUTO_VIDEO_TIMEOUT') ?: 35),
+            ]);
+
+            Logger::info('Auto-vídeo: 34818 despachado', [
+                'imei'          => $req['imei'],
+                'occurrence_id' => $req['occurrence_id'],
+                'command_id'    => $result['command_id'],
+                'status'        => $result['status'],
+                'offline_queued'=> $result['offline_queued'],
+            ]);
+        } catch (Exception $e) {
+            Logger::error('Auto-vídeo: falha no despacho', [
+                'imei' => $req['imei'], 'error' => $e->getMessage(),
+            ]);
+        }
+    }
 }
