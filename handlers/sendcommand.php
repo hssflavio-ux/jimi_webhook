@@ -120,7 +120,7 @@ try {
 }
 
 // Validação de proNo — deve ser inteiro positivo conhecido (R03: whitelist bloqueante)
-$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
+$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 37384, 33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
 if (!in_array($proNo, $proNosConhecidos, true)) {
     http_response_code(400);
     Logger::warning('sendcommand: proNo desconhecido bloqueado', [

@@ -20,6 +20,14 @@ $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
 $user = get_jimi_user();
 
+// Mídias de webhook guardam só o nome do arquivo em file_url — o download
+// real sai do file storage do IoTHub (:23010/download/), como no playback
+$fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
+$mediaHref = function ($url) use ($fileStorageUrl) {
+    if (!$url) return '';
+    return preg_match('#^https?://#i', $url) ? $url : $fileStorageUrl . ltrim($url, '/');
+};
+
 // ── POST: Transição de status da tratativa ─────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['occurrence_id'])) {
     csrf_verify();
@@ -61,9 +69,9 @@ if (!empty($_GET['id'])) {
              FROM occurrences o
              LEFT JOIN customers c ON c.id = o.customer_id
              LEFT JOIN drivers d ON d.id = o.driver_id
-             WHERE o.id = :id"
+             WHERE o.id = :id AND o.customer_id = :cid"
         );
-        $stmt->execute([':id' => (int)$_GET['id']]);
+        $stmt->execute([':id' => (int)$_GET['id'], ':cid' => $customerId]);
         $detailOcc = $stmt->fetch();
 
         if ($detailOcc) {
@@ -136,10 +144,10 @@ require_once __DIR__ . '/../web/layout_base.php';
             <div style="background:var(--ink);border-radius:var(--radius-md);overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center;">
                 <?php if (in_array($detailMedia['file_type'] ?? '', ['video', 'mp4', 'flv'])): ?>
                 <video controls style="width:100%;max-height:300px;" poster="">
-                    <source src="<?= htmlspecialchars($detailMedia['file_url']) ?>" type="video/mp4">
+                    <source src="<?= htmlspecialchars($mediaHref($detailMedia['file_url'])) ?>" type="video/mp4">
                 </video>
                 <?php elseif (($detailMedia['file_type'] ?? '') === 'image'): ?>
-                <img src="<?= htmlspecialchars($detailMedia['file_url']) ?>" style="max-width:100%;max-height:300px;" alt="Mídia da ocorrência">
+                <img src="<?= htmlspecialchars($mediaHref($detailMedia['file_url'])) ?>" style="max-width:100%;max-height:300px;" alt="Mídia da ocorrência">
                 <?php else: ?>
                 <p style="color:var(--muted-soft);">Mídia: <?= htmlspecialchars($detailMedia['file_name'] ?? $detailMedia['file_url'] ?? '—') ?></p>
                 <?php endif; ?>
@@ -165,7 +173,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
                 <td>
                     <?php if ($ev['file_url']): ?>
-                    <a href="<?= htmlspecialchars($ev['file_url']) ?>" target="_blank" class="badge badge-primary">Ver</a>
+                    <a href="<?= htmlspecialchars($mediaHref($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
             </tr>

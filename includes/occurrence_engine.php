@@ -22,6 +22,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/iothub_command.php';
 
 define('OCCURRENCE_DEFAULT_WINDOW_MINUTES', 10);
@@ -77,11 +78,12 @@ function process_alarm_to_occurrence(array $alarm): ?int
     $occId = create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId);
 
     // Gatilho automático de vídeo do evento: ocorrência nova sem mídia vinculada
-    // em câmera JT/T → agenda solicitação de upload da multimídia armazenada
-    // (proNo 34818). O despacho HTTP acontece FORA da transação do webhook,
-    // via flush_pending_video_requests() no fim do pushalarm.php.
+    // em câmera JT/T → agenda o upload do ANEXO do alarme (proNo 37384 =
+    // Alarm Attachment Upload, doc §2.20) usando o alarmLabel que veio no push.
+    // O despacho HTTP acontece FORA da transação do webhook, via
+    // flush_pending_video_requests() no fim do pushalarm.php.
     if ($occId && $mediaId === null) {
-        queue_event_video_request($db, $imei, $alarmTime, $occId);
+        queue_event_video_request($db, $imei, $alarmTime, $occId, $alarm['alarm_label'] ?? null);
     }
 
     return $occId;
@@ -235,8 +237,58 @@ function get_branch_id_for_imei(PDO $db, string $imei): ?int
 }
 
 /**
+ * Vincula um upload de mídia à ocorrência DONA do anexo, resolvendo o
+ * alarmLabel (extraído do fileName {imei}_{alarmLabel}_{xy}.ext) até o
+ * alarme (alarms.alarm_label) e daí à ocorrência via occurrence_events.
+ *
+ * Preferência de mídia: preenche media_file_id vazio; se a ocorrência já
+ * tem uma imagem vinculada e chega o VÍDEO do mesmo anexo, o vídeo assume.
+ *
+ * @param PDO    $db       Conexão ativa
+ * @param string $imei     IMEI do device
+ * @param string $label    alarmLabel extraído do nome do arquivo
+ * @param int    $mediaId  media_files.id recém-inserido
+ * @param string $fileType Tipo detectado ('video', 'image', …)
+ * @return int|null ID da ocorrência vinculada, ou null se não resolvida
+ */
+function link_upload_by_alarm_label(PDO $db, string $imei, string $label, int $mediaId, string $fileType): ?int
+{
+    $stmt = $db->prepare(
+        "SELECT o.id, o.media_file_id, mf.file_type AS linked_type
+         FROM alarms a
+         JOIN occurrence_events e ON e.alarm_id = a.id
+         JOIN occurrences o ON o.id = e.occurrence_id
+         LEFT JOIN media_files mf ON mf.id = o.media_file_id
+         WHERE a.imei = :imei
+           AND a.alarm_label = :label
+         ORDER BY o.id DESC
+         LIMIT 1"
+    );
+    $stmt->execute([':imei' => $imei, ':label' => $label]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        return null;
+    }
+
+    $occId = (int)$row['id'];
+    $shouldLink = $row['media_file_id'] === null
+        || ($fileType === 'video' && $row['linked_type'] !== 'video');
+
+    if ($shouldLink) {
+        $stmt = $db->prepare("UPDATE occurrences SET media_file_id = :mid WHERE id = :oid");
+        $stmt->execute([':mid' => $mediaId, ':oid' => $occId]);
+        Logger::info('Mídia vinculada à ocorrência pelo alarmLabel', [
+            'imei' => $imei, 'media_id' => $mediaId,
+            'occurrence_id' => $occId, 'alarm_label' => $label,
+        ]);
+    }
+    return $occId;
+}
+
+/**
  * Vincula um upload de mídia (arquivo de vídeo) a uma ocorrência aberta
  * para o mesmo IMEI, dentro de uma janela de ±3 minutos.
+ * Fallback para uploads sem alarmLabel no nome do arquivo.
  * Chamado por pushfileupload / pushftpfileupload após INSERT do media_file.
  */
 function link_upload_to_occurrence(PDO $db, string $imei, string $eventTime, int $mediaId): ?int
@@ -269,24 +321,36 @@ function link_upload_to_occurrence(PDO $db, string $imei, string $eventTime, int
 }
 
 /**
- * Agenda a solicitação automática do vídeo do evento (proNo 34818 = 0x8802,
- * multimídia armazenada) para o device de uma ocorrência recém-criada.
+ * Agenda a solicitação automática do vídeo do evento para o device de uma
+ * ocorrência recém-criada, via proNo 37384 (0x9208, Alarm Attachment Upload).
+ *
+ * Por que 37384: em câmeras JT/T (JC371/JC450/JC181…) o vídeo do evento
+ * DMS/ADAS é um ANEXO do alarme identificado pelo alarmLabel que veio no
+ * próprio push (doc "Alarm File Name" + §2.20). O device sobe o(s) arquivo(s)
+ * para o attachment server do IoTHub (porta 21188) e o storage notifica via
+ * /pushfileupload com fileName {imei}_{alarmLabel}_{xy}.mp4/.jpg.
+ * O antigo 34818 (0x8802) apenas CONSULTA a multimídia 808 (fotos do 34817)
+ * — em evento DMS retorna mediaItemsNum:0 e nenhum upload acontece.
  *
  * Apenas AGENDA (fila em memória do request): o despacho HTTP ao IoTHub segura
  * a resposta por até 35s e não pode rodar dentro da transação do webhook —
  * quem envia é flush_pending_video_requests(), chamado pós-commit.
  *
  * Elegibilidade: device com modelo de protocolo JTT e camera_count >= 1
- * (34818 é instrução JT/T — devices JIMI ficam de fora, ADR-001).
+ * (37384 é instrução JT/T — devices JIMI sobem o vídeo sozinhos e o alarme
+ * já chega com `file`, ADR-001). Requer alarmLabel válido no push.
  * Kill-switch: AUTO_VIDEO_REQUEST=0 no .env.
+ * Overrides .env: ATTACH_UPLOAD_IP / ATTACH_UPLOAD_PORT (default: IP de
+ * ingest do vídeo — video_stream_config() — e porta 21188).
  *
- * @param PDO    $db           Conexão ativa
- * @param string $imei         IMEI do device
- * @param string $alarmTime    Hora do alarme (UTC, formato Y-m-d H:i:s)
- * @param int    $occurrenceId Ocorrência que motivou a solicitação (para log)
+ * @param PDO         $db           Conexão ativa
+ * @param string      $imei         IMEI do device
+ * @param string      $alarmTime    Hora do alarme (UTC, formato Y-m-d H:i:s)
+ * @param int         $occurrenceId Ocorrência que motivou a solicitação (para log)
+ * @param string|null $alarmLabel   alarmLabel do push do alarme (32 hex chars)
  * @returns void
  */
-function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int $occurrenceId): void
+function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int $occurrenceId, ?string $alarmLabel = null): void
 {
     // Kill-switch: '0' é falsy em PHP — comparar explicitamente, sem `?:`
     $autoFlag = getenv('AUTO_VIDEO_REQUEST');
@@ -315,37 +379,41 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
         return;
     }
 
-    try {
-        $t = new DateTime($alarmTime, new DateTimeZone('UTC'));
-    } catch (Exception $e) {
+    // Sem alarmLabel não há anexo endereçável — alarmes sem mídia associada
+    // (ex.: ignição, ociosidade) caem aqui e não geram solicitação.
+    $alarmLabel = trim((string)$alarmLabel);
+    if ($alarmLabel === '' || strlen($alarmLabel) < 16 || !ctype_xdigit($alarmLabel)) {
+        Logger::info('Auto-vídeo: alarme sem alarmLabel de anexo — solicitação não enviada', [
+            'imei' => $imei, 'occurrence_id' => $occurrenceId, 'alarm_label' => $alarmLabel ?: null,
+        ]);
         return;
     }
 
-    // Janela do evento em GMT-0 no formato compacto JT/T (yyMMddHHmmss) —
-    // mesma convenção validada em video_playback.php
-    $win   = max(10, (int)(getenv('AUTO_VIDEO_WINDOW_SECS') ?: 60));
-    $begin = (clone $t)->modify("-{$win} seconds")->format('ymdHis');
-    $end   = (clone $t)->modify("+{$win} seconds")->format('ymdHis');
+    // alarmNumber (doc §2.20): ascii-hex de [14 últimos dígitos do IMEI] +
+    // [cauda do alarmLabel após os 14 hex do terminal-ID: hora compacta +
+    // sequência + qtde de anexos + reservado]. Ex. validado na doc §1.13.
+    $alarmNumber = bin2hex(substr($imei, -14) . substr($alarmLabel, 14));
 
-    // 0 = todos os canais (a mídia chega com o canal real no pushfileupload,
-    // que é o que a tela de playback usa para filtrar)
-    $channel = (int)(getenv('AUTO_VIDEO_CHANNEL') ?: 0);
+    // Endereço do attachment server QUE O DEVICE ALCANÇA (não o do navegador):
+    // mesmo IP de ingest do vídeo ao vivo; porta 21188 = jimi-tracker-upload-process
+    $vsc  = video_stream_config();
+    $ip   = getenv('ATTACH_UPLOAD_IP') ?: $vsc['ingest_ip'];
+    $port = (int)(getenv('ATTACH_UPLOAD_PORT') ?: 21188);
 
-    // channel + channelId: firmwares/exemplos divergem no nome do campo
-    // (video_playback usa channel; presets 37381/37382 usam channelId).
-    // O IoTHub ignora chaves extras — enviar ambos cobre as duas variantes.
     $content = json_encode([
-        'mediaType' => 2,
-        'channel'   => $channel,
-        'channelId' => $channel,
-        'eventCode' => 0,
-        'beginTime' => $begin,
-        'endTime'   => $end,
+        'serverLen'     => strlen($ip),
+        'serverAddress' => $ip,
+        'tcpPort'       => $port,
+        'udpPort'       => 0,
+        'alarmLabel'    => $alarmLabel,
+        'alarmNumber'   => $alarmNumber,
     ], JSON_UNESCAPED_SLASHES);
 
     $GLOBALS['_pending_video_requests'][] = [
         'imei'          => $imei,
+        'pro_no'        => 37384,
         'content'       => $content,
+        'alarm_label'   => $alarmLabel,
         'occurrence_id' => $occurrenceId,
     ];
 }
@@ -357,9 +425,11 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
  * IoTHub pode segurar a resposta HTTP por até 35s aguardando o device, e esse
  * tempo não pode estender locks de alarms/occurrences.
  *
- * Guarda anti-rajada: no máximo 1 solicitação automática por device a cada
- * 2 minutos (rajadas de alarmes de tipos diferentes criam várias ocorrências
- * com janelas de vídeo sobrepostas — uma solicitação cobre todas).
+ * Guardas anti-rajada:
+ *   - dedupe por alarmLabel: o mesmo anexo nunca é solicitado 2x em 10 min
+ *     (retransmissão de alarme / agrupamento gera o mesmo label);
+ *   - teto de 5 solicitações automáticas por device a cada 2 minutos
+ *     (cada anexo é único por alarme — suprimir demais perderia vídeos).
  *
  * @returns void
  */
@@ -379,6 +449,27 @@ function flush_pending_video_requests(): void
 
     foreach ($pending as $req) {
         try {
+            if (!empty($req['alarm_label'])) {
+                $stmt = $db->prepare(
+                    "SELECT COUNT(*) FROM commands
+                     WHERE imei = :imei
+                       AND operator = 'auto_video'
+                       AND command_content LIKE :label
+                       AND created_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)"
+                );
+                $stmt->execute([
+                    ':imei'  => $req['imei'],
+                    ':label' => '%' . $req['alarm_label'] . '%',
+                ]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    Logger::info('Auto-vídeo: pulado (anexo já solicitado)', [
+                        'imei' => $req['imei'], 'occurrence_id' => $req['occurrence_id'],
+                        'alarm_label' => $req['alarm_label'],
+                    ]);
+                    continue;
+                }
+            }
+
             $stmt = $db->prepare(
                 "SELECT COUNT(*) FROM commands
                  WHERE imei = :imei
@@ -386,21 +477,23 @@ function flush_pending_video_requests(): void
                    AND created_at > DATE_SUB(NOW(), INTERVAL 2 MINUTE)"
             );
             $stmt->execute([':imei' => $req['imei']]);
-            if ((int)$stmt->fetchColumn() > 0) {
-                Logger::info('Auto-vídeo: pulado (anti-rajada 2 min)', [
+            if ((int)$stmt->fetchColumn() >= 5) {
+                Logger::info('Auto-vídeo: pulado (anti-rajada: 5 em 2 min)', [
                     'imei' => $req['imei'], 'occurrence_id' => $req['occurrence_id'],
                 ]);
                 continue;
             }
 
-            $result = iothub_dispatch_command($req['imei'], 34818, $req['content'], [
+            $proNo  = (int)($req['pro_no'] ?? 37384);
+            $result = iothub_dispatch_command($req['imei'], $proNo, $req['content'], [
                 'operator' => 'auto_video',
                 'timeout'  => (int)(getenv('AUTO_VIDEO_TIMEOUT') ?: 35),
             ]);
 
-            Logger::info('Auto-vídeo: 34818 despachado', [
+            Logger::info("Auto-vídeo: {$proNo} despachado", [
                 'imei'          => $req['imei'],
                 'occurrence_id' => $req['occurrence_id'],
+                'alarm_label'   => $req['alarm_label'] ?? null,
                 'command_id'    => $result['command_id'],
                 'status'        => $result['status'],
                 'offline_queued'=> $result['offline_queued'],

@@ -320,6 +320,7 @@ class PushAlarmHandler extends WebhookHandler {
                         'lat'         => $lat,
                         'lng'         => $lng,
                         'file_url'    => $fileUrl,
+                        'alarm_label' => $alarmLabel,
                     ]);
                 } catch (Exception $e) {
                     Logger::error('Occurrence Engine Error: ' . $e->getMessage(), [

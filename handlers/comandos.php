@@ -232,7 +232,15 @@ var jttPresets = {
                            'playMethod' => 0, 'forwardRewind' => 0,
                            'beginTime' => '', 'endTime' => '', 'instructionID' => '',
                        ], JSON_UNESCAPED_SLASHES)) ?>, label: 'Playback (0x9201)' },
-    'ftp_upload':    { proNo: 37382, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}', label: 'Upload FTP' },
+    // 37384 (0x9208): sobe o ANEXO do alarme (vídeo/foto DMS-ADAS) para o
+    // attachment server do IoTHub — alarmLabel vem do push do alarme
+    'alarm_attach':  { proNo: 37384, content: <?= json_encode(json_encode([
+                           'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
+                           'tcpPort' => (int)(getenv('ATTACH_UPLOAD_PORT') ?: 21188), 'udpPort' => 0,
+                           'alarmLabel' => 'ALARM_LABEL', 'alarmNumber' => 'ALARM_NUMBER',
+                       ], JSON_UNESCAPED_SLASHES)) ?>, label: 'Anexo de Alarme (0x9208)' },
+    // 37382 (0x9206): upload de gravação do cartão para um servidor FTP DO CLIENTE (doc §2.7)
+    'ftp_upload':    { proNo: 37382, content: '{"serverAddress":"","ftpPort":21,"userName":"","password":"","fileUploadPath":"/","channel":1,"beginTime":"","endTime":"","alarmFlag":0,"resourceType":0,"codeType":0,"storageType":0,"condition":7,"instructionID":""}', label: 'Upload FTP (0x9206)' },
     'alarm_ack':     { proNo: 33283, content: '{"alarmSerialNo":0}', label: 'Confirmar Alarme' },
     'tts':           { proNo: 33536, content: '{"text":"","volume":5}', label: 'TTS (Voz)' },
     'photo':         { proNo: 34817, content: '{"channelId":1,"photoType":0}', label: 'Foto' },
