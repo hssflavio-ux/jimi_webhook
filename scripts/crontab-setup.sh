@@ -55,9 +55,16 @@ chmod 777 "$APP_DIR/storage" "$APP_DIR/storage/reports" "$APP_DIR/storage/media"
 # Crontab: remove existing entries (--remove ou --install)
 # ════════════════════════════════════════════════════════════
 remove_entries() {
-    local tmpfile
+    local tmpfile entry script
     tmpfile=$(mktemp)
+    # Remove o marcador E as linhas dos próprios workers — antes só o marcador
+    # saía, e cada --install/--remove deixava (ou duplicava) as entradas reais
     crontab -l 2>/dev/null | grep -v "$CRON_MARKER" > "$tmpfile" || true
+    for entry in "${WORKER_ENTRIES[@]}"; do
+        script=$(echo "$entry" | cut -d: -f1)
+        grep -vF "$script" "$tmpfile" > "$tmpfile.f" || true
+        mv "$tmpfile.f" "$tmpfile"
+    done
     crontab "$tmpfile" 2>/dev/null || { warn "Falha ao atualizar crontab (pode estar vazio)"; }
     rm -f "$tmpfile"
 }
