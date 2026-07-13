@@ -96,7 +96,9 @@ document.addEventListener("DOMContentLoaded", () => {
     modelSelect.addEventListener("change", () => {
         const selected = modelData.find(m => m.id == modelSelect.value);
         if (selected) {
+            // camera_count do modelo é o MÁXIMO de canais; o valor é o default
             cameraInput.value = selected.camera_count;
+            cameraInput.max = selected.camera_count;
         }
     });
 });

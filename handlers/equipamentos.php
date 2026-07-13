@@ -246,7 +246,7 @@ try {
                d.last_communication, d.peripherals, d.streaming_rotation,
                d.streaming_watermark, d.firmware_version, d.branch_id,
                d.created_at,
-               dm.model_name, dm.camera_count, dm.protocol,
+               dm.model_name, COALESCE(NULLIF(d.camera_count, 0), dm.camera_count) AS camera_count, dm.protocol,
                c.name as customer_name,
                sc.msisdn as chip_msisdn,
                ds.battery_level,
@@ -269,7 +269,7 @@ try {
                d.last_communication, d.peripherals, d.streaming_rotation,
                d.streaming_watermark, d.firmware_version, d.branch_id,
                d.created_at,
-               dm.model_name, dm.camera_count, dm.protocol,
+               dm.model_name, COALESCE(NULLIF(d.camera_count, 0), dm.camera_count) AS camera_count, dm.protocol,
                c.name as customer_name,
                NULL as chip_msisdn, NULL as battery_level,
                CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
@@ -648,7 +648,10 @@ require_once __DIR__ . '/../web/layout_base.php';
 function onModelChange(sel) {
     var opt = sel.options[sel.selectedIndex];
     var cam = parseInt(opt.dataset.cam) || 1;
-    document.getElementById('camera_count').value = cam;
+    // camera_count do modelo é o MÁXIMO de canais; o valor é o default
+    var input = document.getElementById('camera_count');
+    input.value = cam;
+    input.max = cam;
 }
 
 function sendFirmware(imei) {

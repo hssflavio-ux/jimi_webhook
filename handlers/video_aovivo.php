@@ -21,7 +21,8 @@ $streamUrl = $vsc['flv_base'];
 
 // Devices with model info and streaming config
 $devices = $db->prepare("
-    SELECT d.imei, d.device_name, dm.model_name, dm.camera_count, dm.protocol,
+    SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
            d.streaming_rotation, d.streaming_watermark,
            DATE_FORMAT(d.last_communication, '%d/%m/%Y %H:%i') as last_com,
            CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
@@ -123,7 +124,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;">Como usar</h4>
             <ol style="font-size:12px;color:var(--muted);padding-left:16px;line-height:1.8;">
                 <li>Selecione o dispositivo online</li>
-                <li>Escolha o canal (CH1-CH4)</li>
+                <li>Escolha o canal (a quantidade vem do cadastro do equipamento)</li>
                 <li>Clique em "Iniciar Transmissão"</li>
                 <li>O sistema envia o comando ao dispositivo</li>
                 <li>O stream HTTP-FLV abre automaticamente</li>
@@ -164,12 +165,14 @@ function onDeviceChange() {
 }
 
 function renderChannels() {
+    // Um botão por canal cadastrado no equipamento (devices.camera_count,
+    // fallback máximo do modelo) — sem teto fixo de 4 (JC450 chega a 5)
+    if (selCh > maxCams) selCh = 1;
     var container = document.getElementById('chan-sel');
     var html = '';
-    for (var c = 1; c <= 4; c++) {
-        var disabled = c > maxCams ? ' disabled' : '';
+    for (var c = 1; c <= maxCams; c++) {
         var active = c === selCh ? ' btn-primary' : ' btn-outline';
-        html += '<button class="btn btn-sm' + active + '"' + disabled + ' data-ch="' + c + '" onclick="selChannel(' + c + ')">CH' + c + '</button>';
+        html += '<button class="btn btn-sm' + active + '" data-ch="' + c + '" onclick="selChannel(' + c + ')">CH' + c + '</button>';
     }
     container.innerHTML = html;
 }
@@ -321,6 +324,16 @@ function connectAttempt(mySession, attempt) {
     }
 }
 
-renderChannels();
+// Estado inicial: lê o data-cam do device já selecionado (antes o load
+// renderizava com maxCams=1 e só o CH1 ficava habilitado até trocar o select)
+(function initChannels() {
+    var sel = document.getElementById('dev-sel');
+    if (sel && sel.options.length && sel.selectedIndex >= 0) {
+        maxCams = parseInt(sel.options[sel.selectedIndex].dataset.cam) || 1;
+        rotation = parseInt(sel.options[sel.selectedIndex].dataset.rotation) || 0;
+        watermark = parseInt(sel.options[sel.selectedIndex].dataset.watermark) || 0;
+    }
+    renderChannels();
+})();
 </script>
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

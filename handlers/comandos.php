@@ -35,7 +35,8 @@ $fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
 
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-           COALESCE(dm.protocol, 'JIMI') AS protocol, COALESCE(dm.camera_count, 1) AS camera_count
+           COALESCE(dm.protocol, 'JIMI') AS protocol,
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     WHERE d.customer_id = :cid AND d.is_active = 1

@@ -291,7 +291,9 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
                 2>/dev/null || echo "0")
 
-            if [ "$DB_VERSION" != "4.1.0" ]; then
+            # Só em versões ANTERIORES (não usar '!=': após o bump para 4.2.1+
+            # a migração antiga reaplicaria a cada deploy)
+            if [ "$DB_VERSION" = "4.0.0" ] || [ "$DB_VERSION" = "3.1.0" ] || [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
                 echo "  Aplicando migration_v4.1.0.sql (Excel/PDF + fix seed DMS, versão atual: $DB_VERSION)..."
                 if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
                     "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.1.0.sql 2>/tmp/migrate_err_v41.log; then
@@ -302,6 +304,27 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 fi
             else
                 echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.1.0 desnecessária"
+            fi
+        fi
+
+        # v4.2.1 migration (catálogo de câmeras por modelo — SQL idempotente)
+        if [ -f "mysql/migration_v4.2.1.sql" ]; then
+            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                -p"${DB_PASS}" -N -e \
+                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+                2>/dev/null || echo "0")
+
+            if [ "$DB_VERSION" != "4.2.1" ]; then
+                echo "  Aplicando migration_v4.2.1.sql (câmeras por modelo, versão atual: $DB_VERSION)..."
+                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.2.1.sql 2>/tmp/migrate_err_v421.log; then
+                    echo "  ✓ Migração v4.2.1 aplicada com sucesso"
+                else
+                    echo "  ⚠ AVISO: Erro na migração v4.2.1. Veja /tmp/migrate_err_v421.log"
+                    cat /tmp/migrate_err_v421.log 2>/dev/null || true
+                fi
+            else
+                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.2.1 desnecessária"
             fi
         fi
     fi

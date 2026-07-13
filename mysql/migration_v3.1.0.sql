@@ -97,12 +97,14 @@ CREATE TABLE IF NOT EXISTS `device_models` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Catálogo de modelos de dispositivos suportados';
 
 -- Seed: 6 modelos de câmera
+-- camera_count = MÁXIMO de canais do modelo (a quantidade instalada em cada
+-- equipamento fica em devices.camera_count, definida no cadastro) — v4.2.1
 INSERT IGNORE INTO `device_models` (`model_name`, `protocol`, `camera_count`, `description`) VALUES
-('JC400D',  'JIMI', 1, 'Câmera veicular JIMI 1 canal (protocolo JIMI)'),
-('JC400AD', 'JIMI', 1, 'Câmera veicular JIMI avançada 1 canal (protocolo JIMI)'),
-('JC371',   'JTT',  1, 'Câmera veicular JT/T 1 canal (protocolo JT/T 808)'),
-('JC450',   'JTT',  2, 'Câmera veicular JT/T 2 canais (protocolo JT/T 808)'),
-('JC181',   'JTT',  1, 'Câmera compacta JT/T 1 canal (protocolo JT/T 808)'),
+('JC400D',  'JIMI', 2, 'Câmera veicular JIMI 2 canais (protocolo JIMI)'),
+('JC400AD', 'JIMI', 2, 'Câmera veicular JIMI avançada 2 canais (protocolo JIMI)'),
+('JC371',   'JTT',  3, 'Câmera veicular JT/T até 3 canais (protocolo JT/T 808)'),
+('JC450',   'JTT',  5, 'Câmera veicular JT/T até 5 canais (protocolo JT/T 808)'),
+('JC181',   'JTT',  2, 'Câmera compacta JT/T 2 canais (protocolo JT/T 808)'),
 ('JC182',   'JTT',  1, 'Câmera compacta JT/T 1 canal avançada (protocolo JT/T 808)');
 
 -- ------------------------------------------------------------

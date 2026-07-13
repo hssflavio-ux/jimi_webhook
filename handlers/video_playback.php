@@ -20,7 +20,8 @@ $customerId = get_customer_id();
 $fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
 
 $devices = $db->prepare("
-    SELECT d.imei, d.device_name, dm.model_name, dm.camera_count, dm.protocol
+    SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     WHERE d.customer_id = :cid
@@ -31,6 +32,13 @@ $devices = $devices->fetchAll();
 
 $selImei    = $_GET['imei'] ?? ($devices[0]['imei'] ?? '');
 $selChannel = (int)($_GET['channel'] ?? 1);
+
+// Quantidade de canais do equipamento selecionado (cadastro; fallback modelo)
+$selCam = 1;
+foreach ($devices as $d) {
+    if ($d['imei'] === $selImei) { $selCam = max(1, (int)($d['camera_count'] ?? 1)); break; }
+}
+if ($selChannel < 1 || $selChannel > $selCam) $selChannel = 1;
 $dateFrom   = $_GET['date_from'] ?? date('Y-m-d', strtotime('-1 day'));
 $dateTo     = $_GET['date_to'] ?? date('Y-m-d');
 $requested  = !empty($_GET['request']);
@@ -90,7 +98,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <form method="GET" id="playback-form" style="display:flex;flex-direction:column;gap:10px;" onsubmit="return onSubmitRequest(event)">
                 <div>
                     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
-                    <select name="imei" id="pb-imei" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <select name="imei" id="pb-imei" onchange="pbRebuildChannels()" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                         <?php foreach ($devices as $d): ?>
                         <option value="<?= $d['imei'] ?>" data-cam="<?= $d['camera_count']??1 ?>" <?= $selImei===$d['imei']?'selected':'' ?>>
                             <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
@@ -102,8 +110,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <div style="display:flex;gap:8px;">
                     <div style="flex:1;">
                         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Canal</label>
-                        <select name="channel" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
-                            <?php for ($c=1;$c<=4;$c++): ?>
+                        <select name="channel" id="pb-channel" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                            <?php for ($c=1;$c<=$selCam;$c++): ?>
                             <option value="<?= $c ?>" <?= $selChannel===$c?'selected':'' ?>>CH<?= $c ?></option>
                             <?php endfor; ?>
                         </select>
@@ -173,6 +181,22 @@ require_once __DIR__ . '/../web/layout_base.php';
 var fileStorageUrl = <?= json_encode($fileStorageUrl) ?>;
 var selImei = <?= json_encode($selImei) ?>;
 var selChannel = <?= $selChannel ?>;
+
+// Reconstrói as opções de canal conforme o cadastro do equipamento escolhido
+// (devices.camera_count, fallback máximo do modelo — via data-cam da option)
+function pbRebuildChannels() {
+    var sel = document.getElementById('pb-imei');
+    if (!sel.options.length || sel.selectedIndex < 0) return;
+    var cam = parseInt(sel.options[sel.selectedIndex].dataset.cam) || 1;
+    var chSel = document.getElementById('pb-channel');
+    var cur = parseInt(chSel.value) || 1;
+    if (cur > cam) cur = 1;
+    var html = '';
+    for (var c = 1; c <= cam; c++) {
+        html += '<option value="' + c + '"' + (c === cur ? ' selected' : '') + '>CH' + c + '</option>';
+    }
+    chSel.innerHTML = html;
+}
 
 function selectRecording(el, rec) {
     document.querySelectorAll('.timeline-item').forEach(function(t) { t.classList.remove('selected'); });
