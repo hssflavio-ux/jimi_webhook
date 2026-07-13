@@ -527,7 +527,13 @@ var jttPresets = {
                            'videoIP' => $vsc['ingest_ip'], 'videoTCPPort' => $vsc['ingest_port'], 'videoUDPPort' => 0,
                        ], JSON_UNESCAPED_SLASHES)) ?> },
     'video_upload':  { proNo: 128,   content: <?= json_encode('VIDEOUPLOAD,' . $fsHost . ',' . $fsPort . ',ALARM_LABEL,1-2-3') ?> },
-    'resources':     { proNo: 37381, content: '{"channelId":1,"beginTime":"","endTime":"","mediaType":0,"eventCode":0}' },
+    // 37381 (0x9205): lista gravações do cartão — janela GMT-0 compacta que NÃO pode cruzar o dia
+    'resources':     { proNo: 37381, content: <?= json_encode(json_encode([
+                           'channel' => 1, 'channelId' => 1,
+                           'beginTime' => gmdate('ymd') . '000000', 'endTime' => gmdate('ymd') . '235959',
+                           'alarmFlag' => 0, 'resourceType' => 0, 'codeType' => 0, 'storageType' => 0,
+                           'instructionID' => 'manual_' . time(),
+                       ], JSON_UNESCAPED_SLASHES)) ?> },
     'playback':      { proNo: 37377, content: <?= json_encode(json_encode([
                            'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
                            'tcpPort' => (int)$vsc['playback_port'], 'udpPort' => 0, 'channel' => 1,

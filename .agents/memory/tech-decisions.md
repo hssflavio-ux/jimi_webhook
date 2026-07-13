@@ -41,3 +41,10 @@ updated: 2026-07-06
 - **worker.php**: processa `jobs` (report, video_download, rollup) — pendente → processando → concluido/falhou
 - **trip_builder.php**: segmenta `gps_data` em `trips` por ignição (lig→desl), distância haversine, cruza alarms
 - **metrics_rollup.php**: stub para KPIs pré-computados do Resumo/BI (implementação futura)
+
+## Vídeo histórico do cartão: 37381 lista, 34818 extrai (fix 13/07/2026)
+- **Bug**: /video/playback disparava 34818 (0x8802, multimídia de EVENTO) e lia só `media_files` → "sempre vazio" mesmo com o cartão cheio (o app Android usa 0x9205)
+- **Decisão**: LISTAR gravações = **37381/0x9205** → resposta assíncrona via /pushresourcelist → `resource_lists`; EXTRAIR trecho = **34818/0x8802** com a janela exata da gravação → /pushfileupload → `media_files`
+- **Gotchas do 37381**: janela `beginTime/endTime` GMT-0 compacta (yyMMddHHmmss) **não pode cruzar o dia** — fatiar o período por dia UTC (a tela fatia com cap de 15 segmentos); campos `channel` (doc) + `channelId` (compat) + alarmFlag/resourceType/codeType/storageType=0 + instructionID
+- **Push §1.11** (`{imei,totalNum,instructionID,resourceList[]}`): pode vir SEM envelope data_list → `allowSingleObjectPayload=true` no handler; `resourceType` segue o 0x1205: **0=áudio+vídeo** (mapear para `video` — 0=imagem é do 0x0800, outro push)
+- **Timeline**: `resource_lists` ("No cartão") ∪ `media_files` ("Disponível") com merge por janela ±120s; botão Extrair por gravação; auto-refresh 6×8s sem reenviar o comando; serverFlagId por protocolo do device

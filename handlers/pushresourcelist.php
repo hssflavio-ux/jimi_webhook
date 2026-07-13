@@ -17,6 +17,11 @@ require_once __DIR__ . '/../config/WebhookHandler.php';
 
 class PushResourceListHandler extends WebhookHandler {
 
+    // O push da lista de recursos (doc §1.11: {imei, totalNum, instructionID,
+    // resourceList}) pode chegar como objeto único, sem envelope data_list —
+    // sem esta flag o corpo seria descartado como "empty data".
+    protected $allowSingleObjectPayload = true;
+
     public function __construct() {
         parent::__construct(HANDLER_NAME);
     }
@@ -51,8 +56,14 @@ class PushResourceListHandler extends WebhookHandler {
         elseif (isset($item['msg']['file'])) $resourceList = [$item['msg']];
 
         if (empty($resourceList) || !is_array($resourceList)) {
-            Logger::info('Nenhuma lista de mídia encontrada', ['imei' => $imei]);
-            return true; 
+            // totalNum=0 = câmera respondeu "nada gravado na janela"; sem a chave
+            // resourceList = formato inesperado — as keys diagnosticam qual caso é
+            Logger::info('Nenhuma lista de mídia encontrada', [
+                'imei' => $imei,
+                'totalNum' => $item['totalNum'] ?? $item['msg']['totalNum'] ?? null,
+                'keys' => array_keys($item)
+            ]);
+            return true;
         }
 
         // 4. Processamento com Geração de Nomes
@@ -148,14 +159,19 @@ class PushResourceListHandler extends WebhookHandler {
         if (empty($dateInput)) return null;
         if (is_numeric($dateInput)) {
             if (strlen((string)$dateInput) > 11) $dateInput = $dateInput / 1000;
-            return date('Y-m-d H:i:s', (int)$dateInput);
+            return gmdate('Y-m-d H:i:s', (int)$dateInput);
         }
-        $ts = strtotime($dateInput);
-        return ($ts && $ts > 0) ? date('Y-m-d H:i:s', $ts) : null;
+        // Device transmite GMT-0 (doc §1.11): interpretar sempre como UTC,
+        // independente do timezone do PHP
+        $dt = date_create((string)$dateInput, new DateTimeZone('UTC'));
+        return $dt ? $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s') : null;
     }
 
     private function mapResourceType($val) {
-        $map = [0 => 'image', 1 => 'audio', 2 => 'video', 3 => 'video'];
+        // Semântica do 0x1205 (doc §1.11 / JT/T 1078): 0=áudio e vídeo,
+        // 1=áudio, 2=vídeo, 3=vídeo ou áudio e vídeo. (0 NÃO é imagem — esse
+        // é o código do multimídia 0x0800, que não passa por este push.)
+        $map = [0 => 'video', 1 => 'audio', 2 => 'video', 3 => 'video'];
         return $map[$val] ?? 'other';
     }
 }
