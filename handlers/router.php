@@ -67,7 +67,7 @@ if (empty($segments)) {
     // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas'];
+                     'chips','equipamentos','motoristas','wiki'];
     $renamedRoutes = [
         'config-ocorrencias' => 'config_ocorrencias.php',
         'grupos-permissao'   => 'grupos_permissao.php',
@@ -190,6 +190,7 @@ $screenByHandler = [
     'motoristas.php'            => 'motoristas',
     'config_ocorrencias.php'    => 'config-ocorrencias',
     'usuarios.php'              => 'usuarios',
+    'wiki.php'                  => 'wiki',
 ];
 if (isset($screenByHandler[$handler])) {
     require_once __DIR__ . '/../includes/auth.php';

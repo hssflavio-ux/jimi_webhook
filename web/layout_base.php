@@ -75,6 +75,7 @@ $navGroups = [
 $navBottom = [
     ['route' => 'comandos', 'label' => 'Comandos', 'icon' => 'terminal', 'href' => '/comandos'],
     ['route' => 'exportar', 'label' => 'Exportar', 'icon' => 'download', 'href' => '/exportar'],
+    ['route' => 'wiki',     'label' => 'Ajuda',   'icon' => 'book',   'href' => '/wiki'],
 ];
 
 // ── RBAC (v4.2.0 — Fase B2): esconde itens de nav sem permissão 'view' ──
@@ -123,6 +124,7 @@ function nav_icon($name) {
         'folder'  => '<path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>',
         'alert'   => '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
         'download'=> '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+        'book'    => '<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',
         'chevron-down' => '<polyline points="6 9 12 15 18 9"/>',
     ];
     return $icons[$name] ?? '';
