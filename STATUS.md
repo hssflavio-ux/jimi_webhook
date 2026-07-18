@@ -1,6 +1,6 @@
-# STATUS.md — Jimi Webhook System v4.1.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.2.1 (YUV Parity)
 
-> **Última atualização**: 13/07/2026 — **Fix do vídeo automático dos alarmes (34818→37384) + exibição na ocorrência (§12.13, aguardando deploy).**
+> **Última atualização**: 18/07/2026 — **Wiki/Central de Ajuda reescrita para o usuário final (§12.14).** Anterior: fix do vídeo automático dos alarmes (34818→37384) + exibição na ocorrência (§12.13, aguardando deploy).
 > Vídeo ao vivo abrindo com stream real capturado da câmera online (payload 37121 corrigido + player resiliente). Comandos → device → resposta ponta-a-ponta (síncrono E offline), horários em BRT em todo o dashboard, cadastro de ativos adotando devices do gateway. Suite Playwright (navegação 25/25 verde), lint OK. **Detalhes da iteração de vídeo: §14. Diagnóstico anterior: §12.**
 > **Servidor homolog**: `http://189.22.240.43` (Apache 2.4 host + PHP 8.3 FPM + MySQL 8.0 + stack IoTHub em 16 containers Docker) — implantado em `cd1af0f`
 > **Dev Windows**: PHP 8.3.32 em `C:\Users\flavi\php\php.exe` + MySQL 8.0.37 portátil em `C:\Users\flavi\mysql` (`scripts/dev-windows.ps1`)
@@ -536,6 +536,15 @@ Commits `75441a7`…`cd1af0f` (7 fixes + docs), todos implantados. CHANGELOG [4.
 - **Usuário E2E criado no homolog**: `e2e@teste.local` (admin, customer 1, `users.id=2`) — mesmo padrão do dev local; candidato a limpeza junto com o device de teste `868120246598152`.
 - **Testes executados**: replay E2E no servidor **8/8** (GPS → alarme 143 → ocorrência id=2 → mídia id=2 vinculada); Playwright contra o homolog **33/40 efetivos, 0 falhas** (7 skipped: multi-tenant sem 2º cliente + rate-limit gated). Flake único no 1º run: login >15s no primeiro load pós-deploy (dashboard v4.2.0 mais pesado + caches frios) — verde na reexecução.
 - **Avisos pré-existentes do `deploy.sh`** (não bloqueiam, a investigar): `mysqldump` falha silenciosamente (backup de banco não é gerado — provável falta de privilégio/credencial no check); "mod_headers ausente" e "VirtualHost não detectado" na FASE 1; check MySQL da FASE 1 roda `mysql` sem credenciais (as migrations com `.env` funcionam normalmente).
+
+### 12.14 Wiki para o usuário final — linguagem, menus e mapas reais (18/07/2026)
+
+- **Feedback do operador** sobre a Central de Ajuda (`handlers/wiki.php`, rota `/wiki` criada no commit `4811166`): linguagem de desenvolvedor, caminhos de URL expostos, mapas mockados vazios e seções de infra. Revisão completa em 4 frentes:
+  1. **Sem termos técnicos**: removidos proNos/códigos de comando (37121/37381/34818/37384/33027), AJAX, polling, cache, localStorage, FLV/flv.js, Leaflet/Chart.js, RTP, soft-delete, DELETE físico, CRUD, RBAC, JSON batch, FILE_STORAGE_URL, IoTHub, cookie `jimi_token` etc. Tabelas Ação→Resultado descrevem apenas o efeito visível (ex.: "A câmera é acionada e o vídeo abre em alguns segundos").
+  2. **Sem caminhos de URL**: badges de rota (`/setup`, `/bi`, `/perfil`, `/video/aovivo`, ...) removidos de todas as seções — a navegação é descrita pela função no menu lateral; badges "admin"/"público"/"tela inicial" mantidos.
+  3. **Mapas reais nos mockups**: novos `assets/img/wiki_map_city.png` e `wiki_map_streets.png` (tiles OSM z13/z15 de São Paulo, 3×2 tiles = 768×512, stitch com GD, otimizados truecolor→paleta: 216/204 KB; crédito "© OpenStreetMap" sobreposto via `.map-credit`). Aplicados no mapa de calor do Resumo (blobs radial-gradient por cima), no mapa do Rastreamento (marcadores verde/vermelho com borda branca) e na trajetória do rel. de Posições (polyline SVG azul sobre o mapa).
+  4. **Seções de dev removidas**: "Webhooks e Integração", "Motor de Ocorrências (fluxo técnico)" e "Segurança" (incl. callout de workers/cron) saíram do conteúdo e do sumário.
+- **Validado com render real** (MySQL portátil + `php -S` + usuário descartável, removido após o teste): `/wiki` 200, PNGs servidos (`image/png`), marcadores presentes, zero ocorrências de proNo/AJAX/webhooks/segurança no HTML; lint OK.
 
 ### 12.13 Fix vídeo automático dos alarmes: 34818→37384 (anexo do alarme) + exibição na ocorrência — v4.2.1 (13/07/2026)
 

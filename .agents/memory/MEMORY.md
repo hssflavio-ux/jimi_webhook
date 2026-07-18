@@ -26,6 +26,7 @@
 - [feedback] Usuário diz "Continue" para avançar fases (não perguntar se quer continuar) → feedback-history.md
 - [feedback] Prefere implementação completa por fase com verificação lint ao final → feedback-history.md
 - [feedback] Valoriza STATUS.md atualizado como artefato de handoff entre sessões → feedback-history.md
+- [feedback] Wiki (/wiki) é para USUÁRIO FINAL: sem termos técnicos (proNo/AJAX/polling), sem caminhos de URL (referir telas pelo menu lateral), mapas com imagem real (assets/img/wiki_map_*.png), sem seções de webhook/motor/segurança → feedback-history.md
 
 ## Reference
 - [reference] LOGS: LOG_LEVEL no .env (lazy — .env só existe após 1º Database::getInstance(); DEBUG liga RAW_WEBHOOK_DATA); purga/rotação = cron diário scripts/log_cleanup.php (NÃO usa classe Database — ela dá exit com banco fora); handler global de exceção/fatal do dashboard em auth.php; `php -r` NÃO dispara set_exception_handler (testar com arquivo) → tech-decisions.md

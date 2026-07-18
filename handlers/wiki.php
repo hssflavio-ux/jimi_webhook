@@ -3,8 +3,9 @@
  * JIMI Webhook System — Wiki / Central de Ajuda v4.2.1
  * Rota: /wiki
  *
- * Documentação completa do sistema com mockups visuais de todas as telas,
- * ações disponíveis e resultados esperados. Linguagem acessível para o operador.
+ * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
+ * ações disponíveis e resultados esperados. Sem jargão técnico, sem caminhos
+ * de URL e sem seções de integração/infra (webhooks, motor, segurança).
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
@@ -264,6 +265,16 @@ $extra_head = <<<'HEAD'
 .map-mock-dot:nth-child(3) { top: 50%; left: 55%; }
 .map-mock-dot:nth-child(4) { top: 60%; left: 70%; }
 .map-mock-dot:nth-child(5) { top: 30%; left: 65%; }
+.map-credit {
+    position: absolute;
+    right: 6px; bottom: 4px;
+    font-size: 9px;
+    color: rgba(0,0,0,.5);
+    background: rgba(255,255,255,.75);
+    padding: 1px 6px;
+    border-radius: 3px;
+    z-index: 2;
+}
 /* ── Chart Mockup ──────────────────────────────────── */
 .chart-mock {
     background: #fafbfc;
@@ -419,8 +430,6 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="#comandos" style="padding-left:20px;font-size:12px">Comandos</a>
         <a href="#exportar" style="padding-left:20px;font-size:12px">Exportar</a>
         <a href="#checklist" style="padding-left:20px;font-size:12px">Checklist</a>
-        <a href="#webhooks">Webhooks</a>
-        <a href="#seguranca">Segurança</a>
     </nav>
 
     <!-- ── Content ──────────────────────────────────── -->
@@ -431,18 +440,18 @@ require_once __DIR__ . '/../web/layout_base.php';
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
 <div class="intro">
-<p>O <strong>JIMI Webhook System</strong> é uma plataforma de rastreamento e telemetria de vídeo para frotas de veículos. Ele recebe dados de dispositivos GPS e câmeras com IA (MDVR/ADAS/DMS) instalados nos veículos, armazena tudo em banco de dados e oferece um painel completo para monitoramento ao vivo, geração de relatórios e gestão de ocorrências de comportamento do motorista.</p>
+<p>O <strong>JIMI Webhook System</strong> é uma plataforma de rastreamento e telemetria de vídeo para frotas de veículos. Ela acompanha os rastreadores e câmeras inteligentes instalados nos veículos e oferece um painel completo para monitoramento ao vivo, vídeos, relatórios e gestão de ocorrências de comportamento do motorista.</p>
 
 <p><strong>O que o sistema faz:</strong></p>
 <ul style="font-size:14px;line-height:1.8;color:var(--body)">
-    <li>Recebe GPS, alarmes, batimentos e mídia dos dispositivos Jimi em tempo real</li>
+    <li>Acompanha em tempo real posições, alertas e vídeos enviados pelos veículos</li>
     <li>Exibe no mapa a posição ao vivo de todos os veículos da frota</li>
-    <li>Detecta automaticamente ocorrências de comportamento (distração, celular, fadiga, sem cinto...) via câmeras com IA</li>
+    <li>Detecta automaticamente ocorrências de comportamento (distração, celular, fadiga, sem cinto...) pelas câmeras inteligentes</li>
     <li>Permite tratar cada ocorrência com vídeo, notas e classificação de risco</li>
     <li>Oferece vídeo ao vivo e gravações históricas das câmeras</li>
     <li>Gera relatórios de posição, deslocamento, alarmes e ocorrências</li>
     <li>Permite enviar comandos remotamente para os dispositivos</li>
-    <li>É multi-tenant: cada cliente vê apenas sua própria frota</li>
+    <li>Cada cliente vê apenas a sua própria frota</li>
 </ul>
 
 <div class="callout info">
@@ -457,10 +466,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <!-- ── Setup ────────────────────────────────────────── -->
 <h3>Setup Inicial <span class="badge">admin</span></h3>
-<p>Ao acessar o sistema pela primeira vez (sem usuários cadastrados), a tela de <strong>/setup</strong> permite criar o primeiro administrador. Informe nome, e-mail e senha (mínimo 6 caracteres). Após a criação, você será redirecionado ao login.</p>
+<p>Ao acessar o sistema pela primeira vez (sem usuários cadastrados), a tela de <strong>Configuração Inicial</strong> permite criar o primeiro administrador. Informe nome, e-mail e senha (mínimo 6 caracteres). Após a criação, você será levado ao login.</p>
 
 <div class="callout warn">
-<strong>Atenção:</strong> A tela de setup só aparece quando NÃO há usuários no banco. Depois do primeiro cadastro, ela fica inacessível.
+<strong>Atenção:</strong> A tela de configuração inicial só aparece enquanto nenhum usuário foi cadastrado. Depois do primeiro cadastro, ela deixa de existir.
 </div>
 
 <div class="mockup">
@@ -481,7 +490,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <!-- ── Login ────────────────────────────────────────── -->
 <h3>Login <span class="badge" style="background:#e6f4ea;color:#098551">público</span></h3>
-<p>Tela de autenticação. Usuários informam e-mail e senha para acessar o sistema. O login cria um cookie seguro <code>jimi_token</code> com validade de sessão. Em caso de erro, a mensagem aparece em vermelho acima do formulário.</p>
+<p>Tela de entrada do sistema. Informe e-mail e senha para acessar. Em caso de erro, a mensagem aparece em vermelho acima do formulário.</p>
 
 <div class="mockup">
 <div class="mockup-header">Tela de Login</div>
@@ -500,22 +509,22 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock" style="margin-top:10px">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Login com credenciais corretas</td><td>Redireciona para o Resumo (/)</td></tr>
+<tr><td>Login com credenciais corretas</td><td>Abre a tela de Resumo</td></tr>
 <tr><td>Login com credenciais erradas</td><td>Mensagem de erro. Após 5 tentativas em 15 min, conta bloqueada temporariamente</td></tr>
 <tr><td>Esqueceu a senha</td><td>Contate o administrador do sistema (não há recuperação automática)</td></tr>
-<tr><td>Acessar sem login</td><td>Redirecionado para /login</td></tr>
+<tr><td>Acessar sem login</td><td>O sistema pede e-mail e senha antes de mostrar qualquer tela</td></tr>
 </table>
 
 <!-- ── Trocar Cliente ───────────────────────────────── -->
-<h3>Trocar Cliente (Customer Switch)</h3>
-<p>No topo da sidebar há um seletor de cliente. Usuários revendedores podem alternar entre os clientes que gerenciam para visualizar os dados de cada um. A troca é instantânea via AJAX e atualiza todo o dashboard.</p>
+<h3>Trocar Cliente</h3>
+<p>No topo do menu lateral há um seletor de cliente. Usuários revendedores podem alternar entre os clientes que gerenciam para visualizar os dados de cada um.</p>
 <div class="callout tip">
-<strong>Dica:</strong> O cliente ativo aparece no topo da sidebar. Ao trocar, todas as telas passam a mostrar dados do cliente selecionado.
+<strong>Dica:</strong> O cliente ativo aparece no topo do menu lateral. Ao trocar, todas as telas passam a mostrar dados do cliente selecionado.
 </div>
 
 <!-- ── Perfil ───────────────────────────────────────── -->
-<h3>Meu Perfil <span class="badge">/perfil</span></h3>
-<p>Tela acessível pelo avatar no rodapé da sidebar. Exibe os dados do usuário logado (nome, e-mail, função, grupo de permissão) e permite <strong>alterar a própria senha</strong>.</p>
+<h3>Meu Perfil</h3>
+<p>Tela acessível pelo avatar no rodapé do menu lateral. Exibe os dados do usuário logado (nome, e-mail, função, grupo de permissão) e permite <strong>alterar a própria senha</strong>.</p>
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Alterar senha (atual + nova + confirmação)</td><td>Senha atualizada. É necessário usar a nova senha no próximo login</td></tr>
@@ -524,9 +533,9 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="resumo">Resumo <span class="badge">/</span></h2>
+<h2 id="resumo">Resumo <span class="badge">tela inicial</span></h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<p><strong>Objetivo:</strong> Visão executiva 360° da frota. É a tela inicial após o login. Mostra KPIs, mapa de calor, velocidade da frota, dispositivos desatualizados e séries temporais de alarmes/ocorrências. Dados vêm de cache pré-computado a cada 5 minutos (com fallback em tempo real), com atualização automática a cada 30 segundos.</p>
+<p><strong>Objetivo:</strong> Visão executiva 360° da frota. É a tela inicial após o login. Mostra indicadores, mapa de calor, velocidade da frota, dispositivos desatualizados e gráficos de alarmes/ocorrências. As informações se atualizam sozinhas a cada 30 segundos.</p>
 
 <div class="mockup">
 <div class="mockup-header">Resumo — Visão 360°</div>
@@ -540,9 +549,9 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
     </div>
     <!-- Heatmap + Velocidade -->
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
-        <div class="map-mock" style="height:180px">
-            <div class="map-mock-inner"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>Mapa de Calor (GPS recentes)</div>
-            <div class="map-mock-dot"></div><div class="map-mock-dot"></div><div class="map-mock-dot"></div><div class="map-mock-dot"></div>
+        <div class="map-mock" style="height:180px;background:url('/assets/img/wiki_map_city.png') center/cover no-repeat">
+            <div style="position:absolute;inset:0;background:radial-gradient(circle at 32% 46%, rgba(230,80,30,.5), rgba(240,160,32,.25) 12%, transparent 24%),radial-gradient(circle at 60% 36%, rgba(230,80,30,.4), rgba(240,160,32,.2) 10%, transparent 20%),radial-gradient(circle at 72% 64%, rgba(240,160,32,.35), transparent 16%),radial-gradient(circle at 45% 68%, rgba(240,160,32,.3), transparent 14%)"></div>
+            <span class="map-credit">© OpenStreetMap</span>
         </div>
         <div class="kpi-box" style="background:#fafbfc">
             <div class="kpi-label">Velocidade da Frota</div>
@@ -567,19 +576,19 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Bloco</th><th>O que mostra</th><th>Atualização</th></tr>
-<tr><td>KPIs (4 cards)</td><td>Total de dispositivos, Online, Ocorrências em tratativa, Desatualizados</td><td>30s (cache 5min)</td></tr>
-<tr><td>Mapa de Calor</td><td>Concentração de GPS dos últimos 30 minutos (Leaflet heatmap)</td><td>30s</td></tr>
-<tr><td>Velocidade da Frota</td><td>Velocidade média dos veículos em movimento</td><td>30s</td></tr>
-<tr><td>Desatualizados</td><td>Top dispositivos sem comunicação recente</td><td>30s</td></tr>
-<tr><td>Séries (Alarmes/Ocorrências)</td><td>Gráfico de barras com volume hora a hora (Chart.js)</td><td>30s</td></tr>
+<tr><td>Indicadores (4 cartões)</td><td>Total de dispositivos, Online, Ocorrências em tratativa, Desatualizados</td><td>Automática (30s)</td></tr>
+<tr><td>Mapa de Calor</td><td>Concentração das posições dos veículos nos últimos 30 minutos</td><td>Automática (30s)</td></tr>
+<tr><td>Velocidade da Frota</td><td>Velocidade média dos veículos em movimento</td><td>Automática (30s)</td></tr>
+<tr><td>Desatualizados</td><td>Dispositivos sem comunicação recente</td><td>Automática (30s)</td></tr>
+<tr><td>Gráficos (Alarmes/Ocorrências)</td><td>Volume hora a hora do dia</td><td>Automática (30s)</td></tr>
 </table>
 
 <div class="callout info">
-<strong>Tour de boas-vindas:</strong> Na primeira visita, um tour de 5 passos destaca as principais áreas da tela. Ele não aparece novamente após ser concluído (salvo no navegador via localStorage).
+<strong>Tour de boas-vindas:</strong> Na primeira visita, um tour de 5 passos destaca as principais áreas da tela. Ele não aparece novamente após ser concluído (a preferência fica guardada no seu navegador).
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="rastreamento">Rastreamento <span class="badge">/rastreamento</span></h2>
+<h2 id="rastreamento">Rastreamento</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <p><strong>Objetivo:</strong> Mapa ao vivo com a última posição de todos os dispositivos da frota. Atualização automática a cada 60 segundos.</p>
 
@@ -597,11 +606,11 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
             <div style="display:flex;align-items:center;gap:8px;padding:6px;font-size:13px"><span style="width:10px;height:10px;border-radius:50%;background:#098551"></span> CAM-003 JC450</div>
             <div style="margin-top:8px"><div class="input-mock dim" style="font-size:12px;width:100%">Buscar ativo...</div></div>
         </div>
-        <div class="map-mock" style="flex:1;height:320px">
-            <div class="map-mock-inner"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/></svg>Mapa Leaflet — Posições ao Vivo</div>
-            <div class="map-mock-dot" style="background:#098551;top:30%;left:30%;width:10px;height:10px"></div>
-            <div class="map-mock-dot" style="background:#098551;top:45%;left:55%;width:10px;height:10px"></div>
-            <div class="map-mock-dot" style="background:#c83532;top:55%;left:70%;width:10px;height:10px"></div>
+        <div class="map-mock" style="flex:1;height:320px;background:url('/assets/img/wiki_map_city.png') center/cover no-repeat">
+            <div class="map-mock-dot" style="background:#098551;top:30%;left:30%;width:12px;height:12px;border:2px solid #fff"></div>
+            <div class="map-mock-dot" style="background:#098551;top:45%;left:55%;width:12px;height:12px;border:2px solid #fff"></div>
+            <div class="map-mock-dot" style="background:#c83532;top:55%;left:70%;width:12px;height:12px;border:2px solid #fff"></div>
+            <span class="map-credit">© OpenStreetMap</span>
         </div>
     </div>
 </div>
@@ -614,11 +623,11 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Buscar por nome/IMEI</td><td>Filtra a lista de ativos em tempo real</td></tr>
 <tr><td>Marcador verde</td><td>Dispositivo online (última comunicação &le; 5 min)</td></tr>
 <tr><td>Marcador vermelho</td><td>Dispositivo offline (última comunicação > 5 min)</td></tr>
-<tr><td>Auto-refresh (60s)</td><td>Posições são atualizadas automaticamente</td></tr>
+<tr><td>Auto-atualização</td><td>As posições se atualizam sozinhas a cada 60 segundos</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="bi">BI — Business Intelligence <span class="badge">/bi</span></h2>
+<h2 id="bi">BI — Business Intelligence</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <p><strong>Objetivo:</strong> Gerador de análises sob demanda. Selecione filtros (cliente, ativos, motoristas, tipos de alarme, período) e clique em <strong>Gerar</strong> para visualizar gráficos de barras, pizza e linha.</p>
 
@@ -660,14 +669,14 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Preencher filtros + Gerar</td><td>Gráficos são carregados com dados do período/filtros selecionados</td></tr>
 <tr><td>Filtro Motoristas</td><td>Filtra dados de ocorrências por motorista específico</td></tr>
-<tr><td>Filtro Alarmes (multi-select)</td><td>Seleciona um ou mais tipos de alarme para análise (chips com +N se houver muitos selecionados)</td></tr>
+<tr><td>Filtro Alarmes</td><td>Seleciona um ou mais tipos de alarme para análise</td></tr>
 <tr><td>Sem filtros preenchidos</td><td>Usa padrão: últimos 30 dias, todos os alarmes</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="ocorrencias-dashboard">Dashboard de Ocorrências <span class="badge">/ocorrencias/dashboard</span></h2>
+<h2 id="ocorrencias-dashboard">Dashboard de Ocorrências</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<p><strong>Objetivo:</strong> Painel operacional de gestão de eventos DMS (Driver Monitoring System). É <strong>o coração do produto</strong>. Câmeras com IA detectam comportamentos de risco (distração, uso de celular, fadiga, sem cinto) e geram ocorrências automaticamente. O operador visualiza a fila em tempo real (polling a cada 15s) e trata cada caso.</p>
+<p><strong>Objetivo:</strong> Painel operacional de gestão das ocorrências de monitoramento do motorista. É <strong>o coração do produto</strong>. As câmeras inteligentes detectam comportamentos de risco (distração, uso de celular, fadiga, sem cinto) e geram ocorrências automaticamente. O operador visualiza a fila em tempo real e trata cada caso.</p>
 
 <div class="mockup">
 <div class="mockup-header">Dashboard de Ocorrências — Fila de Tratativa</div>
@@ -702,12 +711,12 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <h4 style="font-size:14px;font-weight:600;margin:20px 0 8px">Tela de Tratativa (Detalhe da Ocorrência)</h4>
 <p>Ao clicar em uma ocorrência, abre-se a tela de detalhe com:</p>
 <ul style="font-size:13px;line-height:1.8;color:var(--body)">
-    <li><strong>Player de vídeo</strong> do momento do evento (com download via FILE_STORAGE_URL)</li>
+    <li><strong>Player de vídeo</strong> do momento do evento (com opção de baixar o arquivo)</li>
     <li><strong>Alarmes agrupados</strong> (todos os alarmes que compõem a ocorrência, com dados de GPS e velocidade)</li>
     <li><strong>Mini-mapa</strong> da localização do evento</li>
     <li><strong>Transições de status:</strong> Iniciar Tratativa → Resolver → Descartar</li>
     <li><strong>Campo de notas</strong> para o operador registrar observações</li>
-    <li><strong>Flag de Falso Positivo</strong> para marcar alarmes incorretos</li>
+    <li><strong>Marcação de Falso Positivo</strong> para sinalizar alarmes incorretos</li>
 </ul>
 
 <table class="tbl-mock">
@@ -717,20 +726,20 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Resolver</td><td>Status muda para "Resolvida"</td></tr>
 <tr><td>Descartar / Falso Positivo</td><td>Status muda para "Descartada". Se marcado como falso positivo, não conta nas estatísticas</td></tr>
 <tr><td>Adicionar nota</td><td>Nota de texto salva junto com a transição de status</td></tr>
-<tr><td>Dashboard (polling 15s)</td><td>Grade e KPIs atualizam automaticamente</td></tr>
+<tr><td>Auto-atualização</td><td>Grade e indicadores se atualizam sozinhos a cada 15 segundos</td></tr>
 <tr><td>Filtro de período</td><td>Filtra ocorrências por intervalo de datas</td></tr>
 </table>
 
 <div class="callout info">
-<strong>Fluxo completo:</strong> Câmera detecta evento → envia alarme via webhook → motor de ocorrências cria/agrupa ocorrência → operador vê na fila → trata (vê vídeo, classifica, resolve). Todo o processo leva segundos do alarme até aparecer no dashboard.
+<strong>Fluxo completo:</strong> Câmera detecta o evento → o sistema registra a ocorrência → o operador vê na fila → trata (vê o vídeo, classifica, resolve). Do evento no veículo até aparecer na tela, leva poucos segundos.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="videos">Vídeos</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
-<h3 id="video-aovivo">Ao Vivo <span class="badge">/video/aovivo</span></h3>
-<p><strong>Objetivo:</strong> Assistir ao vivo as câmeras dos dispositivos. O sistema envia um comando (proNo 37121) para o dispositivo publicar o stream de vídeo no servidor de mídia. O player FLV (flv.js) então reproduz o stream.</p>
+<h3 id="video-aovivo">Ao Vivo</h3>
+<p><strong>Objetivo:</strong> Assistir ao vivo às câmeras dos veículos. Escolha o equipamento e o canal da câmera, clique em <strong>Iniciar Transmissão</strong> e aguarde alguns segundos até a imagem aparecer.</p>
 
 <div class="mockup">
 <div class="mockup-header">Vídeo ao Vivo</div>
@@ -743,8 +752,8 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
     </div>
     <div class="video-mock">
         <div style="position:relative;z-index:1;display:flex;align-items:center;gap:8px;flex-direction:column">
-            <span>Streaming FLV — Canal 1</span>
-            <span style="font-size:11px;opacity:.6">Tentativa 3/8 — aguardando dispositivo publicar...</span>
+            <span>Transmissão ao vivo — Canal 1</span>
+            <span style="font-size:11px;opacity:.6">Conectando à câmera...</span>
         </div>
     </div>
     <div style="margin-top:8px;display:flex;gap:16px">
@@ -758,19 +767,19 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Selecionar equipamento + canal + Iniciar</td><td>Comando 37121 enviado. Player tenta conectar (8 tentativas de 3s). Vídeo abre quando o dispositivo publica o stream (5-30s)</td></tr>
-<tr><td>Trocar de canal</td><td>Para o stream atual e inicia novo comando para o canal selecionado</td></tr>
-<tr><td>Dispositivo offline</td><td>Comando entra na fila offline. Barra de status avisa "Comando na fila — será executado quando o dispositivo conectar"</td></tr>
-<tr><td>Rotação de tela</td><td>Player aplica rotação CSS configurada no cadastro do equipamento</td></tr>
-<tr><td>Marca d'água</td><td>Se habilitado no cadastro, sobrepõe texto de marca d'água ao vídeo</td></tr>
+<tr><td>Selecionar equipamento + canal + Iniciar</td><td>A câmera é acionada e o vídeo abre em alguns segundos (normalmente entre 5 e 30)</td></tr>
+<tr><td>Trocar de canal</td><td>Encerra a transmissão atual e abre a imagem do canal escolhido</td></tr>
+<tr><td>Dispositivo offline</td><td>O pedido fica agendado e a barra de status avisa que será executado quando o equipamento voltar a se conectar</td></tr>
+<tr><td>Rotação de tela</td><td>A imagem aparece girada conforme configurado no cadastro do equipamento</td></tr>
+<tr><td>Marca d'água</td><td>Se habilitada no cadastro, o vídeo exibe o texto de marca d'água</td></tr>
 </table>
 
 <div class="callout warn">
-<strong>Aguarde o stream:</strong> Entre clicar "Iniciar" e o vídeo aparecer, o dispositivo precisa ligar a câmera e negociar o protocolo RTP com o servidor. Isso leva de 5 a 30 segundos. O player mostra o progresso das tentativas.
+<strong>Aguarde a imagem:</strong> Entre clicar em "Iniciar" e o vídeo aparecer, a câmera precisa ser ativada e começar a transmitir. Isso leva de 5 a 30 segundos — a tela mostra o progresso enquanto isso.
 </div>
 
-<h3 id="video-playback">Playback <span class="badge">/video/playback</span></h3>
-<p><strong>Objetivo:</strong> Visualizar gravações históricas do cartão SD do dispositivo. Ao clicar em <strong>Requisitar Gravações</strong>, o sistema envia o comando 37381 (0x9205) consultando a lista de arquivos no cartão. A timeline mostra gravações "No cartão" (com opção Extrair) e "Disponível" (já baixadas, prontas para reproduzir).</p>
+<h3 id="video-playback">Playback</h3>
+<p><strong>Objetivo:</strong> Visualizar gravações históricas do cartão de memória do equipamento. Ao clicar em <strong>Requisitar Gravações</strong>, o sistema consulta o cartão e monta a lista do período escolhido. A lista mostra gravações "No cartão" (com opção Extrair) e "Disponível" (já baixadas, prontas para reproduzir).</p>
 
 <div class="mockup">
 <div class="mockup-header">Playback — Timeline de Gravações</div>
@@ -806,14 +815,14 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Requisitar Gravações</td><td>Envia 37381. A resposta chega via push e preenche a timeline</td></tr>
-<tr><td>Extrair (gravação "No cartão")</td><td>Envia 34818 solicitando upload da janela exata. Arquivo baixado → status muda para "Disponível"</td></tr>
-<tr><td>Reproduzir (gravação "Disponível")</td><td>Abre player de vídeo inline com o arquivo do storage</td></tr>
-<tr><td>Auto-refresh pós-requisição</td><td>6 verificações a cada 8s após Requisitar (cancela ao interagir)</td></tr>
+<tr><td>Requisitar Gravações</td><td>Consulta o equipamento e preenche a lista de gravações do período</td></tr>
+<tr><td>Extrair (gravação "No cartão")</td><td>Pede o envio da gravação escolhida. Quando o arquivo chega, o status muda para "Disponível"</td></tr>
+<tr><td>Reproduzir (gravação "Disponível")</td><td>Abre o player e reproduz a gravação na própria tela</td></tr>
+<tr><td>Auto-atualização</td><td>Após requisitar, a lista se atualiza sozinha por alguns instantes</td></tr>
 </table>
 
-<h3 id="video-downloads">Downloads <span class="badge">/video/downloads</span></h3>
-<p><strong>Objetivo:</strong> Grade com todos os arquivos de mídia disponíveis para download. Filtros por equipamento e status (disponível, solicitado, erro). Clique no nome do arquivo para baixar diretamente do file storage.</p>
+<h3 id="video-downloads">Downloads</h3>
+<p><strong>Objetivo:</strong> Grade com todos os arquivos de mídia disponíveis para download. Filtros por equipamento e status (disponível, solicitado, erro). Clique no nome do arquivo para baixar.</p>
 
 <div class="mockup">
 <div class="mockup-header">Downloads — Arquivos de Mídia</div>
@@ -835,8 +844,8 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <h2 id="relatorios">Relatórios</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
-<h3 id="rel-posicoes">Posições <span class="badge">/relatorios/posicoes</span></h3>
-<p><strong>Objetivo:</strong> Histórico de posições GPS de um ativo em um período. Mostra mapa Leaflet com trajetória + tabela paginada com data/hora, latitude, longitude, velocidade e ignição. Suporte a exportação CSV/XLSX/PDF.</p>
+<h3 id="rel-posicoes">Posições</h3>
+<p><strong>Objetivo:</strong> Histórico de posições de um ativo em um período. Mostra o trajeto percorrido no mapa + tabela paginada com data/hora, latitude, longitude, velocidade e ignição. Pode ser exportado em CSV, Excel ou PDF.</p>
 
 <div class="mockup">
 <div class="mockup-header">Relatório de Posições</div>
@@ -847,12 +856,15 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <span class="btn-mock">Filtrar</span>
         <span class="btn-mock outline">Exportar</span>
     </div>
-    <div class="map-mock" style="height:180px">
-        <div class="map-mock-inner"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="3 12 8 7 13 12 18 7 21 12"/></svg>Trajetória no Mapa</div>
+    <div class="map-mock" style="height:180px;background:url('/assets/img/wiki_map_streets.png') center/cover no-repeat">
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline points="20,52 40,47 60,37 80,27" fill="none" stroke="#0052ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity=".85"/>
+        </svg>
         <div class="map-mock-dot" style="top:50%;left:20%"></div>
         <div class="map-mock-dot" style="top:45%;left:40%"></div>
         <div class="map-mock-dot" style="top:35%;left:60%"></div>
         <div class="map-mock-dot" style="top:25%;left:80%"></div>
+        <span class="map-credit">© OpenStreetMap</span>
     </div>
     <table class="tbl-mock">
     <tr><th>Data/Hora</th><th>Latitude</th><th>Longitude</th><th>Velocidade</th><th>Ignição</th></tr>
@@ -866,55 +878,55 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Selecionar ativo + período + Filtrar</td><td>Mapa e tabela carregam com os dados do período</td></tr>
-<tr><td>Exportar (CSV/XLSX/PDF)</td><td>Download do arquivo com todos os registros (limitado a 10.000 linhas na exportação síncrona)</td></tr>
+<tr><td>Exportar</td><td>Baixa o arquivo em CSV, Excel ou PDF (até 10.000 linhas)</td></tr>
 <tr><td>Navegar páginas</td><td>Paginação de 25 em 25 registros</td></tr>
 </table>
 
-<h3 id="rel-deslocamento">Deslocamento <span class="badge">/relatorios/deslocamento</span></h3>
-<p><strong>Objetivo:</strong> Histórico de viagens (trips) detectadas por ignição do veículo (liga → desliga). Mostra duração, velocidade máxima, distância percorrida (cálculo Haversine) e alarmes ocorridos durante a viagem. Os dados vêm da tabela <code>trips</code>, preenchida pelo worker <code>trip_builder.php</code>.</p>
+<h3 id="rel-deslocamento">Deslocamento</h3>
+<p><strong>Objetivo:</strong> Histórico de viagens detectadas pela ignição do veículo (liga → desliga). Mostra duração, velocidade máxima, distância percorrida e alarmes ocorridos durante a viagem. As viagens são montadas automaticamente pelo sistema alguns minutos após o término.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Filtrar por ativo + período</td><td>Tabela mostra todas as viagens do período: início, fim, duração, vel. máx, distância, alarmes</td></tr>
 <tr><td>Ordenar por coluna</td><td>Clique no cabeçalho para ordenar (data, duração, distância)</td></tr>
-<tr><td>Exportar</td><td>CSV/XLSX/PDF com os dados da consulta</td></tr>
+<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF com os dados da consulta</td></tr>
 </table>
 
-<h3 id="rel-desatualizados">Desatualizados <span class="badge">/relatorios/desatualizados</span></h3>
-<p><strong>Objetivo:</strong> Identificar dispositivos que não se comunicam há muito tempo. 5 buckets de KPI (1h, 6h, 12h, 24h, >24h) clicáveis para drill-down na listagem de dispositivos daquela faixa.</p>
+<h3 id="rel-desatualizados">Desatualizados</h3>
+<p><strong>Objetivo:</strong> Identificar dispositivos que não se comunicam há muito tempo. 5 faixas de tempo (1h, 6h, 12h, 24h, >24h) clicáveis para ver a lista de dispositivos de cada faixa.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Clicar em um bucket</td><td>Lista filtra para mostrar apenas dispositivos naquela faixa de inatividade</td></tr>
-<tr><td>Visualizar dispositivo</td><td>Link para o detalhe do ativo (/ativos/{imei})</td></tr>
+<tr><td>Clicar em uma faixa</td><td>A lista mostra apenas os dispositivos daquela faixa de inatividade</td></tr>
+<tr><td>Visualizar dispositivo</td><td>Abre a tela de detalhe do ativo</td></tr>
 </table>
 
-<h3 id="rel-alarmes">Alarmes <span class="badge">/relatorios/alarmes</span></h3>
-<p><strong>Objetivo:</strong> Histórico completo de alarmes recebidos. 5 filtros: dispositivo, tipo de alarme, período, cliente e busca textual. Ordenação clicável por qualquer coluna. Link para mapa OSM (OpenStreetMap) na coordenada do alarme.</p>
+<h3 id="rel-alarmes">Alarmes</h3>
+<p><strong>Objetivo:</strong> Histórico completo de alarmes recebidos. 5 filtros: dispositivo, tipo de alarme, período, cliente e busca textual. Ordenação clicável por qualquer coluna. Cada alarme tem um atalho para ver o local no mapa.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Filtrar + ordenar</td><td>Tabela atualiza com filtros aplicados e ordenação escolhida</td></tr>
-<tr><td>Clicar no link do mapa</td><td>Abre OSM em nova aba na coordenada do alarme</td></tr>
-<tr><td>Exportar</td><td>CSV/XLSX/PDF com os dados filtrados</td></tr>
+<tr><td>Clicar no link do mapa</td><td>Abre o mapa em uma nova aba, no local exato do alarme</td></tr>
+<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF com os dados filtrados</td></tr>
 </table>
 
-<h3 id="rel-ocorrencias">Ocorrências <span class="badge">/relatorios/ocorrencias</span></h3>
-<p><strong>Objetivo:</strong> Histórico de ocorrências DMS com 6 filtros: cliente, IMEI, tipo de alarme, status, nível de risco e flag de falso positivo. Visão complementar ao Dashboard de Ocorrências, focada em auditoria e análise histórica.</p>
+<h3 id="rel-ocorrencias">Ocorrências</h3>
+<p><strong>Objetivo:</strong> Histórico de ocorrências com 6 filtros: cliente, IMEI, tipo de alarme, status, nível de risco e falso positivo. Visão complementar ao Dashboard de Ocorrências, focada em auditoria e análise histórica.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Aplicar filtros</td><td>Tabela mostra ocorrências que atendem a todos os critérios</td></tr>
-<tr><td>Clicar em uma ocorrência</td><td>Redireciona para o Dashboard de Ocorrências com o detalhe aberto (?id=N)</td></tr>
-<tr><td>Exportar</td><td>CSV/XLSX/PDF</td></tr>
+<tr><td>Clicar em uma ocorrência</td><td>Abre o detalhe da ocorrência no Dashboard de Ocorrências</td></tr>
+<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="cadastros">Cadastros</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
-<h3 id="ativos">Ativos <span class="badge">/ativos</span></h3>
-<p><strong>Objetivo:</strong> Gerenciar dispositivos (veículos/câmeras) da frota. Lista paginada com busca, edição inline (nome, modelo, número de câmeras) e remoção (soft-delete).</p>
+<h3 id="ativos">Ativos</h3>
+<p><strong>Objetivo:</strong> Gerenciar dispositivos (veículos/câmeras) da frota. Lista paginada com busca, edição inline (nome, modelo, número de câmeras) e remoção.</p>
 
 <div class="mockup">
 <div class="mockup-header">Ativos — Lista de Dispositivos</div>
@@ -939,31 +951,31 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>+ Novo Ativo</td><td>Abre /ativos/novo — formulário de cadastro com campos: IMEI, nome, modelo (dropdown de device_models), número de câmeras instaladas</td></tr>
-<tr><td>Editar inline</td><td>Campos de nome, modelo e câmeras tornam-se editáveis na linha</td></tr>
-<tr><td>Remover</td><td>Soft-delete (is_active=0). Dispositivo não aparece mais nas listas mas dados históricos são preservados</td></tr>
-<tr><td>Clicar no IMEI</td><td>Abre /ativos/{imei} — tela de detalhe com 9 abas</td></tr>
+<tr><td>+ Novo Ativo</td><td>Abre o formulário de cadastro: IMEI, nome, modelo e número de câmeras instaladas</td></tr>
+<tr><td>Editar inline</td><td>Campos de nome, modelo e câmeras tornam-se editáveis na própria linha</td></tr>
+<tr><td>Remover</td><td>O dispositivo sai das listas, mas o histórico dele é preservado</td></tr>
+<tr><td>Clicar no IMEI</td><td>Abre a tela de detalhe do ativo, com 9 abas</td></tr>
 <tr><td>Buscar</td><td>Filtra por nome ou IMEI (busca parcial)</td></tr>
-<tr><td>Exportar</td><td>CSV/XLSX/PDF com todos os dispositivos ativos</td></tr>
+<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF com todos os dispositivos ativos</td></tr>
 </table>
 
 <div class="callout tip">
-<strong>Adoção de órfãos:</strong> Quando um dispositivo envia telemetria pela primeira vez, o gateway cria uma linha órfã (customer_id NULL). Ao cadastrar esse IMEI em /ativos/novo, o sistema adota a linha existente, preservando todo o histórico de telemetria.
+<strong>Equipamento já conhecido:</strong> Se um equipamento novo já estava enviando localização antes de ser cadastrado, ao cadastrar o IMEI o sistema aproveita o que já foi recebido — nada do histórico se perde.
 </div>
 
-<h3 id="chips">Chips SIM <span class="badge">/chips</span></h3>
-<p><strong>Objetivo:</strong> Gerenciar chips SIM usados nos dispositivos. CRUD com campos: operadora, número (MSISDN), ICCID, IMEI vinculado, status ativo/inativo.</p>
+<h3 id="chips">Chips SIM</h3>
+<p><strong>Objetivo:</strong> Gerenciar os chips SIM usados nos equipamentos. Cadastro com: operadora, número da linha, ICCID (código do chip), IMEI vinculado e status ativo/inativo.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Criar chip</td><td>Preencher operadora, número e/ou ICCID. Opcionalmente vincular a um IMEI</td></tr>
 <tr><td>Editar</td><td>Alterar qualquer campo do chip</td></tr>
-<tr><td>Remover</td><td>Exclui o registro (DELETE físico)</td></tr>
+<tr><td>Remover</td><td>Exclui o registro definitivamente</td></tr>
 <tr><td>Buscar</td><td>Filtra por qualquer campo textual</td></tr>
 </table>
 
-<h3 id="clientes">Clientes <span class="badge">/clientes</span> <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
-<p><strong>Objetivo:</strong> Gestão multi-tenant. Administradores (revendedores) gerenciam os clientes da plataforma. Cada cliente tem sua própria frota isolada.</p>
+<h3 id="clientes">Clientes <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Administradores (revendedores) gerenciam os clientes da plataforma. Cada cliente tem sua própria frota isolada.</p>
 
 <div class="mockup">
 <div class="mockup-header">Clientes — Gestão Multi-tenant</div>
@@ -980,15 +992,15 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Criar/Editar cliente</td><td>Formulário com: nome, documento, e-mail, telefone, endereço, perfil de ocorrências, FaceID, cor da marca (white-label), URL do logo</td></tr>
-<tr><td>Desativar</td><td>Soft-delete (is_active=0). Cliente ID 1 não pode ser desativado</td></tr>
-<tr><td>Entrar como (impersonar)</td><td>Revendedor assume o contexto do cliente. Registrado em <code>impersonation_log</code> para auditoria</td></tr>
-<tr><td>White-label</td><td>Cor da marca (<code>brand_color</code>) aplicada na sidebar CSS do cliente</td></tr>
-<tr><td>FaceID</td><td>Flag que habilita identificação facial de motoristas para o cliente</td></tr>
+<tr><td>Criar/Editar cliente</td><td>Formulário com: nome, documento, e-mail, telefone, endereço, perfil de ocorrências, FaceID, cor da marca e logo</td></tr>
+<tr><td>Desativar</td><td>O cliente some das listas (o cliente principal do sistema não pode ser desativado)</td></tr>
+<tr><td>Entrar como (impersonar)</td><td>Revendedor passa a ver o sistema como aquele cliente. A ação fica registrada para auditoria</td></tr>
+<tr><td>Cor da marca</td><td>A cor escolhida é aplicada ao menu lateral do cliente</td></tr>
+<tr><td>FaceID</td><td>Habilita a identificação facial de motoristas para o cliente</td></tr>
 </table>
 
-<h3 id="equipamentos">Equipamentos <span class="badge">/equipamentos</span></h3>
-<p><strong>Objetivo:</strong> Cadastro completo de equipamentos com periféricos (câmeras, sensores), configurações de streaming (rotação, marca d'água), firmware, filial e chip SIM vinculado. Suporte a importação em lote via CSV.</p>
+<h3 id="equipamentos">Equipamentos</h3>
+<p><strong>Objetivo:</strong> Cadastro completo de equipamentos com periféricos (câmeras, sensores), configurações de vídeo (rotação, marca d'água), firmware, filial e chip SIM vinculado. Suporte a importação em lote via CSV.</p>
 
 <div class="mockup">
 <div class="mockup-header">Equipamentos — Cadastro Completo</div>
@@ -1010,7 +1022,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
                 <span class="icon-feature" style="background:#f0f1f3;color:var(--muted)">+ Adicionar</span>
             </div>
         </div>
-        <div class="form-mock-field"><label>Rotação do Stream</label><div class="input-mock">0°</div></div>
+        <div class="form-mock-field"><label>Rotação do Vídeo</label><div class="input-mock">0°</div></div>
         <div class="form-mock-field"><label>Marca d'Água</label><div class="input-mock dim">Texto opcional...</div></div>
     </div>
 </div>
@@ -1019,23 +1031,23 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Cadastrar equipamento</td><td>Cria novo device com modelo, IMEI, chip, periféricos, rotação, marca d'água e firmware</td></tr>
-<tr><td>Importar CSV</td><td>Upload de arquivo CSV com colunas: imei, name, model, camera_count. Parseado no frontend e enviado como JSON batch</td></tr>
-<tr><td>Atualizar Firmware (FOTA)</td><td>Abre modal para enviar comando proNo 33027 (OTA firmware update)</td></tr>
+<tr><td>Importar CSV</td><td>Envie um arquivo CSV com as colunas imei, nome, modelo e nº de câmeras — os equipamentos são cadastrados em lote</td></tr>
+<tr><td>Atualizar Firmware</td><td>Abre janela para enviar a atualização de software ao equipamento</td></tr>
 <tr><td>Selecionar periféricos</td><td>Tags clicáveis (estilo chip) para adicionar/remover periféricos do dispositivo</td></tr>
 </table>
 
-<h3 id="grupos-permissao">Grupos de Permissão <span class="badge">/grupos-permissao</span> <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
-<p><strong>Objetivo:</strong> Matriz de permissões RBAC (Role-Based Access Control). Cada grupo define quais telas (18) e ações (Ver, Criar, Editar, Excluir, Exportar) um usuário pode acessar. Mostra contagem de usuários vinculados a cada grupo.</p>
+<h3 id="grupos-permissao">Grupos de Permissão <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Matriz de permissões de acesso. Cada grupo define quais telas (18) e ações (Ver, Criar, Editar, Excluir, Exportar) um usuário pode acessar. Mostra contagem de usuários vinculados a cada grupo.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Criar grupo</td><td>Nome + matriz de checkboxes (18 telas x 5 ações) salva como JSON em <code>permissions</code></td></tr>
+<tr><td>Criar grupo</td><td>Nome + matriz de marcações (18 telas x 5 ações)</td></tr>
 <tr><td>Editar grupo</td><td>Alterar nome e checkboxes da matriz</td></tr>
 <tr><td>Excluir grupo</td><td>Só permitido se não houver usuários vinculados ao grupo</td></tr>
 <tr><td>Ver contagem de usuários</td><td>Cada grupo mostra quantos usuários estão vinculados a ele</td></tr>
 </table>
 
-<h3 id="motoristas">Motoristas <span class="badge">/motoristas</span></h3>
+<h3 id="motoristas">Motoristas</h3>
 <p><strong>Objetivo:</strong> Cadastro de motoristas com dados de compliance: CNH (número, categoria, vencimento) e exame toxicológico (vencimento). Alertas visuais para documentos vencidos ou próximos do vencimento.</p>
 
 <div class="mockup">
@@ -1056,12 +1068,12 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Criar/Editar motorista</td><td>Nome, nascimento, CNH (número, categoria, vencimento), toxicológico (vencimento), identificador FaceID, status ativo/inativo</td></tr>
-<tr><td>Remover</td><td>DELETE físico do registro</td></tr>
+<tr><td>Remover</td><td>Exclui o registro definitivamente</td></tr>
 <tr><td>Alertas de vencimento</td><td>CNH ou toxicológico vencidos aparecem em vermelho na tabela</td></tr>
 </table>
 
-<h3 id="config-ocorrencias">Configuração de Ocorrências <span class="badge">/config-ocorrencias</span> <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
-<p><strong>Objetivo:</strong> Criar e gerenciar perfis de regras que controlam <strong>como o motor de ocorrências processa cada tipo de alarme</strong>. Cada perfil define, para cada tipo de alarme, se gera ocorrência, qual o nível de risco, a janela de deduplicação e outras configurações.</p>
+<h3 id="config-ocorrencias">Configuração de Ocorrências <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Criar e gerenciar perfis de regras que controlam <strong>como o sistema transforma cada tipo de alarme em ocorrência</strong>. Cada perfil define, para cada tipo de alarme, se gera ocorrência, qual o nível de risco e a janela de agrupamento.</p>
 
 <div class="callout info">
 <strong>Regra de negócio:</strong> Quando um alarme chega do dispositivo, o sistema consulta o perfil de ocorrências do cliente para decidir: este alarme vira uma ocorrência? Com qual risco? Se já existe uma ocorrência similar nos últimos X minutos, agrupa ou cria nova?
@@ -1071,29 +1083,29 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Criar perfil</td><td>Nome + flag "Padrão do Sistema" (um perfil padrão por vez)</td></tr>
 <tr><td>Editar perfil</td><td>Alterar nome + rows dinâmicas de parâmetros por tipo de alarme</td></tr>
-<tr><td>Configurar parâmetro</td><td>Para cada alarm_type: gera ocorrência? (Sim/Não), nível de risco (Baixo/Médio/Alto), janela de dedup (minutos)</td></tr>
+<tr><td>Configurar parâmetro</td><td>Para cada tipo de alarme: gera ocorrência? (Sim/Não), nível de risco (Baixo/Médio/Alto), janela de agrupamento (minutos)</td></tr>
 <tr><td>Excluir perfil</td><td>Só permitido se nenhum cliente estiver usando o perfil</td></tr>
-<tr><td>Vincular ao cliente</td><td>No cadastro do cliente (/clientes), selecionar o perfil de ocorrências</td></tr>
+<tr><td>Vincular ao cliente</td><td>No cadastro do cliente, selecionar o perfil de ocorrências</td></tr>
 </table>
 
-<h3 id="usuarios">Usuários <span class="badge">/usuarios</span> <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<h3 id="usuarios">Usuários <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
 <p><strong>Objetivo:</strong> Gestão de usuários do sistema com duas abas: <strong>Minha Empresa</strong> (usuários internos) e <strong>Meus Clientes</strong> (usuários dos clientes). Campos: nome, e-mail, senha, função (admin/operador/visualizador), tipo (revendedor/cliente), cliente vinculado, grupo de permissão, foto.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Criar usuário</td><td>Nome, e-mail, senha (mín. 6 caracteres), função, tipo de usuário, cliente, grupo de permissão</td></tr>
 <tr><td>Editar usuário</td><td>Alterar dados. Senha só é alterada se preenchida</td></tr>
-<tr><td>Ativar/Desativar</td><td>Toggle is_active. Não pode desativar o próprio usuário</td></tr>
+<tr><td>Ativar/Desativar</td><td>Ativa ou desativa o acesso. Não é possível desativar o próprio usuário</td></tr>
 <tr><td>Vincular grupo de permissão</td><td>Usuário herda as permissões do grupo selecionado</td></tr>
-<tr><td>Foto do usuário</td><td>URL externa para foto de perfil (ex: avatar do Google)</td></tr>
+<tr><td>Foto do usuário</td><td>Link de uma imagem na internet para usar como foto de perfil</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="operacoes">Operações</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
-<h3 id="comandos">Comandos <span class="badge">/comandos</span></h3>
-<p><strong>Objetivo:</strong> Enviar comandos remotos para dispositivos. A tela oferece <strong>presets</strong> para comandos comuns (Status, Reiniciar, Streaming, Playback, Upload) e suporte a comandos JIMI (proNos 128-34818) e JT/T (0x8802, 0x9101, 0x9205, 0x9208).</p>
+<h3 id="comandos">Comandos</h3>
+<p><strong>Objetivo:</strong> Enviar comandos remotos para os equipamentos. A tela oferece <strong>atalhos prontos</strong> para os comandos mais comuns (status, reiniciar, vídeo ao vivo, envio de gravações) e acompanha a resposta de cada envio.</p>
 
 <div class="mockup">
 <div class="mockup-header">Comandos — Envio e Monitoramento</div>
@@ -1103,7 +1115,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
             <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Enviar Comando</div>
             <div style="display:flex;flex-direction:column;gap:8px">
                 <div class="filter-mock">Equipamento: CAM-001 (860112070347838)</div>
-                <div class="filter-mock">Preset: Status do Dispositivo</div>
+                <div class="filter-mock">Comando: Status do Dispositivo</div>
                 <span class="btn-mock" style="align-self:flex-start">Enviar</span>
             </div>
         </div>
@@ -1112,7 +1124,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
             <table class="tbl-mock" style="font-size:12px">
             <tr><th>Comando</th><th>IMEI</th><th>Status</th><th>Resposta</th></tr>
             <tr><td>Status</td><td class="mono">860112...</td><td><span class="pill-mock green">Executado</span></td><td style="font-size:11px">Battery:12.4V; Mode:SLEEP</td></tr>
-            <tr><td>Streaming</td><td class="mono">869058...</td><td><span class="pill-mock blue">Enviado</span></td><td style="font-size:11px;color:var(--muted)">Aguardando dispositivo...</td></tr>
+            <tr><td>Vídeo Ao Vivo</td><td class="mono">869058...</td><td><span class="pill-mock blue">Enviado</span></td><td style="font-size:11px;color:var(--muted)">Aguardando dispositivo...</td></tr>
             </table>
         </div>
     </div>
@@ -1121,19 +1133,19 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Selecionar equipamento + preset + Enviar</td><td>Comando enviado via IoTHub (:10088). Timeout de 35s aguardando resposta</td></tr>
-<tr><td>Resposta síncrona (device online)</td><td>Status muda para "Executado" com a resposta do dispositivo em ~1-3s</td></tr>
-<tr><td>Resposta offline</td><td>Status "Enviado". Callback chega via /pushinstructresponse quando o dispositivo conectar</td></tr>
-<tr><td>Polling de status</td><td>Fase rápida: 3s por 30s. Fase lenta: 10s por 5 min. Timeout: "Comando em fila offline"</td></tr>
-<tr><td>Timeout (dispositivo não responde)</td><td>Após 35s sem resposta e sem callback: "Sem resposta do dispositivo"</td></tr>
+<tr><td>Selecionar equipamento + comando + Enviar</td><td>O comando é enviado e o sistema aguarda a resposta do equipamento</td></tr>
+<tr><td>Equipamento online</td><td>Status muda para "Executado" e a resposta aparece em poucos segundos</td></tr>
+<tr><td>Equipamento offline</td><td>Status fica "Enviado" — a resposta chega quando o equipamento voltar a se conectar</td></tr>
+<tr><td>Acompanhamento</td><td>A tela verifica a resposta automaticamente por alguns minutos</td></tr>
+<tr><td>Sem resposta</td><td>Se o equipamento não responder, a tela avisa que o comando ficou aguardando na fila</td></tr>
 </table>
 
 <div class="callout tip">
-<strong>Presets disponíveis:</strong> Status (128), Informações do Dispositivo, Reiniciar, Streaming Ao Vivo (37121), Reprodução de Vídeo, Upload de Vídeo, Alarm Attachment Upload (37384), Configuração (33027-33031).
+<strong>Atalhos disponíveis:</strong> Status, Informações do Dispositivo, Reiniciar, Vídeo Ao Vivo, Reprodução de Vídeo, Envio de Vídeo e Configuração.
 </div>
 
-<h3 id="exportar">Exportar <span class="badge">/exportar</span></h3>
-<p><strong>Objetivo:</strong> Fila de geração assíncrona de relatórios. Para relatórios pesados, o sistema cria um job em background processado pelo worker (cron a cada 1 min). Formatos: CSV, XLSX (Excel) e PDF.</p>
+<h3 id="exportar">Exportar</h3>
+<p><strong>Objetivo:</strong> Fila de geração de relatórios grandes. O pedido entra na fila, é processado em segundo plano e fica disponível para download quando concluído. Formatos: CSV, Excel e PDF.</p>
 
 <div class="mockup">
 <div class="mockup-header">Exportar — Fila de Jobs</div>
@@ -1144,7 +1156,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
     <table class="tbl-mock">
     <tr><th>Relatório</th><th>Tipo</th><th>Formato</th><th>Status</th><th>Criado em</th><th></th></tr>
     <tr>
-        <td>Alarmes Julho 2026</td><td>Alarmes</td><td>XLSX</td><td><span class="pill-mock green">Concluído</span></td><td>18/07 14:00</td>
+        <td>Alarmes Julho 2026</td><td>Alarmes</td><td>Excel</td><td><span class="pill-mock green">Concluído</span></td><td>18/07 14:00</td>
         <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Baixar</span></td>
     </tr>
     <tr>
@@ -1157,15 +1169,15 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Novo Relatório</td><td>Formulário: nome, tipo (alarms/occurrences/positions/trips/devices), período, formato (CSV/XLSX/PDF)</td></tr>
-<tr><td>Job criado</td><td>Entra na fila com status "pendente". Worker processa em até 1 minuto</td></tr>
+<tr><td>Novo Relatório</td><td>Formulário: nome, tipo de relatório, período e formato (CSV, Excel ou PDF)</td></tr>
+<tr><td>Pedido criado</td><td>Entra na fila com status "pendente" e é processado em até 1 minuto</td></tr>
 <tr><td>Baixar (status "concluído")</td><td>Download do arquivo gerado</td></tr>
-<tr><td>Auto-refresh</td><td>Polling a cada 30s atualiza o status dos jobs</td></tr>
+<tr><td>Auto-atualização</td><td>O status dos relatórios se atualiza sozinho na tela</td></tr>
 <tr><td>Tipos disponíveis</td><td>Alarmes, Ocorrências, Posições, Viagens, Dispositivos</td></tr>
 </table>
 
-<h3 id="checklist">Checklist e Inspeção <span class="badge">/checklist</span></h3>
-<p><strong>Objetivo:</strong> Criar checklists de inspeção veicular (ex: checklist diário de pneus, freios, iluminação) e preenchê-los para dispositivos específicos. Cada checklist tem itens configuráveis com tipos: booleano (OK/Não OK), texto, número e foto.</p>
+<h3 id="checklist">Checklist e Inspeção</h3>
+<p><strong>Objetivo:</strong> Criar checklists de inspeção veicular (ex: checklist diário de pneus, freios, iluminação) e preenchê-los para veículos específicos. Cada checklist tem itens configuráveis: OK/Não OK, texto, número e foto.</p>
 
 <div class="mockup">
 <div class="mockup-header">Checklist — Preenchimento de Inspeção</div>
@@ -1207,73 +1219,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Criar checklist</td><td>Nome + vinculação ao cliente. Adicionar itens: pergunta, tipo (bool/texto/número/foto), obrigatório</td></tr>
+<tr><td>Criar checklist</td><td>Nome + vinculação ao cliente. Adicionar itens: pergunta, tipo de resposta (OK-Não OK/texto/número/foto) e se é obrigatório</td></tr>
 <tr><td>Preencher inspeção</td><td>Selecionar checklist, dispositivo e motorista. Responder cada item. Salvar</td></tr>
 <tr><td>Ver histórico</td><td>Lista de inspeções anteriores para o dispositivo</td></tr>
 </table>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="webhooks">Webhooks e Integração</h2>
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<p><strong>Objetivo:</strong> Referência técnica sobre como o sistema recebe dados dos dispositivos Jimi. Esta seção é voltada para administradores e equipe técnica.</p>
-
-<h3>Como os dados chegam</h3>
-<div class="callout info">
-<strong>Fluxo:</strong> Dispositivo → Jimi IoT Hub (jimicloud.com) → POST HTTP → Apache (este sistema) → .htaccess → router.php → handler push*.php → MySQL.<br>
-Todos os webhooks usam token de autenticação (<code>WEBHOOK_TOKEN</code> no .env) e respondem HTTP 200 antes de processar (fastcgi_finish_request), garantindo que o Jimi Hub não espere.
-</div>
-
-<h3>Tipos de Webhook</h3>
-<table class="tbl-mock">
-<tr><th>Endpoint</th><th>Handler</th><th>O que recebe</th></tr>
-<tr><td><code>/pushgps</code></td><td>pushgps.php</td><td>Coordenadas GPS (latitude, longitude, velocidade, ignição)</td></tr>
-<tr><td><code>/pushhb</code></td><td>pushhb.php</td><td>Heartbeats (batimentos de conexão) a cada ~60s</td></tr>
-<tr><td><code>/pushalarm</code></td><td>pushalarm.php</td><td>Alarmes de eventos (DMS, ADAS, ignição, velocidade, cerca...). <strong>Dispara o motor de ocorrências</strong></td></tr>
-<tr><td><code>/pushfileupload</code></td><td>pushfileupload.php</td><td>Notificação de arquivo de mídia disponível (vídeo/imagem). Vincula à ocorrência ativa</td></tr>
-<tr><td><code>/pushresourcelist</code></td><td>pushresourcelist.php</td><td>Lista de gravações disponíveis no cartão SD (resposta ao comando 37381)</td></tr>
-<tr><td><code>/pushinstructresponse</code></td><td>pushinstructresponse.php</td><td>Resposta de comandos enviados (callback offline do IoTHub)</td></tr>
-<tr><td><code>/pushTerminalTransInfo</code></td><td>pushTerminalTransInfo.php</td><td>Dados de transmissão do terminal (JT/T 1078)</td></tr>
-<tr><td><code>/pushlbs</code></td><td>pushlbs.php</td><td>Posição por triangulação de torres (LBS)</td></tr>
-<tr><td><code>/pushevent</code></td><td>pushevent.php</td><td>Eventos genéricos do dispositivo</td></tr>
-<tr><td><code>/pushftpfileupload</code></td><td>pushftpfileupload.php</td><td>Notificação de upload via FTP</td></tr>
-<tr><td><code>/pushiothubevent</code></td><td>pushiothubevent.php</td><td>Eventos internos do IoTHub</td></tr>
-</table>
-
-<h3>Motor de Ocorrências (DMS)</h3>
-<div class="callout tip">
-<strong>Fluxo completo:</strong><br>
-1. Device gera alarme → <code>/pushalarm</code> → INSERT alarms<br>
-2. Motor (<code>occurrence_engine.php</code>) resolve o perfil do cliente → busca regra do tipo de alarme → se gera ocorrência, verifica janela de dedup (padrão 10 min) → agrupa em ocorrência existente ou cria nova<br>
-3. <code>/pushfileupload</code> vincula mídia à ocorrência por alarm_label ou janela ±3 min<br>
-4. Dashboard mostra ocorrência em tempo real (polling 15s)<br>
-5. Para alarmes de vídeo (JT/T DMS/ADAS), o sistema automaticamente agenda o comando 37384 (Alarm Attachment Upload) para baixar o vídeo do evento
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<h2 id="seguranca">Segurança</h2>
-<!-- ═══════════════════════════════════════════════════════════════ -->
-
-<table class="tbl-mock">
-<tr><th>Mecanismo</th><th>Descrição</th></tr>
-<tr><td>Token de sessão</td><td>Cookie <code>jimi_token</code> (64 caracteres hex) armazenado na tabela <code>sessions</code>. HTTP Only, Secure, SameSite=Lax</td></tr>
-<tr><td>CSRF</td><td>Token por sessão derivado por HMAC-SHA256. Verificado em todos os formulários POST (8 handlers protegidos)</td></tr>
-<tr><td>Rate limiting</td><td>Login: máximo 5 tentativas em 15 minutos. Excedido → conta bloqueada temporariamente</td></tr>
-<tr><td>RBAC</td><td>Matriz de permissões (18 telas x 5 ações). Verificação dupla: view no router + ação fina no handler</td></tr>
-<tr><td>Multi-tenant</td><td>Cada query filtra por <code>customer_id</code> da sessão. Usuário cliente não vê dados de outros clientes</td></tr>
-<tr><td>Prepared statements</td><td>Todas as queries usam PDO prepared statements — sem concatenação de strings SQL</td></tr>
-<tr><td>Sanitização de entrada</td><td>Router sanitiza rotas. Login sanitiza redirect (anti open-redirect). GPS (0,0) é filtrado</td></tr>
-<tr><td>Limpeza automática</td><td><code>auth_cleanup()</code> remove sessões expiradas e logs antigos (~1% das requests)</td></tr>
-<tr><td>Impersonação auditada</td><td>Toda impersonação (revendedor → cliente) é registrada em <code>impersonation_log</code></td></tr>
-<tr><td>Senhas</td><td>Hash BCRYPT. Nunca armazenadas em texto plano</td></tr>
-</table>
-
-<div class="callout info" style="margin-top:32px">
-<strong>Workers (cron):</strong> O sistema possui 3 workers que rodam em background:<br>
-• <code>worker.php</code> (a cada 1 min) — processa fila de jobs (relatórios CSV/XLSX/PDF)<br>
-• <code>trip_builder.php</code> (a cada 15 min) — segmenta GPS em viagens por ignição (cálculo Haversine de distância)<br>
-• <code>metrics_rollup.php</code> (a cada 5 min) — pré-computa KPIs para o Resumo e BI<br>
-• <code>log_cleanup.php</code> (diário 03:10) — rotação e purga de logs por tamanho e idade
-</div>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
 JIMI Webhook System v4.2.1 — Central de Ajuda — Última atualização: Julho 2026

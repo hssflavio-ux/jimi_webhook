@@ -1,7 +1,7 @@
 ---
 type: feedback
 created: 2026-07-06
-updated: 2026-07-06
+updated: 2026-07-18
 ---
 
 # Feedback History
@@ -26,3 +26,12 @@ updated: 2026-07-06
 - Não precisa de explicações longas de código
 - Confia na implementação e verifica via lint
 - Sessões longas são aceitáveis (8 fases em sequência)
+
+## 2026-07-18 — Revisão da Wiki (/wiki) para usuário final
+
+### Diretrizes recebidas (valem para TODO conteúdo voltado ao usuário final)
+- **Nunca** expor termos técnicos: números de comando (proNo 37121 etc.), AJAX, polling, nomes de biblioteca, nomes de tabela/campo — descrever só a ação e o resultado visível
+- **Nunca** expor caminhos de URL (/setup, /bi, /perfil...) — referenciar telas pela função no menu lateral
+- Mockups de mapa devem usar **imagem real de mapa** (recorte OSM em `assets/img/wiki_map_*.png`), não retângulo vazio com pontos
+- Wiki NÃO cobre webhooks/integração, motor de ocorrências ou segurança — isso é assunto de documentação de dev (STATUS.md, PROJETO_YUV.md)
+- Sempre atualizar o STATUS.md ("arquivo de controle do desenvolvimento") ao fechar a tarefa
