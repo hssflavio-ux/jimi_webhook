@@ -26,6 +26,11 @@ $db = Database::getInstance()->getConnection();
 // agora para não fragmentá-la; os pontos são reavaliados no próximo cron.
 $staleBefore = date('Y-m-d H:i:s', strtotime('-2 hours'));
 
+// Lookback inicial para device SEM viagens ainda: 1 dia no cron (comportamento
+// padrão, incremental daí em diante). Para backfill histórico, passe a qtd de
+// dias como argumento: `php scripts/trip_builder.php 30`.
+$initialLookbackDays = (isset($argv[1]) && (int)$argv[1] > 0) ? (int)$argv[1] : 1;
+
 $devices = $db->query("
     SELECT d.imei, d.customer_id
     FROM devices d
@@ -45,7 +50,9 @@ foreach ($devices as $dev) {
     $lastTrip->execute([':imei' => $imei]);
     $lastEnd = $lastTrip->fetchColumn();
 
-    $from = $lastEnd ? date('Y-m-d H:i:s', strtotime($lastEnd)) : date('Y-m-d H:i:s', strtotime('-24 hours'));
+    $from = $lastEnd
+        ? date('Y-m-d H:i:s', strtotime($lastEnd))
+        : date('Y-m-d H:i:s', strtotime("-{$initialLookbackDays} days"));
 
     // A ignição fica na coluna `acc` de gps_data (pushgps grava acc/accStatus).
     // Aliasamos para `ignition` para manter a lógica de detecção legível.
