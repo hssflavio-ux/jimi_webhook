@@ -161,7 +161,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
         case 'positions':
             $stmt = $db->prepare("
                 SELECT g.imei, COALESCE(d.device_name, g.imei) as device_name,
-                       g.gps_time, g.latitude, g.longitude, g.speed, g.ignition, g.battery
+                       g.gps_time, g.latitude, g.longitude, g.speed, g.acc AS ignition, g.battery
                 FROM gps_data g
                 JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
                 WHERE g.gps_time BETWEEN :df AND :dt AND ABS(g.latitude) > 0.0001 AND ABS(g.longitude) > 0.0001

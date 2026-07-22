@@ -102,7 +102,7 @@ foreach ($customers as $cust) {
         FROM gps_data g
         JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
         WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
-          AND g.ignition = 1
+          AND g.acc = 1
     ");
     $spd->execute([':cid' => $cid]);
     $spd = $spd->fetch();

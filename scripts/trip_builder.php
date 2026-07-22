@@ -11,9 +11,20 @@
 
 require_once __DIR__ . '/../config/database.php';
 
+// Filtro de qualidade: uma viagem só conta como deslocamento real se houve
+// movimento efetivo. Descarta viagens de 1 ponto, paradas com ignição ligada
+// e deriva de GPS. Velocidade é o sinal primário (deriva nunca passa de ~1-2
+// km/h); a distância é um escape para devices que não reportam speed.
+const MIN_TRIP_MAX_SPEED   = 6.0; // km/h
+const MIN_TRIP_DISTANCE_KM = 1.0; // km
+
 $db = Database::getInstance()->getConnection();
 
-$batchTime = date('Y-m-d H:i:s', strtotime('-2 hours'));
+// Limite de "frescor": uma viagem que ficou aberta (sem acc=desligado no fim
+// do lote) só é finalizada se o último ponto já é mais velho que isto (2h).
+// Se for recente, a viagem provavelmente ainda está em curso — não persistimos
+// agora para não fragmentá-la; os pontos são reavaliados no próximo cron.
+$staleBefore = date('Y-m-d H:i:s', strtotime('-2 hours'));
 
 $devices = $db->query("
     SELECT d.imei, d.customer_id
@@ -36,8 +47,10 @@ foreach ($devices as $dev) {
 
     $from = $lastEnd ? date('Y-m-d H:i:s', strtotime($lastEnd)) : date('Y-m-d H:i:s', strtotime('-24 hours'));
 
+    // A ignição fica na coluna `acc` de gps_data (pushgps grava acc/accStatus).
+    // Aliasamos para `ignition` para manter a lógica de detecção legível.
     $points = $db->prepare("
-        SELECT id, latitude, longitude, speed, gps_time, ignition
+        SELECT id, latitude, longitude, speed, gps_time, acc AS ignition
         FROM gps_data
         WHERE imei = :imei AND gps_time > :from
         ORDER BY gps_time ASC
@@ -77,26 +90,50 @@ foreach ($devices as $dev) {
             $trip['distance_km'] = calcDistance($trip['points']);
             $trip['alarm_count'] = countAlarms($db, $imei, $trip['started_at'], $trip['ended_at']);
 
-            saveTrip($db, $trip);
-            $tripsCreated++;
+            if (isRealTrip($trip)) {
+                saveTrip($db, $trip);
+                $tripsCreated++;
+            }
             $trip = null;
         }
     }
 
+    // Viagem ainda aberta ao fim dos pontos (sem acc=desligado): só finaliza se
+    // o último ponto já está velho (<= $staleBefore); do contrário deixa em
+    // aberto p/ o próximo cron — evita fragmentar uma viagem em curso.
     if ($trip && count($trip['points']) >= 2) {
         $lastPoint = end($trip['points']);
-        $trip['ended_at'] = $lastPoint['gps_time'];
-        $trip['end_lat'] = $lastPoint['latitude'];
-        $trip['end_lng'] = $lastPoint['longitude'];
-        $trip['duration_s'] = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
-        $trip['distance_km'] = calcDistance($trip['points']);
-        $trip['alarm_count'] = countAlarms($db, $imei, $trip['started_at'], $trip['ended_at']);
-        saveTrip($db, $trip);
-        $tripsCreated++;
+        if ($lastPoint['gps_time'] <= $staleBefore) {
+            $trip['ended_at'] = $lastPoint['gps_time'];
+            $trip['end_lat'] = $lastPoint['latitude'];
+            $trip['end_lng'] = $lastPoint['longitude'];
+            $trip['duration_s'] = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
+            $trip['distance_km'] = calcDistance($trip['points']);
+            $trip['alarm_count'] = countAlarms($db, $imei, $trip['started_at'], $trip['ended_at']);
+            if (isRealTrip($trip)) {
+                saveTrip($db, $trip);
+                $tripsCreated++;
+            }
+        }
     }
 }
 
 echo "Trip Builder: $tripsCreated viagens criadas.\n";
+
+/**
+ * Uma viagem só é um "deslocamento" real se teve movimento efetivo: pelo menos
+ * 2 pontos E (velocidade máxima acima do ruído de GPS parado OU distância
+ * mínima percorrida). Filtra viagens de 1 ponto, paradas com ignição ligada
+ * (ex.: veículo estacionado a noite toda com ACC on) e deriva de GPS.
+ *
+ * @param array $trip Viagem finalizada (com max_speed, distance_km, points)
+ * @return bool true se deve ser persistida
+ */
+function isRealTrip(array $trip): bool {
+    if (count($trip['points']) < 2) return false;
+    return (float)$trip['max_speed'] >= MIN_TRIP_MAX_SPEED
+        || (float)$trip['distance_km'] >= MIN_TRIP_DISTANCE_KM;
+}
 
 function calcDistance(array $points): float {
     $dist = 0;
