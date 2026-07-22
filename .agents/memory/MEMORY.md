@@ -8,13 +8,14 @@
 - [user] PHP lint via `C:\Users\flavi\php\php.exe -l` → user-preferences.md
 
 ## Project
-- [project] jimi_webhook v4.1.1 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
+- [project] jimi_webhook v4.3.0 — YUV Parity, PHP 8.3 puro + MySQL 8.0 → project-conventions.md
 - [project] Design system Coinbase: azul #0052ff, sidebar #0a0b0d, CTAs pill 100px, JetBrains Mono números/IMEI → project-conventions.md
 - [project] Autenticação token cookie `jimi_token` → MySQL `sessions`, sem `session_start()` — $_SESSION é POR REQUEST (nunca persistir nada nele entre requests) → project-conventions.md
 - [project] PROJETO_YUV.md é o contrato-mestre; STATUS.md é o diário vivo (estado atual: §12) → project-conventions.md
 - [project] Fases 0-M + iteração v4.1.1 concluídas — comandos ponta-a-ponta OK (síncrono + callback offline real), BRT em todo o dashboard, Playwright 37/37 → project-conventions.md
 - [project] Servidor homolog: 189.22.240.43 (host `iothub`) Apache/FPM no HOST + 16 containers IoTHub; containers só alcançam o host via IP LAN 10.1.0.43 (nunca localhost) → project-conventions.md
-- [project] Deploy homolog (12/07/2026): servidor puxa de hssflavio-ux/jimi_webhook (deploy key dedicada no root; repo Flaviohses é legado); SSH por chave como administrador + sudo com senha; usuário E2E e2e@teste.local existe no homolog; v4.2.0 (e5f9309) implantado, replay 8/8, Playwright 33/40 (7 skips esperados) → project-conventions.md
+- [project] Deploy homolog (12/07/2026): servidor puxa de hssflavio-ux/jimi_webhook (deploy key dedicada no root; repo Flaviohses é legado); SSH por chave como administrador + sudo com senha; usuário E2E e2e@teste.local existe no homolog; working copy do servidor é www-data (git pull só com sudo) → project-conventions.md
+- [project] Estado homolog 22/07/2026: v4.3.0 implantado em `5f6b8ed` (banco 4.3.0). Relatório de deslocamento em 2 modalidades (viagens | fechamento diário) + mapa de rota (/relatorios/deslocamento/rota) + teto global 31 dias (clamp_report_range) + índice trips(customer_id, started_at). QUANDO deploy.sh muda a si mesmo (bloco de migration novo): rodar `sudo ./scripts/deploy.sh && sudo ./scripts/deploy.sh --force` (git pull no meio do script → bloco novo só vale na 2ª passada; sudo cacheia a senha) → tech-decisions.md
 - [project] Auto-vídeo de evento (v4.2.1, 13/07): ocorrência nova JT/T dispara **37384/0x9208 (Alarm Attachment Upload)** pós-commit com alarmLabel do push + alarmNumber=bin2hex(IMEI[-14:]+label[14:]) + attachment server (ingest_ip:21188, overrides ATTACH_UPLOAD_IP/PORT). **34818/0x8802 é CONSULTA (não upload)** — JC371 real respondeu mediaItemsNum:0 para evento DMS. Arquivos chegam {imei}_{label}_{xy}.mp4/.jpg via /pushfileupload; vínculo mídia→ocorrência pelo label (alarms.alarm_label→occurrence_events), vídeo > imagem, fallback ±3min. Kill-switch AUTO_VIDEO_REQUEST=0 → tech-decisions.md
 - [reference] Câmeras: device_models.camera_count = MÁXIMO do modelo (JC182=1, JC181/JC400D/JC400AD=2, JC371≤3, JC450≤5); devices.camera_count = instalado (cadastro). Telas de vídeo usam COALESCE(NULLIF(d.camera_count,0), dm.camera_count, 1) — nunca ler só o modelo (2e8472f) → tech-decisions.md
 - [feedback] deploy.sh: git pull roda no MEIO do script — mudança no próprio deploy.sh só vale na próxima execução (rodar deploy 2× quando o script muda) → feedback-history.md
