@@ -26,6 +26,7 @@ $page      = max(1, (int)($_GET['page'] ?? 1));
 $perPage   = min(50, max(5, (int)($_GET['per_page'] ?? 20)));
 $dateFrom  = $_GET['date_from'] ?? brt_today();
 $dateTo    = $_GET['date_to'] ?? brt_today();
+[$dateFrom, $dateTo] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $search    = $_GET['search'] ?? '';
 
 try {

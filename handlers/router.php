@@ -31,6 +31,7 @@
  *   /video/downloads                  → video_downloads.php
  *   /relatorios/posicoes              → rel_posicoes.php
  *   /relatorios/deslocamento           → rel_deslocamento.php
+ *   /relatorios/deslocamento/rota      → rel_deslocamento_rota.php (mapa do percurso)
  *   /relatorios/desatualizados        → rel_desatualizados.php
  *   /relatorios/alarmes               → rel_alarmes.php
  *   /relatorios/ocorrencias           → rel_ocorrencias.php
@@ -57,6 +58,7 @@ if (empty($segments)) {
 } else {
     $first = $segments[0];
     $second = $segments[1] ?? null;
+    $third = $segments[2] ?? null;
 
     $ajaxRoutes = ['camerasdata','commandstatus','sendcommand','mediadata','trackdata','hbdata','devicemodels',
                    'ocorrenciasdata','exportardata'];
@@ -85,6 +87,7 @@ if (empty($segments)) {
         'relatorios' => [
             'posicoes'     => 'rel_posicoes.php',
             'deslocamento' => 'rel_deslocamento.php',
+            'deslocamento/rota' => 'rel_deslocamento_rota.php',
             'desatualizados' => 'rel_desatualizados.php',
             'alarmes'      => 'rel_alarmes.php',
             'ocorrencias'  => 'rel_ocorrencias.php',
@@ -108,7 +111,10 @@ if (empty($segments)) {
 
     } elseif (isset($subrouteMap[$first])) {
         $sub = $subrouteMap[$first];
-        if ($second && isset($sub[$second])) {
+        // Subrota de 3 segmentos (chave 'segundo/terceiro') tem precedência
+        if ($second && $third && isset($sub[$second . '/' . $third])) {
+            $handler = $sub[$second . '/' . $third];
+        } elseif ($second && isset($sub[$second])) {
             $handler = $sub[$second];
         } elseif ($second) {
             http_response_code(404);
@@ -177,6 +183,7 @@ $screenByHandler = [
     'video_downloads.php'       => 'video_downloads',
     'rel_posicoes.php'          => 'relatorios',
     'rel_deslocamento.php'      => 'relatorios',
+    'rel_deslocamento_rota.php' => 'relatorios',
     'rel_desatualizados.php'    => 'relatorios',
     'rel_alarmes.php'           => 'relatorios',
     'rel_ocorrencias.php'       => 'relatorios',

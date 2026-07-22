@@ -20,6 +20,7 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 
 $dateFrom    = $_GET['date_from'] ?? brt_today();
 $dateTo      = $_GET['date_to'] ?? brt_today();
+[$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $filterCust  = $_GET['customer_id'] ?? null;
 $filterImei  = $_GET['imei'] ?? null;
 // Multiselect de tipos (chips, CSV) + retrocompat com o antigo campo texto alarm_type
@@ -219,7 +220,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período</label>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
                 <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
                 <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
@@ -228,6 +229,12 @@ require_once __DIR__ . '/../web/layout_base.php';
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
     </form>
 </div>
+
+<?php if ($rangeClamped): ?>
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+    O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
+</div>
+<?php endif; ?>
 
 <div class="table-wrap">
     <table>

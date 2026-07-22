@@ -25,6 +25,7 @@ function fmt_brt_rpt($dt) {
 $reportType  = $_GET['tipo'] ?? 'alarmes';
 $dateFrom    = $_GET['from'] ?? date('Y-m-d', strtotime('-7 days'));
 $dateTo      = $_GET['to'] ?? date('Y-m-d');
+[$dateFrom, $dateTo] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $imeiFilter  = $_GET['imei'] ?? '';
 $alarmSev    = $_GET['severity'] ?? '';
 $alarmCat    = $_GET['category'] ?? '';

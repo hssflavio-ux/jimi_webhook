@@ -187,7 +187,10 @@ All DB times are UTC. Dashboard converts to BRT (America/Sao_Paulo) for display.
 mysql -u root -p < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
-mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql   # YUV Parity (a criar — ver PROJETO_YUV.md §6)
+mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql   # YUV Parity
+mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql   # jobs.format + fix seed DMS
+mysql -u root -p jimi_tracker < mysql/migration_v4.2.1.sql   # catálogo de câmeras por modelo
+mysql -u root -p jimi_tracker < mysql/migration_v4.3.0.sql   # índice composto trips (customer_id, started_at)
 
 # No build step needed — pure PHP
 ```

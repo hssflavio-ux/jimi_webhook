@@ -55,3 +55,11 @@ updated: 2026-07-06
 - **Decisão**: log_cleanup NÃO usa a classe Database (o construtor dá `exit` em falha de conexão — limpeza de log deve rodar com banco fora); parse próprio do .env
 - **Handler global do dashboard** (auth.php): set_exception_handler → ERROR + 500 neutro; shutdown p/ fatais → CRITICAL; só páginas/AJAX (webhooks têm o try/catch do WebhookHandler); warnings/notices de fora
 - **Gotcha de teste**: `php -r` NÃO dispara set_exception_handler neste build (código eval'd) — sempre testar handler com arquivo .php real
+
+## Relatório de Deslocamento v4.3.0: modalidades, teto de período e mapa de rota (22/07/2026)
+- **Teto global de 31 dias** em todo relatório com filtro de data: `clamp_report_range()` (includes/functions.php, const `REPORT_RANGE_MAX_DAYS`). Datas invertidas trocam; excesso encurta `date_to`. Telas com banner âmbar; AJAX/exportar clampam silenciosamente. **Relatório novo = aplicar o helper.**
+- **Por quê 31 dias**: benchmark com 2,92M viagens (tenant 200 veículos): fechamento diário (GROUP BY) custa 41–177ms até 30 dias, mas 5,7s@90d e ~10s@365d — a agregação em si é o custo, não falta de índice.
+- **Índice**: `trips` consultada por período EXIGE o composto `idx_trips_customer_time (customer_id, started_at)` (migration v4.3.0; o antigo `idx_trips_customer` foi dropado — o composto serve a FK). Sem ele, 3,5–6s por consulta.
+- **Fechamento diário**: agrega `trips` por `imei + DATE(CONVERT_TZ(started_at,'+00:00','-03:00'))`; viagem que cruza meia-noite conta no dia em que começou; **Jornada** (MAX(ended)−MIN(started), inclui paradas) ≠ **Em Movimento** (SUM(duration_s)). Períodos parados com ACC ligado não entram (isRealTrip filtra no builder).
+- **Mapa de rota** (`/relatorios/deslocamento/rota`): janela SEMPRE recalculada server-side (trip_id → started/ended; imei+dia → MIN/MAX das trips do dia BRT) — nunca aceitar datetimes crus da URL. Ocorrência com coordenada = posição do 1º alarme (`occurrence_events`→`alarms`); sem coordenada = anexa ao ponto GPS mais próximo no tempo. Amostragem >3000 pontos preservando primeiro/último; `preferCanvas` no Leaflet.
+- **Router**: subrota de 3 segmentos = chave `'segundo/terceiro'` no `$subrouteMap` (ex.: `'deslocamento/rota'`), com precedência sobre a de 2.

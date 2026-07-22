@@ -252,6 +252,60 @@ function brt_today($format = 'Y-m-d', $modify = null) {
     return $d->format($format);
 }
 
+/** Teto global de período dos relatórios do sistema, em dias. */
+const REPORT_RANGE_MAX_DAYS = 31;
+
+/**
+ * Aplica o teto global de período dos relatórios (REPORT_RANGE_MAX_DAYS).
+ *
+ * Recebe os dias BRT digitados no filtro; datas invertidas são trocadas e,
+ * se o intervalo exceder o teto, date_to é encurtado para caber. O terceiro
+ * elemento indica se houve ajuste (para a tela avisar o usuário).
+ *
+ * @param string $dateFrom Dia inicial local ('Y-m-d')
+ * @param string $dateTo   Dia final local ('Y-m-d')
+ * @returns array [date_from, date_to, foi_limitado(bool)]
+ */
+function clamp_report_range($dateFrom, $dateTo) {
+    try {
+        $from = new DateTime($dateFrom);
+        $to   = new DateTime($dateTo);
+    } catch (Exception $e) {
+        return [brt_today(), brt_today(), false];
+    }
+    $clamped = false;
+    if ($to < $from) { [$from, $to] = [$to, $from]; $clamped = true; }
+    $maxTo = (clone $from)->modify('+' . (REPORT_RANGE_MAX_DAYS - 1) . ' days');
+    if ($to > $maxTo) { $to = $maxTo; $clamped = true; }
+    return [$from->format('Y-m-d'), $to->format('Y-m-d'), $clamped];
+}
+
+/**
+ * Converte um intervalo local (BRT) com data E hora, como digitado nos
+ * filtros com faixa horária, para a janela UTC equivalente.
+ *
+ * @param string $dateFrom Dia inicial local ('Y-m-d')
+ * @param string $dateTo   Dia final local ('Y-m-d')
+ * @param string $timeFrom Hora inicial local ('H:i'; default '00:00')
+ * @param string $timeTo   Hora final local ('H:i'; default '23:59')
+ * @returns array [utc_from 'Y-m-d H:i:s', utc_to 'Y-m-d H:i:s']
+ */
+function brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom = '', $timeTo = '') {
+    $timeFrom = preg_match('/^\d{2}:\d{2}$/', $timeFrom) ? $timeFrom : '00:00';
+    $timeTo   = preg_match('/^\d{2}:\d{2}$/', $timeTo)   ? $timeTo   : '23:59';
+    $tzBrt = new DateTimeZone('America/Sao_Paulo');
+    $tzUtc = new DateTimeZone('UTC');
+    try {
+        $from = new DateTime("$dateFrom $timeFrom:00", $tzBrt);
+        $to   = new DateTime("$dateTo $timeTo:59", $tzBrt);
+        $from->setTimezone($tzUtc);
+        $to->setTimezone($tzUtc);
+        return [$from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')];
+    } catch (Exception $e) {
+        return ["$dateFrom 00:00:00", "$dateTo 23:59:59"];
+    }
+}
+
 /**
  * Configuração de streaming de vídeo ao vivo/playback (JT/T 1078 via IoTHub).
  *

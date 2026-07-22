@@ -5,6 +5,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.3.0
+
+### Added
+- **Relatório de Deslocamento em duas modalidades** (`/relatorios/deslocamento`, select "Modalidade"): **Por deslocamento** (grade anterior, 1 linha por viagem ignição lig→desl) e **Fechamento diário** — agregado por dia BRT sobre `trips` com primeira ignição ligada, última desligada (viagem que cruza a meia-noite conta inteira no dia em que começou), **Jornada** (última−primeira, inclui paradas) e **Em Movimento** (soma das durações das viagens) lado a lado, Σ distância, vel. máxima, Σ alarmes e nº de viagens do dia. Paginação por grupos e export XLSX/PDF próprios da modalidade. Filtro de **faixa horária opcional** (`time_from`/`time_to`, novo helper `brt_datetime_range_to_utc()`).
+- **Mapa de rota por deslocamento** (`/relatorios/deslocamento/rota`, novo `rel_deslocamento_rota.php`; cada linha do relatório ganhou o link "Ver rota"): aceita `trip_id` (viagem) ou `imei`+`dia` (dia fechado; janela primeira→última ignição recalculada server-side, escopo multi-tenant). Leaflet com a polyline do percurso, balão de **Partida** (verde) e **Chegada** (vermelho) com data/hora BRT, um ponto por posição/comunicação da câmera (popup com hora, velocidade e ignição) e **ocorrências em cor de destaque** (laranja): com coordenada própria (posição do 1º alarme agrupado) o pino vai no local exato; sem coordenada, o ponto de comunicação mais próximo no tempo é destacado — o balão cita a ocorrência (tipo, hora, risco, status). Amostragem automática acima de 3000 pontos (preserva primeiro/último) e KPIs do percurso (distância, duração, vel. máx, viagens, alarmes, posições, ocorrências). Router ganhou subrotas de 3 segmentos (chave `'segundo/terceiro'` no `$subrouteMap`).
+- **Teto global de período nos relatórios: 31 dias** (`clamp_report_range()` + `REPORT_RANGE_MAX_DAYS` em `includes/functions.php`): datas invertidas são corrigidas e períodos maiores têm o fim encurtado, com banner "período ajustado" e label "máx. 31 dias" em `rel_deslocamento`, `rel_posicoes`, `rel_alarmes`, `rel_ocorrencias` e `bi`; aplicado silenciosamente em `relatorios.php`, `ocorrenciasdata.php` (AJAX) e na criação de jobs do `exportar.php`.
+
+### Changed
+- **Migração v4.3.0**: novo índice composto `idx_trips_customer_time (customer_id, started_at)` em `trips` (o antigo `idx_trips_customer` é removido — redundante, o composto serve a FK). Motivação medida em benchmark com 2,92M viagens (tenant de 200 veículos): grade do relatório caía de 3,5–6s para <1ms (por viagem) e 41–177ms (fechamento diário de 7–30 dias); o teto de 31 dias mantém a modalidade diária nessa faixa. `deploy.sh` aplica a migração automaticamente.
+
 ## [Unreleased] — 4.2.1
 
 ### Fixed

@@ -29,6 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && csrf_verify()) {
     $reportType = $_POST['report_type'] ?? 'alarms';
     $dateFrom   = $_POST['date_from'] ?? brt_today('Y-m-d', '-30 days');
     $dateTo     = $_POST['date_to'] ?? brt_today();
+    [$dateFrom, $dateTo] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
     $format     = in_array($_POST['format'] ?? 'csv', ['csv', 'xlsx', 'pdf'], true) ? $_POST['format'] : 'csv';
 
     if ($reportName) {
