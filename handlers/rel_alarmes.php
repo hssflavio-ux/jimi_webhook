@@ -28,15 +28,12 @@ $filterTypes = array_values(array_filter(array_map('trim', explode(',', $_GET['a
 $filterType  = $_GET['alarm_type'] ?? null;
 $filterBranch = $_GET['branch_id'] ?? null;
 $filterStatus = $_GET['alarm_status'] ?? null;
-$sort        = $_GET['sort'] ?? 'alarm_time';
-$order       = $_GET['order'] ?? 'DESC';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
 
-// Validate sort column
+// Ordenação: whitelist de colunas + default crescente por data/hora
 $validSorts = ['alarm_time', 'alarm_type', 'alarm_name', 'imei'];
-if (!in_array($sort, $validSorts)) $sort = 'alarm_time';
-$order = strtoupper($order) === 'ASC' ? 'ASC' : 'DESC';
+[$sort, $order] = report_sort_params($validSorts, 'alarm_time', 'ASC');
 
 $where = 'WHERE a.alarm_time BETWEEN :df AND :dt';
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
@@ -149,17 +146,6 @@ try {
     $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
 } catch (Exception $e) {}
 
-// Sort helper
-function sort_link($col, $label, $currentSort, $currentOrder) {
-    $newOrder = ($currentSort === $col && $currentOrder === 'ASC') ? 'DESC' : 'ASC';
-    $arrow = $currentSort === $col ? ($currentOrder === 'ASC' ? ' &#9650;' : ' &#9660;') : '';
-    $q = $_GET;
-    $q['sort'] = $col;
-    $q['order'] = $newOrder;
-    unset($q['page']);
-    return '<a href="?' . http_build_query($q) . '" style="color:var(--ink);text-decoration:none;">' . $label . $arrow . '</a>';
-}
-
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
@@ -169,6 +155,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <?php if (report_has_query()) echo report_back_button('/relatorios/alarmes'); ?>
     </div>
 </div>
 
@@ -240,11 +227,11 @@ require_once __DIR__ . '/../web/layout_base.php';
     <table>
         <thead>
             <tr>
-                <th><?= sort_link('alarm_time', 'Data/Hora', $sort, $order) ?></th>
+                <th><?= report_sort_link('alarm_time', 'Data/Hora', $sort, $order) ?></th>
                 <th>Cliente</th>
-                <th><?= sort_link('imei', 'IMEI', $sort, $order) ?></th>
-                <th><?= sort_link('alarm_type', 'Código', $sort, $order) ?></th>
-                <th><?= sort_link('alarm_name', 'Nome do Alarme', $sort, $order) ?></th>
+                <th><?= report_sort_link('imei', 'IMEI', $sort, $order) ?></th>
+                <th><?= report_sort_link('alarm_type', 'Código', $sort, $order) ?></th>
+                <th><?= report_sort_link('alarm_name', 'Nome do Alarme', $sort, $order) ?></th>
                 <th>Protocolo</th>
                 <th>Velocidade</th>
                 <th>Status</th>

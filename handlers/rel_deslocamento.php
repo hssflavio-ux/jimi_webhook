@@ -33,6 +33,11 @@ $generated = !empty($_GET['gerar']);
 
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo);
 
+// Ordenação por modalidade; ambas abrem crescente por data/hora
+[$sort, $order] = $mode === 'diario'
+    ? report_sort_params(['dia'], 'dia', 'ASC')
+    : report_sort_params(['started_at', 'ended_at', 'distance_km', 'max_speed'], 'started_at', 'ASC');
+
 $rows = [];
 $totalRows = 0;
 $totalPages = 1;
@@ -79,7 +84,7 @@ if ($generated) {
         try {
             if ($mode === 'diario') {
                 $expStmt = $db->prepare("$dailySelect $where
-                    GROUP BY t.imei, dia ORDER BY dia DESC, device_name
+                    GROUP BY t.imei, dia ORDER BY dia $order, device_name
                     LIMIT " . SYNC_EXPORT_MAX_ROWS);
                 $expStmt->execute($params);
                 while ($r = $expStmt->fetch()) {
@@ -108,7 +113,7 @@ if ($generated) {
                     LEFT JOIN devices d ON d.imei = t.imei
                     LEFT JOIN drivers dr ON dr.id = t.driver_id
                     $where
-                    ORDER BY t.started_at DESC
+                    ORDER BY t.$sort $order
                     LIMIT " . SYNC_EXPORT_MAX_ROWS);
                 $expStmt->execute($params);
                 while ($r = $expStmt->fetch()) {
@@ -148,7 +153,7 @@ if ($generated) {
 
         if ($mode === 'diario') {
             $stmt = $db->prepare("$dailySelect $where
-                GROUP BY t.imei, dia ORDER BY dia DESC, device_name
+                GROUP BY t.imei, dia ORDER BY dia $order, device_name
                 LIMIT $perPage OFFSET $offset");
         } else {
             $stmt = $db->prepare("
@@ -158,7 +163,7 @@ if ($generated) {
                 LEFT JOIN devices d ON d.imei = t.imei
                 LEFT JOIN drivers dr ON dr.id = t.driver_id
                 $where
-                ORDER BY t.started_at DESC
+                ORDER BY t.$sort $order
                 LIMIT $perPage OFFSET $offset
             ");
         }
@@ -196,6 +201,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <?= report_back_button('/relatorios/deslocamento') ?>
     </div>
     <?php endif; ?>
 </div>
@@ -248,7 +254,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <?php if ($mode === 'diario'): ?>
             <tr>
-                <th>Dia</th>
+                <th><?= report_sort_link('dia', 'Dia', $sort, $order) ?></th>
                 <th>Dispositivo</th>
                 <th>Primeira Ignição</th>
                 <th>Última Ign. Deslig.</th>
@@ -265,11 +271,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>IMEI</th>
                 <th>Dispositivo</th>
                 <th>Motorista</th>
-                <th>Início</th>
-                <th>Término</th>
+                <th><?= report_sort_link('started_at', 'Início', $sort, $order) ?></th>
+                <th><?= report_sort_link('ended_at', 'Término', $sort, $order) ?></th>
                 <th>Duração</th>
-                <th>Vel. Máx</th>
-                <th>Distância</th>
+                <th><?= report_sort_link('max_speed', 'Vel. Máx', $sort, $order, 'DESC') ?></th>
+                <th><?= report_sort_link('distance_km', 'Distância', $sort, $order, 'DESC') ?></th>
                 <th>Alarmes</th>
                 <th>Rota</th>
             </tr>

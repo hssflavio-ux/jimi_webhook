@@ -551,6 +551,20 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--canvas-soft); }
 
+/* Cabeçalho ordenável (relatórios): seta ▲/▼ na coluna ativa, ⇅ nas demais */
+.sort-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.sort-link:hover { color: var(--primary); }
+.sort-arrow { font-size: 9px; line-height: 1; opacity: .35; }
+.sort-link:hover .sort-arrow { opacity: .7; }
+.sort-arrow.is-active { opacity: 1; color: var(--primary); }
+
 /* ── Badges / Pills ──────────────────────────────────── */
 .badge {
     display: inline-flex;

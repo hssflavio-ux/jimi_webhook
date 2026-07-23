@@ -306,6 +306,89 @@ function brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom = '', $timeTo =
     }
 }
 
+/* ── UI comum dos relatórios (ordenação + voltar) ───────────────────────── */
+
+/**
+ * Lê e valida os parâmetros de ordenação (?sort=&order=) de um relatório.
+ *
+ * A whitelist é obrigatória: a coluna volta interpolada no SQL (PDO não
+ * parametriza identificadores), então nada fora de $validSorts pode passar.
+ *
+ * CONVENÇÃO DO SISTEMA: relatórios com data/hora abrem em ordem CRESCENTE
+ * (mais antigo no topo, mais recente no fim) — por isso o default é 'ASC'.
+ *
+ * @param array  $validSorts   Colunas ordenáveis permitidas
+ * @param string $defaultSort  Coluna padrão (deve estar em $validSorts)
+ * @param string $defaultOrder Direção padrão ('ASC' | 'DESC')
+ * @returns array [sort, order]
+ */
+function report_sort_params(array $validSorts, string $defaultSort, string $defaultOrder = 'ASC'): array {
+    $sort = $_GET['sort'] ?? $defaultSort;
+    if (!in_array($sort, $validSorts, true)) $sort = $defaultSort;
+    $order = strtoupper((string)($_GET['order'] ?? $defaultOrder));
+    if ($order !== 'ASC' && $order !== 'DESC') {
+        $order = strtoupper($defaultOrder) === 'DESC' ? 'DESC' : 'ASC';
+    }
+    return [$sort, $order];
+}
+
+/**
+ * Cabeçalho de coluna clicável com seta de ordenação (▲ crescente / ▼
+ * decrescente). A coluna ativa mostra a seta cheia e o clique inverte a
+ * direção; as demais mostram a seta neutra (⇅) e o primeiro clique aplica
+ * $firstOrder. Preserva os demais filtros da URL e volta para a página 1.
+ *
+ * @param string $col        Chave da coluna (mesma da whitelist de report_sort_params)
+ * @param string $label      Rótulo exibido no <th>
+ * @param string $sort       Coluna atualmente ordenada
+ * @param string $order      Direção atual ('ASC' | 'DESC')
+ * @param string $firstOrder Direção do primeiro clique nesta coluna
+ * @returns string HTML do link
+ */
+function report_sort_link(string $col, string $label, string $sort, string $order, string $firstOrder = 'ASC'): string {
+    $active = ($sort === $col);
+    $newOrder = $active ? ($order === 'ASC' ? 'DESC' : 'ASC') : strtoupper($firstOrder);
+    $q = $_GET;
+    $q['sort'] = $col;
+    $q['order'] = $newOrder;
+    unset($q['page'], $q['export']);   // nova ordenação sempre reinicia a paginação
+    $arrow = $active
+        ? '<span class="sort-arrow is-active">' . ($order === 'ASC' ? '&#9650;' : '&#9660;') . '</span>'
+        : '<span class="sort-arrow">&#8645;</span>';
+    $title = $active
+        ? ($order === 'ASC' ? 'Ordenado crescente — clique para inverter' : 'Ordenado decrescente — clique para inverter')
+        : 'Clique para ordenar por ' . $label;
+    return '<a class="sort-link" href="?' . htmlspecialchars(http_build_query($q), ENT_QUOTES)
+         . '" title="' . htmlspecialchars($title, ENT_QUOTES) . '">'
+         . htmlspecialchars($label) . $arrow . '</a>';
+}
+
+/**
+ * Botão "Voltar" dos relatórios: devolve o usuário à tela inicial (filtros
+ * limpos) do próprio relatório depois de ver o resultado, sem obrigá-lo a
+ * reabrir a tela pelo menu lateral.
+ *
+ * @param string $baseUrl Rota do relatório (ex.: '/relatorios/alarmes')
+ * @param string $label   Rótulo do botão
+ * @returns string HTML do botão
+ */
+function report_back_button(string $baseUrl, string $label = 'Voltar'): string {
+    return '<a href="' . htmlspecialchars($baseUrl, ENT_QUOTES) . '" class="btn btn-outline btn-sm">&larr; '
+         . htmlspecialchars($label) . '</a>';
+}
+
+/**
+ * Indica se o relatório foi acionado com algum parâmetro (filtro, ordenação,
+ * paginação) — usado para só exibir o "Voltar" quando há resultado na tela.
+ *
+ * @returns bool
+ */
+function report_has_query(): bool {
+    $q = $_GET;
+    unset($q['export']);
+    return !empty($q);
+}
+
 /**
  * Configuração de streaming de vídeo ao vivo/playback (JT/T 1078 via IoTHub).
  *

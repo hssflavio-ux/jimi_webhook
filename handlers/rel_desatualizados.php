@@ -19,6 +19,13 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 $filterCust = $_GET['customer_id'] ?? null;
 $detailBucket = $_GET['bucket'] ?? null;
 
+// Ordenação do detalhe: só por data/hora da última posição; default crescente
+// (mais desatualizado no topo). "Nunca posicionados" (NULL) acompanha o extremo
+// mais antigo — primeiro em ASC, último em DESC.
+[$sort, $order] = report_sort_params(['last_gps_time'], 'last_gps_time', 'ASC');
+$nullsOrder = $order === 'ASC' ? 'DESC' : 'ASC';
+$detailOrderBy = "ORDER BY ds.last_gps_time IS NULL $nullsOrder, ds.last_gps_time $order";
+
 $where = '';
 $params = [];
 if (!$isAdmin && !$filterCust) {
@@ -74,7 +81,7 @@ if ($detailBucket && isset($buckets[$detailBucket])) {
             LEFT JOIN device_models dm ON d.device_model_id = dm.id
             LEFT JOIN device_statistics ds ON ds.imei = d.imei
             $full
-            ORDER BY ds.last_gps_time IS NULL DESC, ds.last_gps_time ASC
+            $detailOrderBy
             LIMIT 200
         ");
         $stmt->execute($params);
@@ -101,7 +108,7 @@ if ($detailBucket && isset($buckets[$detailBucket]) && in_array($export, ['xlsx'
             LEFT JOIN device_models dm ON d.device_model_id = dm.id
             LEFT JOIN device_statistics ds ON ds.imei = d.imei
             $full
-            ORDER BY ds.last_gps_time IS NULL DESC, ds.last_gps_time ASC
+            $detailOrderBy
             LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $expStmt->execute($params);
         while ($d = $expStmt->fetch()) {
@@ -188,13 +195,13 @@ require_once __DIR__ . '/../web/layout_base.php';
         <?php $expQ = $_GET; unset($expQ['export']); $expBase = http_build_query($expQ); ?>
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
-        <a href="/relatorios/desatualizados<?= $filterCust ? '?customer_id='.$filterCust : '' ?>" class="btn btn-outline btn-sm">Voltar</a>
+        <?= report_back_button('/relatorios/desatualizados' . ($filterCust ? '?customer_id=' . urlencode($filterCust) : '')) ?>
     </div>
 </div>
 
 <div class="table-wrap">
     <table>
-        <thead><tr><th>IMEI</th><th>Nome</th><th>Modelo</th><th>Cliente</th><th>Última Posição</th><th>Horas Desde</th></tr></thead>
+        <thead><tr><th>IMEI</th><th>Nome</th><th>Modelo</th><th>Cliente</th><th><?= report_sort_link('last_gps_time', 'Última Posição', $sort, $order) ?></th><th>Horas Desde</th></tr></thead>
         <tbody>
             <?php if (empty($detailRows)): ?>
             <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted);">Nenhum dispositivo nesta faixa</td></tr>

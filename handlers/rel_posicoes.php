@@ -25,6 +25,9 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 $generated = !empty($_GET['gerar']);
 
+// Ordenação: só por data/hora; default crescente (mais antigo no topo)
+[$sort, $order] = report_sort_params(['gps_time'], 'gps_time', 'ASC');
+
 $rows = [];
 $totalRows = 0;
 $totalPages = 1;
@@ -55,7 +58,7 @@ if ($generated && $selImei) {
                 FROM gps_data g
                 LEFT JOIN devices d ON d.imei = g.imei
                 $where
-                ORDER BY g.gps_time DESC
+                ORDER BY g.$sort $order
                 LIMIT " . SYNC_EXPORT_MAX_ROWS);
             $expStmt->execute($params);
             $expRows = [];
@@ -90,7 +93,7 @@ if ($generated && $selImei) {
             FROM gps_data g
             LEFT JOIN devices d ON d.imei = g.imei
             $where
-            ORDER BY g.gps_time DESC
+            ORDER BY g.$sort $order
             LIMIT $perPage OFFSET $offset
         ");
         $stmt->execute($params);
@@ -140,6 +143,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <?= report_back_button('/relatorios/posicoes') ?>
     </div>
     <?php endif; ?>
 </div>
@@ -190,7 +194,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="table-wrap">
     <table>
         <thead>
-            <tr><th>Data/Hora</th><th>IMEI</th><th>Dispositivo</th><th>Endereço</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
+            <tr><th><?= report_sort_link('gps_time', 'Data/Hora', $sort, $order) ?></th><th>IMEI</th><th>Dispositivo</th><th>Endereço</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>

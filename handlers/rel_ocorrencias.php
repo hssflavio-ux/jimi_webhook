@@ -34,6 +34,9 @@ $filterDriver = $_GET['driver_id'] ?? null;   // B4: filtro de Motorista (YUV)
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 
+// Ordenação: whitelist de colunas + default crescente por data/hora
+[$sort, $order] = report_sort_params(['last_alarm_at', 'imei', 'alarm_count'], 'last_alarm_at', 'ASC');
+
 $where = 'WHERE o.last_alarm_at BETWEEN :df AND :dt';
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
 $params = [':df' => $utcFrom, ':dt' => $utcTo];
@@ -91,7 +94,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             LEFT JOIN drivers dr ON dr.id = o.driver_id
             LEFT JOIN branches b ON b.id = o.branch_id
             $where
-            ORDER BY o.last_alarm_at DESC
+            ORDER BY o.$sort $order
             LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $expStmt->execute($params);
         while ($r = $expStmt->fetch()) {
@@ -130,7 +133,7 @@ try {
         LEFT JOIN drivers dr ON dr.id = o.driver_id
         LEFT JOIN branches b ON b.id = o.branch_id
         $where
-        ORDER BY o.last_alarm_at DESC
+        ORDER BY o.$sort $order
         LIMIT $perPage OFFSET $offset
     ");
     $dataStmt->execute($params);
@@ -170,6 +173,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <?php if (report_has_query()) echo report_back_button('/relatorios/ocorrencias'); ?>
     </div>
 </div>
 
@@ -271,11 +275,11 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>Cliente</th>
-                <th>IMEI</th>
+                <th><?= report_sort_link('imei', 'IMEI', $sort, $order) ?></th>
                 <th>Motorista</th>
                 <th>Tipo de Alarme</th>
-                <th>Último Alarme</th>
-                <th>Qtd</th>
+                <th><?= report_sort_link('last_alarm_at', 'Último Alarme', $sort, $order) ?></th>
+                <th><?= report_sort_link('alarm_count', 'Qtd', $sort, $order, 'DESC') ?></th>
                 <th>Risco</th>
                 <th>Falso Pos.</th>
                 <th>Situação</th>

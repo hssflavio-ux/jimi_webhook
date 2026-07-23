@@ -30,6 +30,11 @@ $imeiFilter  = $_GET['imei'] ?? '';
 $alarmSev    = $_GET['severity'] ?? '';
 $alarmCat    = $_GET['category'] ?? '';
 
+// Ordenação por data/hora. A amostra é sempre a dos 200 registros MAIS RECENTES
+// do período (LIMIT sobre ORDER BY DESC); a exibição é invertida em PHP quando
+// crescente — ordenar a query em ASC traria os 200 mais antigos, outra amostra.
+[$sort, $order] = report_sort_params(['data'], 'data', 'ASC');
+
 // Tipos de alarme para filtro
 $alarmCategories = $db->query("SELECT DISTINCT category FROM alarm_types WHERE category IS NOT NULL ORDER BY category")->fetchAll(PDO::FETCH_COLUMN);
 $alarmSeverities = ['critical', 'warning', 'info'];
@@ -111,6 +116,9 @@ if ($reportType === 'alarmes') {
     $columns = ['Data/Hora', 'Dispositivo', 'Comando', 'Status', 'Resposta'];
 }
 
+// Crescente (mais antigo no topo) sem trocar a amostra dos 200 mais recentes
+if ($order === 'ASC') $rows = array_reverse($rows);
+
 $page_title    = 'Relatórios';
 $current_route = 'relatorios';
 include __DIR__ . '/../web/layout_base.php';
@@ -123,7 +131,10 @@ include __DIR__ . '/../web/layout_base.php';
         <a href="?tipo=trajetos<?= $imeiFilter ? '&imei='.urlencode($imeiFilter) : '' ?>&from=<?= $dateFrom ?>&to=<?= $dateTo ?>" class="btn <?= $reportType === 'trajetos' ? 'btn-primary' : 'btn-outline' ?> btn-sm">Trajetos</a>
         <a href="?tipo=comandos<?= $imeiFilter ? '&imei='.urlencode($imeiFilter) : '' ?>&from=<?= $dateFrom ?>&to=<?= $dateTo ?>" class="btn <?= $reportType === 'comandos' ? 'btn-primary' : 'btn-outline' ?> btn-sm">Comandos</a>
     </div>
-    <div style="font-size:12px;color:var(--muted)"><?= $total ?> registro(s)</div>
+    <div class="flex flex-gap" style="align-items:center">
+        <span style="font-size:12px;color:var(--muted)"><?= $total ?> registro(s)</span>
+        <?php if (report_has_query()) echo report_back_button('/relatorios'); ?>
+    </div>
 </div>
 
 <!-- Filtros -->
@@ -179,7 +190,7 @@ include __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <?php foreach ($columns as $col): ?>
-                <th><?= $col ?></th>
+                <th><?= $col === 'Data/Hora' ? report_sort_link('data', $col, $sort, $order) : $col ?></th>
                 <?php endforeach; ?>
             </tr>
         </thead>

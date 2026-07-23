@@ -63,3 +63,11 @@ updated: 2026-07-06
 - **Fechamento diário**: agrega `trips` por `imei + DATE(CONVERT_TZ(started_at,'+00:00','-03:00'))`; viagem que cruza meia-noite conta no dia em que começou; **Jornada** (MAX(ended)−MIN(started), inclui paradas) ≠ **Em Movimento** (SUM(duration_s)). Períodos parados com ACC ligado não entram (isRealTrip filtra no builder).
 - **Mapa de rota** (`/relatorios/deslocamento/rota`): janela SEMPRE recalculada server-side (trip_id → started/ended; imei+dia → MIN/MAX das trips do dia BRT) — nunca aceitar datetimes crus da URL. Ocorrência com coordenada = posição do 1º alarme (`occurrence_events`→`alarms`); sem coordenada = anexa ao ponto GPS mais próximo no tempo. Amostragem >3000 pontos preservando primeiro/último; `preferCanvas` no Leaflet.
 - **Router**: subrota de 3 segmentos = chave `'segundo/terceiro'` no `$subrouteMap` (ex.: `'deslocamento/rota'`), com precedência sobre a de 2.
+
+## UI comum dos relatórios: ordenação crescente + seta + Voltar (23/07/2026)
+- **Convenção**: relatório com data como condicional **abre em ordem CRESCENTE** (mais antigo no topo, mais recente no fim da página). Vale para toda tela nova.
+- **Helpers** (includes/functions.php): `report_sort_params(array $whitelist, string $default, string $defaultOrder='ASC')` → `[$sort,$order]` validados; `report_sort_link($col,$label,$sort,$order,$firstOrder='ASC')` → `<th>` clicável com ▲/▼ na coluna ativa e ⇅ nas demais (preserva filtros, remove `page`/`export`); `report_back_button($baseUrl,$label)` + `report_has_query()` → `← Voltar` à tela limpa do relatório (exibir só quando há resultado). CSS `.sort-link`/`.sort-arrow` no `web/layout_base.php`.
+- **Segurança**: a coluna de ordenação volta **interpolada** no `ORDER BY` (PDO não parametriza identificadores) → a whitelist de `report_sort_params()` é obrigatória; nunca passar `$_GET['sort']` direto.
+- **Export segue a grade**: usar a mesma variável `$sort/$order` no `ORDER BY` da query de export.
+- **Armadilha `ORDER BY … DESC LIMIT N`** (hub `/relatorios`, 3 queries com LIMIT 200): virar ASC no SQL troca a amostra pelos N **mais antigos** do período. Inverter em PHP (`array_reverse`) depois do fetch.
+- **NULL em coluna de data** (desatualizados, "Nunca posicionados"): `ORDER BY col IS NULL <inverso>, col <ordem>` → NULL primeiro em ASC (mais desatualizado), último em DESC.

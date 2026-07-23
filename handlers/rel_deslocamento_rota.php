@@ -193,12 +193,15 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Rota do Deslocamento</h2>
-    <?php if (!$error): ?>
-    <span style="font-size:13px;color:var(--muted);">
-        <?= htmlspecialchars($deviceName) ?> · <span class="text-mono"><?= htmlspecialchars($imei) ?></span>
-        · <?= fmt_brt($utcFrom) ?> → <?= fmt_brt($utcTo) ?>
-    </span>
-    <?php endif; ?>
+    <div style="display:flex;align-items:center;gap:12px;">
+        <?php if (!$error): ?>
+        <span style="font-size:13px;color:var(--muted);">
+            <?= htmlspecialchars($deviceName) ?> · <span class="text-mono"><?= htmlspecialchars($imei) ?></span>
+            · <?= fmt_brt($utcFrom) ?> → <?= fmt_brt($utcTo) ?>
+        </span>
+        <?php endif; ?>
+        <?= report_back_button('/relatorios/deslocamento', 'Voltar ao relatório') ?>
+    </div>
 </div>
 
 <?php if ($error): ?>
