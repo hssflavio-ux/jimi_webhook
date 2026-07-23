@@ -79,14 +79,26 @@ else
     echo "  ⚠ AVISO: Apache não detectado (pode ser Nginx — verifique rewrite manualmente)"
 fi
 
-# MySQL
+# MySQL — a conexão é testada com as credenciais do .env (que é o que a app e
+# as migrations usam). NÃO usar `mysql -e "SELECT 1"` sem credenciais: isso
+# conecta como o usuário do SO (root/administrador sob sudo), que normalmente
+# não tem conta MySQL, e falha SEMPRE — dando um "verifique credenciais no .env"
+# enganoso mesmo com o .env perfeito.
 echo "  Verificando MySQL..."
 if mysql --version >/dev/null 2>&1; then
     echo "  ✓ MySQL disponível"
-    if mysql -e "SELECT 1" >/dev/null 2>&1; then
-        echo "  ✓ Conexão MySQL OK (via socket/auth local)"
+    if [ -f .env ]; then
+        source <(grep -E '^DB_(HOST|PORT|NAME|USER|PASS)=' .env | sed 's/^/export /')
+        if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" \
+            -u"${DB_USER:-root}" "${DB_NAME:-jimi_tracker}" -e "SELECT 1" >/dev/null 2>/tmp/mysql_check_err.log; then
+            echo "  ✓ Conexão MySQL OK (credenciais do .env)"
+        else
+            echo "  ⚠ AVISO: conexão MySQL com as credenciais do .env falhou:"
+            grep -v 'Using a password' /tmp/mysql_check_err.log | sed 's/^/          /'
+        fi
+        rm -f /tmp/mysql_check_err.log
     else
-        echo "  ⚠ AVISO: Conexão MySQL falhou — verifique credenciais no .env"
+        echo "  ⚠ AVISO: .env ausente — não foi possível testar a conexão MySQL"
     fi
 else
     echo "  ✗ FALHA: mysql CLI não encontrado"
@@ -145,16 +157,21 @@ if [ "$SKIP_BACKUP" -eq 0 ]; then
         echo "  ✓ .env → backup/env_$TIMESTAMP.bak"
     fi
 
-    # Backup do banco de dados
+    # Backup do banco de dados. O erro do mysqldump é capturado e exibido — não
+    # é sempre credencial: uma VIEW quebrada (ex.: definer/tabela inexistente)
+    # aborta o dump com erro 1356 e o backup sai incompleto. Silenciar o stderr
+    # e culpar as credenciais mascarava a causa real.
     if [ -f .env ]; then
         source <(grep -E '^DB_(HOST|PORT|NAME|USER|PASS)=' .env | sed 's/^/export /')
-        if mysqldump -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-            -p"${DB_PASS}" --single-transaction --routines --triggers \
-            "${DB_NAME:-jimi_tracker}" > "$BACKUP_DIR/db_$TIMESTAMP.sql" 2>/dev/null; then
+        if MYSQL_PWD="${DB_PASS:-}" mysqldump -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+            --single-transaction --routines --triggers \
+            "${DB_NAME:-jimi_tracker}" > "$BACKUP_DIR/db_$TIMESTAMP.sql" 2>/tmp/dump_err.log; then
             echo "  ✓ Banco → backup/db_$TIMESTAMP.sql ($(du -h "$BACKUP_DIR/db_$TIMESTAMP.sql" | cut -f1))"
         else
-            echo "  ⚠ AVISO: mysqldump falhou — verifique credenciais no .env"
+            echo "  ⚠ AVISO: mysqldump falhou (backup NÃO gerado). Erro:"
+            grep -v 'Using a password' /tmp/dump_err.log | head -3 | sed 's/^/          /'
         fi
+        rm -f /tmp/dump_err.log
     fi
 
     # Limpar backups antigos (manter últimos 10)
