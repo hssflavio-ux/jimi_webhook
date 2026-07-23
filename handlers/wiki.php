@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.2.1
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.3.0
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
@@ -412,6 +412,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="#video-playback" style="padding-left:20px;font-size:12px">Playback</a>
         <a href="#video-downloads" style="padding-left:20px;font-size:12px">Downloads</a>
         <a href="#relatorios">Relatórios</a>
+        <a href="#rel-comum" style="padding-left:20px;font-size:12px">Comum a todos</a>
         <a href="#rel-posicoes" style="padding-left:20px;font-size:12px">Posições</a>
         <a href="#rel-deslocamento" style="padding-left:20px;font-size:12px">Deslocamento</a>
         <a href="#rel-desatualizados" style="padding-left:20px;font-size:12px">Desatualizados</a>
@@ -844,8 +845,43 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <h2 id="relatorios">Relatórios</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
+<h3 id="rel-comum">O que vale para todos os relatórios</h3>
+<p>Estes cinco comportamentos são iguais em todas as telas de relatório. O que muda de um para outro são os filtros e as colunas.</p>
+
+<table class="tbl-mock">
+<tr><th>Recurso</th><th>Como funciona</th></tr>
+<tr>
+    <td><strong>Ordem dos resultados</strong></td>
+    <td>Todo relatório com data abre em <strong>ordem crescente</strong>: o registro mais antigo no topo e o mais recente no fim da página — a leitura acompanha a linha do tempo.</td>
+</tr>
+<tr>
+    <td><strong>Setinha de ordenação</strong></td>
+    <td>As colunas ordenáveis têm uma seta no cabeçalho. A coluna em uso mostra <strong>▲</strong> (crescente) ou <strong>▼</strong> (decrescente) em azul; as demais mostram <strong>⇅</strong> em cinza. Um clique inverte a ordem, outro clique volta. Os filtros são mantidos e a listagem volta para a página 1.</td>
+</tr>
+<tr>
+    <td><strong>Botão Voltar</strong></td>
+    <td>Depois que o resultado aparece, surge o botão <strong>← Voltar</strong> no canto superior direito, ao lado dos botões de exportar. Ele limpa os filtros e devolve a tela em branco do mesmo relatório — não é preciso ir de novo ao menu lateral.</td>
+</tr>
+<tr>
+    <td><strong>Paginação</strong></td>
+    <td>Os números acompanham a página em que você está: a primeira e a última ficam sempre visíveis e as reticências indicam o salto. Estando na página 12 de 14, por exemplo, aparece <span class="mono">« 1 … 10 11 12 13 14 »</span>. As setas « e » avançam de uma em uma.</td>
+</tr>
+<tr>
+    <td><strong>Exportar</strong></td>
+    <td>Excel ou PDF, sempre com <strong>os mesmos filtros e a mesma ordenação</strong> que estão na tela. O arquivo baixa na hora (até 10.000 linhas). Para volumes maiores, use a tela Exportar, que processa em segundo plano.</td>
+</tr>
+</table>
+
+<div class="callout info">
+<strong>Período máximo de 31 dias:</strong> Todo relatório com filtro de data aceita no máximo 31 dias por consulta. Se você pedir um intervalo maior, o sistema encurta a data final e avisa na tela com uma tarja amarela. Para períodos longos, faça a consulta em partes ou use a tela Exportar.
+</div>
+
+<div class="callout tip">
+<strong>Horários sempre em Brasília:</strong> Todas as datas e horas exibidas nos relatórios — e as que você digita nos filtros — estão no horário de Brasília. Os equipamentos transmitem em outro fuso, e o sistema faz a conversão sozinho.
+</div>
+
 <h3 id="rel-posicoes">Posições</h3>
-<p><strong>Objetivo:</strong> Histórico de posições de um ativo em um período. Mostra o trajeto percorrido no mapa + tabela paginada com data/hora, latitude, longitude, velocidade e ignição. Pode ser exportado em CSV, Excel ou PDF.</p>
+<p><strong>Objetivo:</strong> Histórico de posições de um ativo em um período. Mostra o trajeto percorrido no mapa + tabela paginada com data/hora, endereço, velocidade e ignição. Pode ser exportado em Excel ou PDF.</p>
 
 <div class="mockup">
 <div class="mockup-header">Relatório de Posições</div>
@@ -853,8 +889,11 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
     <div class="filter-bar-mock">
         <div class="filter-mock">Ativo: CAM-001</div>
         <div class="filter-mock dim">dd/mm/aaaa - dd/mm/aaaa</div>
-        <span class="btn-mock">Filtrar</span>
+        <div class="filter-mock dim">08:00 - 10:00</div>
+        <div class="filter-mock">Em cada dia do período</div>
+        <span class="btn-mock">Gerar</span>
         <span class="btn-mock outline">Exportar</span>
+        <span class="btn-mock outline">← Voltar</span>
     </div>
     <div class="map-mock" style="height:180px;background:url('/assets/img/wiki_map_streets.png') center/cover no-repeat">
         <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -867,58 +906,92 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <span class="map-credit">© OpenStreetMap</span>
     </div>
     <table class="tbl-mock">
-    <tr><th>Data/Hora</th><th>Latitude</th><th>Longitude</th><th>Velocidade</th><th>Ignição</th></tr>
-    <tr><td>18/07 14:35:22</td><td class="mono">-23.5505</td><td class="mono">-46.6333</td><td class="mono">42 km/h</td><td>Ligada</td></tr>
-    <tr><td>18/07 14:30:10</td><td class="mono">-23.5489</td><td class="mono">-46.6311</td><td class="mono">38 km/h</td><td>Ligada</td></tr>
-    <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">Página 1 de 12 — 1-25 de 287 registros</td></tr>
+    <tr><th>Data/Hora ▲</th><th>Endereço</th><th>Velocidade</th><th>Ignição</th></tr>
+    <tr><td>18/07 08:00:10</td><td>Av. Rangel Pestana, 300 — São Paulo</td><td class="mono">38 km/h</td><td>Ligada</td></tr>
+    <tr><td>18/07 08:05:22</td><td>Av. Rangel Pestana, 812 — São Paulo</td><td class="mono">42 km/h</td><td>Ligada</td></tr>
+    <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Página 12 de 14 (700 posições) — « 1 … 10 11 <strong>12</strong> 13 14 »</td></tr>
     </table>
 </div>
 </div>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Selecionar ativo + período + Filtrar</td><td>Mapa e tabela carregam com os dados do período</td></tr>
-<tr><td>Exportar</td><td>Baixa o arquivo em CSV, Excel ou PDF (até 10.000 linhas)</td></tr>
-<tr><td>Navegar páginas</td><td>Paginação de 25 em 25 registros</td></tr>
+<tr><td>Selecionar ativo + período + Gerar</td><td>Mapa e tabela carregam com os dados do período, do mais antigo para o mais recente</td></tr>
+<tr><td><strong>Faixa horária</strong> (opcional)</td><td>Além das datas, você pode informar hora inicial e final. Deixando em branco, vale o dia inteiro (00:00 às 23:59)</td></tr>
+<tr><td>Intervalo</td><td>"Todas as posições" ou "Amostrado (1:10)", que traz 1 a cada 10 posições — útil para períodos longos</td></tr>
+<tr><td>Ver Posições no Mapa</td><td>Abre o mapa com os pontos da página atual</td></tr>
+<tr><td>Exportar</td><td>Baixa o arquivo em Excel ou PDF, com os mesmos filtros e a mesma ordenação da tela</td></tr>
+<tr><td>Navegar páginas</td><td>Paginação de 50 em 50 posições</td></tr>
 </table>
+
+<div class="callout info">
+<strong>Faixa horária: as duas maneiras de usar.</strong> Ao informar hora inicial e final, escolha ao lado como o sistema deve aplicá-las ao período:
+<ul style="margin:8px 0 0 18px;line-height:1.7">
+    <li><strong>Contínua (início → fim)</strong> — uma única janela, do primeiro dia na hora inicial até o último dia na hora final. Pedindo 01/07 a 05/07 das 08:00 às 10:00, você recebe <em>tudo</em> entre 01/07 08:00 e 05/07 10:00, madrugadas incluídas. Use para acompanhar um trajeto que atravessa dias.</li>
+    <li><strong>Em cada dia do período</strong> — a faixa se repete em todos os dias. O mesmo pedido traz apenas as manhãs de 08:00 às 10:00 de cada um dos 5 dias. Use para comparar o mesmo horário dia após dia (saída da garagem, horário de almoço, turno da tarde).</li>
+</ul>
+</div>
+
+<div class="callout tip">
+<strong>Turno da noite:</strong> No modo "Em cada dia do período", informe a hora inicial <em>maior</em> que a final para pegar a jornada que vira o dia — <span class="mono">22:00</span> às <span class="mono">06:00</span> traz, de cada dia, o fim da noite e a madrugada seguinte.
+</div>
 
 <h3 id="rel-deslocamento">Deslocamento</h3>
-<p><strong>Objetivo:</strong> Histórico de viagens detectadas pela ignição do veículo (liga → desliga). Mostra duração, velocidade máxima, distância percorrida e alarmes ocorridos durante a viagem. As viagens são montadas automaticamente pelo sistema alguns minutos após o término.</p>
+<p><strong>Objetivo:</strong> Histórico dos deslocamentos do veículo, com duração, velocidade máxima, distância percorrida e alarmes ocorridos no trajeto. Os deslocamentos são montados automaticamente pelo sistema alguns minutos depois de terminarem.</p>
+
+<p>O relatório tem <strong>duas modalidades</strong>, escolhidas no primeiro campo do filtro:</p>
 
 <table class="tbl-mock">
-<tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Filtrar por ativo + período</td><td>Tabela mostra todas as viagens do período: início, fim, duração, vel. máx, distância, alarmes</td></tr>
-<tr><td>Ordenar por coluna</td><td>Clique no cabeçalho para ordenar (data, duração, distância)</td></tr>
-<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF com os dados da consulta</td></tr>
+<tr><th>Modalidade</th><th>O que mostra</th></tr>
+<tr><td><strong>Por deslocamento</strong></td><td>Uma linha por trajeto: início, local de partida, término, local de chegada, duração, velocidade máxima, distância e alarmes.</td></tr>
+<tr><td><strong>Fechamento diário</strong></td><td>Uma linha por dia e por veículo: primeira ignição ligada, última desligada, <strong>jornada</strong> (do começo ao fim do dia, com as paradas), <strong>tempo em movimento</strong> (só rodando), distância total, velocidade máxima, alarmes e quantidade de deslocamentos do dia.</td></tr>
 </table>
 
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar por ativo + período + Gerar</td><td>Tabela carrega na modalidade escolhida, do mais antigo para o mais recente</td></tr>
+<tr><td>Faixa horária (opcional)</td><td>Restringe a consulta a um intervalo de horas dentro do período</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Início, Término, Velocidade Máxima e Distância (ou Dia, no fechamento diário)</td></tr>
+<tr><td><strong>Ver rota</strong></td><td>Abre em nova aba o trajeto desenhado no mapa: balão verde na partida, vermelho na chegada, um ponto por posição enviada pela câmera e <strong>as ocorrências em laranja</strong>, com tipo, horário e risco no balão. No fechamento diário, mostra o dia inteiro.</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados da consulta</td></tr>
+</table>
+
+<div class="callout info">
+<strong>Como o sistema separa um deslocamento do outro:</strong> o trajeto termina quando a ignição desliga, quando o veículo fica parado por mais de 5 minutos, ou quando o equipamento passa esse mesmo tempo sem comunicar. É por isso que uma jornada com várias paradas aparece como vários deslocamentos, e não como um só — mesmo que o motorista não tenha desligado a ignição em nenhum momento.
+</div>
+
 <h3 id="rel-desatualizados">Desatualizados</h3>
-<p><strong>Objetivo:</strong> Identificar dispositivos que não se comunicam há muito tempo. 5 faixas de tempo (1h, 6h, 12h, 24h, >24h) clicáveis para ver a lista de dispositivos de cada faixa.</p>
+<p><strong>Objetivo:</strong> Identificar equipamentos que estão há muito tempo sem enviar posição. A tela abre com cinco faixas — <strong>menos de 24 horas</strong>, <strong>mais de 1 dia</strong>, <strong>mais de 7 dias</strong>, <strong>mais de 30 dias</strong> e <strong>nunca posicionados</strong> — com a quantidade de equipamentos em cada uma e uma barra mostrando a proporção.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Clicar em uma faixa</td><td>A lista mostra apenas os dispositivos daquela faixa de inatividade</td></tr>
-<tr><td>Visualizar dispositivo</td><td>Abre a tela de detalhe do ativo</td></tr>
+<tr><td>Clicar em uma faixa</td><td>Abre a lista dos equipamentos daquela faixa: IMEI, nome, modelo, cliente, última posição e há quantas horas</td></tr>
+<tr><td>Ordenar por Última Posição</td><td>Setinha no cabeçalho. Em ordem crescente, os mais desatualizados vêm primeiro — os "nunca posicionados" encabeçam a lista</td></tr>
+<tr><td>← Voltar</td><td>Fecha a lista e devolve o resumo com as cinco faixas</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF com os equipamentos da faixa aberta</td></tr>
 </table>
 
 <h3 id="rel-alarmes">Alarmes</h3>
-<p><strong>Objetivo:</strong> Histórico completo de alarmes recebidos. 5 filtros: dispositivo, tipo de alarme, período, cliente e busca textual. Ordenação clicável por qualquer coluna. Cada alarme tem um atalho para ver o local no mapa.</p>
+<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, IMEI, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Filtrar + ordenar</td><td>Tabela atualiza com filtros aplicados e ordenação escolhida</td></tr>
-<tr><td>Clicar no link do mapa</td><td>Abre o mapa em uma nova aba, no local exato do alarme</td></tr>
-<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF com os dados filtrados</td></tr>
+<tr><td>Filtrar + Gerar</td><td>Tabela atualiza com os filtros aplicados, do alarme mais antigo para o mais recente</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Data/Hora, IMEI, Código e Nome do Alarme</td></tr>
+<tr><td>Tipos de Alarme</td><td>Clique nos tipos para incluí-los na consulta — dá para selecionar vários de uma vez</td></tr>
+<tr><td>Ver Mapa</td><td>Abre o mapa em uma nova aba, no local exato do alarme</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados filtrados</td></tr>
 </table>
 
 <h3 id="rel-ocorrencias">Ocorrências</h3>
-<p><strong>Objetivo:</strong> Histórico de ocorrências com 6 filtros: cliente, IMEI, tipo de alarme, status, nível de risco e falso positivo. Visão complementar ao Dashboard de Ocorrências, focada em auditoria e análise histórica.</p>
+<p><strong>Objetivo:</strong> Histórico de ocorrências com filtros por cliente, IMEI, tipo de alarme, situação, risco, falso positivo, filial e motorista. Visão complementar ao Dashboard de Ocorrências, voltada a auditoria e análise histórica.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
-<tr><td>Aplicar filtros</td><td>Tabela mostra ocorrências que atendem a todos os critérios</td></tr>
-<tr><td>Clicar em uma ocorrência</td><td>Abre o detalhe da ocorrência no Dashboard de Ocorrências</td></tr>
-<tr><td>Exportar</td><td>Baixa CSV, Excel ou PDF</td></tr>
+<tr><td>Aplicar filtros + Gerar</td><td>Tabela mostra as ocorrências que atendem a todos os critérios, da mais antiga para a mais recente</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Último Alarme, IMEI e Qtd (quantidade de alarmes agrupados)</td></tr>
+<tr><td>Abrir</td><td>Abre o detalhe da ocorrência no Dashboard de Ocorrências, com vídeo e histórico de tratativa</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -1225,7 +1298,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
-JIMI Webhook System v4.2.1 — Central de Ajuda — Última atualização: Julho 2026
+JIMI Webhook System v4.3.0 — Central de Ajuda — Última atualização: 23/07/2026
 </p>
 
     </div><!-- /.wiki-content -->
