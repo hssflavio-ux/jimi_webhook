@@ -275,31 +275,6 @@ require_once __DIR__ . '/../web/layout_base.php';
     </table>
 </div>
 
-<?php if ($totalPages > 1): ?>
-<div class="flex-between mt-16" style="font-size:13px;color:var(--muted);">
-    <span>Página <?= $page ?> de <?= $totalPages ?> (<?= number_format($totalRows, 0, ',', '.') ?> registros)</span>
-    <div style="display:flex;gap:4px;">
-        <?php
-        $queryStr = $_GET; unset($queryStr['page']);
-        $base = http_build_query($queryStr);
-        if ($page > 1): ?>
-        <a href="?<?= $base ?>&page=<?= $page-1 ?>" class="btn btn-outline btn-sm">&laquo;</a>
-        <?php endif;
-        for ($i = 1; $i <= min($totalPages, 10); $i++):
-            if ($i === $page): ?>
-            <span class="btn btn-primary btn-sm" style="pointer-events:none;"><?= $i ?></span>
-            <?php else: ?>
-            <a href="?<?= $base ?>&page=<?= $i ?>" class="btn btn-outline btn-sm"><?= $i ?></a>
-            <?php endif;
-        endfor;
-        if ($totalPages > 10): ?>
-        <span style="padding:4px 2px;">... <?= $totalPages ?></span>
-        <?php endif;
-        if ($page < $totalPages): ?>
-        <a href="?<?= $base ?>&page=<?= $page+1 ?>" class="btn btn-outline btn-sm">&raquo;</a>
-        <?php endif; ?>
-    </div>
-</div>
-<?php endif; ?>
+<?= report_pagination($page, $totalPages, $totalRows, 'alarmes') ?>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

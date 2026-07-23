@@ -20,6 +20,8 @@ $selImei    = $_GET['imei'] ?? '';
 $dateFrom   = $_GET['date_from'] ?? brt_today();
 $dateTo     = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
+$timeFrom   = $_GET['time_from'] ?? '';   // faixa horária opcional (BRT)
+$timeTo     = $_GET['time_to'] ?? '';
 $interval   = $_GET['interval'] ?? 'all';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
@@ -39,7 +41,8 @@ if ($generated && $selImei) {
         // Prefixo g. obrigatório: as queries da grade/export fazem JOIN com devices
         // (imei/id existem nas duas tabelas → coluna ambígua quebrava o relatório)
         $where = 'WHERE g.imei = :imei AND g.gps_time BETWEEN :df AND :dt';
-        [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
+        // Dias BRT (+ faixa horária opcional) → janela UTC
+        [$utcFrom, $utcTo] = brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom, $timeTo);
         $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo];
 
         if ($interval === 'sampled') {
@@ -75,9 +78,10 @@ if ($generated && $selImei) {
                     $r['gsm_signal'] ?? '—',
                 ];
             }
+            $faixa = ($timeFrom || $timeTo) ? ' — faixa horária: ' . ($timeFrom ?: '00:00') . ' a ' . ($timeTo ?: '23:59') : '';
             stream_export($export, 'relatorio_posicoes',
                 ['Data/Hora', 'IMEI', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
-                $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo");
+                $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo$faixa");
         }
 
         $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data g $where");
@@ -174,6 +178,13 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
             </div>
         </div>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Faixa horária (opcional)</label>
+            <div style="display:flex;gap:4px;">
+                <input type="time" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
+                <input type="time" name="time_to" value="<?= htmlspecialchars($timeTo) ?>" title="Hora final (BRT) — vazio = 23:59" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
+            </div>
+        </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
         <?php if ($generated && !empty($hasCoords)): ?>
         <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()" id="btn-map">Ver Posições no Mapa</button>
@@ -224,22 +235,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     </table>
 </div>
 
-<?php if ($totalPages > 1): ?>
-<div class="flex-between mt-16" style="font-size:13px;color:var(--muted);">
-    <span>Página <?= $page ?> de <?= $totalPages ?> (<?= number_format($totalRows, 0, ',', '.') ?> posições)</span>
-    <div style="display:flex;gap:4px;">
-        <?php
-        $queryStr = $_GET; unset($queryStr['page']);
-        $base = http_build_query($queryStr);
-        if ($page > 1): ?><a href="?<?= $base ?>&page=<?= $page-1 ?>" class="btn btn-outline btn-sm">&laquo;</a><?php endif;
-        for ($i = 1; $i <= min($totalPages, 10); $i++):
-            if ($i === $page): ?><span class="btn btn-primary btn-sm"><?= $i ?></span>
-            <?php else: ?><a href="?<?= $base ?>&page=<?= $i ?>" class="btn btn-outline btn-sm"><?= $i ?></a><?php endif;
-        endfor;
-        if ($page < $totalPages): ?><a href="?<?= $base ?>&page=<?= $page+1 ?>" class="btn btn-outline btn-sm">&raquo;</a><?php endif; ?>
-    </div>
-</div>
-<?php endif; ?>
+<?= report_pagination($page, $totalPages, $totalRows, 'posições') ?>
 
 <?php if (!empty($hasCoords)): ?>
 <script>

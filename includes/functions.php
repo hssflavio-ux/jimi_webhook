@@ -378,6 +378,63 @@ function report_back_button(string $baseUrl, string $label = 'Voltar'): string {
 }
 
 /**
+ * Paginação padrão das grades: rótulo "Página X de Y (N unidades)" + « + janela
+ * deslizante de páginas + ».
+ *
+ * A janela acompanha a página atual (primeira e última sempre visíveis, com
+ * reticências nos saltos) — o laço fixo `1..min($totalPages,10)` que existia
+ * antes nunca mostrava a página 11+ nem a atual quando o usuário passava do
+ * décimo bloco.
+ *
+ * @param int    $page       Página atual (1-based)
+ * @param int    $totalPages Total de páginas
+ * @param int    $totalRows  Total de registros (rótulo)
+ * @param string $unit       Unidade no rótulo (ex.: 'posições', 'viagens')
+ * @param int    $window     Páginas exibidas de cada lado da atual
+ * @returns string HTML da paginação ('' quando há só uma página)
+ */
+function report_pagination(int $page, int $totalPages, int $totalRows, string $unit = 'registros', int $window = 2): string {
+    if ($totalPages <= 1) return '';
+
+    $q = $_GET;
+    unset($q['page'], $q['export']);
+    $base = http_build_query($q);
+    $href = function (int $n) use ($base) {
+        return htmlspecialchars('?' . ($base !== '' ? $base . '&' : '') . 'page=' . $n, ENT_QUOTES);
+    };
+
+    // Primeira, última e as vizinhas da atual
+    $pages = [1, $totalPages];
+    for ($i = $page - $window; $i <= $page + $window; $i++) {
+        if ($i >= 1 && $i <= $totalPages) $pages[] = $i;
+    }
+    $pages = array_unique($pages);
+    sort($pages);
+
+    $out = '<div class="flex-between mt-16" style="font-size:13px;color:var(--muted);">'
+         . '<span>Página ' . $page . ' de ' . $totalPages
+         . ' (' . number_format($totalRows, 0, ',', '.') . ' ' . htmlspecialchars($unit) . ')</span>'
+         . '<div style="display:flex;gap:4px;align-items:center;">';
+
+    if ($page > 1) {
+        $out .= '<a href="' . $href($page - 1) . '" class="btn btn-outline btn-sm" title="Página anterior">&laquo;</a>';
+    }
+    $prev = 0;
+    foreach ($pages as $n) {
+        if ($prev && $n > $prev + 1) $out .= '<span style="padding:0 2px;">…</span>';
+        $out .= $n === $page
+            ? '<span class="btn btn-primary btn-sm" style="pointer-events:none;">' . $n . '</span>'
+            : '<a href="' . $href($n) . '" class="btn btn-outline btn-sm">' . $n . '</a>';
+        $prev = $n;
+    }
+    if ($page < $totalPages) {
+        $out .= '<a href="' . $href($page + 1) . '" class="btn btn-outline btn-sm" title="Próxima página">&raquo;</a>';
+    }
+
+    return $out . '</div></div>';
+}
+
+/**
  * Indica se o relatório foi acionado com algum parâmetro (filtro, ordenação,
  * paginação) — usado para só exibir o "Voltar" quando há resultado na tela.
  *
