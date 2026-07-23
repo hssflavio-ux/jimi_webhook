@@ -378,6 +378,53 @@ function report_back_button(string $baseUrl, string $label = 'Voltar'): string {
 }
 
 /**
+ * Traduz período (dias BRT) + faixa horária opcional na janela UTC do relatório
+ * e, quando for o caso, no predicado extra de hora local.
+ *
+ * Dois modos, escolhidos pelo usuário na tela:
+ *  - 'continua' (default): UMA janela só, de `date_from time_from` até
+ *    `date_to time_to`. Ex.: 01/07 08:00 → 05/07 10:00 traz tudo no meio,
+ *    inclusive as madrugadas.
+ *  - 'diaria': dias inteiros no BETWEEN + a faixa horária aplicada a CADA dia
+ *    do intervalo. Ex.: 08:00–10:00 traz só as manhãs de 01/07 a 05/07.
+ *    Faixa invertida (time_from > time_to) é lida como janela que cruza a
+ *    meia-noite — ex.: 22:00–06:00 = turno da noite — e vira OR.
+ *
+ * Sem faixa horária os dois modos são idênticos (dias inteiros).
+ *
+ * Nota de performance: no modo diário o predicado de hora usa
+ * TIME(CONVERT_TZ(col)) e portanto não é indexável, mas o BETWEEN da janela
+ * continua servido pelo índice (imei, tempo) e limitado pelo teto de 31 dias.
+ *
+ * @param string $col      Coluna de tempo qualificada (ex.: 'g.gps_time')
+ * @param string $dateFrom Dia inicial local ('Y-m-d')
+ * @param string $dateTo   Dia final local ('Y-m-d')
+ * @param string $timeFrom Hora inicial local ('H:i'; vazio = 00:00)
+ * @param string $timeTo   Hora final local ('H:i'; vazio = 23:59)
+ * @param string $mode     'continua' | 'diaria'
+ * @returns array{0:string,1:string,2:string,3:array} [utc_from, utc_to, sql_extra, params_extra]
+ */
+function report_time_window(string $col, string $dateFrom, string $dateTo, string $timeFrom, string $timeTo, string $mode = 'continua'): array {
+    $hasTime = $timeFrom !== '' || $timeTo !== '';
+
+    if ($mode !== 'diaria' || !$hasTime) {
+        [$utcFrom, $utcTo] = brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom, $timeTo);
+        return [$utcFrom, $utcTo, '', []];
+    }
+
+    // Modo diário: a janela cobre os dias inteiros; a hora filtra dentro de cada um
+    [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo);
+    $tf = preg_match('/^\d{2}:\d{2}$/', $timeFrom) ? $timeFrom : '00:00';
+    $tt = preg_match('/^\d{2}:\d{2}$/', $timeTo)   ? $timeTo   : '23:59';
+    $localTime = "TIME(CONVERT_TZ($col, '+00:00', '-03:00'))";
+    $sql = $tf <= $tt
+        ? " AND $localTime BETWEEN :tw_from AND :tw_to"
+        : " AND ($localTime >= :tw_from OR $localTime <= :tw_to)";  // cruza a meia-noite
+
+    return [$utcFrom, $utcTo, $sql, [':tw_from' => $tf . ':00', ':tw_to' => $tt . ':59']];
+}
+
+/**
  * Paginação padrão das grades: rótulo "Página X de Y (N unidades)" + « + janela
  * deslizante de páginas + ».
  *

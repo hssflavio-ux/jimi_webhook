@@ -22,6 +22,9 @@ $dateTo     = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $timeFrom   = $_GET['time_from'] ?? '';   // faixa horária opcional (BRT)
 $timeTo     = $_GET['time_to'] ?? '';
+// 'continua' = data/hora inicial → data/hora final (uma janela só)
+// 'diaria'   = a faixa horária repetida em cada dia do intervalo
+$timeMode   = ($_GET['time_mode'] ?? 'continua') === 'diaria' ? 'diaria' : 'continua';
 $interval   = $_GET['interval'] ?? 'all';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
@@ -41,9 +44,11 @@ if ($generated && $selImei) {
         // Prefixo g. obrigatório: as queries da grade/export fazem JOIN com devices
         // (imei/id existem nas duas tabelas → coluna ambígua quebrava o relatório)
         $where = 'WHERE g.imei = :imei AND g.gps_time BETWEEN :df AND :dt';
-        // Dias BRT (+ faixa horária opcional) → janela UTC
-        [$utcFrom, $utcTo] = brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom, $timeTo);
-        $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo];
+        // Dias BRT + faixa horária opcional (contínua ou repetida em cada dia)
+        [$utcFrom, $utcTo, $timeSql, $timeParams] =
+            report_time_window('g.gps_time', $dateFrom, $dateTo, $timeFrom, $timeTo, $timeMode);
+        $where .= $timeSql;
+        $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo] + $timeParams;
 
         if ($interval === 'sampled') {
             $where .= ' AND MOD(g.id, 10) = 0';
@@ -78,7 +83,10 @@ if ($generated && $selImei) {
                     $r['gsm_signal'] ?? '—',
                 ];
             }
-            $faixa = ($timeFrom || $timeTo) ? ' — faixa horária: ' . ($timeFrom ?: '00:00') . ' a ' . ($timeTo ?: '23:59') : '';
+            $faixa = ($timeFrom || $timeTo)
+                ? ' — faixa horária: ' . ($timeFrom ?: '00:00') . ' a ' . ($timeTo ?: '23:59')
+                  . ($timeMode === 'diaria' ? ' (em cada dia do período)' : ' (contínua)')
+                : '';
             stream_export($export, 'relatorio_posicoes',
                 ['Data/Hora', 'IMEI', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
                 $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo$faixa");
@@ -183,6 +191,10 @@ require_once __DIR__ . '/../web/layout_base.php';
             <div style="display:flex;gap:4px;">
                 <input type="time" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
                 <input type="time" name="time_to" value="<?= htmlspecialchars($timeTo) ?>" title="Hora final (BRT) — vazio = 23:59" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
+                <select name="time_mode" title="Como aplicar a faixa horária ao período" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:190px;">
+                    <option value="continua" <?= $timeMode==='continua'?'selected':'' ?>>Contínua (início → fim)</option>
+                    <option value="diaria" <?= $timeMode==='diaria'?'selected':'' ?>>Em cada dia do período</option>
+                </select>
             </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
