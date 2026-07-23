@@ -17,6 +17,16 @@ require_once __DIR__ . '/../config/database.php';
 // km/h); a distância é um escape para devices que não reportam speed.
 const MIN_TRIP_MAX_SPEED   = 6.0; // km/h
 const MIN_TRIP_DISTANCE_KM = 1.0; // km
+const MIN_TRIP_DURATION_S  = 60;  // s — descarta "viagens" de poucos segundos (ruído)
+
+// Segmentação por parada sustentada. Muitos devices NÃO reportam acc=desligado
+// entre um deslocamento e outro (mantêm a ignição/voltagem ligada o dia todo);
+// sem isto, uma jornada inteira colapsaria numa única "viagem" de 24h. Uma
+// parada com velocidade abaixo de STOP_SPEED_KMH por mais de STOP_IDLE_SECONDS
+// encerra a viagem no último ponto em movimento — o próximo movimento abre uma
+// viagem nova. Assim a segmentação não depende só do sinal de ignição.
+const STOP_SPEED_KMH    = 3.0; // km/h — abaixo disto o veículo é considerado parado
+const STOP_IDLE_SECONDS = 300; // s (5 min) — parada mais longa que isto encerra a viagem
 
 $db = Database::getInstance()->getConnection();
 
@@ -68,76 +78,137 @@ foreach ($devices as $dev) {
     if (count($points) < 2) continue;
 
     $trip = null;
+    // Índice, dentro de $trip['points'], do último ponto em que o veículo
+    // estava em movimento. A viagem sempre termina nele (a cauda parada é
+    // descartada), seja ao desligar a ignição ou ao detectar parada sustentada.
+    $lastMovingIdx = 0;
 
     foreach ($points as $p) {
         $ignitionOn = !empty($p['ignition']);
+        $moving = (float)$p['speed'] > STOP_SPEED_KMH;
 
-        if ($ignitionOn && !$trip) {
-            $trip = [
-                'imei'       => $imei,
-                'customer_id' => $customerId,
-                'started_at' => $p['gps_time'],
-                'start_lat'  => $p['latitude'],
-                'start_lng'  => $p['longitude'],
-                'max_speed'  => (float)$p['speed'],
-                'distance_km' => 0,
-                'points'     => [$p],
-            ];
-        } elseif ($ignitionOn && $trip) {
-            $trip['points'][] = $p;
-            if ((float)$p['speed'] > $trip['max_speed']) {
-                $trip['max_speed'] = (float)$p['speed'];
+        // Ignição desligada encerra a viagem no último ponto em movimento.
+        if (!$ignitionOn) {
+            if ($trip) {
+                $tripsCreated += finalizeTrip($db, $trip, $lastMovingIdx);
+                $trip = null;
             }
-        } elseif (!$ignitionOn && $trip) {
-            $lastPoint = end($trip['points']);
-            $trip['ended_at'] = $p['gps_time'];
-            $trip['end_lat'] = $p['latitude'];
-            $trip['end_lng'] = $p['longitude'];
-            $trip['duration_s'] = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
-            $trip['distance_km'] = calcDistance($trip['points']);
-            $trip['alarm_count'] = countAlarms($db, $imei, $trip['started_at'], $trip['ended_at']);
+            continue;
+        }
 
-            if (isRealTrip($trip)) {
-                saveTrip($db, $trip);
-                $tripsCreated++;
+        // Ignição ligada, sem viagem aberta: só abre quando há movimento real
+        // (evita iniciar viagem em veículo parado com ignição ligada / deriva).
+        if (!$trip) {
+            if ($moving) {
+                $trip = [
+                    'imei'        => $imei,
+                    'customer_id' => $customerId,
+                    'points'      => [$p],
+                ];
+                $lastMovingIdx = 0;
             }
+            continue;
+        }
+
+        // Buraco de dados: se o intervalo desde o último ponto da viagem passou
+        // de STOP_IDLE_SECONDS, o device ficou offline/parado sem reportar — não
+        // dá para afirmar que houve deslocamento contínuo. Encerra a viagem no
+        // último ponto em movimento; o ponto atual reinicia o ciclo (uma viagem
+        // nunca atravessa um período de silêncio do rastreador).
+        $prev = $trip['points'][count($trip['points']) - 1];
+        if (strtotime($p['gps_time']) - strtotime($prev['gps_time']) >= STOP_IDLE_SECONDS) {
+            $tripsCreated += finalizeTrip($db, $trip, $lastMovingIdx);
             $trip = null;
+            if ($moving) {
+                $trip = ['imei' => $imei, 'customer_id' => $customerId, 'points' => [$p]];
+                $lastMovingIdx = 0;
+            }
+            continue;
+        }
+
+        // Viagem aberta: acumula o ponto.
+        $trip['points'][] = $p;
+        $idx = count($trip['points']) - 1;
+
+        if ($moving) {
+            $lastMovingIdx = $idx;
+        } else {
+            // Parada: mede há quanto tempo o veículo não se move. Se passou de
+            // STOP_IDLE_SECONDS, encerra a viagem (no último ponto em movimento)
+            // — o próximo movimento abrirá uma viagem nova.
+            $idleSecs = strtotime($p['gps_time']) - strtotime($trip['points'][$lastMovingIdx]['gps_time']);
+            if ($idleSecs >= STOP_IDLE_SECONDS) {
+                $tripsCreated += finalizeTrip($db, $trip, $lastMovingIdx);
+                $trip = null;
+            }
         }
     }
 
-    // Viagem ainda aberta ao fim dos pontos (sem acc=desligado): só finaliza se
-    // o último ponto já está velho (<= $staleBefore); do contrário deixa em
-    // aberto p/ o próximo cron — evita fragmentar uma viagem em curso.
-    if ($trip && count($trip['points']) >= 2) {
-        $lastPoint = end($trip['points']);
-        if ($lastPoint['gps_time'] <= $staleBefore) {
-            $trip['ended_at'] = $lastPoint['gps_time'];
-            $trip['end_lat'] = $lastPoint['latitude'];
-            $trip['end_lng'] = $lastPoint['longitude'];
-            $trip['duration_s'] = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
-            $trip['distance_km'] = calcDistance($trip['points']);
-            $trip['alarm_count'] = countAlarms($db, $imei, $trip['started_at'], $trip['ended_at']);
-            if (isRealTrip($trip)) {
-                saveTrip($db, $trip);
-                $tripsCreated++;
-            }
-        }
+    // Viagem ainda aberta ao fim dos pontos (sem acc=desligado nem parada longa):
+    // só finaliza se o último ponto em movimento já está velho (<= $staleBefore);
+    // do contrário deixa em aberto p/ o próximo cron — evita fragmentar uma
+    // viagem em curso.
+    if ($trip && $trip['points'][$lastMovingIdx]['gps_time'] <= $staleBefore) {
+        $tripsCreated += finalizeTrip($db, $trip, $lastMovingIdx);
     }
 }
 
 echo "Trip Builder: $tripsCreated viagens criadas.\n";
 
 /**
- * Uma viagem só é um "deslocamento" real se teve movimento efetivo: pelo menos
- * 2 pontos E (velocidade máxima acima do ruído de GPS parado OU distância
- * mínima percorrida). Filtra viagens de 1 ponto, paradas com ignição ligada
- * (ex.: veículo estacionado a noite toda com ACC on) e deriva de GPS.
+ * Fecha uma viagem no último ponto em movimento (descarta a cauda parada),
+ * calcula os agregados (duração, distância, vel. máx., alarmes) e persiste se
+ * passar no filtro de qualidade (isRealTrip). Centraliza o fechamento usado
+ * tanto por ignição-desligada quanto por parada sustentada e fim de lote.
  *
- * @param array $trip Viagem finalizada (com max_speed, distance_km, points)
+ * @param PDO   $db
+ * @param array $trip    Viagem aberta (com 'imei', 'customer_id', 'points')
+ * @param int   $endIdx  Índice do último ponto em movimento (fim da viagem)
+ * @return int 1 se a viagem foi persistida, 0 caso contrário
+ */
+function finalizeTrip($db, array $trip, int $endIdx): int {
+    // Recorta a viagem até o último ponto em movimento — pontos parados no fim
+    // (semáforo, veículo aguardando desligado) não fazem parte do deslocamento.
+    $pts = array_slice($trip['points'], 0, $endIdx + 1);
+    if (count($pts) < 2) return 0;
+
+    $first = $pts[0];
+    $last  = $pts[count($pts) - 1];
+    $maxSpeed = 0.0;
+    foreach ($pts as $p) {
+        if ((float)$p['speed'] > $maxSpeed) $maxSpeed = (float)$p['speed'];
+    }
+
+    $trip['started_at']  = $first['gps_time'];
+    $trip['start_lat']   = $first['latitude'];
+    $trip['start_lng']   = $first['longitude'];
+    $trip['ended_at']    = $last['gps_time'];
+    $trip['end_lat']     = $last['latitude'];
+    $trip['end_lng']     = $last['longitude'];
+    $trip['duration_s']  = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
+    $trip['max_speed']   = $maxSpeed;
+    $trip['distance_km'] = calcDistance($pts);
+    $trip['points']      = $pts;
+    $trip['alarm_count'] = countAlarms($db, $trip['imei'], $trip['started_at'], $trip['ended_at']);
+
+    if (!isRealTrip($trip)) return 0;
+    saveTrip($db, $trip);
+    return 1;
+}
+
+/**
+ * Uma viagem só é um "deslocamento" real se teve movimento efetivo: pelo menos
+ * 2 pontos, duração mínima E (velocidade máxima acima do ruído de GPS parado OU
+ * distância mínima percorrida). Filtra viagens de 1 ponto, slivers de poucos
+ * segundos, paradas com ignição ligada (ex.: veículo estacionado a noite toda
+ * com ACC on) e deriva de GPS.
+ *
+ * @param array $trip Viagem finalizada (com duration_s, max_speed, distance_km, points)
  * @return bool true se deve ser persistida
  */
 function isRealTrip(array $trip): bool {
     if (count($trip['points']) < 2) return false;
+    if ((int)$trip['duration_s'] < MIN_TRIP_DURATION_S) return false;
     return (float)$trip['max_speed'] >= MIN_TRIP_MAX_SPEED
         || (float)$trip['distance_km'] >= MIN_TRIP_DISTANCE_KM;
 }

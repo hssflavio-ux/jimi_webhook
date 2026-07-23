@@ -15,6 +15,9 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Changed
 - **Migração v4.3.0**: novo índice composto `idx_trips_customer_time (customer_id, started_at)` em `trips` (o antigo `idx_trips_customer` é removido — redundante, o composto serve a FK). Motivação medida em benchmark com 2,92M viagens (tenant de 200 veículos): grade do relatório caía de 3,5–6s para <1ms (por viagem) e 41–177ms (fechamento diário de 7–30 dias); o teto de 31 dias mantém a modalidade diária nessa faixa. `deploy.sh` aplica a migração automaticamente.
 
+### Fixed
+- **Deslocamento colapsava a jornada inteira numa única viagem de 24h** (`scripts/trip_builder.php`): a segmentação encerrava uma viagem **só** ao ver `acc=desligado`. Muitos devices mantêm a ignição/voltagem reportada ligada o dia todo (não enviam `acc=0` entre um deslocamento e outro), então uma jornada inteira — incluindo paradas e pernoite — virava **uma linha só cobrindo o dia todo** (validado no homolog com a placa FJR7B59 / IMEI 869058070151343: viagem única de **07-22 11:58 → 07-23 10:55**, ~23h). Agora a viagem também é encerrada por **parada sustentada** (velocidade abaixo de `STOP_SPEED_KMH=3 km/h` por mais de `STOP_IDLE_SECONDS=300s`) e por **buraco de dados** (device offline/silente por mais que esse mesmo limite) — sempre no **último ponto em movimento** (a cauda parada é descartada), e o próximo movimento abre uma viagem nova; a segmentação deixa de depender do sinal de ignição. Filtro `isRealTrip()` ganhou piso de duração (`MIN_TRIP_DURATION_S=60s`) para descartar *slivers* de poucos segundos. Rebuild no homolog (lookback 30d): FJR7B59 saiu de 11 → **39 viagens** (5–9/dia, a viagem de ~23h fatiada em 17 deslocamentos reais; o trajeto-tronco de 07-19, 3h/292 km, preservado) e o device-bancada `181_7838` (só deriva de GPS, nunca >7 km/h) deixou de gerar "viagem" de 24h fantasma.
+
 ## [Unreleased] — 4.2.1
 
 ### Fixed
