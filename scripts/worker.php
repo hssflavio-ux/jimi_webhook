@@ -294,18 +294,22 @@ function processRollupJob($db, $job): array {
 function processNotificationJob($db, $job): array {
     $p  = json_decode($job['params'] ?? '{}', true) ?: [];
     $to = $p['to'] ?? [];
+    // Cliente do job decide quais credenciais SMTP valem (cliente → global → .env)
+    $cid = isset($job['customer_id']) ? (int)$job['customer_id'] : null;
 
     if (!is_array($to) || empty($to)) {
         return ['status' => 'falhou', 'error' => 'Sem destinatários'];
     }
-    if (!mail_is_configured()) {
-        return ['status' => 'falhou', 'error' => 'SMTP não configurado (SMTP_HOST vazio)'];
+    if (!mail_is_configured($cid)) {
+        return ['status' => 'falhou', 'error' => 'Servidor SMTP não cadastrado (Cadastros › Servidor de E-mail)'];
     }
 
     $result = send_mail(
         $to,
         (string)($p['subject'] ?? 'Notificação'),
-        buildNotificationEmailHtml($p)
+        buildNotificationEmailHtml($p),
+        [],
+        $cid
     );
 
     if ($result['ok']) {

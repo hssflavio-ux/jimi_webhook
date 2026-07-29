@@ -73,6 +73,7 @@ if (empty($segments)) {
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
+        'config-smtp'         => 'config_smtp.php',
         'grupos-permissao'    => 'grupos_permissao.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',

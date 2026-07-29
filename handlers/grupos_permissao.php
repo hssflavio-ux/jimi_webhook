@@ -35,6 +35,7 @@ $screens = [
     'motoristas'            => 'Motoristas',
     'config-ocorrencias'    => 'Config. Ocorrências',
     'config-notificacoes'   => 'Config. Notificações',
+    'config-smtp'           => 'Servidor de E-mail',
     'usuarios'              => 'Usuários',
 ];
 

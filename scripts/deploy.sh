@@ -386,6 +386,27 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
                 echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.4.0 desnecessária"
             fi
         fi
+
+        # v4.4.1 migration (credenciais SMTP cadastráveis — SQL idempotente)
+        if [ -f "mysql/migration_v4.4.1.sql" ]; then
+            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                -p"${DB_PASS}" -N -e \
+                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+                2>/dev/null || echo "0")
+
+            if [ "$DB_VERSION" != "4.4.1" ]; then
+                echo "  Aplicando migration_v4.4.1.sql (credenciais SMTP, versão atual: $DB_VERSION)..."
+                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
+                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.4.1.sql 2>/tmp/migrate_err_v441.log; then
+                    echo "  ✓ Migração v4.4.1 aplicada com sucesso"
+                else
+                    echo "  ⚠ AVISO: Erro na migração v4.4.1. Veja /tmp/migrate_err_v441.log"
+                    cat /tmp/migrate_err_v441.log 2>/dev/null || true
+                fi
+            else
+                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.4.1 desnecessária"
+            fi
+        fi
     fi
 fi
 

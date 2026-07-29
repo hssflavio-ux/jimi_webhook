@@ -67,6 +67,7 @@ $navGroups = [
             ['route' => 'motoristas',          'label' => 'Motoristas',          'href' => '/motoristas'],
             ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],
             ['route' => 'config-notificacoes', 'label' => 'Config. Notificações','href' => '/config-notificacoes'],
+            ['route' => 'config-smtp',         'label' => 'Servidor de E-mail',  'href' => '/config-smtp'],
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
         ],
     ],

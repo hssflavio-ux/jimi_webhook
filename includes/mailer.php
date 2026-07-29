@@ -21,14 +21,107 @@
  */
 
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/crypto.php';
 
 /**
- * Lê a configuração de SMTP do ambiente (.env já carregado por database.php).
+ * Cache das credenciais por request (uma consulta por escopo).
  *
- * @returns array{host:string,port:int,secure:string,user:string,pass:string,from:string,from_name:string,timeout:int}
+ * Exposto por referência para que smtp_settings_cache_clear() possa
+ * esvaziá-lo: quem grava novas credenciais e segue usando a mesma request
+ * (a tela /config-smtp faz isso) precisa enxergar o valor novo, não o que
+ * foi lido antes do INSERT.
+ *
+ * @returns array Referência ao cache interno
  */
-function mail_config(): array
+function &smtp_settings_cache(): array
 {
+    static $cache = [];
+    return $cache;
+}
+
+/**
+ * Invalida o cache de credenciais. Chamar após gravar/remover configuração.
+ *
+ * @returns void
+ */
+function smtp_settings_cache_clear(): void
+{
+    $cache = &smtp_settings_cache();
+    $cache = [];
+}
+
+/**
+ * Busca a linha de `smtp_settings` aplicável, com precedência
+ * cliente → global. Devolve null se a tabela não existe (migração v4.4.1
+ * não aplicada) ou se não há configuração ativa.
+ *
+ * @param int|null $customerId Cliente em cujo nome o e-mail será enviado
+ * @returns array|null
+ */
+function smtp_settings_row(?int $customerId = null): ?array
+{
+    $cache = &smtp_settings_cache();
+    $ck = $customerId === null ? 'global' : (string)$customerId;
+    if (array_key_exists($ck, $cache)) {
+        return $cache[$ck];
+    }
+
+    $row = null;
+    try {
+        $db = Database::getInstance()->getConnection();
+        // ORDER BY coloca a linha do cliente antes da global (customer_id NULL)
+        $stmt = $db->prepare(
+            "SELECT * FROM smtp_settings
+             WHERE is_active = 1 AND (customer_id = :cid OR customer_id IS NULL)
+             ORDER BY (customer_id IS NULL) ASC
+             LIMIT 1"
+        );
+        $stmt->execute([':cid' => $customerId]);
+        $row = $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        // Sem a tabela, o .env continua respondendo — não é erro fatal
+        $row = null;
+    }
+
+    $cache[$ck] = $row;
+    return $row;
+}
+
+/**
+ * Resolve a configuração de SMTP em uso.
+ *
+ * Precedência: credenciais do CLIENTE → credenciais GLOBAIS (ambas em
+ * `smtp_settings`, cadastradas em /config-smtp) → variáveis do `.env`.
+ * O `.env` sobrevive como fallback para não quebrar instalações que já
+ * estavam configuradas antes da v4.4.1 e para permitir subir um ambiente
+ * sem passar pela interface.
+ *
+ * @param int|null $customerId Cliente em cujo nome o e-mail será enviado
+ * @returns array{host:string,port:int,secure:string,user:string,pass:string,from:string,from_name:string,timeout:int,source:string}
+ */
+function mail_config(?int $customerId = null): array
+{
+    $row = smtp_settings_row($customerId);
+
+    if ($row && trim((string)$row['host']) !== '') {
+        $secure = strtolower((string)$row['secure']);
+        if (!in_array($secure, ['tls', 'ssl', 'none'], true)) {
+            $secure = 'tls';
+        }
+        return [
+            'host'      => trim((string)$row['host']),
+            'port'      => (int)$row['port'] ?: ($secure === 'ssl' ? 465 : 587),
+            'secure'    => $secure,
+            'user'      => trim((string)($row['username'] ?? '')),
+            'pass'      => app_decrypt($row['password_enc'] ?? null),
+            'from'      => trim((string)$row['from_email']),
+            'from_name' => trim((string)($row['from_name'] ?? 'Jimi Tracker')),
+            'timeout'   => (int)($row['timeout_s'] ?: 20),
+            'source'    => $row['customer_id'] === null ? 'banco:global' : 'banco:cliente',
+        ];
+    }
+
     $secure = strtolower(trim((string)(getenv('SMTP_SECURE') ?: 'tls')));
     if (!in_array($secure, ['tls', 'ssl', 'none'], true)) {
         $secure = 'tls';
@@ -42,17 +135,19 @@ function mail_config(): array
         'from'      => trim((string)(getenv('SMTP_FROM') ?: 'nao-responda@localhost')),
         'from_name' => trim((string)(getenv('SMTP_FROM_NAME') ?: 'Jimi Tracker')),
         'timeout'   => (int)(getenv('SMTP_TIMEOUT') ?: 20),
+        'source'    => 'env',
     ];
 }
 
 /**
  * Indica se há SMTP configurado o suficiente para tentar um envio.
  *
+ * @param int|null $customerId Escopo a considerar
  * @returns bool
  */
-function mail_is_configured(): bool
+function mail_is_configured(?int $customerId = null): bool
 {
-    $cfg = mail_config();
+    $cfg = mail_config($customerId);
     return $cfg['host'] !== '';
 }
 
@@ -196,22 +291,24 @@ function smtp_cmd($sock, string $cmd): array
  * Falhas são devolvidas (nunca lançadas) para que o worker decida sobre
  * retry — SMTP indisponível é condição transitória, não erro de programa.
  *
- * @param array  $to          Destinatários
- * @param string $subject     Assunto
- * @param string $htmlBody    Corpo HTML
- * @param array  $attachments [['path'=>string,'name'=>string,'mime'=>string], ...]
+ * @param array    $to          Destinatários
+ * @param string   $subject     Assunto
+ * @param string   $htmlBody    Corpo HTML
+ * @param array    $attachments [['path'=>string,'name'=>string,'mime'=>string], ...]
+ * @param int|null $customerId  Cliente cujas credenciais devem ser usadas
+ *                              (null = configuração global)
  * @returns array{ok:bool,error:?string}
  */
-function send_mail(array $to, string $subject, string $htmlBody, array $attachments = []): array
+function send_mail(array $to, string $subject, string $htmlBody, array $attachments = [], ?int $customerId = null): array
 {
-    $cfg = mail_config();
+    $cfg = mail_config($customerId);
     $to  = mail_valid_recipients($to);
 
     if (empty($to)) {
         return ['ok' => false, 'error' => 'Nenhum destinatário válido'];
     }
     if ($cfg['host'] === '') {
-        return ['ok' => false, 'error' => 'SMTP_HOST não configurado'];
+        return ['ok' => false, 'error' => 'Servidor SMTP não cadastrado (ver Cadastros › Servidor de E-mail)'];
     }
 
     $transport = ($cfg['secure'] === 'ssl' ? 'ssl://' : 'tcp://') . $cfg['host'] . ':' . $cfg['port'];

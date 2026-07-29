@@ -28,6 +28,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.2.1.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.3.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.4.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql
 
 # Lint a single PHP file
 php -l handlers/pushgps.php

@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.4.1
+
+### Added
+- **Credenciais de SMTP cadastráveis pela interface** (`/config-smtp`, "Cadastros › Servidor de E-mail"): a v4.4.0 lia o servidor de e-mail só do `.env`, o que obrigava acesso ao servidor para trocar de provedor. Agora as credenciais (host, porta, segurança, usuário, senha, remetente, timeout) são cadastradas na tela e ficam em `smtp_settings`. Dois escopos: **global da plataforma** (`customer_id NULL`, só administrador) e **por cliente**, que sobrepõe a global — cenário white-label, em que o cliente envia do próprio domínio. Resolução em `mail_config()`: **credenciais do cliente → servidor global → variáveis do `.env`**; o `.env` permanece como fallback para não quebrar instalação já configurada e para permitir subir ambiente sem passar pela interface. A tela mostra um painel "em uso agora" com a origem efetiva das credenciais daquele cliente.
+- **Botão "Enviar e-mail de teste"** com registro do resultado (`last_test_at`/`last_test_ok`/`last_test_error`): o envio usa exatamente o que está gravado, e o erro real do provedor aparece na tela — diagnosticar SMTP às cegas era o principal risco operacional do canal de e-mail.
+- **Cifra de segredos em repouso** (`includes/crypto.php`): a senha do SMTP é gravada com **AES-256-GCM** (autenticado — adulterar o ciphertext falha na verificação da tag em vez de devolver lixo), chave derivada por SHA-256 de `APP_KEY` com `WEBHOOK_TOKEN` como fallback, mesma cadeia do `includes/csrf.php`. Formato versionado (`v1:`) para permitir troca de algoritmo. A senha **nunca volta para o navegador**: o campo aparece vazio e, se ficar vazio ao salvar, a senha atual é preservada.
+- **Migração v4.4.1**: tabela `smtp_settings` com `customer_key` gerada (mesma solução da v4.4.0 para impedir duas configurações globais, já que MySQL trata `NULL`s como distintos em índice único) e FKs para `customers` (CASCADE) e `users` (SET NULL).
+
+### Changed
+- **`send_mail()` e `mail_config()` ganharam escopo por cliente** (`?int $customerId`): o `scripts/worker.php` passa o `customer_id` do job, então uma notificação de um cliente com SMTP próprio sai pelo servidor dele. Chamadas sem o parâmetro continuam válidas e resolvem a configuração global.
+- **`.env.example`**: bloco SMTP marcado como fallback com a ordem de precedência explícita, e nova `APP_KEY` documentada (`openssl rand -hex 32`) — a tela avisa quando o sistema está caindo no `WEBHOOK_TOKEN`, porque rotacionar esse token tornaria as senhas gravadas indecifráveis.
+
+### Fixed
+- **Cache de credenciais não era invalidado após salvar**: `smtp_settings_row()` guarda a configuração por request para não repetir a consulta, mas a tela `/config-smtp` grava e renderiza o painel "em uso agora" na **mesma** request — sem invalidar, o administrador salvava um servidor novo e continuava vendo o antigo. Novo `smtp_settings_cache_clear()`, chamado após salvar e após remover. Encontrado pelo teste de precedência, não em produção.
+
 ## [Unreleased] — 4.4.0
 
 ### Added
