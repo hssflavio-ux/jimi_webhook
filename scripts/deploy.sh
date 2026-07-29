@@ -258,179 +258,71 @@ if [ -f .env ] && [ -f .env.example ]; then
 fi
 
 # ─── 3b. Migração do banco de dados ──────────────────────────
+#
+# Gate por comparação SEMÂNTICA de versão (`sort -V`): uma migração só roda
+# quando a versão do banco é MENOR que a dela.
+#
+# O gate anterior comparava com `!=` bloco a bloco, então um banco em 4.4.1
+# satisfazia "!= 4.2.1" e a cadeia inteira era reaplicada a cada publicação:
+# 4.4.1 → aplica v4.2.1 → banco vira 4.2.1 → aplica v4.3.0 → 4.3.0 → … De
+# fato só não quebrava porque as migrações são idempotentes; em troca, as
+# mensagens "versão atual" mentiam, o banco era temporariamente rebaixado no
+# meio do deploy e o custo crescia a cada release nova.
+
+# Verdadeiro se $1 < $2 na ordem semântica de versões.
+version_lt() {
+    [ "$1" = "$2" ] && return 1
+    [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]
+}
+
+# Versão registrada em system_info; "0" quando a tabela ainda não existe.
+db_version() {
+    local v
+    v=$(MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" \
+        -u"${DB_USER:-root}" -N -e \
+        "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
+        2>/dev/null) || v=""
+    echo "${v:-0}"
+}
+
+# run_migration <versão-alvo> <arquivo> <descrição>
+run_migration() {
+    local target="$1" file="$2" desc="$3" current errlog
+    [ -f "$file" ] || return 0
+
+    current=$(db_version)
+    if ! version_lt "$current" "$target"; then
+        echo "  ✓ Banco em $current — migração v$target desnecessária"
+        return 0
+    fi
+
+    echo "  Aplicando $(basename "$file") ($desc; banco em $current)..."
+    errlog="/tmp/migrate_err_v$(echo "$target" | tr -d '.').log"
+    if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" \
+        -u"${DB_USER:-root}" "${DB_NAME:-jimi_tracker}" < "$file" 2>"$errlog"; then
+        echo "  ✓ Migração v$target aplicada — banco agora em $(db_version)"
+    else
+        echo "  ⚠ AVISO: erro na migração v$target. Veja $errlog"
+        cat "$errlog" 2>/dev/null || true
+    fi
+    return 0
+}
+
 if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     echo "  Verificando migrações pendentes..."
     source <(grep -E '^DB_(HOST|PORT|NAME|USER|PASS)=' .env | sed 's/^/export /')
 
-    if [ -f "mysql/migration_v2.0.0.sql" ]; then
-        # Verifica versão atual do banco
-        DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-            -p"${DB_PASS}" -N -e \
-            "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-            2>/dev/null || echo "0")
+    echo "  Versão atual do banco: $(db_version)"
 
-        if [ "$DB_VERSION" = "0" ]; then
-            echo "  Aplicando migration_v2.0.0.sql (versão atual do banco: $DB_VERSION)..."
-            if mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" "${DB_NAME:-jimi_tracker}" < mysql/migration_v2.0.0.sql 2>/tmp/migrate_err.log; then
-                echo "  ✓ Migração v2.0.0 aplicada com sucesso"
-            else
-                echo "  ⚠ AVISO: Erro na migração v2.0.0. Veja /tmp/migrate_err.log"
-                cat /tmp/migrate_err.log 2>/dev/null || true
-            fi
-        else
-            echo "  ✓ Banco já está na versão $DB_VERSION — migração v2.0.0 desnecessária"
-        fi
-
-        # v3.1.0 migration
-        if [ -f "mysql/migration_v3.1.0.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
-                echo "  Aplicando migration_v3.1.0.sql (versão atual do banco: $DB_VERSION)..."
-                if mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    -p"${DB_PASS}" "${DB_NAME:-jimi_tracker}" < mysql/migration_v3.1.0.sql 2>/tmp/migrate_err_v31.log; then
-                    echo "  ✓ Migração v3.1.0 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v3.1.0. Veja /tmp/migrate_err_v31.log"
-                    cat /tmp/migrate_err_v31.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v3.1.0 desnecessária"
-            fi
-        fi
-
-        # v4.0.0 migration
-        if [ -f "mysql/migration_v4.0.0.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" = "3.1.0" ] || [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
-                echo "  Aplicando migration_v4.0.0.sql (YUV Parity, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.0.0.sql 2>/tmp/migrate_err_v40.log; then
-                    echo "  ✓ Migração v4.0.0 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.0.0. Veja /tmp/migrate_err_v40.log"
-                    cat /tmp/migrate_err_v40.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.0.0 desnecessária"
-            fi
-        fi
-
-        # v4.1.0 migration (jobs.format + fix seed occurrence_config_params)
-        if [ -f "mysql/migration_v4.1.0.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            # Só em versões ANTERIORES (não usar '!=': após o bump para 4.2.1+
-            # a migração antiga reaplicaria a cada deploy)
-            if [ "$DB_VERSION" = "4.0.0" ] || [ "$DB_VERSION" = "3.1.0" ] || [ "$DB_VERSION" = "2.0.0" ] || [ "$DB_VERSION" = "0" ]; then
-                echo "  Aplicando migration_v4.1.0.sql (Excel/PDF + fix seed DMS, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.1.0.sql 2>/tmp/migrate_err_v41.log; then
-                    echo "  ✓ Migração v4.1.0 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.1.0. Veja /tmp/migrate_err_v41.log"
-                    cat /tmp/migrate_err_v41.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.1.0 desnecessária"
-            fi
-        fi
-
-        # v4.2.1 migration (catálogo de câmeras por modelo — SQL idempotente)
-        if [ -f "mysql/migration_v4.2.1.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" != "4.2.1" ]; then
-                echo "  Aplicando migration_v4.2.1.sql (câmeras por modelo, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.2.1.sql 2>/tmp/migrate_err_v421.log; then
-                    echo "  ✓ Migração v4.2.1 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.2.1. Veja /tmp/migrate_err_v421.log"
-                    cat /tmp/migrate_err_v421.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.2.1 desnecessária"
-            fi
-        fi
-
-        # v4.3.0 migration (índice composto trips p/ relatório de deslocamento — SQL idempotente)
-        if [ -f "mysql/migration_v4.3.0.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" != "4.3.0" ]; then
-                echo "  Aplicando migration_v4.3.0.sql (índice de período em trips, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.3.0.sql 2>/tmp/migrate_err_v430.log; then
-                    echo "  ✓ Migração v4.3.0 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.3.0. Veja /tmp/migrate_err_v430.log"
-                    cat /tmp/migrate_err_v430.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.3.0 desnecessária"
-            fi
-        fi
-
-        # v4.4.0 migration (motor de notificações — SQL idempotente)
-        if [ -f "mysql/migration_v4.4.0.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" != "4.4.0" ]; then
-                echo "  Aplicando migration_v4.4.0.sql (motor de notificações, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.4.0.sql 2>/tmp/migrate_err_v440.log; then
-                    echo "  ✓ Migração v4.4.0 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.4.0. Veja /tmp/migrate_err_v440.log"
-                    cat /tmp/migrate_err_v440.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.4.0 desnecessária"
-            fi
-        fi
-
-        # v4.4.1 migration (credenciais SMTP cadastráveis — SQL idempotente)
-        if [ -f "mysql/migration_v4.4.1.sql" ]; then
-            DB_VERSION=$(mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                -p"${DB_PASS}" -N -e \
-                "SELECT COALESCE(version,'0') FROM ${DB_NAME:-jimi_tracker}.system_info WHERE id=1 LIMIT 1" \
-                2>/dev/null || echo "0")
-
-            if [ "$DB_VERSION" != "4.4.1" ]; then
-                echo "  Aplicando migration_v4.4.1.sql (credenciais SMTP, versão atual: $DB_VERSION)..."
-                if MYSQL_PWD="${DB_PASS:-}" mysql -h"${DB_HOST:-localhost}" -P"${DB_PORT:-3306}" -u"${DB_USER:-root}" \
-                    "${DB_NAME:-jimi_tracker}" < mysql/migration_v4.4.1.sql 2>/tmp/migrate_err_v441.log; then
-                    echo "  ✓ Migração v4.4.1 aplicada com sucesso"
-                else
-                    echo "  ⚠ AVISO: Erro na migração v4.4.1. Veja /tmp/migrate_err_v441.log"
-                    cat /tmp/migrate_err_v441.log 2>/dev/null || true
-                fi
-            else
-                echo "  ✓ Banco já está na versão $DB_VERSION — migração v4.4.1 desnecessária"
-            fi
-        fi
-    fi
+    # Ordem cronológica — o gate decide sozinho quais estão pendentes.
+    run_migration "2.0.0" "mysql/migration_v2.0.0.sql" "base v2"
+    run_migration "3.1.0" "mysql/migration_v3.1.0.sql" "multi-tenant"
+    run_migration "4.0.0" "mysql/migration_v4.0.0.sql" "YUV Parity"
+    run_migration "4.1.0" "mysql/migration_v4.1.0.sql" "Excel/PDF + fix seed DMS"
+    run_migration "4.2.1" "mysql/migration_v4.2.1.sql" "câmeras por modelo"
+    run_migration "4.3.0" "mysql/migration_v4.3.0.sql" "índice de período em trips"
+    run_migration "4.4.0" "mysql/migration_v4.4.0.sql" "motor de notificações"
+    run_migration "4.4.1" "mysql/migration_v4.4.1.sql" "credenciais SMTP"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
