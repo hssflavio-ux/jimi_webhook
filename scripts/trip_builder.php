@@ -10,6 +10,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php'; // haversine_km()
 
 // Filtro de qualidade: uma viagem só conta como deslocamento real se houve
 // movimento efetivo. Descarta viagens de 1 ponto, paradas com ignição ligada
@@ -213,23 +214,25 @@ function isRealTrip(array $trip): bool {
         || (float)$trip['distance_km'] >= MIN_TRIP_DISTANCE_KM;
 }
 
+/**
+ * Soma a distância entre pontos consecutivos da viagem.
+ *
+ * A haversine local foi promovida para includes/functions.php como
+ * haversine_km() na v4.5.0 — o worker de geocercas usa a mesma medida no
+ * teste de raio, e duas cópias divergiriam com o tempo.
+ *
+ * @param array $points Pontos ordenados por gps_time
+ * @returns float Distância em km, com 2 casas
+ */
 function calcDistance(array $points): float {
     $dist = 0;
     for ($i = 1; $i < count($points); $i++) {
-        $dist += haversine(
+        $dist += haversine_km(
             (float)$points[$i-1]['latitude'], (float)$points[$i-1]['longitude'],
             (float)$points[$i]['latitude'],   (float)$points[$i]['longitude']
         );
     }
     return round($dist, 2);
-}
-
-function haversine(float $lat1, float $lng1, float $lat2, float $lng2): float {
-    $earth = 6371;
-    $dLat = deg2rad($lat2 - $lat1);
-    $dLng = deg2rad($lng2 - $lng1);
-    $a = sin($dLat/2)*sin($dLat/2) + cos(deg2rad($lat1))*cos(deg2rad($lat2))*sin($dLng/2)*sin($dLng/2);
-    return $earth * 2 * atan2(sqrt($a), sqrt(1-$a));
 }
 
 function countAlarms($db, string $imei, string $from, string $to): int {

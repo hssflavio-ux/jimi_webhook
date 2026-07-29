@@ -53,6 +53,7 @@ $navGroups = [
             ['route' => 'rel_desatualizados', 'label' => 'Desatualizados',  'href' => '/relatorios/desatualizados'],
             ['route' => 'rel_alarmes',        'label' => 'Alarmes',         'href' => '/relatorios/alarmes'],
             ['route' => 'rel_ocorrencias',    'label' => 'Ocorrências',     'href' => '/relatorios/ocorrencias'],
+            ['route' => 'rel_geocercas',      'label' => 'Geocercas',       'href' => '/relatorios/geocercas'],
         ],
     ],
     'cadastros' => [
@@ -63,6 +64,7 @@ $navGroups = [
             ['route' => 'chips',               'label' => 'Chips',               'href' => '/chips'],
             ['route' => 'clientes',            'label' => 'Clientes',            'href' => '/clientes'],
             ['route' => 'equipamentos',        'label' => 'Equipamentos',        'href' => '/equipamentos'],
+            ['route' => 'geocercas',           'label' => 'Geocercas',           'href' => '/geocercas'],
             ['route' => 'grupos-permissao',    'label' => 'Grupos de Permissão', 'href' => '/grupos-permissao'],
             ['route' => 'motoristas',          'label' => 'Motoristas',          'href' => '/motoristas'],
             ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],

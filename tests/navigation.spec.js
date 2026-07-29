@@ -22,6 +22,8 @@ const ROUTES = [
     '/relatorios/desatualizados',
     '/relatorios/alarmes',
     '/relatorios/ocorrencias',
+    '/relatorios/geocercas',
+    '/geocercas',
     '/ativos',
     '/ativos/novo',
     '/chips',

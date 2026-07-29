@@ -323,6 +323,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.3.0" "mysql/migration_v4.3.0.sql" "índice de período em trips"
     run_migration "4.4.0" "mysql/migration_v4.4.0.sql" "motor de notificações"
     run_migration "4.4.1" "mysql/migration_v4.4.1.sql" "credenciais SMTP"
+    run_migration "4.5.0" "mysql/migration_v4.5.0.sql" "geocercas"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
@@ -359,10 +360,14 @@ echo "  ✓ Permissões configuradas"
 echo ""
 echo "=== FASE 4/5: VERIFY — Testando ==="
 
-# Sintaxe PHP em todos os arquivos
+# Sintaxe PHP em todos os arquivos.
+# `scripts` entrou na varredura na v4.5.0: os workers de cron (worker.php,
+# trip_builder.php, geofence_worker.php…) ficam lá e estavam FORA do lint do
+# deploy — um erro de sintaxe num worker passaria batido e só apareceria na
+# primeira execução do cron, em silêncio, dentro de logs/<worker>.log.
 echo "  Verificando sintaxe PHP..."
 ERRORS=0
-for f in $(find handlers config core includes -name "*.php" -type f); do
+for f in $(find handlers config core includes scripts -name "*.php" -type f); do
     if ! php -l "$f" >/dev/null 2>&1; then
         echo "  ✗ Erro sintaxe: $f"
         php -l "$f" 2>&1 | head -2

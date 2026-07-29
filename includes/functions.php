@@ -111,6 +111,35 @@ function calculate_distance($lat1, $lon1, $lat2, $lon2) {
 }
 
 /**
+ * Distância em quilômetros entre dois pontos, pela fórmula de Haversine.
+ *
+ * Existe separada de calculate_distance() de propósito. Aquela usa lei dos
+ * cossenos esférica e **retorna 0 quando qualquer latitude é 0** — guarda
+ * pensada para descartar GPS inválido, mas que sabota qualquer teste de raio
+ * (a linha do Equador passa a ter distância zero para tudo). Como há
+ * chamadores legados dependendo daquele comportamento (pushgps.php), a função
+ * antiga fica intocada e as medições novas usam esta.
+ *
+ * Promovida de scripts/trip_builder.php na v4.5.0, onde era privada do script:
+ * o worker de geocercas precisa exatamente da mesma medida para o teste de
+ * raio, e duas implementações de haversine no repositório é uma a mais.
+ *
+ * @param float $lat1 Latitude do ponto de origem
+ * @param float $lng1 Longitude do ponto de origem
+ * @param float $lat2 Latitude do ponto de destino
+ * @param float $lng2 Longitude do ponto de destino
+ * @returns float Distância em quilômetros
+ */
+function haversine_km(float $lat1, float $lng1, float $lat2, float $lng2): float {
+    $earth = 6371; // raio médio da Terra em km
+    $dLat = deg2rad($lat2 - $lat1);
+    $dLng = deg2rad($lng2 - $lng1);
+    $a = sin($dLat / 2) * sin($dLat / 2)
+       + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) * sin($dLng / 2);
+    return $earth * 2 * atan2(sqrt($a), sqrt(1 - $a));
+}
+
+/**
  * Obtém o nome legível de um código de alarme (fallback simples).
  * Para resolução completa, utilize a tabela alarm_types no banco de dados.
  *

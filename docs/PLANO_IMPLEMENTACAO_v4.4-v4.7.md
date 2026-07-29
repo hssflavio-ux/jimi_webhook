@@ -13,7 +13,16 @@
 | 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` |
 | **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §8 | — |
 
-> **Status em 28/07/2026**: Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`). Fases 2–4 e a atualização da wiki seguem pendentes.
+> **Status em 29/07/2026**:
+> - Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`).
+> - Fase 2 (**v4.5.0 — geocercas**) **implementada e verificada localmente**; falta publicar no homolog e instalar o cron (`bash scripts/crontab-setup.sh --install`).
+> - Fases 3–4 e a atualização da wiki seguem pendentes.
+>
+> **Desvios da Fase 2 em relação ao plano original**, todos deliberados:
+> 1. **Histerese em polígono mede distância até a aresta**, não até a bbox expandida (§2.4). A bbox manteria "dentro" um veículo parado no vão da concavidade de uma cerca em "L" — exatamente o caso que o critério de aceite exige classificar certo.
+> 2. **`geofences.alert_emails`** (JSON, até 3) acrescentada ao DDL: `notification_rules` é indexada por `alarm_type` e não sabe expressar "cerca X". Sem a coluna, o alerta de geocerca seria sino-e-pop-up apenas.
+> 3. **Colunas de conveniência**: `geofences.description`/`created_by`, `geofence_events.speed`. O relatório mostra a velocidade no instante da travessia, que é a primeira pergunta de quem audita uma saída não autorizada.
+> 4. **Cerca nova semeia o estado sem gerar evento** — não estava no plano e é o que impede uma enxurrada de "entradas" retroativas ao desenhar uma cerca sobre a garagem.
 
 ### Por que esta ordem
 
@@ -369,14 +378,27 @@ Filtra-se `event_type = 'entrada'` na camada externa; a permanência é `saida -
 
 ## 2.7 Critérios de aceite
 
-- [ ] `php -l` limpo; cron instalado por `scripts/crontab-setup.sh --check`.
-- [ ] Cerca circular de 200 m sobre um trajeto real conhecido gera exatamente 1 entrada e 1 saída.
-- [ ] Cerca poligonal côncava (formato em "L") classifica corretamente — teste unitário do ray
-      casting com pelo menos um ponto no vão da concavidade.
-- [ ] Rodar o worker duas vezes sobre a mesma janela **não** duplica eventos.
-- [ ] Veículo parado sobre a borda por 30 min gera no máximo 1 par de eventos (histerese).
-- [ ] Entrada em cerca com `alert_on='ambos'` gera notificação (integração com a Fase 1).
-- [ ] Cliente A não enxerga cerca do cliente B.
+- [x] `php -l` limpo (0 erros em todo o projeto); `bash -n` limpo no `crontab-setup.sh`.
+      **Cron ainda não instalado no homolog** — pendente do deploy.
+- [x] Cerca circular de 200 m sobre um trajeto gera exatamente 1 entrada e 1 saída.
+      *(21 pontos sintéticos, sul→norte, passo de 50 m.)*
+- [x] Cerca poligonal côncava (formato em "L") classifica corretamente — ponto no vão da
+      concavidade dá **fora**, embora esteja **dentro** da bounding box.
+- [x] Rodar o worker duas vezes sobre a mesma janela **não** duplica eventos.
+      *(2ª rodada: "0 pontos avaliados"; contagem permanece 2.)*
+- [x] Veículo parado sobre a borda por 30 min gera no máximo 1 par de eventos (histerese).
+      *(30 pontos oscilando 185 m ↔ 215 m numa cerca de 200 m → **1** evento.)*
+- [x] Entrada em cerca com `alert_on='ambos'` gera notificação (integração com a Fase 1).
+      *(2 linhas em `notifications` com `kind='geocerca'`.)*
+- [x] Cliente A não enxerga cerca do cliente B — evento carrega o `customer_id` da cerca,
+      relatório filtra por ele, e a FK impede apontar cerca para cliente inexistente.
+- [x] **Extra**: migração idempotente (2×, exit 0); pareamento `LEAD` correto (2h / 30min /
+      "em permanência"); CRUD por HTTP com CSRF (POST sem token → 403); geometria inválida
+      recusada (polígono de 2 vértices, raio de 5 m); e-mail inválido descartado no cadastro.
+
+**Verificação executada**: 36 asserções de geometria + 13 do worker ponta-a-ponta + 28 de
+relatório/CRUD = **77 asserções, 0 falhas**. Specs Playwright em `tests/geocercas.spec.js`
+(9 casos) e 2 rotas novas em `tests/navigation.spec.js` — dependem de `TEST_EMAIL`/`TEST_PASSWORD`.
 
 ---
 

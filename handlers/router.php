@@ -35,6 +35,8 @@
  *   /relatorios/desatualizados        → rel_desatualizados.php
  *   /relatorios/alarmes               → rel_alarmes.php
  *   /relatorios/ocorrencias           → rel_ocorrencias.php
+ *   /relatorios/geocercas             → rel_geocercas.php
+ *   /geocercas                        → geocercas.php
  *   /perfil                           → perfil.php
  *   /camerasdata ...                  → AJAX endpoints
  *   /ocorrenciasdata                  → ocorrenciasdata.php (AJAX)
@@ -69,7 +71,7 @@ if (empty($segments)) {
     // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas','wiki'];
+                     'chips','equipamentos','motoristas','geocercas','wiki'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -93,6 +95,7 @@ if (empty($segments)) {
             'desatualizados' => 'rel_desatualizados.php',
             'alarmes'      => 'rel_alarmes.php',
             'ocorrencias'  => 'rel_ocorrencias.php',
+            'geocercas'    => 'rel_geocercas.php',
         ],
         'ocorrencias' => [
             'dashboard' => 'ocorrencias_dashboard.php',
@@ -189,6 +192,8 @@ $screenByHandler = [
     'rel_desatualizados.php'    => 'relatorios',
     'rel_alarmes.php'           => 'relatorios',
     'rel_ocorrencias.php'       => 'relatorios',
+    'rel_geocercas.php'         => 'relatorios',
+    'geocercas.php'             => 'geocercas',
     'ativos.php'                => 'ativos',
     'ativos_novo.php'           => 'ativos',
     'ativo_detalhe.php'         => 'ativos',

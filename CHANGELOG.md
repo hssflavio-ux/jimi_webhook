@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.5.0
+
+### Added
+- **Geocercas e POIs** (Fase 2 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`): áreas monitoradas desenhadas na própria plataforma, em **círculo** (centro + raio) ou **polígono** (vértices), vinculadas a equipamentos. Cada travessia da borda vira um evento de entrada ou saída, notifica pelo motor da v4.4.0 e alimenta o relatório de permanência. Peças novas: `includes/geofence.php` (geometria pura), `scripts/geofence_worker.php` (cron de 2 min), `handlers/geocercas.php` (CRUD + desenho no mapa) e `handlers/rel_geocercas.php` (relatório).
+- **Desenho no mapa com Leaflet puro** (`/geocercas`): círculo = clique define o centro (marcador arrastável) e um campo numérico define o raio; polígono = cliques acumulam vértices, com "Desfazer" e "Limpar". Sem `leaflet-draw` — evita uma dependência de CDN por um ganho de UX pequeno, e o Leaflet já estava no projeto. A cor escolhida é aplicada ao vivo no desenho e volta na grade e no relatório.
+- **Relatório de Geocercas** (`/relatorios/geocercas`) em duas modalidades: **entradas e saídas** (lista crua, com velocidade e link para o mapa) e **permanência**, que pareia cada entrada com a saída seguinte por função de janela (`LEAD` particionado por cerca × equipamento) e mostra o tempo dentro da área. Entrada sem saída no período aparece como "Em permanência" — leitura correta tanto para quem ainda está lá dentro quanto para quem saiu depois do fim do filtro. Segue o molde de `rel_alarmes.php`: teto de 31 dias, ordenação por whitelist, paginação com janela deslizante e export XLSX/PDF/CSV.
+- **Migração v4.5.0**: `geofences`, `geofence_devices`, `geofence_state` e `geofence_events`. Idempotente — validada com duas execuções seguidas (exit 0 nas duas).
+
+### Changed
+- **`haversine()` promovida de `scripts/trip_builder.php` para `includes/functions.php`** como `haversine_km()`: o teste de raio da geocerca precisa exatamente da mesma medida da segmentação de viagens, e duas implementações no repositório divergiriam. `calculate_distance()` fica **intocada** de propósito — ela usa lei dos cossenos e **retorna 0 quando qualquer latitude é 0** (guarda contra GPS inválido que, aplicada a uma cerca, tornaria todo ponto na linha do Equador "dentro de tudo"), e há chamador legado (`pushgps.php`) dependendo daquele comportamento.
+- **`scripts/crontab-setup.sh`**: `geofence_worker.php` entrou no array `CRON_JOBS` (a cada 2 min, `logs/geofence.log`). **`scripts/deploy.sh`**: nova linha `run_migration "4.5.0"`.
+- **Navegação**: "Geocercas" no grupo Cadastros e no grupo Relatórios; nova tela na matriz de `/grupos-permissao`; rotas `/geocercas` e `/relatorios/geocercas` no router (32 rotas).
+
+### Notas de implementação
+- **O evento é sempre gravado; `alert_on` decide apenas se notifica.** Sem os dois lados do par, o relatório de permanência não teria o que parear — silenciar o alerta não pode silenciar o histórico.
+- **Anti-flapping por histerese de 50 m.** Um veículo parado sobre a borda oscila dentro/fora a cada ponto (a precisão típica de GPS já é de 5–15 m) e geraria dezenas de pares em meia hora. A borda vira uma faixa: **entrar** exige cruzar a borda real; **sair** exige afastar-se mais de 50 m dela. Medido no teste: 30 minutos de oscilação entre 185 m e 215 m de uma cerca de 200 m produziram **1** evento, não 30.
+- **Em polígono, a histerese mede a distância até a aresta, não até a bounding box.** A bbox expandida — solução mais barata — manteria "dentro" um veículo parado no vão da concavidade de uma cerca em "L", a centenas de metros da área real.
+- **Reexecução do worker é inofensiva**: os eventos entram com `INSERT IGNORE` sob a `UNIQUE (geofence_id, imei, event_time)`. Rodar duas vezes sobre a mesma janela não duplica.
+- **Custo proporcional ao que foi configurado**: o worker parte de `geofence_devices` (cerca sem equipamento vinculado não custa nada, device sem cerca nunca é lido), lê incrementalmente por `geofence_state.last_gps_time` e pré-filtra por bounding box gravada — quatro comparações de float antes de qualquer trigonometria. A bbox é calculada **ao salvar**, em `handlers/geocercas.php`, não a cada avaliação.
+- **Cerca nova não gera entrada retroativa**: sem estado gravado, o primeiro ponto avaliado apenas **semeia** o estado. Do contrário, desenhar uma cerca sobre a garagem produziria uma "entrada" para cada veículo já estacionado ali. Editar a geometria apaga `geofence_state` pelo mesmo motivo — o estado antigo descreve uma cerca que não existe mais.
+- **Ponto (0,0) é descartado** antes de qualquer avaliação (R06): coordenada inválida não diz nada sobre posição e criaria entrada/saída fantasma.
+
 ## [Unreleased] — 4.4.1
 
 ### Fixed
