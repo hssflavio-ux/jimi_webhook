@@ -206,8 +206,31 @@ else
         echo "$CHANGED" | while read -r f; do echo "    - $f"; done
     fi
 
+    # Impressão do próprio script ANTES do pull. O bash lê o arquivo em
+    # disco conforme executa: se o pull trocar este script no meio da
+    # execução, o interpretador continua a partir do offset antigo dentro
+    # do arquivo novo — e blocos inteiros somem silenciosamente.
+    # Foi exatamente o que aconteceu no deploy da v4.4.1 (28/07/2026): as
+    # migrações v4.4.0 e v4.4.1, recém-adicionadas neste arquivo, nunca
+    # rodaram e o deploy terminou com "sucesso". Daí a re-execução abaixo.
+    SELF_SHA_BEFORE=$(sha256sum "$0" 2>/dev/null | cut -d' ' -f1 || echo "")
+
     git pull origin main 2>&1
     echo "  ✓ Código atualizado para $(git rev-parse --short HEAD)"
+
+    SELF_SHA_AFTER=$(sha256sum "$0" 2>/dev/null | cut -d' ' -f1 || echo "")
+    if [ -n "$SELF_SHA_BEFORE" ] && [ "$SELF_SHA_BEFORE" != "$SELF_SHA_AFTER" ]; then
+        if [ "${DEPLOY_REEXEC:-0}" -eq 1 ]; then
+            echo "  ⚠ deploy.sh mudou de novo após a re-execução — seguindo assim mesmo."
+        else
+            echo ""
+            echo "  ⚠ O próprio deploy.sh foi atualizado por este pull."
+            echo "    Re-executando a versão nova para não pular etapas..."
+            echo ""
+            export DEPLOY_REEXEC=1
+            exec "$0" "$@"
+        fi
+    fi
 fi
 
 # ─── 3a. Verificar/Criar .env ────────────────────────────────
