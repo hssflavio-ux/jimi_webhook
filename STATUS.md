@@ -2,10 +2,23 @@
 
 > **Última atualização**: 29/07/2026 — **v4.5.0: geocercas e POIs** (Fase 2 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`). Cercas em **círculo** ou **polígono** desenhadas no mapa (`/geocercas`, Leaflet puro — sem `leaflet-draw`), vinculadas a equipamentos; cada travessia vira evento em `geofence_events`, notifica pelo motor da v4.4.0 e alimenta `/relatorios/geocercas` em duas modalidades (**entradas/saídas** e **permanência**, pareada com `LEAD` sobre cerca × equipamento). Novos: `mysql/migration_v4.5.0.sql`, `includes/geofence.php`, `scripts/geofence_worker.php`, `handlers/geocercas.php`, `handlers/rel_geocercas.php`, `tests/geocercas.spec.js`. Alterados: `includes/functions.php` (`haversine_km()` promovida do `trip_builder`), `scripts/trip_builder.php`, `router.php`, `layout_base.php`, `grupos_permissao.php`, `crontab-setup.sh`, `deploy.sh`, `tests/navigation.spec.js`.
 > **Verificado (local, PHP 8.3 + MySQL 8.0)**: lint **0 erros** em todo o projeto (`handlers`, `config`, `core`, `includes`, `scripts`, `web`) + `bash -n` em `crontab-setup.sh` e `deploy.sh`; migração **idempotente** (2 execuções, exit 0, banco em `4.5.0`, as 4 tabelas criadas); **36 asserções de geometria** (haversine, círculo, histerese, ray casting em polígono côncavo em "L", normalização, geometria incompleta); **13 asserções do worker** ponta-a-ponta com trajetória sintética; **28 asserções** de relatório + CRUD via HTTP; 7 rotas renderizando 200 sem erro/aviso de PHP; `trip_builder.php` sem regressão após a troca da haversine.
-> ⚠️ **Pendente para publicar** (auditoria do `deploy.sh` feita em 29/07 — ver §"Deploy" abaixo):
-> 1. `./scripts/deploy.sh` — cobre sozinho a migração (gate semântico) **e** o `SYSTEM_VERSION` do `.env` (o bloco da linha 250 faz `sed` do `.env` para o valor do `.env.example`, que já está em `4.5.0`). Nada de editar `.env` à mão.
-> 2. **`bash scripts/crontab-setup.sh --install`** — **o `deploy.sh` NÃO instala cron**. Sem este passo o `geofence_worker.php` nunca roda, e a falha é silenciosa do pior tipo: a tela funciona, a cerca salva, e o relatório fica vazio para sempre.
-> 3. **Permissão da tela nova**: `can()` nega tela ausente da matriz JSON, então usuário em grupo restrito (ex.: "Operador Padrão") recebe 403 em `/geocercas` e não vê o item na sidebar até o administrador marcar a linha "Geocercas" em `/grupos-permissao`. Admin (`{"*": [...]}`) e usuário sem grupo não são afetados. **Mesmo comportamento das telas da v4.4.x** — tela nova nasce opt-in de propósito, mas é a primeira coisa que alguém reporta como "bug".
+> ### ▶️ RETOMAR AQUI — estado em 29/07/2026, commit `16f3184`
+> **Código: local = GitHub. Homolog: NÃO.** `main` local e `origin/main` em `16f3184` (working tree limpo; a branch `feat/v4.5.0-geocercas` foi mesclada por fast-forward e removida local/remota, mesmo ciclo da v4.4.0). **O servidor continua em `92725cb` / banco `4.4.1`** — a v4.5.0 está commitada e empurrada, mas **não publicada**.
+>
+> **Os 3 passos que faltam** (o 1º é o único automatizado):
+> ```bash
+> # no servidor — o deploy.sh muda a si mesmo neste release; ver nota de auto-substituição abaixo
+> sudo ./scripts/deploy.sh
+> bash scripts/crontab-setup.sh --install    # deploy.sh NÃO instala cron
+> bash scripts/crontab-setup.sh --check      # confere os 5 workers
+> ```
+> 1. **`deploy.sh`** cobre sozinho a migração (gate semântico) **e** o `SYSTEM_VERSION` do `.env` (o bloco da linha ~250 faz `sed` a partir do `.env.example`, já em `4.5.0`). Nada de editar `.env` à mão. Gate simulado: banco em 4.4.1 → aplica **somente** a v4.5.0.
+> 2. **Cron é obrigatório e não sai no deploy.** Sem `crontab-setup.sh --install` o `geofence_worker.php` nunca roda, e a falha é silenciosa do pior tipo: a tela funciona, a cerca salva, e o relatório fica vazio para sempre.
+> 3. **Liberar a tela nova no RBAC**: `can()` nega tela ausente da matriz JSON, então usuário em grupo restrito (ex.: "Operador Padrão") recebe 403 em `/geocercas` e não vê o item na sidebar até o administrador marcar a linha "Geocercas" em `/grupos-permissao`. Admin (`{"*": [...]}`) e usuário sem grupo não são afetados. **Mesmo comportamento das telas da v4.4.x** — tela nova nasce opt-in de propósito, mas é a primeira coisa que alguém reporta como "bug".
+>
+> **Depois de publicar, verificar**: `/ping` reportando `4.5.0`; `SELECT version FROM system_info` = `4.5.0`; as 4 tabelas `geofence*`; `crontab -l` com 5 workers; desenhar uma cerca de teste sobre um device ativo e conferir `geofence_events` após ~2 min.
+>
+> **Próximo passo do roadmap**: **Fase 3 — v4.6.0, relatórios operacionais** (`docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md` §3). É independente das Fases 1–2; só precisa estar pronta antes da Fase 4. Maior em volume (7 arquivos novos, 5 telas) e a de menor risco: mesmo molde de `rel_alarmes.php` sobre um worker que espelha o `trip_builder.php`. A Fase 5 (atualizar `/wiki`) fica para o fim de tudo, por decisão registrada.
 >
 > ### Deploy — auditoria de 29/07/2026
 > O script está **apto** para publicar a v4.5.0. O que foi conferido, e o que mudou:
