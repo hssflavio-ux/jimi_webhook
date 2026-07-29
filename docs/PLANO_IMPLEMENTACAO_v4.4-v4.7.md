@@ -7,9 +7,13 @@
 | Fase | Versão | Entrega | Migração |
 |---|---|---|---|
 | 1 | **v4.4.0** | Motor de notificações (sino, pop-up, som, e-mail) | `migration_v4.4.0.sql` |
+| — | **v4.4.1** | Credenciais de SMTP cadastráveis pela interface (`/config-smtp`) | `migration_v4.4.1.sql` |
 | 2 | **v4.5.0** | Geocercas + POI com relatório de entrada/saída | `migration_v4.5.0.sql` |
 | 3 | **v4.6.0** | Relatórios Parada / Ociosidade / Ignição / Velocidade / Status da Frota | `migration_v4.6.0.sql` |
 | 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` |
+| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §8 | — |
+
+> **Status em 28/07/2026**: Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`). Fases 2–4 e a atualização da wiki seguem pendentes.
 
 ### Por que esta ordem
 
@@ -677,6 +681,39 @@ php scripts/schedule_dispatcher.php
 Specs Playwright a acrescentar: `notificacoes.spec.js`, `geocercas.spec.js`,
 `relatorios-operacionais.spec.js`, `agendamentos.spec.js`. As specs de navegação existentes
 precisam ser estendidas com as 8 rotas novas.
+
+---
+
+# FASE 5 — Atualizar a Central de Ajuda (`/wiki`)
+
+## 5.1 Quando
+
+**Depois de concluídas as Fases 1 a 4** — não a cada fase. As Fases 2, 3 e 4 tocam nas mesmas
+telas de relatório e no mesmo motor de notificação; documentar a cada entrega significaria
+reescrever as mesmas seções quatro vezes. A wiki é o último passo da iniciativa.
+
+## 5.2 Onde
+
+`handlers/wiki.php` (rota `/wiki`), hoje congelada na **v4.3.0**. A estrutura é uma seção
+`<h2 id="…">` por assunto, com mockup e regra de negócio. O precedente a seguir é o commit
+`83f9849` ("Central de Ajuda atualizada para a v4.3.0").
+
+## 5.3 O que precisa entrar
+
+| Origem | Conteúdo |
+|---|---|
+| **Fase 1** (feita) | O **sino** no cabeçalho (badge, painel, polling de 30s que pausa com a aba oculta), o **pop-up em tempo real** e o **som**. A tela `/config-notificacoes`: regra por cliente × tipo de alarme, o fato de uma **categoria** cobrir todos os alarmes dela, `min_risk`, precedência da regra do cliente sobre a global, limite de 3 destinatários. A tela `/config-smtp`: escopo global × por cliente, senha cifrada e nunca reexibida, botão "Enviar e-mail de teste". |
+| **Fase 2** | Desenho de cerca no mapa (círculo e polígono), vínculo de equipamentos, relatório de entrada/saída/permanência. |
+| **Fase 3** | Parada, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota — **com a definição de cada estado** (`movimento`/`ocioso`/`parado`/`offline`) e os limiares usados. |
+| **Fase 4** | `/agendamentos`, modelos de relatório salvos, histórico de execuções. |
+| **Transversal** | Revisar "O que vale para todos os relatórios" se as Fases 3–4 mudarem filtros, ordenação ou export. |
+
+## 5.4 Um ponto que o usuário precisa entender
+
+A documentação tem de explicar que o sistema **notifica por ocorrência, não por alarme**. Sem
+isso, o operador vê uma rajada de 12 alarmes gerando um único aviso e conclui que o sistema
+falhou — quando é a janela de agrupamento do perfil funcionando como projetado. Vale o mesmo
+para o teto de 60 notificações/hora, que produz uma notificação-resumo e passa a suprimir.
 
 ---
 
