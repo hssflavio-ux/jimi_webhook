@@ -537,7 +537,7 @@ Commits `75441a7`…`cd1af0f` (7 fixes + docs), todos implantados. CHANGELOG [4.
 
 - [ ] **OTA firmware** (proNo 33027) com device real — M.2.5, único item remanescente da Fase M
 - [ ] **Specs multi-tenant** do Playwright: exigem credenciais de um segundo cliente (`TEST_EMAIL_B`/`TEST_PASSWORD_B`) — hoje há apenas 1 cliente ("Frota Principal")
-- [ ] **Arquivos untracked no servidor** (pré-existentes, não tocados): `handlers/pushterminalrealtimestatus.php`, `includes/config.php` — o operador deve decidir se commita ou remove
+- [x] ~~**Arquivos untracked no servidor**: `handlers/pushterminalrealtimestatus.php`, `includes/config.php`~~ — resolvido em 28/07/2026: o handler foi **documentado e versionado** (endpoint de diagnóstico, alcançado por caminho direto fora do router); o `includes/config.php` foi **removido** do servidor (resquício legado com `DB_PASS` em texto puro apontando para um banco inexistente `jimi_webhook`)
 - [ ] **Correlação do callback offline**: heurística "comando pendente mais recente" — confiável agora que síncronos saem do pool, mas uma correlação por `requestId` seria mais robusta (melhoria futura)
 - [ ] **Limpeza opcional**: device de teste `868120246598152` + ocorrência/mídia de teste no banco do homolog
 - [ ] Retomar a **análise visual/operacional do frontend** pelo operador (interrompida pelos fixes desta iteração)
