@@ -61,7 +61,7 @@ if (empty($segments)) {
     $third = $segments[2] ?? null;
 
     $ajaxRoutes = ['camerasdata','commandstatus','sendcommand','mediadata','trackdata','hbdata','devicemodels',
-                   'ocorrenciasdata','exportardata'];
+                   'ocorrenciasdata','exportardata','notificacoesdata'];
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
                       'pushevent'];
@@ -71,8 +71,9 @@ if (empty($segments)) {
                      'exportar','config','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','wiki'];
     $renamedRoutes = [
-        'config-ocorrencias' => 'config_ocorrencias.php',
-        'grupos-permissao'   => 'grupos_permissao.php',
+        'config-ocorrencias'  => 'config_ocorrencias.php',
+        'config-notificacoes' => 'config_notificacoes.php',
+        'grupos-permissao'    => 'grupos_permissao.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',
     ];

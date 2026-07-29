@@ -34,6 +34,7 @@ $screens = [
     'grupos-permissao'      => 'Grupos de Permissão',
     'motoristas'            => 'Motoristas',
     'config-ocorrencias'    => 'Config. Ocorrências',
+    'config-notificacoes'   => 'Config. Notificações',
     'usuarios'              => 'Usuários',
 ];
 

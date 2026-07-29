@@ -66,6 +66,7 @@ $navGroups = [
             ['route' => 'grupos-permissao',    'label' => 'Grupos de Permissão', 'href' => '/grupos-permissao'],
             ['route' => 'motoristas',          'label' => 'Motoristas',          'href' => '/motoristas'],
             ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],
+            ['route' => 'config-notificacoes', 'label' => 'Config. Notificações','href' => '/config-notificacoes'],
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
         ],
     ],
@@ -891,6 +892,86 @@ body.sidebar-locked { overflow: hidden; }
 }
 @media (max-width: 768px) { .hamburger { display: inline-flex; width: 44px; height: 44px; } }
 
+/* ── Notificações (v4.4.0) ───────────────────────────── */
+.notif-wrap { position: relative; }
+.notif-btn {
+    position: relative;
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--hairline); border-radius: 50%;
+    background: var(--surface); color: var(--ink);
+    cursor: pointer; transition: background .15s ease;
+}
+.notif-btn:hover { background: var(--canvas-soft); }
+.notif-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; }
+.notif-badge {
+    position: absolute; top: -4px; right: -4px;
+    min-width: 17px; height: 17px; padding: 0 4px;
+    border-radius: 9px; background: var(--error); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
+    font-family: var(--font-mono, monospace);
+    display: none;
+}
+.notif-badge.show { display: block; }
+.notif-panel {
+    position: absolute; top: 44px; right: 0;
+    width: 380px; max-width: calc(100vw - 32px);
+    max-height: 460px; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: var(--radius); box-shadow: 0 8px 28px rgba(10,11,13,.14);
+    z-index: 1200; display: none;
+}
+.notif-panel.open { display: block; }
+.notif-panel-head {
+    position: sticky; top: 0; background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--hairline);
+    font-size: 13px; font-weight: 600; color: var(--ink);
+}
+.notif-panel-head button {
+    border: none; background: transparent; color: var(--primary);
+    font-size: 12px; cursor: pointer; padding: 0;
+}
+.notif-item {
+    display: block; text-decoration: none;
+    padding: 12px 16px; border-bottom: 1px solid var(--hairline);
+    border-left: 3px solid transparent;
+    cursor: pointer; transition: background .12s ease;
+}
+.notif-item:hover { background: var(--canvas-soft); }
+.notif-item.unread { border-left-color: var(--primary); background: var(--primary-soft); }
+.notif-item.sev-critical { border-left-color: var(--error); }
+.notif-item.sev-warning  { border-left-color: #a97a00; }
+.notif-item-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+.notif-item-body  { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.notif-item-when  { font-size: 11px; color: var(--muted); margin-top: 5px; font-family: var(--font-mono, monospace); }
+.notif-empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+/* Toasts em tempo real (empilhados no canto) */
+.notif-toast-stack {
+    position: fixed; top: 76px; right: 20px; z-index: 2000;
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 340px;
+}
+.notif-toast {
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm); padding: 12px 14px;
+    box-shadow: 0 6px 20px rgba(10,11,13,.16);
+    cursor: pointer; animation: notifSlideIn .22s ease;
+}
+.notif-toast.sev-critical { border-left-color: var(--error); }
+.notif-toast.sev-warning  { border-left-color: #a97a00; }
+.notif-toast-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.notif-toast-body  { font-size: 12px; color: var(--muted); line-height: 1.4; }
+@keyframes notifSlideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 768px) {
+    .notif-panel { width: calc(100vw - 24px); right: -8px; }
+    .notif-toast-stack { left: 12px; right: 12px; max-width: none; }
+    .notif-btn { width: 44px; height: 44px; }
+}
+
 </style>
 <?php
 if (!empty($customer['brand_color'])) {
@@ -1016,6 +1097,27 @@ if (!empty($customer['brand_color'])) {
             <?php if ($customer): ?>
             <span><?= htmlspecialchars($customer['name']) ?></span>
             <?php endif; ?>
+
+            <!-- Sino de notificações (v4.4.0) -->
+            <div class="notif-wrap">
+                <button class="notif-btn" id="notif-btn" onclick="toggleNotifPanel(event)" title="Notificações" aria-label="Notificações">
+                    <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    <span class="notif-badge" id="notif-badge">0</span>
+                </button>
+                <div class="notif-panel" id="notif-panel">
+                    <div class="notif-panel-head">
+                        <span>Notificações</span>
+                        <button onclick="markAllNotifRead(event)">Marcar todas como lidas</button>
+                    </div>
+                    <div id="notif-list">
+                        <div class="notif-empty">Carregando…</div>
+                    </div>
+                </div>
+            </div>
+
             <div class="fleet-counter" id="fleet-counter">
                 <div class="fleet-counter-item">
                     <div class="fleet-counter-dot on"></div>
@@ -1052,6 +1154,9 @@ if (!empty($customer['brand_color'])) {
 
     <div class="main-content">
 
+<!-- Pilha de toasts de notificação em tempo real (v4.4.0) -->
+<div class="notif-toast-stack" id="notif-toast-stack"></div>
+
 <script>
 function switchCustomer(id) {
     fetch('/customer_switch', {
@@ -1071,6 +1176,151 @@ function exitImpersonation() {
         if (data.code === 0) location.href = '/';
     });
 }
+
+// ── Notificações (v4.4.0) ─────────────────────────────
+// Polling de 30s. `notifLastId` guarda o maior id já visto para que um
+// alarme abra o toast uma única vez, e não a cada ciclo do polling.
+var notifLastId = parseInt(localStorage.getItem('jimi_notif_last_id') || '0', 10);
+var notifPollTimer = null;
+
+function notifEsc(s) {
+    var d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+}
+
+function fetchNotifications() {
+    fetch('/notificacoesdata?last_id=' + notifLastId, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (!data || data.code !== 0) return;
+
+            var badge = document.getElementById('notif-badge');
+            if (badge) {
+                badge.textContent = data.unread > 99 ? '99+' : data.unread;
+                badge.classList.toggle('show', data.unread > 0);
+            }
+
+            renderNotifList(data.items || []);
+
+            // Primeira carga só estabelece a régua — não dispara toast de
+            // notificação antiga que já estava no banco antes de abrir a aba.
+            if (notifLastId === 0) {
+                notifLastId = data.max_id || 0;
+                localStorage.setItem('jimi_notif_last_id', notifLastId);
+                return;
+            }
+            (data.popups || []).forEach(showNotifToast);
+            if (data.max_id && data.max_id > notifLastId) {
+                notifLastId = data.max_id;
+                localStorage.setItem('jimi_notif_last_id', notifLastId);
+            }
+        })
+        .catch(function() { /* rede instável não deve poluir o console */ });
+}
+
+function renderNotifList(items) {
+    var box = document.getElementById('notif-list');
+    if (!box) return;
+    if (!items.length) {
+        box.innerHTML = '<div class="notif-empty">Nenhuma notificação.</div>';
+        return;
+    }
+    box.innerHTML = items.map(function(n) {
+        return '<div class="notif-item ' + (n.is_read ? '' : 'unread') + ' sev-' + notifEsc(n.severity) + '" ' +
+               'onclick="openNotif(' + n.id + ', ' + JSON.stringify(n.link || '') + ')">' +
+               '<div class="notif-item-title">' + notifEsc(n.title) + '</div>' +
+               (n.body ? '<div class="notif-item-body">' + notifEsc(n.body) + '</div>' : '') +
+               '<div class="notif-item-when">' + notifEsc(n.when) + '</div>' +
+               '</div>';
+    }).join('');
+}
+
+function showNotifToast(n) {
+    var stack = document.getElementById('notif-toast-stack');
+    if (!stack) return;
+
+    var el = document.createElement('div');
+    el.className = 'notif-toast sev-' + (n.severity || 'info');
+    el.innerHTML = '<div class="notif-toast-title">' + notifEsc(n.title) + '</div>' +
+                   (n.body ? '<div class="notif-toast-body">' + notifEsc(n.body) + '</div>' : '');
+    el.onclick = function() { openNotif(n.id, n.link || ''); };
+    stack.appendChild(el);
+
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 12000);
+    if (n.sound) playNotifSound();
+}
+
+// Som sintetizado via WebAudio: evita versionar um binário no repositório
+// e não depende de CDN (o app não tem build step nem assets externos).
+function playNotifSound() {
+    try {
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        var ctx = new Ctx();
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(1180, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.16, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+        osc.start(); osc.stop(ctx.currentTime + 0.45);
+        setTimeout(function() { ctx.close(); }, 800);
+    } catch (e) { /* autoplay bloqueado antes da 1ª interação: silencioso */ }
+}
+
+function openNotif(id, link) {
+    fetch('/notificacoesdata', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ action: 'read', id: id })
+    }).then(function() {
+        if (link) location.href = link;
+        else fetchNotifications();
+    });
+}
+
+function markAllNotifRead(ev) {
+    if (ev) ev.stopPropagation();
+    fetch('/notificacoesdata', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ action: 'read_all' })
+    }).then(function() { fetchNotifications(); });
+}
+
+function toggleNotifPanel(ev) {
+    if (ev) ev.stopPropagation();
+    var panel = document.getElementById('notif-panel');
+    if (!panel) return;
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) fetchNotifications();
+}
+
+document.addEventListener('click', function(e) {
+    var panel = document.getElementById('notif-panel');
+    var wrap = e.target.closest ? e.target.closest('.notif-wrap') : null;
+    if (panel && !wrap) panel.classList.remove('open');
+});
+
+(function() {
+    if (!document.getElementById('notif-btn')) return;
+    fetchNotifications();
+    notifPollTimer = setInterval(fetchNotifications, 30000);
+    // Aba oculta não precisa consultar: economiza request e bateria
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            clearInterval(notifPollTimer);
+        } else {
+            fetchNotifications();
+            notifPollTimer = setInterval(fetchNotifications, 30000);
+        }
+    });
+})();
 
 // ── Accordion Toggle ──────────────────────────────────
 function toggleAccordion(groupId) {

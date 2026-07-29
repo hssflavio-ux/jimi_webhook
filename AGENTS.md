@@ -191,6 +191,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql   # YUV Parity
 mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql   # jobs.format + fix seed DMS
 mysql -u root -p jimi_tracker < mysql/migration_v4.2.1.sql   # catálogo de câmeras por modelo
 mysql -u root -p jimi_tracker < mysql/migration_v4.3.0.sql   # índice composto trips (customer_id, started_at)
+mysql -u root -p jimi_tracker < mysql/migration_v4.4.0.sql   # motor de notificações (regras + sino + fila de e-mail)
 
 # No build step needed — pure PHP
 ```

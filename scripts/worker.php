@@ -1,10 +1,13 @@
 <?php
 /**
- * JIMI Webhook System — Worker de Jobs v4.1.0
+ * JIMI Webhook System — Worker de Jobs v4.4.0
  * Script: scripts/worker.php
  *
  * Cron (cada 1 min): processa fila de jobs pendentes.
- * Tipos: report (CSV/XLSX/PDF), video_download, rollup.
+ * Tipos: report (CSV/XLSX/PDF), video_download, rollup, notification (e-mail).
+ *
+ * É aqui que a saída SMTP acontece — nunca no webhook (ver
+ * includes/notification_engine.php).
  *
  * Uso: php scripts/worker.php
  */
@@ -12,6 +15,10 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/export_helper.php';
+require_once __DIR__ . '/../includes/mailer.php';
+
+/** Máximo de tentativas de um job com falha transitória (só 'notification'). */
+const JOB_MAX_ATTEMPTS = 3;
 
 $db = Database::getInstance()->getConnection();
 
@@ -34,6 +41,9 @@ foreach ($jobs as $job) {
             case 'rollup':
                 $result = processRollupJob($db, $job);
                 break;
+            case 'notification':
+                $result = processNotificationJob($db, $job);
+                break;
             default:
                 $result = ['status' => 'falhou', 'error' => 'Tipo desconhecido'];
         }
@@ -42,16 +52,45 @@ foreach ($jobs as $job) {
             $db->prepare("UPDATE jobs SET status = 'concluido', result_path = :path, updated_at = NOW() WHERE id = :id")
                ->execute([':path' => $result['path'] ?? null, ':id' => $job['id']]);
         } else {
-            $db->prepare("UPDATE jobs SET status = 'falhou', error_message = :err, updated_at = NOW() WHERE id = :id")
-               ->execute([':err' => $result['error'] ?? 'Erro desconhecido', ':id' => $job['id']]);
+            markJobFailed($db, $job, $result['error'] ?? 'Erro desconhecido');
         }
     } catch (Exception $e) {
-        $db->prepare("UPDATE jobs SET status = 'falhou', error_message = :err, updated_at = NOW() WHERE id = :id")
-           ->execute([':err' => $e->getMessage(), ':id' => $job['id']]);
+        markJobFailed($db, $job, $e->getMessage());
     }
 }
 
 echo 'Worker executado: ' . count($jobs) . " jobs processados.\n";
+
+/**
+ * Encerra um job com falha, aplicando retry quando a falha é transitória.
+ *
+ * Só 'notification' faz retry: SMTP fora do ar por dois minutos é condição
+ * passageira e perder o aviso seria pior. Report e video_download continuam
+ * falhando de primeira — reexecutá-los repetiria trabalho pesado e o usuário
+ * pode simplesmente pedir de novo em /exportar.
+ *
+ * @param PDO    $db    Conexão ativa
+ * @param array  $job   Linha da fila
+ * @param string $error Mensagem de erro
+ * @returns void
+ */
+function markJobFailed($db, array $job, string $error): void {
+    $attempts = (int)($job['attempts'] ?? 0) + 1;
+
+    if ($job['type'] === 'notification' && $attempts < JOB_MAX_ATTEMPTS) {
+        $db->prepare(
+            "UPDATE jobs SET status = 'pendente', attempts = :att, error_message = :err, updated_at = NOW()
+             WHERE id = :id"
+        )->execute([':att' => $attempts, ':err' => $error, ':id' => $job['id']]);
+        echo "Job {$job['id']}: falha transitória (tentativa {$attempts}/" . JOB_MAX_ATTEMPTS . ") — {$error}\n";
+        return;
+    }
+
+    $db->prepare(
+        "UPDATE jobs SET status = 'falhou', attempts = :att, error_message = :err, updated_at = NOW()
+         WHERE id = :id"
+    )->execute([':att' => $attempts, ':err' => $error, ':id' => $job['id']]);
+}
 
 function processReportJob($db, $job): array {
     $params = json_decode($job['params'] ?? '{}', true);
@@ -243,4 +282,79 @@ function processVideoJob($db, $job): array {
 
 function processRollupJob($db, $job): array {
     return ['status' => 'concluido', 'path' => null, 'error' => null];
+}
+
+/**
+ * Envia por e-mail uma notificação enfileirada pelo notification_engine.
+ *
+ * @param PDO   $db  Conexão ativa
+ * @param array $job Linha da fila (params com to/subject/title/body/link_url)
+ * @returns array{status:string,path:?string,error:?string}
+ */
+function processNotificationJob($db, $job): array {
+    $p  = json_decode($job['params'] ?? '{}', true) ?: [];
+    $to = $p['to'] ?? [];
+
+    if (!is_array($to) || empty($to)) {
+        return ['status' => 'falhou', 'error' => 'Sem destinatários'];
+    }
+    if (!mail_is_configured()) {
+        return ['status' => 'falhou', 'error' => 'SMTP não configurado (SMTP_HOST vazio)'];
+    }
+
+    $result = send_mail(
+        $to,
+        (string)($p['subject'] ?? 'Notificação'),
+        buildNotificationEmailHtml($p)
+    );
+
+    if ($result['ok']) {
+        return ['status' => 'concluido', 'path' => null, 'error' => null];
+    }
+    return ['status' => 'falhou', 'error' => $result['error']];
+}
+
+/**
+ * Monta o HTML do e-mail de notificação.
+ *
+ * HTML inline e tabela simples de propósito: cliente de e-mail não tem
+ * cascata de CSS confiável nem suporte a flexbox.
+ *
+ * @param array $p Params do job
+ * @returns string HTML completo
+ */
+function buildNotificationEmailHtml(array $p): string {
+    $accent = [
+        'critical' => '#cf202f',
+        'warning'  => '#a97a00',
+        'info'     => '#0052ff',
+    ][$p['severity'] ?? 'info'] ?? '#0052ff';
+
+    $title = htmlspecialchars((string)($p['title'] ?? 'Notificação'), ENT_QUOTES, 'UTF-8');
+    $body  = htmlspecialchars((string)($p['body'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+    $link = '';
+    if (!empty($p['link_url'])) {
+        $base = rtrim((string)(getenv('APP_URL') ?: ''), '/');
+        $url  = htmlspecialchars($base . $p['link_url'], ENT_QUOTES, 'UTF-8');
+        $link = '<p style="margin:24px 0 0;">'
+              . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#fff;'
+              . 'text-decoration:none;padding:12px 24px;border-radius:100px;font-weight:600;font-size:14px;">'
+              . 'Abrir no sistema</a></p>';
+    }
+
+    return '<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;'
+         . 'background:#f5f6f8;font-family:Helvetica,Arial,sans-serif;color:#0a0b0d;">'
+         . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+         . 'style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6e8eb;border-radius:12px;">'
+         . '<tr><td style="height:4px;background:' . $accent . ';border-radius:12px 12px 0 0;"></td></tr>'
+         . '<tr><td style="padding:28px;">'
+         . '<h1 style="margin:0 0 12px;font-size:18px;font-weight:600;line-height:1.4;">' . $title . '</h1>'
+         . '<p style="margin:0;font-size:14px;line-height:1.6;color:#5b616e;">' . $body . '</p>'
+         . $link
+         . '</td></tr>'
+         . '<tr><td style="padding:16px 28px;border-top:1px solid #e6e8eb;font-size:12px;color:#8a919e;">'
+         . 'Mensagem automática do JIMI Tracker. Para deixar de receber, ajuste as regras em '
+         . 'Cadastros &rsaquo; Config. Notificações.'
+         . '</td></tr></table></body></html>';
 }

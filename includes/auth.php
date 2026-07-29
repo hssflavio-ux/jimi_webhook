@@ -70,6 +70,13 @@ function auth_cleanup() {
         $db = Database::getInstance()->getConnection();
         $db->exec("DELETE FROM sessions WHERE expires_at < NOW()");
         $db->exec("DELETE FROM request_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 7 DAY)");
+        // v4.4.0: notificações crescem rápido (1 por ocorrência nova).
+        // Lidas duram 30 dias; não lidas, 90 — depois disso ninguém mais vai ler.
+        // try/catch próprio: base sem a migração v4.4.0 não pode quebrar o login.
+        try {
+            $db->exec("DELETE FROM notifications WHERE is_read = 1 AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+            $db->exec("DELETE FROM notifications WHERE is_read = 0 AND created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        } catch (Exception $e) {}
     } catch (Exception $e) {
         error_log('auth_cleanup: ' . $e->getMessage());
     }

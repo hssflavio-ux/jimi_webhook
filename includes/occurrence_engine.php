@@ -24,6 +24,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/iothub_command.php';
+require_once __DIR__ . '/notification_engine.php';
 
 define('OCCURRENCE_DEFAULT_WINDOW_MINUTES', 10);
 
@@ -76,6 +77,20 @@ function process_alarm_to_occurrence(array $alarm): ?int
     $mediaId = link_media_to_occurrence($db, $imei, $alarmTime, $alarm);
 
     $occId = create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId);
+
+    // Notificação (v4.4.0): só no ramo de ocorrência NOVA. No ramo de
+    // agrupamento (acima) a janela de dedup do perfil já absorveu a rajada,
+    // então notificar ali significaria repetir o mesmo aviso N vezes.
+    // notify_from_occurrence() apenas GRAVA (sino + fila de e-mail) — o
+    // envio SMTP é do worker, fora desta transação.
+    if ($occId) {
+        notify_from_occurrence($db, $occId, [
+            'imei'       => $imei,
+            'alarm_type' => $alarmType,
+            'alarm_name' => $alarmName,
+            'alarm_time' => $alarmTime,
+        ], $risk, $customerId);
+    }
 
     // Gatilho automático de vídeo do evento: ocorrência nova sem mídia vinculada
     // em câmera JT/T → agenda o upload do ANEXO do alarme (proNo 37384 =
