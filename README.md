@@ -1,8 +1,8 @@
-# Jimi Webhook System v4.1.0 — YUV Parity
+# Jimi Webhook System v4.7.0 — YUV Parity
 
 Gateway PHP para dispositivos IoT Jimi — recebe webhooks de GPS/heartbeat/alarme/evento do Jimi IoT Hub (`jimicloud.com`), persiste em MySQL e fornece uma plataforma multi-tenant de rastreamento com telemetria de vídeo (MDVR) e gestão de ocorrências DMS/ADAS.
 
-> **Status (07/2026)**: Fases 0–M concluídas. Dashboard com 30 rotas, motor de ocorrências DMS (verificado E2E), exportação CSV/XLSX/PDF, PWA mobile, suite Playwright (37 testes verdes), white-label, rate limiting, logs de auditoria.
+> **Status (07/2026)**: Fases 0–M concluídas, mais a série v4.4–v4.7 (notificações, geocercas, relatórios operacionais, relatórios agendados por e-mail). Dashboard com **39 rotas**, motor de ocorrências DMS (verificado E2E), 7 workers de cron, exportação CSV/XLSX/PDF (síncrona e assíncrona), PWA mobile, suíte Playwright (84 testes verdes), white-label, rate limiting, logs de auditoria.
 >
 > **Blueprint**: [`PROJETO_YUV.md`](./PROJETO_YUV.md). **Análise visual**: [`analise_yuv/analise_yuv.html`](./analise_yuv/analise_yuv.html).
 
@@ -13,11 +13,23 @@ Gateway PHP para dispositivos IoT Jimi — recebe webhooks de GPS/heartbeat/alar
 cp .env.example .env
 
 # 2. Crie o banco e execute todas as migrations em ordem
+#    ATENÇÃO: os 4 primeiros arquivos embutem `USE jimi_tracker` e ignoram o
+#    banco passado na linha de comando — instalar com outro nome exige editá-los.
 mysql -u root -p < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.2.1.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.3.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.4.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.5.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql
+
+# 2b. Instale os 7 workers de cron (o deploy.sh NÃO faz isso)
+bash scripts/crontab-setup.sh --install
 
 # 3. Setup pre-commit lint hook
 git config core.hooksPath .githooks
@@ -36,7 +48,7 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 - **Anti-replay** — idempotência por hash MD5 do payload com janela de 10 minutos
 - **Duplo protocolo** — suporte completo a JIMI (msgClass=0) e JT/T 808 (msgClass=1)
 
-### Dashboard (v4.0.0 — 30 rotas)
+### Dashboard (v4.7.0 — 39 rotas)
 
 | Rota | Descrição |
 |---|---|
@@ -52,6 +64,16 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 | **`/relatorios/desatualizados`** | 5 buckets KPI clicáveis + drill-down |
 | **`/relatorios/alarmes`** | Ordenação clicável, 5 filtros, link mapa OSM |
 | **`/relatorios/ocorrencias`** | 6 filtros: cliente, IMEI, tipo, status, risco, falso-positivo |
+| **`/relatorios/geocercas`** | v4.5.0 — entradas/saídas e permanência (pareada por `LEAD` sobre cerca × equipamento) |
+| **`/relatorios/status-frota`** | v4.6.0 — foto do agora: 4 estados com % + barra de distribuição + drill-down |
+| **`/relatorios/paradas`** | v4.6.0 — ignição desligada, com filtro de duração mínima |
+| **`/relatorios/ociosidade`** | v4.6.0 — motor ligado com o veículo imóvel (combustível sem deslocamento) |
+| **`/relatorios/ignicao`** | v4.6.0 — acionamentos derivados dos segmentos de estado |
+| **`/relatorios/velocidade`** | v4.6.0 — excesso apurado contra limite equipamento → cliente → 80 km/h |
+| **`/agendamentos`** | v4.7.0 — relatório recorrente por e-mail (diário/semanal/mensal) + histórico de execuções |
+| **`/geocercas`** | v4.5.0 — CRUD de cercas e POIs desenhados no mapa (Leaflet puro) |
+| **`/config-notificacoes`** | v4.4.0 — regras de notificação por cliente × tipo de alarme |
+| **`/config-smtp`** | v4.4.1 — credenciais de SMTP (global e por cliente, senha cifrada) |
 | **`/ativos`** | Lista + editar inline + remover (soft-delete) |
 | **`/chips`** | CRUD SIM cards (operadora, MSISDN, ICCID, vínculo IMEI) |
 | **`/clientes`** | CRUD + impersonar + white-label (logo, cor, faceid) |
@@ -91,9 +113,18 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 ### Workers (cron)
 | Script | Periodicidade | Função |
 |---|---|---|
-| `scripts/worker.php` | 1 min | Processa fila `jobs`: geração de CSV, download de vídeo |
+| `scripts/worker.php` | 1 min | Fila `jobs`: relatórios (CSV/XLSX/PDF), download de vídeo, e-mail de notificação e entrega dos relatórios agendados |
 | `scripts/trip_builder.php` | 15 min | Segmenta `gps_data` em `trips` (haversine), cruza alarmes |
 | `scripts/metrics_rollup.php` | 5 min | Pré-computa 22 KPIs por cliente em `metrics_snapshots` |
+| `scripts/log_cleanup.php` | diário (3h10) | Purga/rotação de log (`LOG_RETENTION_DAYS`, `LOG_MAX_SIZE_MB`) |
+| `scripts/geofence_worker.php` | 2 min | v4.5.0 — avalia pontos novos contra as geocercas e grava as travessias |
+| `scripts/state_builder.php` | 15 min | v4.6.0 — segmenta `gps_data` em estados (movimento/ocioso/parado/offline) e apura excessos de velocidade |
+| `scripts/schedule_dispatcher.php` | hora cheia (min 5) | v4.7.0 — enfileira os relatórios agendados vencidos |
+
+Instalação: `bash scripts/crontab-setup.sh --install` (o array `CRON_JOBS` do script é a fonte
+única) e `--check` para conferir. **O `deploy.sh` não instala cron** — worker novo exige o
+`--install` à parte, e esquecê-lo produz uma falha silenciosa: a tela funciona e o relatório
+fica vazio.
 
 ## Configuration
 
@@ -101,11 +132,16 @@ Pré-requisitos: PHP 8.3+ com PHP-FPM, MySQL 8.0+, Apache com mod_rewrite.
 |---|---|---|
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` | MySQL | `localhost:3306/jimi_tracker` |
 | `WEBHOOK_TOKEN` | Token de autenticação (webhooks + painel) | `a12341234123` |
-| `SYSTEM_VERSION` | Versão do sistema | `4.0.0` |
+| `SYSTEM_VERSION` | Versão do sistema | `4.7.0` |
+| `APP_URL` | URL base da aplicação — usada nos links dos e-mails (notificação e relatório grande) | — |
+| `APP_KEY` | Chave de cifra dos segredos em repouso (senha de SMTP). **Definir antes de cadastrar credenciais**: rotacioná-la torna as senhas gravadas indecifráveis | fallback `WEBHOOK_TOKEN` |
 | `FILE_STORAGE_URL` | URL base para arquivos de mídia | `http://IP:23010/download/` |
 | `STREAM_URL` | URL base para streams HTTP-FLV | `http://IP:8881` |
 | `IOTHUB_COMMAND_URL` | Endpoint de comandos IoTHub | `http://localhost:10088/api/device/sendInstruct` |
 | `IOTHUB_API_TOKEN` | Token interno da API IoTHub | `123` |
+| `NOTIFY_ENABLED` | Kill-switch do motor de notificações (`0` desliga) | `1` |
+| `SMTP_*` | Servidor de e-mail — **fallback**; a origem preferida é `/config-smtp` (banco, senha cifrada) | — |
+| `MAIL_MAX_ATTACH_MB` | Acima disso o relatório agendado vai como link, não anexo | `5` |
 
 ## Testes
 

@@ -19,6 +19,7 @@
  */
 
 require_once __DIR__ . '/fleet_state.php';
+require_once __DIR__ . '/report_templates.php';
 
 /**
  * Renderiza um relatório de segmentos de estado ponta a ponta.
@@ -41,6 +42,10 @@ require_once __DIR__ . '/fleet_state.php';
  */
 function render_segment_report(array $cfg): void
 {
+    // Modelos de relatório (v4.7.0) — antes de qualquer saída, porque salvar,
+    // aplicar e excluir terminam em redirecionamento.
+    handle_template_actions($cfg['route'], $cfg['path']);
+
     $db         = Database::getInstance()->getConnection();
     $customerId = get_customer_id();
     $user       = get_jimi_user();
@@ -216,6 +221,8 @@ function render_segment_report(array $cfg): void
         </div>
     </div>
     <?php endif; ?>
+
+    <?php render_template_bar($cfg['route'], $cfg['path']); ?>
 
     <div class="card mb-24" style="padding:16px 20px;">
         <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">

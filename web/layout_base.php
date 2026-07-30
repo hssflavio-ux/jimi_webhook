@@ -59,6 +59,7 @@ $navGroups = [
             ['route' => 'rel_ociosidade',     'label' => 'Ociosidade',      'href' => '/relatorios/ociosidade'],
             ['route' => 'rel_ignicao',        'label' => 'Ignição',         'href' => '/relatorios/ignicao'],
             ['route' => 'rel_velocidade',     'label' => 'Excesso de Velocidade', 'href' => '/relatorios/velocidade'],
+            ['route' => 'agendamentos',       'label' => 'Agendamentos',    'href' => '/agendamentos'],
         ],
     ],
     'cadastros' => [

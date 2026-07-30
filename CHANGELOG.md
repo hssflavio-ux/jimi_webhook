@@ -5,6 +5,39 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.7.0
+
+### Added
+- **Relatório agendado por e-mail** (Fase 4 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`, a última da série): o relatório configurado uma vez chega sozinho na frequência escolhida — **diária**, **semanal** ou **mensal** — para até 3 destinatários, em `/agendamentos`. Fecha a iniciativa iniciada na v4.4.0: o `includes/mailer.php` construído para as notificações é o mesmo que entrega os relatórios.
+- **`scripts/schedule_dispatcher.php`** (cron `5 * * * *`): enfileira o que venceu e nada mais. Quem gera o arquivo e envia o e-mail é o `scripts/worker.php` — mesma separação que vale para notificações, e a razão de nenhuma conversa SMTP acontecer no caminho de uma requisição.
+- **`includes/schedule.php`**: `brt_hour_to_utc()`, `schedule_next_run()`, `schedule_period_days()`, `schedule_describe()`. A tela e o cron usam **as mesmas funções**, para que o "próximo envio" exibido não possa divergir do que vai acontecer.
+- **`/agendamentos`**: CRUD com recorrência traduzida em português ("Toda segunda-feira às 07:00 (BRT)"), próximo/último envio em BRT, contador de falhas visível e **histórico de execuções** (período coberto, nº de registros, status e o erro real do provedor). Sem o histórico, "o relatório não chegou" é indepurável — não se distingue agendamento que nunca disparou de e-mail recusado.
+- **Modelos de relatório** (`includes/report_templates.php`): "salvar filtros atuais como…" e um seletor que os repõe, em **10 telas** de relatório. O modelo guarda a **query string** da tela, não uma estrutura por relatório: é o que a tela já sabe interpretar, serve para qualquer filtro presente ou futuro e dispensa mapeamento tela a tela. Escopo por **usuário** — o filtro de quem trata ocorrências não é o de quem audita combustível, e os dois podem ser do mesmo cliente.
+- **Anexo com nome amigável**: `Excesso de velocidade - 20-07-2026 a 26-07-2026.xlsx` em vez de `report_66_20260730_004335.xlsx`, que não diz nada a quem recebe e colide visualmente na caixa de entrada.
+- **Migração v4.7.0**: `report_schedules`, `report_schedule_runs`, `report_templates` e `jobs.schedule_run_id`. Idempotente — validada com duas execuções seguidas (exit 0 nas duas).
+- **Specs**: `tests/agendamentos.spec.js` (19 casos: ciclo do agendamento, campos por frequência, ciclo dos modelos) + a rota nova em `tests/navigation.spec.js`.
+
+### Changed
+- **`scripts/worker.php`** passa a contar as linhas escritas e, quando o job veio de um agendamento, a entregar por e-mail. Acima de `MAIL_MAX_ATTACH_MB` (5 por padrão) o arquivo vira **link** em vez de anexo: provedor recusa anexo grande, e e-mail recusado é pior do que link. Teto de `SCHEDULE_MAX_ROWS` (100.000) por relatório assíncrono — sem teto, um relatório de milhões de linhas estoura a memória do worker e derruba a fila inteira, inclusive as notificações que estavam atrás dele.
+- **`scripts/crontab-setup.sh`**: `schedule_dispatcher.php` no array `CRON_JOBS` — **7 workers**. **`scripts/deploy.sh`**: `run_migration "4.7.0"`. **`.env.example`**: `MAIL_MAX_ATTACH_MB` documentado (o link usa `APP_URL` como base, que precisa estar correta).
+- **`/exportar`**: botão "Agendados" e um resumo com quantos agendamentos estão ativos e quando é o próximo envio. A fila mostra o resultado; quem quer saber *por que* um relatório chegou (ou não) vai para `/agendamentos`.
+- **Navegação**: "Agendamentos" no grupo Relatórios (38 rotas) e a tela nova na matriz de `/grupos-permissao`.
+
+### Fixed
+- **`/relatorios/geocercas` quebrou e foi consertado dentro desta fase**: o script que injetou o maquinário de modelos nos handlers usou uma regex com `\n`, que **não casa com CRLF** — e `rel_geocercas.php` é o único arquivo do repositório com terminação CRLF. O resultado foi a chamada de `render_template_bar()` inserida **sem** o `require_once` correspondente, e a tela passou a devolver "Erro interno" (`Call to undefined function`). O lint não pega isso: a função existe, só não está carregada. Quem pegou foi a suíte Playwright completa, rodada depois da mudança — e a lição é que uma edição automatizada em lote precisa ser auditada arquivo por arquivo, não conferida por amostragem.
+
+### Notas de implementação
+- **Fuso é o ponto de maior risco da fase, e é tratado por `DateTimeZone`, nunca por offset fixo.** `send_hour` é BRT (o que o usuário digita); `next_run_at` é UTC (o que o cron compara com `NOW()`). O Brasil aboliu o horário de verão em 2019, então hoje janeiro e julho dão o mesmo offset — o teste confirma isso em vez de supor, **e** ancora uma asserção em 16/02/2018, quando o DST estava vigente: lá 07:00 BRT são **09:00 UTC**, e somar 3 h na mão erraria a data em uma hora. O cálculo é feito no calendário BRT ("toda segunda às 7h" é uma afirmação sobre o calendário do usuário) e só então convertido.
+- **Reentrância por UPDATE condicional.** O dispatcher move `next_run_at` **antes** de enfileirar, num `UPDATE ... WHERE next_run_at = <valor lido>`. Dois processos simultâneos: um move a linha, o outro afeta 0 linhas e desiste. Enviar o mesmo relatório duas vezes é o defeito que o usuário percebe primeiro e perdoa por último.
+- **O período é sempre o fechado anterior**, nunca o corrente: quem recebe o diário às 7h quer o dia de ontem inteiro, não as 7 horas de hoje. Semanal é segunda a domingo da semana passada; mensal é o mês passado inteiro. Tudo em dias BRT convertidos para janela UTC por `brt_day_range_to_utc()`.
+- **Job `concluido` com entrega falha é proposital.** O arquivo existe e fica baixável em `/exportar`; marcar o job como falho esconderia o `result_path` e perderia o artefato. A falha aparece onde importa — no histórico do agendamento —, e é ele que alimenta a regra das 3 falhas.
+- **3 falhas CONSECUTIVAS desativam** e notificam o criador. Sucesso **zera** o contador: sem o reset, três tropeços espalhados por meses derrubariam um agendamento saudável. Editar ou reativar também zera — mexer na configuração é a resposta do usuário ao problema.
+- **`vazio` é um status próprio**, distinto de enviado e de falhou: "não enviei porque não havia nada" não é erro, e confundir os dois faria `skip_if_empty` desativar o agendamento depois de 3 dias tranquilos.
+- **Excluir e alternar são POST com CSRF.** `csrf_verify()` só lê o token de `$_POST` ou do cabeçalho; ação destrutiva por GET é acionável por um `<img src="…">` em qualquer página que o usuário logado abra. ⚠️ **`/geocercas?action=excluir` (v4.5.0) tem exatamente esse problema e continua pendente** — ver §4.7 do plano.
+- **Dia do mês limitado a 28**: 29/30/31 não existem em todo mês, e pular fevereiro nunca é o que o usuário quis dizer.
+- **`fleet_status` não é agendável** — é uma foto do agora, e "o estado da frota de ontem às 7h" não significa nada.
+- **Verificado com SMTP de verdade**: um servidor de captura mínimo recebe a mensagem e o teste inspeciona o `.eml` — `multipart/mixed`, MIME `spreadsheetml.sheet`, nome do anexo, e o anexo decodificado com assinatura `PK` (zip válido). O caminho do link foi exercitado baixando `MAIL_MAX_ATTACH_MB` a ~100 bytes.
+
 ## [Unreleased] — 4.6.0
 
 ### Added

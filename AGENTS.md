@@ -195,6 +195,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.4.0.sql   # motor de notifica
 mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql   # credenciais SMTP cadastráveis (senha cifrada)
 mysql -u root -p jimi_tracker < mysql/migration_v4.5.0.sql   # geocercas e POIs (cerca + vínculo + estado + eventos)
 mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios operacionais (segmentos de estado + excesso de velocidade)
+mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql   # relatórios agendados por e-mail + modelos de filtro
 
 # No build step needed — pure PHP
 ```
@@ -211,7 +212,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios opera
 
 **Vídeos**: `/video/aovivo` · `/video/playback` · `/video/downloads`
 
-**Relatórios**: `/relatorios/posicoes` · `/relatorios/deslocamento` · `/relatorios/desatualizados` · `/relatorios/alarmes` · `/relatorios/ocorrencias` · `/relatorios/geocercas` (v4.5.0) · `/relatorios/status-frota` · `/relatorios/paradas` · `/relatorios/ociosidade` · `/relatorios/ignicao` · `/relatorios/velocidade` (v4.6.0)
+**Relatórios**: `/relatorios/posicoes` · `/relatorios/deslocamento` · `/relatorios/desatualizados` · `/relatorios/alarmes` · `/relatorios/ocorrencias` · `/relatorios/geocercas` (v4.5.0) · `/relatorios/status-frota` · `/relatorios/paradas` · `/relatorios/ociosidade` · `/relatorios/ignicao` · `/relatorios/velocidade` (v4.6.0) · `/agendamentos` (v4.7.0)
 
 **Cadastros**: `/ativos` · `/chips` · `/clientes` · `/equipamentos` · `/geocercas` (v4.5.0) · `/grupos-permissao` · `/motoristas` · `/config-ocorrencias` · `/config-notificacoes` · `/config-smtp` (v4.4.x) · `/usuarios`
 
@@ -225,11 +226,13 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios opera
 
 **Alterações**: `users`(+user_type,+permission_group_id,+photo_url) · `customers`(+reseller_id,+brand_color,+logo_url,+occurrence_config_id,+faceid_enabled) · `devices`(+sim_card_id,+peripherals,+streaming_rotation,+streaming_watermark,+firmware_version,+branch_id) · `media_files`(+channel,+download_status).
 
-### Tabelas novas (v4.4.0 → v4.6.0)
+### Tabelas novas (v4.4.0 → v4.7.0)
 
-`notification_rules`, `notifications` (v4.4.0) · `smtp_settings` (v4.4.1) · `geofences`, `geofence_devices`, `geofence_state`, `geofence_events` (v4.5.0) · `device_state_segments`, `speeding_events` (v4.6.0).
+`notification_rules`, `notifications` (v4.4.0) · `smtp_settings` (v4.4.1) · `geofences`, `geofence_devices`, `geofence_state`, `geofence_events` (v4.5.0) · `device_state_segments`, `speeding_events` (v4.6.0) · `report_schedules`, `report_schedule_runs`, `report_templates` (v4.7.0).
 
-**Alterações**: `jobs`(+attempts, `type` com `notification`) · `devices`(+speed_limit_kmh) · `customers`(+default_speed_limit_kmh).
+**Alterações**: `jobs`(+attempts, +schedule_run_id, `type` com `notification`) · `devices`(+speed_limit_kmh) · `customers`(+default_speed_limit_kmh).
+
+> **Fuso nos agendamentos (v4.7.0)**: `report_schedules.send_hour` é hora **BRT**; `next_run_at` é **UTC**. Converter só por `DateTimeZone` (`includes/schedule.php`), nunca somando 3 h — erra para datas anteriores a 2019 (quando havia horário de verão) e voltaria a errar se a política mudar. A tela e o cron chamam as MESMAS funções, para que o "próximo envio" exibido não divirja do que acontece.
 
 > `device_state_segments` sustenta 4 das 5 telas da v4.6.0 (paradas, ociosidade, ignição, status da frota). A invariante que a torna auditável: os segmentos de um equipamento são **contíguos e sem sobreposição** (`ended_at` de um = `started_at` do seguinte), de onde a soma das durações de um dia fecha em 86.400 s. Quem altera `scripts/state_builder.php` tem de preservar isso — é o único teste que pega furo de segmentação.
 
@@ -239,7 +242,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios opera
 
 ### Workers (cron)
 
-`scripts/worker.php` a cada 1 min (fila `jobs`: relatórios/downloads/e-mail) · `scripts/trip_builder.php` a cada 15 min (viagens) · `scripts/metrics_rollup.php` a cada 5 min (KPIs Resumo/BI) · `scripts/log_cleanup.php` diário · `scripts/geofence_worker.php` a cada 2 min (travessias de cerca) · `scripts/state_builder.php` a cada 15 min (segmentos de estado + excesso de velocidade).
+`scripts/worker.php` a cada 1 min (fila `jobs`: relatórios/downloads/e-mail) · `scripts/trip_builder.php` a cada 15 min (viagens) · `scripts/metrics_rollup.php` a cada 5 min (KPIs Resumo/BI) · `scripts/log_cleanup.php` diário · `scripts/geofence_worker.php` a cada 2 min (travessias de cerca) · `scripts/state_builder.php` a cada 15 min (segmentos de estado + excesso de velocidade) · `scripts/schedule_dispatcher.php` na hora cheia (enfileira relatórios agendados).
 
 O array `CRON_JOBS` de `scripts/crontab-setup.sh` é a fonte única — atualizar lá, nunca o crontab à mão. **`deploy.sh` NÃO instala cron**: worker novo exige `bash scripts/crontab-setup.sh --install`, e a falha é silenciosa (a tela funciona, o relatório fica vazio para sempre).
 

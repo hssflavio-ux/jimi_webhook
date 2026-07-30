@@ -17,6 +17,8 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/export_helper.php';
 require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../includes/fleet_state.php'; // fmt_duration(), resolve_current_state()
+require_once __DIR__ . '/../includes/schedule.php';    // SCHEDULE_MAX_ROWS, SCHEDULE_MAX_FAILURES
+require_once __DIR__ . '/../includes/notification_engine.php'; // notify() ao desativar agendamento
 
 /** Máximo de tentativas de um job com falha transitória (só 'notification'). */
 const JOB_MAX_ATTEMPTS = 3;
@@ -118,12 +120,19 @@ function processReportJob($db, $job): array {
     $filename = 'report_' . $job['id'] . '_' . date('Ymd_His') . '.' . $format;
     $filepath = $dir . '/' . $filename;
 
+    // Teto de linhas (v4.7.0). SYNC_EXPORT_MAX_ROWS não se aplica ao caminho
+    // assíncrono, mas sem teto algum um relatório de milhões de linhas estoura
+    // a memória do worker e derruba a fila inteira — inclusive as notificações
+    // que estavam atrás dele.
+    $rowCount = 0;
+
     switch ($format) {
         case 'xlsx':
             $writer = new XlsxWriter($filepath);
             $writer->writeHeader($headers);
             while ($row = $stmt->fetch()) {
                 $writer->writeRow($mapper($row));
+                if (++$rowCount >= SCHEDULE_MAX_ROWS) break;
             }
             if (!$writer->close()) return ['status' => 'falhou', 'error' => 'Falha ao gerar XLSX'];
             break;
@@ -134,7 +143,8 @@ function processReportJob($db, $job): array {
             $writer = new PdfWriter($filepath, $reportName, $headers, $subtitle);
             while ($row = $stmt->fetch()) {
                 $writer->writeRow($mapper($row));
-                if ($writer->isFull()) break;
+                $rowCount++;
+                if ($writer->isFull() || $rowCount >= SCHEDULE_MAX_ROWS) break;
             }
             if (!$writer->close()) return ['status' => 'falhou', 'error' => 'Falha ao gerar PDF'];
             break;
@@ -146,11 +156,240 @@ function processReportJob($db, $job): array {
             fputcsv($fp, $headers, ';');
             while ($row = $stmt->fetch()) {
                 fputcsv($fp, $mapper($row), ';');
+                if (++$rowCount >= SCHEDULE_MAX_ROWS) break;
             }
             fclose($fp);
     }
 
-    return ['status' => 'concluido', 'path' => 'storage/reports/' . $filename];
+    $relPath = 'storage/reports/' . $filename;
+
+    // Entrega por e-mail (v4.7.0): só quando o job veio de um agendamento.
+    // O job continua 'concluido' mesmo se o e-mail falhar — o ARQUIVO existe e
+    // fica baixável em /exportar; o que falhou foi a entrega, e é no histórico
+    // do agendamento que essa distinção importa.
+    if (!empty($params['deliver_email'])) {
+        deliverScheduledReport($db, $job, $params, $filepath, $relPath, $rowCount);
+    }
+
+    return ['status' => 'concluido', 'path' => $relPath];
+}
+
+/**
+ * Envia por e-mail o relatório recém-gerado e fecha a execução do agendamento.
+ *
+ * Acima de MAIL_MAX_ATTACH_MB o arquivo vira **link** em vez de anexo: provedor
+ * de e-mail recusa anexo grande (o limite comum é 25 MB, e vários param bem
+ * antes), e um e-mail recusado é pior do que um link.
+ *
+ * @param PDO    $db       Conexão ativa
+ * @param array  $job      Linha da fila
+ * @param array  $params   Params decodificados do job
+ * @param string $filepath Caminho absoluto do arquivo gerado
+ * @param string $relPath  Caminho relativo (para o link e para jobs.result_path)
+ * @param int    $rowCount Linhas escritas no relatório
+ * @returns void
+ */
+function deliverScheduledReport($db, array $job, array $params, string $filepath, string $relPath, int $rowCount): void {
+    $runId      = isset($job['schedule_run_id']) ? (int)$job['schedule_run_id'] : 0;
+    $scheduleId = isset($params['schedule_id']) ? (int)$params['schedule_id'] : 0;
+    $cid        = isset($job['customer_id']) ? (int)$job['customer_id'] : null;
+    $to         = is_array($params['deliver_email']) ? $params['deliver_email'] : [];
+
+    // Relatório vazio: por padrão envia mesmo assim (o "nada aconteceu" é
+    // informação), mas o agendamento pode pedir para pular.
+    if ($rowCount === 0 && !empty($params['skip_if_empty'])) {
+        finishScheduleRun($db, $runId, $scheduleId, 'vazio', $rowCount, null);
+        Logger::info('Worker: relatório agendado vazio, envio pulado', ['job_id' => $job['id']]);
+        return;
+    }
+
+    if (!mail_is_configured($cid)) {
+        finishScheduleRun($db, $runId, $scheduleId, 'falhou', $rowCount,
+            'Servidor SMTP não cadastrado (Cadastros › Servidor de E-mail)');
+        return;
+    }
+
+    $maxBytes = (float)(getenv('MAIL_MAX_ATTACH_MB') ?: 5) * 1024 * 1024;
+    $size     = is_file($filepath) ? (int)filesize($filepath) : 0;
+    $asLink   = $size > $maxBytes;
+
+    $attachments = $asLink ? [] : [[
+        'path' => $filepath,
+        'name' => scheduleAttachmentName($params, $relPath),
+        'mime' => scheduleMimeType($relPath),
+    ]];
+
+    $result = send_mail(
+        $to,
+        'Relatório: ' . (string)($params['report_name'] ?? 'Relatório')
+            . ' — ' . (string)($params['periodo_label'] ?? ''),
+        buildScheduledReportEmailHtml($params, $rowCount, $asLink, $relPath, $size),
+        $attachments,
+        $cid
+    );
+
+    if ($result['ok']) {
+        finishScheduleRun($db, $runId, $scheduleId, 'enviado', $rowCount, null);
+        Logger::info('Worker: relatório agendado enviado', [
+            'job_id' => $job['id'], 'linhas' => $rowCount, 'link' => $asLink,
+        ]);
+    } else {
+        finishScheduleRun($db, $runId, $scheduleId, 'falhou', $rowCount, $result['error']);
+    }
+}
+
+/**
+ * Fecha a execução no histórico e atualiza o contador de falhas do agendamento.
+ *
+ * Sucesso **zera** `fail_count`: a regra é 3 falhas CONSECUTIVAS. Sem o reset,
+ * três tropeços espalhados por meses desativariam um agendamento saudável.
+ *
+ * @param PDO         $db         Conexão ativa
+ * @param int         $runId      report_schedule_runs.id (0 = sem histórico)
+ * @param int         $scheduleId report_schedules.id (0 = job avulso)
+ * @param string      $status     enviado|vazio|falhou
+ * @param int         $rowCount   Linhas do relatório
+ * @param string|null $error      Mensagem de erro, quando houver
+ * @returns void
+ */
+function finishScheduleRun($db, int $runId, int $scheduleId, string $status, int $rowCount, ?string $error): void {
+    try {
+        if ($runId > 0) {
+            $db->prepare("
+                UPDATE report_schedule_runs
+                SET status = :st, row_count = :rc, error_message = :err
+                WHERE id = :id")
+               ->execute([':st' => $status, ':rc' => $rowCount, ':err' => $error, ':id' => $runId]);
+        }
+        if ($scheduleId <= 0) {
+            return;
+        }
+
+        if ($status === 'falhou') {
+            $db->prepare("UPDATE report_schedules SET fail_count = fail_count + 1 WHERE id = :id")
+               ->execute([':id' => $scheduleId]);
+
+            $stmt = $db->prepare("SELECT * FROM report_schedules WHERE id = :id");
+            $stmt->execute([':id' => $scheduleId]);
+            $sch = $stmt->fetch();
+
+            if ($sch && (int)$sch['fail_count'] >= SCHEDULE_MAX_FAILURES && (int)$sch['is_active'] === 1) {
+                $db->prepare("UPDATE report_schedules SET is_active = 0 WHERE id = :id")
+                   ->execute([':id' => $scheduleId]);
+                notify($db, [
+                    'customer_id' => (int)$sch['customer_id'],
+                    'user_id'     => $sch['user_id'] !== null ? (int)$sch['user_id'] : null,
+                    'kind'        => 'sistema',
+                    'severity'    => 'warning',
+                    'title'       => 'Agendamento desativado: ' . (string)$sch['name'],
+                    'body'        => SCHEDULE_MAX_FAILURES . ' execuções falharam em sequência. Último erro: '
+                                   . mb_substr((string)$error, 0, 200),
+                    'link_url'    => '/agendamentos',
+                    'ref_type'    => 'report_schedule',
+                    'ref_id'      => $scheduleId,
+                    'want_popup'  => 0,
+                    'want_sound'  => 0,
+                    'dedupe_key'  => 'sched|' . $scheduleId,
+                ]);
+                Logger::warning('Worker: agendamento desativado após falhas consecutivas', [
+                    'schedule_id' => $scheduleId, 'error' => $error,
+                ]);
+            }
+        } else {
+            $db->prepare("UPDATE report_schedules SET fail_count = 0 WHERE id = :id")
+               ->execute([':id' => $scheduleId]);
+        }
+    } catch (Throwable $e) {
+        Logger::error('Worker: falha ao registrar execução do agendamento', [
+            'run_id' => $runId, 'error' => $e->getMessage(),
+        ]);
+    }
+}
+
+/**
+ * Nome amigável do anexo: "Alarmes Julho - 01-07-2026.xlsx".
+ *
+ * O nome interno (`report_42_20260729_1830.xlsx`) não diz nada a quem recebe e
+ * colide visualmente com os outros na caixa de entrada.
+ *
+ * @param array  $params  Params do job
+ * @param string $relPath Caminho relativo (fonte da extensão)
+ * @returns string
+ */
+function scheduleAttachmentName(array $params, string $relPath): string {
+    $ext  = pathinfo($relPath, PATHINFO_EXTENSION) ?: 'csv';
+    $base = (string)($params['report_name'] ?? 'relatorio');
+    $per  = (string)($params['periodo_label'] ?? '');
+    // Caractere de caminho ou de citação no nome do anexo quebra o cabeçalho MIME
+    $safe = preg_replace('/[^\p{L}\p{N} _.-]+/u', '', $base . ($per ? ' - ' . str_replace('/', '-', $per) : ''));
+    $safe = trim(preg_replace('/\s+/', ' ', (string)$safe)) ?: 'relatorio';
+    return mb_substr($safe, 0, 120) . '.' . $ext;
+}
+
+/**
+ * MIME do arquivo gerado.
+ *
+ * @param string $relPath Caminho relativo
+ * @returns string
+ */
+function scheduleMimeType(string $relPath): string {
+    switch (strtolower(pathinfo($relPath, PATHINFO_EXTENSION))) {
+        case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        case 'pdf':  return 'application/pdf';
+        default:     return 'text/csv; charset=UTF-8';
+    }
+}
+
+/**
+ * Corpo HTML do e-mail de relatório agendado.
+ *
+ * @param array  $params   Params do job
+ * @param int    $rowCount Linhas do relatório
+ * @param bool   $asLink   Se o arquivo foi substituído por link
+ * @param string $relPath  Caminho relativo do arquivo
+ * @param int    $size     Tamanho em bytes
+ * @returns string HTML completo
+ */
+function buildScheduledReportEmailHtml(array $params, int $rowCount, bool $asLink, string $relPath, int $size): string {
+    $accent = '#0052ff';
+    $nome   = htmlspecialchars((string)($params['report_name'] ?? 'Relatório'), ENT_QUOTES, 'UTF-8');
+    $per    = htmlspecialchars((string)($params['periodo_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $base   = rtrim((string)(getenv('APP_URL') ?: ''), '/');
+
+    $corpo = $rowCount === 0
+        ? 'Nenhum registro foi encontrado no período.'
+        : number_format($rowCount, 0, ',', '.') . ' registro(s) no período.';
+
+    $anexo = '';
+    if ($asLink) {
+        $mb = number_format($size / 1024 / 1024, 1, ',', '.');
+        $url = htmlspecialchars($base . '/' . $relPath, ENT_QUOTES, 'UTF-8');
+        $anexo = '<p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#5b616e;">'
+               . 'O arquivo tem ' . $mb . ' MB e ficou grande demais para anexo. Baixe pelo link:'
+               . '</p><p style="margin:12px 0 0;">'
+               . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#fff;'
+               . 'text-decoration:none;padding:12px 24px;border-radius:100px;font-weight:600;font-size:14px;">'
+               . 'Baixar relatório</a></p>';
+    } elseif ($rowCount > 0) {
+        $anexo = '<p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#5b616e;">'
+               . 'O relatório está anexado a esta mensagem.</p>';
+    }
+
+    return '<!doctype html><html lang="pt-BR"><body style="margin:0;padding:24px;'
+         . 'background:#f5f6f8;font-family:Helvetica,Arial,sans-serif;color:#0a0b0d;">'
+         . '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+         . 'style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e6e8eb;border-radius:12px;">'
+         . '<tr><td style="height:4px;background:' . $accent . ';border-radius:12px 12px 0 0;"></td></tr>'
+         . '<tr><td style="padding:28px;">'
+         . '<h1 style="margin:0 0 6px;font-size:18px;font-weight:600;line-height:1.4;">' . $nome . '</h1>'
+         . '<p style="margin:0 0 16px;font-size:13px;color:#8a919e;">Período: ' . $per . ' (BRT)</p>'
+         . '<p style="margin:0;font-size:14px;line-height:1.6;color:#5b616e;">' . $corpo . '</p>'
+         . $anexo
+         . '</td></tr>'
+         . '<tr><td style="padding:16px 28px;border-top:1px solid #e6e8eb;font-size:12px;color:#8a919e;">'
+         . 'Envio automático do JIMI Tracker. Para alterar a frequência ou os destinatários, '
+         . 'acesse Relatórios &rsaquo; Agendamentos.'
+         . '</td></tr></table></body></html>';
 }
 
 /**

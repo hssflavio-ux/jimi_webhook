@@ -11,6 +11,10 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
+require_once __DIR__ . '/../includes/report_templates.php';
+// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
+handle_template_actions('rel_alarmes', '/relatorios/alarmes');
+
 $page_title = 'Relatório de Alarmes';
 $current_route = 'rel_alarmes';
 $db = Database::getInstance()->getConnection();
@@ -158,6 +162,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <?php if (report_has_query()) echo report_back_button('/relatorios/alarmes'); ?>
     </div>
 </div>
+
+<?php render_template_bar('rel_alarmes', '/relatorios/alarmes'); ?>
 
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">

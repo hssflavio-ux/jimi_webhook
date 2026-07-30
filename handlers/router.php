@@ -41,6 +41,7 @@
  *   /relatorios/ignicao               → rel_ignicao.php
  *   /relatorios/velocidade            → rel_velocidade.php
  *   /relatorios/status-frota          → rel_status_frota.php
+ *   /agendamentos                     → agendamentos.php
  *   /geocercas                        → geocercas.php
  *   /perfil                           → perfil.php
  *   /camerasdata ...                  → AJAX endpoints
@@ -76,7 +77,7 @@ if (empty($segments)) {
     // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas','geocercas','wiki'];
+                     'chips','equipamentos','motoristas','geocercas','agendamentos','wiki'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -209,6 +210,7 @@ $screenByHandler = [
     'rel_velocidade.php'        => 'relatorios',
     'rel_status_frota.php'      => 'relatorios',
     'geocercas.php'             => 'geocercas',
+    'agendamentos.php'          => 'agendamentos',
     'ativos.php'                => 'ativos',
     'ativos_novo.php'           => 'ativos',
     'ativo_detalhe.php'         => 'ativos',

@@ -22,6 +22,10 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
+require_once __DIR__ . '/../includes/report_templates.php';
+// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
+handle_template_actions('rel_status_frota', '/relatorios/status-frota');
+
 require_once __DIR__ . '/../includes/fleet_state.php';
 
 /** Teto de equipamentos classificados em memória por requisição. */
@@ -219,6 +223,8 @@ $cardBase = http_build_query($cardQ);
     </div>
 </div>
 <?php endif; ?>
+
+<?php render_template_bar('rel_status_frota', '/relatorios/status-frota'); ?>
 
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">

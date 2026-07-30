@@ -23,6 +23,10 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
+require_once __DIR__ . '/../includes/report_templates.php';
+// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
+handle_template_actions('rel_ignicao', '/relatorios/ignicao');
+
 require_once __DIR__ . '/../includes/fleet_state.php';
 
 $page_title    = 'Relatório de Ignição';
@@ -225,6 +229,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 <?php endif; ?>
+
+<?php render_template_bar('rel_ignicao', '/relatorios/ignicao'); ?>
 
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">

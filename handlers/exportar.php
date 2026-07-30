@@ -111,11 +111,44 @@ require_once __DIR__ . '/../web/layout_base.php';
             Geração assíncrona de relatórios. Os arquivos ficam disponíveis para download quando concluídos.
         </p>
     </div>
-    <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);">
-        <input type="checkbox" id="auto-refresh" checked onchange="togglePoll()" style="width:auto;">
-        Atualização automática
-    </label>
+    <div style="display:flex;align-items:center;gap:14px;">
+        <a href="/agendamentos" class="btn btn-outline btn-sm">Agendados</a>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);">
+            <input type="checkbox" id="auto-refresh" checked onchange="togglePoll()" style="width:auto;">
+            Atualização automática
+        </label>
+    </div>
 </div>
+
+<?php
+// Resumo dos agendamentos (v4.7.0). A fila abaixo mostra o resultado de cada
+// execução; quem quiser saber POR QUE um relatório chegou (ou não chegou) vai
+// para /agendamentos, onde está a configuração e o histórico.
+$schedSummary = null;
+try {
+    $ss = $db->prepare("
+        SELECT COUNT(*) AS total,
+               SUM(is_active = 1) AS ativos,
+               MIN(CASE WHEN is_active = 1 THEN next_run_at END) AS proximo
+        FROM report_schedules WHERE customer_id = :cid");
+    $ss->execute([':cid' => $customerId]);
+    $schedSummary = $ss->fetch();
+} catch (Throwable $e) { /* migração v4.7.0 pendente */ }
+?>
+<?php if ($schedSummary && (int)$schedSummary['total'] > 0): ?>
+<div class="card mb-24" style="padding:12px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:16px;font-size:13px;">
+    <span style="color:var(--muted);">
+        <strong class="text-mono" style="color:var(--ink);"><?= (int)$schedSummary['ativos'] ?></strong>
+        agendamento(s) ativo(s) de <?= (int)$schedSummary['total'] ?>
+    </span>
+    <?php if ($schedSummary['proximo']): ?>
+    <span style="color:var(--muted);">
+        Próximo envio: <strong class="text-mono" style="color:var(--ink);"><?= fmt_brt($schedSummary['proximo'], 'd/m/Y H:i') ?></strong>
+    </span>
+    <?php endif; ?>
+    <a href="/agendamentos" style="font-size:12px;">Ver agendamentos e histórico →</a>
+</div>
+<?php endif; ?>
 
 <!-- ═══════ New Export Form ═══════ -->
 <div class="card mb-24" style="padding:16px 20px;">

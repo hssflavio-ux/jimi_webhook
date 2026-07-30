@@ -4,22 +4,24 @@
 **Base**: v4.3.0 (commit `83f9849`).
 **Data**: 28/07/2026.
 
-| Fase | Versão | Entrega | Migração |
-|---|---|---|---|
-| 1 | **v4.4.0** | Motor de notificações (sino, pop-up, som, e-mail) | `migration_v4.4.0.sql` |
-| — | **v4.4.1** | Credenciais de SMTP cadastráveis pela interface (`/config-smtp`) | `migration_v4.4.1.sql` |
-| 2 | **v4.5.0** | Geocercas + POI com relatório de entrada/saída | `migration_v4.5.0.sql` |
-| 3 | **v4.6.0** | Relatórios Parada / Ociosidade / Ignição / Velocidade / Status da Frota | `migration_v4.6.0.sql` |
-| 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` |
-| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §8 | — |
+| Fase | Versão | Entrega | Migração | Estado |
+|---|---|---|---|---|
+| 1 | **v4.4.0** | Motor de notificações (sino, pop-up, som, e-mail) | `migration_v4.4.0.sql` | ✅ publicada |
+| — | **v4.4.1** | Credenciais de SMTP cadastráveis pela interface (`/config-smtp`) | `migration_v4.4.1.sql` | ✅ publicada |
+| 2 | **v4.5.0** | Geocercas + POI com relatório de entrada/saída | `migration_v4.5.0.sql` | ✅ feita, a publicar |
+| 3 | **v4.6.0** | Relatórios Parada / Ociosidade / Ignição / Velocidade / Status da Frota | `migration_v4.6.0.sql` | ✅ feita, a publicar |
+| 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` | ✅ feita, a publicar |
+| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §5 | — | ⬜ pendente |
 
-> **Status em 29/07/2026**:
+> **Status em 30/07/2026 — IMPLEMENTAÇÃO COMPLETA (Fases 1 a 4)**:
 > - Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`).
 > - Fase 2 (**v4.5.0 — geocercas**) **implementada e verificada localmente** (commit `16f3184`); falta publicar.
 > - Fase 3 (**v4.6.0 — relatórios operacionais**) **implementada e verificada localmente**; falta publicar.
-> - Fase 4 e a atualização da wiki seguem pendentes.
-> - **Publicação pendente das duas fases de uma vez**: `sudo ./scripts/deploy.sh` (o gate semântico aplica v4.5.0 e v4.6.0 em sequência) + `bash scripts/crontab-setup.sh --install` (**6 workers** — o deploy não instala cron) + marcar "Geocercas" em `/grupos-permissao` para grupos restritos. As 5 telas da Fase 3 **não** precisam de liberação: herdam a permissão `relatorios` existente.
+> - Fase 4 (**v4.7.0 — relatório agendado + modelos**) **implementada e verificada localmente**; falta publicar.
+> - **Resta apenas a Fase 5** (atualizar a `/wiki`), que por decisão registrada é o último passo da iniciativa.
+> - **Publicação pendente das TRÊS versões de uma vez**: `sudo ./scripts/deploy.sh` (o gate semântico aplica v4.5.0, v4.6.0 e v4.7.0 em sequência) + `bash scripts/crontab-setup.sh --install` (**7 workers** — o deploy não instala cron) + marcar **"Geocercas"** e **"Agendamentos"** em `/grupos-permissao` para grupos restritos. As 5 telas da Fase 3 **não** precisam de liberação: herdam a permissão `relatorios` existente.
 > - **Backfill depois de publicar**: `php scripts/state_builder.php 30` fora do horário de pico. Sem ele, os 4 relatórios de estado só mostram dados a partir da primeira execução do cron.
+> - **Para o envio agendado funcionar**: credenciais em `/config-smtp` (ou `.env`) **e `APP_URL` correta** — é a base do link quando o anexo passa de `MAIL_MAX_ATTACH_MB`. O envio real nunca foi validado contra provedor externo; localmente foi validado contra um SMTP de captura.
 >
 > **Desvios da Fase 3 em relação ao plano original**, todos deliberados:
 > 1. **`includes/report_segments.php`** (não previsto): Paradas e Ociosidade são a mesma consulta com um `state` diferente. Dois handlers de 250 linhas quase idênticos reintroduziriam na exibição exatamente a duplicação que §3.1 eliminou no banco. Os handlers viraram ~30 linhas de configuração.
@@ -676,15 +678,73 @@ semanal, "mês passado" para a mensal — todos resolvidos por `brt_today()` +
 
 ## 4.6 Critérios de aceite
 
-- [ ] `php -l` limpo; cron instalado.
-- [ ] Agendamento diário às 07:00 BRT com `next_run_at` gravado em UTC (10:00 no horário padrão);
-      **testar com data de janeiro e de julho**.
-- [ ] Dispatcher executado duas vezes na mesma hora enfileira **um** job.
-- [ ] E-mail chega com o XLSX anexado e abre no Excel pt-BR.
-- [ ] Arquivo acima de `MAIL_MAX_ATTACH_MB` chega como link, e o link baixa.
-- [ ] 3 falhas consecutivas desativam o agendamento e notificam.
-- [ ] Modelo salvo em `/relatorios/alarmes` reaparece no seletor e repopula os filtros.
-- [ ] Usuário do cliente A não vê agendamento do cliente B.
+- [x] `php -l` limpo (0 erros em todo o projeto); `bash -n` limpo em `crontab-setup.sh` e
+      `deploy.sh`. **Cron ainda não instalado no homolog** — pendente do deploy.
+- [x] Agendamento diário às 07:00 BRT com `next_run_at` gravado em UTC (10:00);
+      **testado com data de janeiro e de julho** — as duas dão 10:00 UTC, porque o Brasil
+      aboliu o horário de verão em 2019. Para provar que a conversão é por **tzdata** e não
+      por offset fixo, há uma asserção em **16/02/2018** (DST vigente), que dá **09:00 UTC**:
+      somar 3 h na mão erraria essa data em uma hora.
+- [x] Dispatcher executado duas vezes na mesma hora enfileira **um** job.
+      *(Guarda de reentrância: o `UPDATE` de `next_run_at` é condicionado ao valor lido, então
+      o segundo processo afeta 0 linhas e desiste.)*
+- [x] E-mail chega com o XLSX anexado — verificado contra um **servidor SMTP de captura**: a
+      mensagem é `multipart/mixed`, o anexo tem MIME `spreadsheetml.sheet`, nome amigável
+      (`ZZ Diario Alarmes - 28-07-2026.xlsx`, não `report_66_...`) e decodifica para um zip
+      válido (assinatura `PK`). *Abrir no Excel pt-BR não é verificável por automação; o
+      `XlsxWriter` é o mesmo já em uso no export síncrono desde a v4.1.0.*
+- [x] Arquivo acima de `MAIL_MAX_ATTACH_MB` chega como link: a mensagem deixa de ser
+      multipart, o corpo traz o link para `storage/reports/` e explica o motivo.
+- [x] 3 falhas consecutivas desativam o agendamento e notificam o criador.
+      *(Medido ciclo a ciclo: `fail_count` 1 → 2 → 3 com `is_active` caindo para 0 no 3º; o erro
+      real do SMTP fica no histórico; sucesso **zera** o contador, porque a regra é
+      "consecutivas".)*
+- [x] Modelo salvo em `/relatorios/alarmes` reaparece no seletor e repopula os filtros
+      — verificado pela UI: salvar → aparecer → aplicar → campos preenchidos → excluir.
+- [x] Usuário do cliente A não vê agendamento do cliente B — nem na grade, nem no histórico,
+      nem abrindo a URL de edição pelo id, nem tentando excluí-lo.
+- [x] **Extra**: migração idempotente (2×, exit 0); `skip_if_empty` grava `vazio` e não envia;
+      CSRF obrigatório em criar/editar/excluir/alternar (POST sem token → 403, nada gravado);
+      destinatário inválido e tipo de relatório inexistente recusados; reativar zera o contador
+      de falhas; agendamento inativo não é mais disparado; modelo não vaza para outra tela;
+      `/exportar` mostra o resumo dos agendamentos e o próximo envio.
+
+**Verificação executada**: 71 asserções de agendamento/fuso/entrega (com SMTP de captura) +
+72 de HTTP autenticado (CRUD, CSRF, escopo, ciclo dos modelos) = **143 asserções, 0 falhas**,
+mais **19 casos Playwright** em `tests/agendamentos.spec.js` e a rota nova em
+`tests/navigation.spec.js`.
+
+### Desvios em relação ao plano original, todos deliberados
+
+1. **Excluir e alternar são POST, não link GET.** `csrf_verify()` só lê o token de `$_POST` ou
+   do cabeçalho `X-CSRF-Token`; uma ação destrutiva alcançável por GET é acionável por um
+   `<img src="/agendamentos?action=excluir&id=1">` em qualquer página que o usuário logado
+   abra. (O `/geocercas` da v4.5.0 tem esse problema — ver §4.7.)
+2. **Job continua `concluido` quando só a ENTREGA falha.** O arquivo existe e fica baixável em
+   `/exportar`; marcar o job como falho esconderia o `result_path` e perderia o artefato. A
+   falha aparece onde importa: no histórico do agendamento (`report_schedule_runs`), que é o
+   que alimenta a regra das 3 falhas.
+3. **`report_schedule_runs.status` ganhou `vazio`** (o plano previa só enfileirado/enviado/
+   falhou): "não enviei porque não havia nada" não é falha nem envio, e confundir os dois faria
+   `skip_if_empty` desativar o agendamento em 3 dias tranquilos.
+4. **`jobs.schedule_run_id`** acrescentada: sem o vínculo, o worker não sabe qual execução
+   fechar e o histórico ficaria eternamente em "enfileirado".
+5. **`fleet_status` fica fora dos tipos agendáveis** — é uma foto do agora, e "o estado da
+   frota de ontem às 7h" não significa nada.
+6. **Dia do mês limitado a 28**: 29/30/31 não existem em todo mês, e pular fevereiro nunca é o
+   que o usuário quis dizer.
+7. **`includes/report_templates.php` guarda a query string da tela**, não uma estrutura por
+   relatório: é o que a tela já sabe interpretar, serve para qualquer filtro presente ou futuro
+   e dispensa mapeamento tela a tela. Aplicar um modelo é redirecionar com aquela query.
+
+## 4.7 Achado fora do escopo — CSRF em ação destrutiva por GET
+
+`/geocercas?action=excluir&id=N` (v4.5.0) apaga a geocerca **sem token CSRF**, porque
+`csrf_verify()` não lê da query string. Qualquer página que um administrador logado abra pode
+disparar a exclusão com uma tag `<img>`. Os agendamentos da Fase 4 já nascem com POST + CSRF;
+a correção de `/geocercas` (e a varredura por outros `action=` destrutivos em GET) fica
+**pendente**, como passe focado de segurança — vale revisar `handlers/*.php` inteiro de uma vez
+em vez de corrigir de raspão no fim de uma fase de features.
 
 ---
 
@@ -712,7 +772,7 @@ Por fase, na ordem:
 # 1. Lint (o pre-commit já roda, mas rodar antes de abrir PR)
 find handlers config core includes scripts -name "*.php" -type f -exec php -l {} \;
 
-# 2. Migração em base limpa E em base com dados (idempotência)
+# 2. Migração em base COM DADOS, duas vezes (idempotência)
 mysql -u root -p jimi_tracker < mysql/migration_v4.X.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.X.0.sql   # 2ª vez: sem erro
 
@@ -728,9 +788,34 @@ php scripts/schedule_dispatcher.php
 ./scripts/run-tests.ps1
 ```
 
-Specs Playwright a acrescentar: `notificacoes.spec.js`, `geocercas.spec.js`,
-`relatorios-operacionais.spec.js`, `agendamentos.spec.js`. As specs de navegação existentes
-precisam ser estendidas com as 8 rotas novas.
+> ⚠️ **Não existe teste "em base limpa" com os arquivos como estão** — e tentar fazê-lo escreve
+> na base real. `mysql/jimi_tracker.sql`, `migration_v2.0.0.sql`, `migration_v3.1.0.sql` e
+> `migration_v4.0.0.sql` **embutem `USE \`jimi_tracker\``** (o primeiro também tem
+> `CREATE DATABASE`), então ignoram o banco passado ao cliente; de `v4.1.0` em diante os arquivos
+> respeitam o alvo. Consequências: (a) instalar em banco com outro nome exige editar os 4
+> arquivos; (b) rodar a cadeia apontando para um banco de teste executa os 4 primeiros contra o
+> `jimi_tracker` de verdade e, como a `v4.0.0` termina com
+> `system_info.version = '4.0.0'`, **empurra o marcador de versão para trás** — exatamente o
+> valor que o gate do `deploy.sh` lê. (Verificado nesta sessão, ao tentar o teste: o banco de dev
+> foi para `4.0.0` e precisou da cadeia `4.1.0 → 4.7.0` para voltar a `4.7.0`; os dados ficaram
+> intactos porque todos os seeds usam `INSERT IGNORE`.) **O deploy não é afetado** — o gate
+> semântico nunca reexecuta a base nem a v4.0.0 num banco já adiante. Correção sugerida: remover
+> `USE`/`CREATE DATABASE` dos 4 arquivos e deixar o nome do banco a cargo de quem invoca.
+
+Specs Playwright acrescentadas: `geocercas.spec.js` (Fase 2), `relatorios-operacionais.spec.js`
+(Fase 3) e `agendamentos.spec.js` (Fase 4); `navigation.spec.js` estendida com as rotas novas.
+Suíte ao fim da série: **84 passed / 0 failed / 5 skipped** (os skips são os documentados —
+multi-tenant sem 2º cliente, `TEST_IMEI` ausente, rate-limit destrutivo).
+
+> **`notificacoes.spec.js` da Fase 1 não foi escrita** e o sino segue sem cobertura E2E — a Fase 1
+> foi verificada por asserções PHP (13 do motor) e por rotas autenticadas, não pela UI. Fica como
+> lacuna conhecida.
+
+> ⚠️ **Rodar a suíte COM credenciais antes de dar uma fase por concluída.** Os 9 casos de
+> `geocercas.spec.js` foram escritos na Fase 2 e **nunca executados** (faltavam
+> `TEST_EMAIL`/`TEST_PASSWORD`); ao rodarem na Fase 3, dois falharam de imediato — um deles
+> revelando bug real (`/geocercas` re-renderizava o formulário vazio depois de salvar, e um F5
+> duplicava a cerca). Spec escrita não é spec verificada.
 
 ---
 
@@ -786,20 +871,30 @@ Fase 1 é a menor em volume e a de maior risco, por introduzir a primeira saída
 
 ## Rotas resultantes
 
-Ao fim da série o sistema sai de 30 para **38 rotas**:
+Ao fim da série o sistema saiu de 30 para **39 rotas** — uma a mais que as 38 previstas, porque a
+v4.4.1 (`/config-smtp`) não estava no plano original: as credenciais de SMTP nasceram no `.env` e
+só depois virou evidente que trocar de provedor não pode exigir acesso ao servidor.
 
-| Rota | Fase |
-|---|---|
-| `/config-notificacoes` | 1 |
-| `/notificacoesdata` (AJAX) | 1 |
-| `/geocercas` | 2 |
-| `/relatorios/geocercas` | 2 |
-| `/relatorios/paradas` | 3 |
-| `/relatorios/ociosidade` | 3 |
-| `/relatorios/ignicao` | 3 |
-| `/relatorios/velocidade` | 3 |
-| `/relatorios/status-frota` | 3 |
-| `/agendamentos` | 4 |
+**Todas implementadas:**
+
+| Rota | Fase | Estado |
+|---|---|---|
+| `/config-notificacoes` | 1 | ✅ |
+| `/notificacoesdata` (AJAX) | 1 | ✅ |
+| `/config-smtp` | 1 (não previsto) | ✅ |
+| `/geocercas` | 2 | ✅ |
+| `/relatorios/geocercas` | 2 | ✅ |
+| `/relatorios/paradas` | 3 | ✅ |
+| `/relatorios/ociosidade` | 3 | ✅ |
+| `/relatorios/ignicao` | 3 | ✅ |
+| `/relatorios/velocidade` | 3 | ✅ |
+| `/relatorios/status-frota` | 3 | ✅ |
+| `/agendamentos` | 4 | ✅ |
+
+**Telas que exigem liberação em `/grupos-permissao`**: `/config-notificacoes`, `/config-smtp`,
+`/geocercas` e `/agendamentos`. Os 5 relatórios da Fase 3 herdam a permissão `relatorios` e não
+aparecem na matriz — tela nova nasce opt-in de propósito, mas é a primeira coisa que alguém
+reporta como "bug".
 
 ## Crontab final
 
@@ -808,10 +903,15 @@ Ao fim da série o sistema sai de 30 para **38 rotas**:
 */15 * * * *   php scripts/trip_builder.php         # existente
 */5  * * * *   php scripts/metrics_rollup.php       # existente
 10   3 * * *   php scripts/log_cleanup.php          # existente
-*/2  * * * *   php scripts/geofence_worker.php      # Fase 2
-*/15 * * * *   php scripts/state_builder.php        # Fase 3
-5    * * * *   php scripts/schedule_dispatcher.php  # Fase 4
+*/2  * * * *   php scripts/geofence_worker.php      # Fase 2 ✅
+*/15 * * * *   php scripts/state_builder.php        # Fase 3 ✅
+5    * * * *   php scripts/schedule_dispatcher.php  # Fase 4 ✅
 ```
+
+Os **7 workers** estão no array `CRON_JOBS` de `scripts/crontab-setup.sh` e o `--check` confere os 7.
+Nenhum deles é instalado pelo `deploy.sh` — a instalação é o passo manual que sobra em cada release
+que traz worker novo, e esquecê-la produz a falha mais silenciosa possível: tela funcionando,
+relatório vazio para sempre.
 
 Instalação por `scripts/crontab-setup.sh --install` (o array `CRON_JOBS`, linha 20, é a fonte
 única — atualizar lá, não no crontab à mão).

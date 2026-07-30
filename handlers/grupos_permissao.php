@@ -32,6 +32,7 @@ $screens = [
     'clientes'              => 'Clientes',
     'equipamentos'          => 'Equipamentos',
     'geocercas'             => 'Geocercas',
+    'agendamentos'          => 'Agendamentos',
     'grupos-permissao'      => 'Grupos de Permissão',
     'motoristas'            => 'Motoristas',
     'config-ocorrencias'    => 'Config. Ocorrências',

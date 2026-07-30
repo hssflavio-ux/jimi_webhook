@@ -28,6 +28,7 @@ const ROUTES = [
     '/relatorios/ociosidade',
     '/relatorios/ignicao',
     '/relatorios/velocidade',
+    '/agendamentos',
     '/geocercas',
     '/ativos',
     '/ativos/novo',

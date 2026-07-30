@@ -11,6 +11,10 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
+require_once __DIR__ . '/../includes/report_templates.php';
+// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
+handle_template_actions('rel_desatualizados', '/relatorios/desatualizados');
+
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
 $user = get_jimi_user();
@@ -137,6 +141,8 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Desatualizados</h2>
 </div>
+
+<?php render_template_bar('rel_desatualizados', '/relatorios/desatualizados'); ?>
 
 <?php if ($isAdmin): ?>
 <div class="card mb-24" style="padding:12px 16px;">
