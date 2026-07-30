@@ -10,7 +10,8 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../includes/functions.php'; // haversine_km()
+require_once __DIR__ . '/../includes/functions.php';   // haversine_km()
+require_once __DIR__ . '/../includes/fleet_state.php'; // STOP_SPEED_KMH, STOP_IDLE_SECONDS
 
 // Filtro de qualidade: uma viagem só conta como deslocamento real se houve
 // movimento efetivo. Descarta viagens de 1 ponto, paradas com ignição ligada
@@ -26,8 +27,11 @@ const MIN_TRIP_DURATION_S  = 60;  // s — descarta "viagens" de poucos segundos
 // parada com velocidade abaixo de STOP_SPEED_KMH por mais de STOP_IDLE_SECONDS
 // encerra a viagem no último ponto em movimento — o próximo movimento abre uma
 // viagem nova. Assim a segmentação não depende só do sinal de ignição.
-const STOP_SPEED_KMH    = 3.0; // km/h — abaixo disto o veículo é considerado parado
-const STOP_IDLE_SECONDS = 300; // s (5 min) — parada mais longa que isto encerra a viagem
+//
+// STOP_SPEED_KMH e STOP_IDLE_SECONDS vivem em includes/fleet_state.php desde a
+// v4.6.0 (antes eram locais deste arquivo). O state_builder.php usa as MESMAS
+// constantes: se "parado" aqui significasse algo diferente de "parado" no
+// relatório de paradas, as duas telas se contradiriam e nenhuma seria auditável.
 
 $db = Database::getInstance()->getConnection();
 

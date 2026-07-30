@@ -1,35 +1,51 @@
-# STATUS.md — Jimi Webhook System v4.5.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.6.0 (YUV Parity)
 
-> **Última atualização**: 29/07/2026 — **v4.5.0: geocercas e POIs** (Fase 2 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`). Cercas em **círculo** ou **polígono** desenhadas no mapa (`/geocercas`, Leaflet puro — sem `leaflet-draw`), vinculadas a equipamentos; cada travessia vira evento em `geofence_events`, notifica pelo motor da v4.4.0 e alimenta `/relatorios/geocercas` em duas modalidades (**entradas/saídas** e **permanência**, pareada com `LEAD` sobre cerca × equipamento). Novos: `mysql/migration_v4.5.0.sql`, `includes/geofence.php`, `scripts/geofence_worker.php`, `handlers/geocercas.php`, `handlers/rel_geocercas.php`, `tests/geocercas.spec.js`. Alterados: `includes/functions.php` (`haversine_km()` promovida do `trip_builder`), `scripts/trip_builder.php`, `router.php`, `layout_base.php`, `grupos_permissao.php`, `crontab-setup.sh`, `deploy.sh`, `tests/navigation.spec.js`.
-> **Verificado (local, PHP 8.3 + MySQL 8.0)**: lint **0 erros** em todo o projeto (`handlers`, `config`, `core`, `includes`, `scripts`, `web`) + `bash -n` em `crontab-setup.sh` e `deploy.sh`; migração **idempotente** (2 execuções, exit 0, banco em `4.5.0`, as 4 tabelas criadas); **36 asserções de geometria** (haversine, círculo, histerese, ray casting em polígono côncavo em "L", normalização, geometria incompleta); **13 asserções do worker** ponta-a-ponta com trajetória sintética; **28 asserções** de relatório + CRUD via HTTP; 7 rotas renderizando 200 sem erro/aviso de PHP; `trip_builder.php` sem regressão após a troca da haversine.
-> ### ▶️ RETOMAR AQUI — estado em 29/07/2026, commit `16f3184`
-> **Código: local = GitHub. Homolog: NÃO.** `main` local e `origin/main` em `16f3184` (working tree limpo; a branch `feat/v4.5.0-geocercas` foi mesclada por fast-forward e removida local/remota, mesmo ciclo da v4.4.0). **O servidor continua em `92725cb` / banco `4.4.1`** — a v4.5.0 está commitada e empurrada, mas **não publicada**.
+> **Última atualização**: 29/07/2026 — **v4.6.0: relatórios operacionais** (Fase 3 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`). Cinco telas novas — **Status da Frota**, **Paradas**, **Ociosidade**, **Ignição** e **Excesso de Velocidade** — alimentadas por **um** worker (`scripts/state_builder.php`, cron de 15 min) que segmenta `gps_data` em `device_state_segments` (`movimento`/`ocioso`/`parado`/`offline`) e apura `speeding_events`. Novos: `mysql/migration_v4.6.0.sql`, `includes/fleet_state.php`, `includes/report_segments.php`, `scripts/state_builder.php`, `handlers/rel_paradas.php`, `rel_ociosidade.php`, `rel_ignicao.php`, `rel_velocidade.php`, `rel_status_frota.php`, `tests/relatorios-operacionais.spec.js`. Alterados: `trip_builder.php` (passa a consumir os limiares compartilhados), `worker.php` (5 tipos novos de export assíncrono), `equipamentos.php` + `clientes.php` (limite de velocidade), `exportar.php`, `router.php`, `layout_base.php`, `crontab-setup.sh`, `deploy.sh`, `.env.example`, `navigation.spec.js`. **Corrigido de quebra**: `/geocercas` re-renderizava o formulário vazio após salvar (v4.5.0) — agora Post/Redirect/Get.
+> **Verificado (local, PHP 8.3 + MySQL 8.0)**: lint **0 erros** em todo o projeto + `bash -n` em `crontab-setup.sh` e `deploy.sh`; migração **idempotente** (2×, exit 0, banco em `4.6.0`); **114 asserções** em 3 suítes (51 de segmentação com trajetória sintética de 1.515 pontos, 39 de HTTP autenticado ponta-a-ponta, 24 de worker/regressão) — **0 falhas**; **Playwright: 69 passed / 0 failed / 5 skipped** (a suíte inteira, não só as telas novas). O critério duro — **soma das durações de um dia = 86.400 s exatos** — passa, e com ele a contiguidade sem vão nem sobreposição.
 >
-> **Os 3 passos que faltam** (o 1º é o único automatizado):
+> ### ▶️ RETOMAR AQUI — estado em 29/07/2026
+> **Homolog continua em `92725cb` / banco `4.4.1`.** Há **duas** versões commitadas e não publicadas: a v4.5.0 (geocercas) e a v4.6.0 (relatórios operacionais). O gate semântico do `deploy.sh` aplica as duas em sequência numa única execução.
+>
+> **Os passos que faltam:**
 > ```bash
-> # no servidor — o deploy.sh muda a si mesmo neste release; ver nota de auto-substituição abaixo
-> sudo ./scripts/deploy.sh
-> bash scripts/crontab-setup.sh --install    # deploy.sh NÃO instala cron
-> bash scripts/crontab-setup.sh --check      # confere os 5 workers
+> sudo ./scripts/deploy.sh                   # aplica v4.5.0 E v4.6.0 (gate semântico)
+> bash scripts/crontab-setup.sh --install    # 6 workers — o deploy NÃO instala cron
+> bash scripts/crontab-setup.sh --check
+> php scripts/state_builder.php 30           # backfill, fora do horário de pico
 > ```
-> 1. **`deploy.sh`** cobre sozinho a migração (gate semântico) **e** o `SYSTEM_VERSION` do `.env` (o bloco da linha ~250 faz `sed` a partir do `.env.example`, já em `4.5.0`). Nada de editar `.env` à mão. Gate simulado: banco em 4.4.1 → aplica **somente** a v4.5.0.
-> 2. **Cron é obrigatório e não sai no deploy.** Sem `crontab-setup.sh --install` o `geofence_worker.php` nunca roda, e a falha é silenciosa do pior tipo: a tela funciona, a cerca salva, e o relatório fica vazio para sempre.
-> 3. **Liberar a tela nova no RBAC**: `can()` nega tela ausente da matriz JSON, então usuário em grupo restrito (ex.: "Operador Padrão") recebe 403 em `/geocercas` e não vê o item na sidebar até o administrador marcar a linha "Geocercas" em `/grupos-permissao`. Admin (`{"*": [...]}`) e usuário sem grupo não são afetados. **Mesmo comportamento das telas da v4.4.x** — tela nova nasce opt-in de propósito, mas é a primeira coisa que alguém reporta como "bug".
+> 1. **Cron é obrigatório e não sai no deploy.** Sem `--install`, nem `geofence_worker.php` nem `state_builder.php` rodam, e a falha é silenciosa do pior tipo: as telas funcionam, os filtros funcionam, e os relatórios ficam vazios para sempre.
+> 2. **Sem o backfill, os 4 relatórios de estado só têm dado a partir da 1ª execução do cron.** O worker é incremental por natureza; ele não vai atrás do histórico sozinho.
+> 3. **RBAC**: só **"Geocercas"** (v4.5.0) precisa ser marcada em `/grupos-permissao` para grupos restritos. As 5 telas da v4.6.0 herdam a permissão `relatorios` já existente — quem hoje vê Alarmes já vê as novas.
+> 4. **Verificar depois de publicar**: `/ping` em `4.6.0`; `SELECT version FROM system_info` = `4.6.0`; as 6 tabelas (`geofence*` + `device_state_segments` + `speeding_events`); `crontab -l` com 6 workers; e a consulta que fecha a conta —
+>    `SELECT COUNT(*) FROM device_state_segments a JOIN device_state_segments b ON a.imei=b.imei AND a.id<>b.id AND a.started_at < COALESCE(b.ended_at,'9999-12-31') AND COALESCE(a.ended_at,'9999-12-31') > b.started_at;` **tem de dar 0** (nenhuma sobreposição).
 >
-> **Depois de publicar, verificar**: `/ping` reportando `4.5.0`; `SELECT version FROM system_info` = `4.5.0`; as 4 tabelas `geofence*`; `crontab -l` com 5 workers; desenhar uma cerca de teste sobre um device ativo e conferir `geofence_events` após ~2 min.
+> **Próximo passo do roadmap**: **Fase 4 — v4.7.0, relatório agendado por e-mail + modelos de relatório** (§4 do plano). Depende da Fase 1 (mailer) e da Fase 3 (os tipos novos já estão em `buildReportSource()`, prontos para serem agendados). Maior risco da fase: **fuso horário** — `send_hour` é BRT e `next_run_at` é UTC; converter por `DateTimeZone`, nunca somando 3 h, e testar com data de janeiro E de julho. Depois dela, a **Fase 5** (atualizar `/wiki`), que é o último passo da iniciativa por decisão registrada.
 >
-> **Próximo passo do roadmap**: **Fase 3 — v4.6.0, relatórios operacionais** (`docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md` §3). É independente das Fases 1–2; só precisa estar pronta antes da Fase 4. Maior em volume (7 arquivos novos, 5 telas) e a de menor risco: mesmo molde de `rel_alarmes.php` sobre um worker que espelha o `trip_builder.php`. A Fase 5 (atualizar `/wiki`) fica para o fim de tudo, por decisão registrada.
+> ### O que sustenta a precisão da v4.6.0 (decisões que valem revisitar)
+> - **A invariante**: segmentos contíguos e sem sobreposição (`ended_at` de um = `started_at` do seguinte) ⇒ a soma de um dia fecha em 86.400 s. **Quem mexer no `state_builder.php` tem de preservar isso** — é o único teste que pega furo de segmentação. Mudança de estado põe a fronteira no ponto **novo**; buraco de dados põe no ponto **anterior**, com um segmento `offline` cobrindo o vão (fechar no anterior é o que impede creditar 6 h de "movimento" a um veículo sem sinal).
+> - **O último segmento fica aberto de propósito** (`ended_at IS NULL`) e é reescrito na rodada seguinte por `ON DUPLICATE KEY UPDATE` sobre `(imei, started_at)`. Fechá-lo a cada rodada fatiaria um estado em curso em pedaços de 15 min.
+> - **Segmento de duração zero não é gravado**: ponto isolado seguido de buraco colidiria com o `offline` do vão na mesma chave, e o offline o sobrescreveria — certo por acidente. Descartar é explícito e mantém a soma intacta.
+> - **O estado corrente do Status da Frota é resolvido na leitura** (`resolve_current_state()`), não lido do segmento aberto: um veículo calado desde as 3h tem segmento aberto em `movimento`, e dizer "em movimento" às 10h seria mentira. Entre duas rodadas do cron a verdade muda sem dado novo no banco.
+> - **`offline` nunca sai de `classify_point()`** — é ausência de ponto, não propriedade de um ponto.
+> - **Ignição ignora os segmentos `offline`** ao comparar estados: durante o silêncio não se sabe o que a ignição fez, e incluí-lo inventaria dois acionamentos que ninguém observou.
+> - **`trip_builder.php` e `state_builder.php` compartilham os limiares** (`includes/fleet_state.php`). Redeclarar localmente faz "parado" significar coisas diferentes em duas telas e nenhuma das duas fica auditável (risco R6).
+>
+> Anterior — **v4.5.0: geocercas e POIs** (Fase 2 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`). Cercas em **círculo** ou **polígono** desenhadas no mapa (`/geocercas`, Leaflet puro — sem `leaflet-draw`), vinculadas a equipamentos; cada travessia vira evento em `geofence_events`, notifica pelo motor da v4.4.0 e alimenta `/relatorios/geocercas` em duas modalidades (**entradas/saídas** e **permanência**, pareada com `LEAD` sobre cerca × equipamento). Novos: `mysql/migration_v4.5.0.sql`, `includes/geofence.php`, `scripts/geofence_worker.php`, `handlers/geocercas.php`, `handlers/rel_geocercas.php`, `tests/geocercas.spec.js`. Alterados: `includes/functions.php` (`haversine_km()` promovida do `trip_builder`), `scripts/trip_builder.php`, `router.php`, `layout_base.php`, `grupos_permissao.php`, `crontab-setup.sh`, `deploy.sh`, `tests/navigation.spec.js`.
+> **Verificado (local, PHP 8.3 + MySQL 8.0)**: lint **0 erros** em todo o projeto (`handlers`, `config`, `core`, `includes`, `scripts`, `web`) + `bash -n` em `crontab-setup.sh` e `deploy.sh`; migração **idempotente** (2 execuções, exit 0, banco em `4.5.0`, as 4 tabelas criadas); **36 asserções de geometria** (haversine, círculo, histerese, ray casting em polígono côncavo em "L", normalização, geometria incompleta); **13 asserções do worker** ponta-a-ponta com trajetória sintética; **28 asserções** de relatório + CRUD via HTTP; 7 rotas renderizando 200 sem erro/aviso de PHP; `trip_builder.php` sem regressão após a troca da haversine.
+> **Publicação da v4.5.0**: continua pendente e foi absorvida pelo bloco RETOMAR AQUI da v4.6.0 acima — as duas versões sobem juntas, numa única execução do `deploy.sh`. O ponto que permanece exclusivo da v4.5.0 é o **RBAC**: `can()` nega tela ausente da matriz JSON, então usuário em grupo restrito (ex.: "Operador Padrão") recebe 403 em `/geocercas` e não vê o item na sidebar até o administrador marcar a linha "Geocercas" em `/grupos-permissao`. Admin (`{"*": [...]}`) e usuário sem grupo não são afetados. Tela nova nasce opt-in de propósito, mas é a primeira coisa que alguém reporta como "bug".
+>
+> **Corrigido na v4.6.0**: `/geocercas` re-renderizava o **formulário vazio** depois de salvar (o POST caía no mesmo `?action=nova`), então o usuário recebia "Geocerca criada." sem ver o registro na grade — e um F5 reenviava o POST e criava uma cerca duplicada. Agora há Post/Redirect/Get. O defeito passou despercebido porque os specs da Fase 2 foram escritos e **nunca executados com credenciais**; rodá-los na Fase 3 o revelou de imediato.
 >
 > ### Deploy — auditoria de 29/07/2026
-> O script está **apto** para publicar a v4.5.0. O que foi conferido, e o que mudou:
-> - ✅ **Migração**: `run_migration "4.5.0"` na cadeia; o gate semântico (`sort -V`) roda só o que falta. Banco em 4.4.1 → aplica apenas a v4.5.0.
-> - ✅ **`SYSTEM_VERSION`**: atualizado automaticamente a partir do `.env.example` (linhas 250‑258). *(Correção: uma nota anterior desta sessão dizia que o script não mexia no `.env` — dizia errado.)*
+> O script está **apto** para publicar a v4.5.0 **e a v4.6.0 na mesma execução**. O que foi conferido, e o que mudou:
+> - ✅ **Migração**: `run_migration "4.5.0"` e `run_migration "4.6.0"` na cadeia; o gate semântico (`sort -V`) roda só o que falta. Banco em 4.4.1 → aplica as duas, em ordem.
+> - ✅ **`SYSTEM_VERSION`**: atualizado automaticamente a partir do `.env.example` (linhas 250‑258), já em **`4.6.0`**. Nada de editar `.env` à mão. *(Correção: uma nota anterior desta sessão dizia que o script não mexia no `.env` — dizia errado.)*
 > - ✅ **Auto-substituição**: a guarda de sha256 + `exec` (v4.4.1) continua no lugar, e este release **altera o próprio `deploy.sh`** — a re-execução vai disparar. Esperar **dois** cabeçalhos `=== DEPLOY:` no log; é o comportamento correto, não erro.
 > - ✅ **Backup**: `mysqldump` roda antes do pull; as 2 VIEWs órfãs já foram dropadas no homolog, então não aborta.
 > - 🔧 **Corrigido nesta sessão**: a FASE 4 (VERIFY) lintava `handlers config core includes` e **deixava `scripts/` de fora** — justamente onde vivem os 5 workers de cron. Um erro de sintaxe no `geofence_worker.php` passaria pelo deploy e só apareceria na primeira execução do cron, dentro de `logs/geofence.log`. `scripts` entrou no `find`.
-> - ⚠️ **Não coberto pelo script** (continua manual): instalação do cron e concessão da permissão da tela nova.
+> - ⚠️ **Não coberto pelo script** (continua manual): instalação do cron, o **backfill** do `state_builder` e a concessão da permissão de `/geocercas`.
 >
-> ### O que sustenta o custo e a precisão (decisões que valem revisitar)
+> ### O que sustenta o custo e a precisão da v4.5.0 (decisões que valem revisitar)
 > - **Histerese de 50 m** contra flapping: a borda vira uma faixa — entrar exige cruzar a borda real, sair exige afastar-se 50 m dela. Medido: 30 min de oscilação entre 185 m e 215 m numa cerca de 200 m produziram **1** evento, não 30.
 > - **Em polígono, a histerese mede distância até a ARESTA**, não até a bbox expandida (que é o que o plano original sugeria): a bbox manteria "dentro" um veículo parado no vão da concavidade de uma cerca em "L", a centenas de metros da área real. O teste do vão é asserção explícita.
 > - **`INSERT IGNORE` + `UNIQUE (geofence_id, imei, event_time)`**: reexecutar o worker sobre a mesma janela não duplica evento. Confirmado rodando duas vezes.
@@ -165,6 +181,14 @@ Jimi IoT Hub ──POST──▶ .htaccess ──▶ handlers/router.php ──�
 | `/relatorios/desatualizados` | `rel_desatualizados.php` | 5 buckets KPI clicáveis + drill-down |
 | `/relatorios/alarmes` | `rel_alarmes.php` | Ordenação clicável, 5 filtros, link mapa OSM, paginação |
 | `/relatorios/ocorrencias` | `rel_ocorrencias.php` | 6 filtros: cliente, IMEI, tipo, status, risco, falso-positivo |
+| `/relatorios/geocercas` | `rel_geocercas.php` | **v4.5.0** — 2 modalidades: entradas/saídas e permanência (`LEAD` por cerca × equipamento) |
+| `/relatorios/status-frota` | `rel_status_frota.php` | **v4.6.0** — foto do agora: 4 cartões de estado com % + barra de distribuição + drill-down; estado resolvido na leitura |
+| `/relatorios/paradas` | `rel_paradas.php` | **v4.6.0** — `state='parado'` (ignição desligada); filtro de duração mínima |
+| `/relatorios/ociosidade` | `rel_ociosidade.php` | **v4.6.0** — `state='ocioso'` (motor ligado, imóvel); combustível queimado sem deslocamento |
+| `/relatorios/ignicao` | `rel_ignicao.php` | **v4.6.0** — acionamentos derivados por `LAG` sobre os segmentos, com `offline` fora da janela |
+| `/relatorios/velocidade` | `rel_velocidade.php` | **v4.6.0** — `speeding_events`; limite gravado no evento; filtro de excedente mínimo |
+
+> Os 5 handlers da v4.6.0 usam a permissão **`relatorios`** no `$screenByHandler` — não são telas novas na matriz de `/grupos-permissao`.
 
 ### Grupo Cadastros (sidebar-sanfona)
 | Rota | Handler | Descrição |
@@ -300,9 +324,18 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql # v4.1.0 (Excel/PDF +
 
 | Script | Periodicidade | Função |
 |---|---|---|
-| `scripts/worker.php` | Cada 1 min | Processa fila `jobs`: report (gera CSV), video_download, rollup |
-| `scripts/trip_builder.php` | Cada 15 min | Segmenta `gps_data` em `trips` por ignição (lig→desl), calcula distância haversine, cruza alarmes da janela |
-| `scripts/metrics_rollup.php` | Cada 5 min | Stub para pré-computar KPIs do Resumo/BI (implementação completa na próxima iteração) |
+| `scripts/worker.php` | Cada 1 min | Processa fila `jobs`: report (CSV/XLSX/PDF, 10 tipos), video_download, rollup, notification (e-mail, com retry por `attempts`) |
+| `scripts/trip_builder.php` | Cada 15 min | Segmenta `gps_data` em `trips` por ignição (lig→desl) e parada sustentada; distância haversine; cruza alarmes da janela |
+| `scripts/metrics_rollup.php` | Cada 5 min | Pré-computa KPIs do Resumo/BI em `metrics_snapshots` |
+| `scripts/log_cleanup.php` | Diário (3h10) | Purga/rotação de log por `LOG_RETENTION_DAYS`/`LOG_MAX_SIZE_MB` |
+| `scripts/geofence_worker.php` | Cada 2 min | **v4.5.0** — avalia pontos novos contra as cercas vinculadas, grava `geofence_events`, notifica |
+| `scripts/state_builder.php` | Cada 15 min | **v4.6.0** — segmenta `gps_data` em `device_state_segments` e apura `speeding_events`; alimenta 5 relatórios |
+
+**Fonte única da configuração**: o array `CRON_JOBS` de `scripts/crontab-setup.sh` (**6 workers**) — atualizar lá, nunca o crontab à mão. **`deploy.sh` não instala cron**: worker novo exige `bash scripts/crontab-setup.sh --install`.
+
+**Limiares compartilhados**: `trip_builder.php` e `state_builder.php` leem `STOP_SPEED_KMH` e `STOP_IDLE_SECONDS` de `includes/fleet_state.php`. Não redeclarar localmente — "parado" tem de significar o mesmo nos dois.
+
+**Backfill**: `php scripts/state_builder.php 30` (dias) e `php scripts/state_builder.php 30 <imei>` (um equipamento). É também a saída para ponto que chegou atrasado, que a leitura incremental não reprocessa.
 
 ---
 
@@ -594,8 +627,8 @@ Commits `75441a7`…`cd1af0f` (7 fixes + docs), todos implantados. CHANGELOG [4.
 
 - [ ] 📌 **Atualizar a Central de Ajuda (`/wiki`) ao fim da iniciativa v4.4–v4.7** — executar **após a Fase 4 (v4.7.0)**, não a cada fase. A wiki está congelada na v4.3.0. Checklist do que precisará entrar:
   - **Notificações (Fase 1, já implementada)**: seção nova explicando o **sino** no cabeçalho (badge, painel, polling de 30s que pausa com a aba oculta), o **pop-up em tempo real** e o **som**; a tela `/config-notificacoes` (regra por cliente × tipo de alarme, o fato de uma **categoria** cobrir todos os alarmes dela, `min_risk`, precedência da regra do cliente sobre a global, limite de 3 e-mails); e a tela `/config-smtp` (escopo global × por cliente, senha cifrada e nunca reexibida, botão "Enviar e-mail de teste"). Avisar que **notifica-se por ocorrência, não por alarme** — é o que explica ao usuário por que uma rajada de alarmes gera um aviso só.
-  - **Geocercas (Fase 2)**: desenho de cerca no mapa, vínculo de equipamentos, relatório de entrada/saída/permanência.
-  - **Relatórios operacionais (Fase 3)**: Parada, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota — incluindo a definição de cada estado (`movimento`/`ocioso`/`parado`/`offline`) e os limiares usados, que o usuário precisa entender para interpretar os números.
+  - **Geocercas (Fase 2, já implementada)**: desenho de cerca no mapa, vínculo de equipamentos, relatório de entrada/saída/permanência. Explicar que **cerca sem equipamento vinculado não é avaliada** e que **cerca nova não gera entrada retroativa** — as duas coisas parecem bug e são projeto.
+  - **Relatórios operacionais (Fase 3, já implementada)**: Parada, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota — incluindo a definição de cada estado (`movimento`/`ocioso`/`parado`/`offline`) e os limiares usados, que o usuário precisa entender para interpretar os números. Quatro pontos que geram dúvida e precisam estar escritos: (a) **Parada ≠ Ociosidade** — parada é ignição desligada, ociosidade é motor ligado com o veículo imóvel abaixo de 3 km/h; (b) **"Sem comunicação" ganha de qualquer estado anterior** depois de 30 min de silêncio, então o veículo que sumiu em movimento aparece como sem comunicação, não em movimento; (c) **a troca movimento↔ociosidade não é acionamento de ignição**, e períodos sem comunicação são ignorados na contagem de acionamentos; (d) **o limite de velocidade exibido é o vigente quando o evento foi apurado** — mudar o limite hoje não reescreve o histórico —, com a precedência equipamento → cliente → 80 km/h. Vale também dizer que os relatórios dependem de um **cron de 15 min**: dado do último quarto de hora pode ainda não estar segmentado.
   - **Agendamento (Fase 4)**: `/agendamentos`, modelos de relatório salvos e o histórico de execuções.
   - **Transversal**: revisar a seção "O que vale para todos os relatórios" se as Fases 3–4 mudarem filtros, ordenação ou export.
 - [ ] **OTA firmware** (proNo 33027) com device real — M.2.5, único item remanescente da Fase M

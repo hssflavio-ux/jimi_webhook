@@ -22,6 +22,7 @@ WORKER_ENTRIES=(
     "scripts/metrics_rollup.php:metrics.log:5 min:*/5 * * * *"
     "scripts/log_cleanup.php:log_cleanup.log:24 h (3h10):10 3 * * *"
     "scripts/geofence_worker.php:geofence.log:2 min:*/2 * * * *"
+    "scripts/state_builder.php:state_builder.log:15 min:*/15 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

@@ -324,6 +324,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.4.0" "mysql/migration_v4.4.0.sql" "motor de notificações"
     run_migration "4.4.1" "mysql/migration_v4.4.1.sql" "credenciais SMTP"
     run_migration "4.5.0" "mysql/migration_v4.5.0.sql" "geocercas"
+    run_migration "4.6.0" "mysql/migration_v4.6.0.sql" "relatórios operacionais"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

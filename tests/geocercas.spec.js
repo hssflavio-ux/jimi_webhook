@@ -92,7 +92,11 @@ test.describe('Relatório de Geocercas', () => {
     });
 
     test('exporta em CSV', async ({ authedPage }) => {
-        const response = await authedPage.goto('/relatorios/geocercas?export=csv');
+        // page.goto() numa URL que dispara download falha com "Download is
+        // starting" — o navegador nunca navega. A requisição tem de ser feita
+        // pelo contexto (que já carrega o cookie de sessão).
+        const response = await authedPage.request.get('/relatorios/geocercas?export=csv');
         expect(response.status()).toBeLessThan(400);
+        expect(response.headers()['content-type']).toMatch(/csv/i);
     });
 });

@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // DEFAULT_SPEED_LIMIT_KMH
 require_admin();
 
 $db = Database::getInstance()->getConnection();
@@ -48,17 +49,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $faceId = !empty($_POST['faceid_enabled']) ? 1 : 0;
         $brand  = trim($_POST['brand_color'] ?? '');
         $logo   = trim($_POST['logo_url'] ?? '');
+        // Vazio e zero significam "usa o padrão global" (v4.6.0). Gravar 0 faria
+        // todo ponto da frota virar excesso de velocidade.
+        $spdLim = (isset($_POST['default_speed_limit_kmh']) && (int)$_POST['default_speed_limit_kmh'] > 0)
+            ? (int)$_POST['default_speed_limit_kmh'] : null;
 
         if ($id > 0) {
             $stmt = $db->prepare("UPDATE customers SET name=?, document=?, email=?, phone=?, address=?,
-                occurrence_config_id=?, faceid_enabled=?, brand_color=?, logo_url=? WHERE id=?");
-            $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $id]);
+                occurrence_config_id=?, faceid_enabled=?, brand_color=?, logo_url=?,
+                default_speed_limit_kmh=? WHERE id=?");
+            $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $spdLim, $id]);
             $success = 'Cliente atualizado.';
         } else {
             $stmt = $db->prepare("INSERT INTO customers (name, document, email, phone, address,
-                occurrence_config_id, faceid_enabled, brand_color, logo_url, reseller_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $isReseller ? $user['id'] : null]);
+                occurrence_config_id, faceid_enabled, brand_color, logo_url, default_speed_limit_kmh, reseller_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $spdLim, $isReseller ? $user['id'] : null]);
             $success = 'Cliente criado.';
         }
     } else {
@@ -238,6 +244,17 @@ include __DIR__ . '/../web/layout_base.php';
             <div class="form-group">
                 <label>URL do Logo</label>
                 <input type="text" name="logo_url" value="<?= htmlspecialchars($editCustomer['logo_url'] ?? '') ?>" placeholder="https://...">
+            </div>
+            <div class="form-group">
+                <label>Limite de velocidade da frota (km/h)</label>
+                <input type="number" name="default_speed_limit_kmh" min="1" max="300"
+                       value="<?= htmlspecialchars((string)($editCustomer['default_speed_limit_kmh'] ?? '')) ?>"
+                       placeholder="<?= DEFAULT_SPEED_LIMIT_KMH ?> (padrão do sistema)"
+                       class="text-mono" style="font-family:'JetBrains Mono',monospace;">
+                <small class="text-muted" style="font-size:11px;">
+                    Vale para todo equipamento do cliente que não tenha limite próprio.
+                    Alimenta <a href="/relatorios/velocidade">Excesso de Velocidade</a>.
+                </small>
             </div>
             <div class="form-group">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">

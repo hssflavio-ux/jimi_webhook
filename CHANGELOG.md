@@ -5,6 +5,40 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.6.0
+
+### Added
+- **Relatórios operacionais** (Fase 3 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`): cinco telas novas — **Status da Frota** (`/relatorios/status-frota`), **Paradas** (`/relatorios/paradas`), **Ociosidade** (`/relatorios/ociosidade`), **Ignição** (`/relatorios/ignicao`) e **Excesso de Velocidade** (`/relatorios/velocidade`).
+- **`scripts/state_builder.php`** (cron de 15 min): segmenta `gps_data` em `device_state_segments` (`movimento` / `ocioso` / `parado` / `offline`) e apura `speeding_events`. **Um worker alimenta quatro das cinco telas** — Parada, Ociosidade, Ignição e Status da Frota são recortes da mesma segmentação. Calcular cada tela na hora da consulta varreria `gps_data` quatro vezes com a lógica escrita quatro vezes, e as telas divergiriam na primeira correção aplicada a só uma delas. Aceita backfill: `php scripts/state_builder.php 30` (e um IMEI como 2º argumento para reprocessar um equipamento).
+- **`includes/fleet_state.php`**: fonte única das regras de estado — os limiares (`STOP_SPEED_KMH`, `STOP_IDLE_SECONDS`, `OFFLINE_GAP_SECONDS`, `DEFAULT_SPEED_LIMIT_KMH`, `MIN_SPEEDING_POINTS`), `classify_point()`, `resolve_current_state()`, `resolve_speed_limit()` e `fmt_duration()`. Consumido pelos dois workers e pelas cinco telas.
+- **Limite de velocidade com precedência equipamento → cliente → global** (80 km/h): campo em `/equipamentos` (`devices.speed_limit_kmh`) e em `/clientes` (`customers.default_speed_limit_kmh`). O limite apurado é **gravado no evento** — mudar o limite hoje não reescreve o histórico, e quem audita precisa saber contra qual limite a infração foi apurada.
+- **Export assíncrono dos 5 tipos novos** em `/exportar` (`stops`, `idling`, `ignition`, `speeding`, `fleet_status`), já preparando os relatórios agendáveis da Fase 4.
+- **Migração v4.6.0**: `device_state_segments` e `speeding_events`, mais as duas colunas de limite. Idempotente — validada com duas execuções seguidas (exit 0 nas duas).
+- **Specs**: `tests/relatorios-operacionais.spec.js` (19 casos: estrutura, preservação de filtros, drill-down, export, coerência entre telas) e as 5 rotas novas em `tests/navigation.spec.js`.
+
+### Changed
+- **`scripts/trip_builder.php` passa a consumir os limiares de `includes/fleet_state.php`** em vez de declarar `STOP_SPEED_KMH`/`STOP_IDLE_SECONDS` localmente. Se "parado" na segmentação de viagens significar algo diferente de "parado" no relatório de paradas, as duas telas se contradizem e nenhuma é auditável (risco R6 do plano).
+- **`includes/report_segments.php`**: corpo comum de Paradas e Ociosidade, que são a mesma consulta com um `state` diferente. Dois arquivos de 250 linhas quase idênticos garantiriam que a primeira correção fosse aplicada a só um deles — o mesmo problema que a fase resolveu no banco e que seria incoerente reintroduzir na exibição.
+- **`scripts/crontab-setup.sh`**: `state_builder.php` no array `CRON_JOBS` (15 min, `logs/state_builder.log`) — **6 workers**. **`scripts/deploy.sh`**: nova linha `run_migration "4.6.0"`.
+- **Navegação**: 5 itens no grupo Relatórios (37 rotas). As telas herdam a permissão `relatorios` já existente, então **nenhum ajuste em `/grupos-permissao` é necessário** — quem já exporta relatórios enxerga as novas.
+
+### Fixed
+- **`/geocercas` re-renderizava o formulário vazio depois de salvar** (v4.5.0): o POST caía no mesmo `?action=nova`, então a página voltava a ser o formulário em branco com o toast "Geocerca criada." — o usuário nunca via o registro na grade e um F5 reenviava o POST, criando uma cerca duplicada. Agora há Post/Redirect/Get para `/geocercas` com a mensagem em código fechado na URL. Encontrado ao rodar os specs da Fase 2, que tinham sido escritos mas nunca executados com credenciais.
+- **`tests/geocercas.spec.js`**: o teste de export em CSV usava `page.goto()` numa URL que dispara download e falhava com "Download is starting" — o navegador nunca navega. Passou a usar `page.request.get()`, que carrega o cookie de sessão sem navegar, e ainda verifica o `content-type`.
+
+### Notas de implementação
+- **A invariante que torna a segmentação auditável**: os segmentos de um equipamento são **contíguos e sem sobreposição** — o `ended_at` de um é exatamente o `started_at` do seguinte. Daí decorre que **a soma das durações de um dia fecha em 86.400 s**, que é o teste de aceite e o único capaz de revelar furo de segmentação. Duas regras produzem a propriedade: **mudança de estado** põe a fronteira no `gps_time` do ponto **novo** (o estado antigo acaba no instante em que o novo é observado); **buraco de dados** põe a fronteira no ponto **anterior**, e um segmento `offline` cobre o vão. Fechar no ponto anterior é o que impede creditar 6 h de "movimento" a um veículo que ficou sem sinal.
+- **O último segmento fica aberto (`ended_at IS NULL`) de propósito.** O estado está em curso; fechá-lo a cada rodada fatiaria um estado em andamento em pedaços de 15 min. A rodada seguinte retoma do `started_at` dele e o reescreve por `ON DUPLICATE KEY UPDATE` sobre `uk_dss_imei_start` — mesma chave, mesma linha. Rodar duas vezes sobre a mesma janela não duplica nem fragmenta.
+- **Segmento de duração zero não é gravado.** Um ponto isolado seguido de buraco fecharia no próprio instante que o abriu, e o segmento `offline` do vão começaria no mesmo instante: os dois disputariam `(imei, started_at)` e o offline sobrescreveria o outro. O resultado seria certo por acidente — melhor descartar de propósito. Nada se perde: um instante isolado não sustenta afirmação de duração.
+- **`offline` nunca sai de `classify_point()`**: é ausência de ponto, não propriedade de um ponto. Quem detecta buraco é o worker, comparando `gps_time` consecutivos.
+- **O estado corrente do Status da Frota é resolvido na leitura, não lido do segmento.** Um veículo que parou de reportar às 3h da manhã tem segmento aberto em `movimento`; mostrar "em movimento" às 10h seria mentira. `resolve_current_state()` derruba para `offline` quem não reporta há mais de 30 min, qualquer que fosse o estado anterior — entre duas rodadas do cron a verdade muda sem que nenhum dado novo entre no banco.
+- **A soma dos quatro estados é sempre o total de equipamentos ativos**: a lista parte de `devices`, não dos segmentos, e equipamento sem segmento algum cai em `offline`.
+- **O relatório de Ignição exclui os segmentos `offline` da janela do `LAG`.** Durante o silêncio não se sabe o que a ignição fez; incluir o offline inventaria dois acionamentos (desligou ao sumir, ligou ao voltar) que ninguém observou. A janela interna começa 2 dias antes do filtro para que o `LAG` do primeiro segmento do período tenha um anterior de verdade — sem essa folga, a primeira transição do período se perderia sempre que o veículo tivesse passado a noite desligado.
+- **Piso de 2 pontos para excesso de velocidade**: um único ponto acima do limite é indistinguível do salto de leitura de GPS (140 km/h numa via urbana). Velocidade **igual** ao limite não é infração — a regra é `>`.
+- **Duração de segmento em curso é contada até agora** (`COALESCE(duration_s, TIMESTAMPDIFF(...))`), inclusive no filtro de duração mínima e na ordenação: sem isso, a parada que começou há 4 h e não terminou apareceria com duração vazia e iria para o fim da lista — justamente a que mais interessa a quem audita.
+- **Ponto (0,0) é descartado** antes da segmentação (R06): usá-lo faria a distância do segmento saltar milhares de km via golfo da Guiné.
+- **Limitação conhecida**: ponto que chega atrasado, com `gps_time` anterior à marca-d'água, não é reprocessado — mesma limitação do `trip_builder.php`. Para corrigir uma janela histórica, rodar o backfill com o IMEI como 2º argumento.
+
 ## [Unreleased] — 4.5.0
 
 ### Added

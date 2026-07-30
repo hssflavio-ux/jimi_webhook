@@ -32,6 +32,20 @@ $isAdmin    = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') ==
 
 $message = '';
 $messageType = '';
+$savedAction = '';
+
+// Retorno do Post/Redirect/Get do salvamento. O código vem na URL porque o
+// projeto não tem mecanismo de flash em sessão — e um enum fechado aqui é
+// melhor do que ecoar texto vindo da query string.
+const GEOFENCE_FLASH = [
+    'criada'                 => ['Geocerca criada.', 'success'],
+    'atualizada'             => ['Geocerca atualizada.', 'success'],
+    'criada_sem_device'      => ['Geocerca criada. Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.', 'warning'],
+    'atualizada_sem_device'  => ['Geocerca atualizada. Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.', 'warning'],
+];
+if (!empty($_GET['msg']) && isset(GEOFENCE_FLASH[$_GET['msg']])) {
+    [$message, $messageType] = GEOFENCE_FLASH[$_GET['msg']];
+}
 
 /**
  * Normaliza a lista de e-mails de alerta: até 3, sem duplicata, só válidos.
@@ -154,6 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 $stmt->execute($fields + [':id' => $fenceId]);
                 $message = 'Geocerca atualizada.';
+                $savedAction = 'atualizada';
             } else {
                 $stmt = $db->prepare(
                     "INSERT INTO geofences
@@ -170,6 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $fenceId = (int)$db->lastInsertId();
                 $message = 'Geocerca criada.';
+                $savedAction = 'criada';
             }
 
             // ── Vínculo de equipamentos ────────────────────────────
@@ -193,6 +209,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message .= ' Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.';
                 $messageType = 'warning';
             }
+
+            // Post/Redirect/Get. Sem isto o POST cai no mesmo `?action=nova` e a
+            // página volta a ser o formulário VAZIO: o usuário recebe "Geocerca
+            // criada." sem ver o registro na grade, e um F5 reenvia o POST e
+            // cria uma cerca duplicada. Redirecionar para a lista mostra o que
+            // acabou de ser salvo e torna o refresh inofensivo.
+            header('Location: /geocercas?msg=' . $savedAction . ($imeis ? '' : '_sem_device'));
+            exit;
         } catch (Throwable $e) {
             if ($db->inTransaction()) {
                 $db->rollBack();

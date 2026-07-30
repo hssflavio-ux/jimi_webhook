@@ -15,8 +15,19 @@
 
 > **Status em 29/07/2026**:
 > - Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`).
-> - Fase 2 (**v4.5.0 — geocercas**) **implementada e verificada localmente**; falta publicar no homolog e instalar o cron (`bash scripts/crontab-setup.sh --install`).
-> - Fases 3–4 e a atualização da wiki seguem pendentes.
+> - Fase 2 (**v4.5.0 — geocercas**) **implementada e verificada localmente** (commit `16f3184`); falta publicar.
+> - Fase 3 (**v4.6.0 — relatórios operacionais**) **implementada e verificada localmente**; falta publicar.
+> - Fase 4 e a atualização da wiki seguem pendentes.
+> - **Publicação pendente das duas fases de uma vez**: `sudo ./scripts/deploy.sh` (o gate semântico aplica v4.5.0 e v4.6.0 em sequência) + `bash scripts/crontab-setup.sh --install` (**6 workers** — o deploy não instala cron) + marcar "Geocercas" em `/grupos-permissao` para grupos restritos. As 5 telas da Fase 3 **não** precisam de liberação: herdam a permissão `relatorios` existente.
+> - **Backfill depois de publicar**: `php scripts/state_builder.php 30` fora do horário de pico. Sem ele, os 4 relatórios de estado só mostram dados a partir da primeira execução do cron.
+>
+> **Desvios da Fase 3 em relação ao plano original**, todos deliberados:
+> 1. **`includes/report_segments.php`** (não previsto): Paradas e Ociosidade são a mesma consulta com um `state` diferente. Dois handlers de 250 linhas quase idênticos reintroduziriam na exibição exatamente a duplicação que §3.1 eliminou no banco. Os handlers viraram ~30 linhas de configuração.
+> 2. **`resolve_current_state()` resolve o estado corrente na LEITURA**, em vez de o worker gravar um segmento `offline` de cauda. Gravar exigiria um segmento de duração zero por rodada e quebraria a idempotência; e a verdade muda entre duas rodadas do cron sem que dado novo entre no banco, então a conta do silêncio pertence à leitura.
+> 3. **O relatório de Ignição exclui `offline` da janela do `LAG`** e amplia a leitura interna em 2 dias. Sem isso, o silêncio inventaria acionamentos que ninguém observou, e a primeira transição do período se perderia.
+> 4. **Segmento de duração zero é descartado** (§3.3 não previa o caso): ponto isolado seguido de buraco colidiria com o `offline` do vão na chave `(imei, started_at)`.
+> 5. **Colunas de conveniência**: `point_count` nas duas tabelas, `avg_speed`/`max_lat`/`max_lng` em `speeding_events` (o mapa aponta onde a velocidade máxima ocorreu, não onde a infração começou).
+> 6. **`fmt_duration()` mora em `fleet_state.php`** e não em cada handler — o `fmt_dwell()` do relatório de geocercas é privado daquele arquivo, e duas grafias de duração na mesma suíte confundem quem compara telas lado a lado.
 >
 > **Desvios da Fase 2 em relação ao plano original**, todos deliberados:
 > 1. **Histerese em polígono mede distância até a aresta**, não até a bbox expandida (§2.4). A bbox manteria "dentro" um veículo parado no vão da concavidade de uma cerca em "L" — exatamente o caso que o critério de aceite exige classificar certo.
@@ -528,16 +539,33 @@ faixas de device para não segurar transação longa.
 
 ## 3.6 Critérios de aceite
 
-- [ ] `php -l` limpo nos 7 arquivos novos.
-- [ ] Soma de `duration_s` de todos os segmentos de um device em um dia = 86.400 s (± tolerância
-      de borda) — **este é o teste que pega furo de segmentação**.
-- [ ] Nenhum par de segmentos do mesmo device se sobrepõe no tempo.
-- [ ] Reexecução do worker sobre a mesma janela não duplica (protegido por `uk_dss_imei_start`).
-- [ ] Total de "parado" bate com a contagem de transições `acc 1→0` do relatório de Ignição.
-- [ ] Device com limite 60 e pico de 85 km/h aparece em Excesso de Velocidade com
-      `limit_kmh = 60`.
-- [ ] Status da Frota soma exatamente o total de equipamentos ativos do cliente.
-- [ ] Specs Playwright de navegação: 5 novas rotas respondem 200 e exportam.
+- [x] `php -l` limpo (0 erros em todo o projeto, incluindo `scripts/` e `web/`);
+      `bash -n` limpo em `crontab-setup.sh` e `deploy.sh`.
+- [x] Soma de `duration_s` de todos os segmentos de um device em um dia = 86.400 s
+      — **exatamente**, sem tolerância de borda. *(Trajetória sintética de 1.515 pontos com
+      margens antes e depois do dia; medida como a interseção de cada segmento com a janela
+      do dia. O resultado exato decorre da contiguidade, não de arredondamento.)*
+- [x] Nenhum par de segmentos do mesmo device se sobrepõe no tempo — e não há **vão** entre
+      eles (a asserção de contiguidade é o que sustenta o item acima).
+- [x] Reexecução do worker sobre a mesma janela não duplica.
+      *(2ª rodada: mesmas 8 linhas, soma do dia continua 86.400 s.)*
+- [x] Total de "parado" bate com a contagem de transições `acc 1→0` do relatório de Ignição.
+      *(2 = 2; os dois números são publicados lado a lado na própria tela.)*
+- [x] Device com limite 60 e pico de 85 km/h aparece em Excesso de Velocidade com
+      `limit_kmh = 60` — e o device sem limite próprio herda os 100 do cliente.
+- [x] Status da Frota soma exatamente o total de equipamentos ativos do cliente.
+- [x] Specs Playwright: **19 casos novos** em `tests/relatorios-operacionais.spec.js` + 5 rotas
+      em `tests/navigation.spec.js`. Suíte completa: **69 passed, 0 failed, 5 skipped**.
+- [x] **Extra**: migração idempotente (2×, exit 0); `trip_builder.php` sem regressão após
+      passar a consumir as constantes compartilhadas (2 viagens, mesma segmentação); export
+      XLSX das 5 telas; export **assíncrono** dos 5 tipos novos via fila `jobs`; escopo
+      multi-tenant (cliente B não vê dado do cliente A); subrota inexistente devolve 404;
+      spike de 1 ponto acima do limite descartado; velocidade **igual** ao limite não é
+      infração; backfill de 30 dias sobre os dados reais locais (0 sobreposições).
+
+**Verificação executada**: 51 asserções de segmentação/geometria + 39 de HTTP autenticado
+(rotas, dados na tela, export, multi-tenant) + 24 de worker/regressão = **114 asserções,
+0 falhas**, mais **69 testes Playwright** verdes.
 
 ---
 

@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // DEFAULT_SPEED_LIMIT_KMH
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -93,6 +94,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $watermark = !empty($_POST['streaming_watermark']) ? 1 : 0;
     $firmware = trim($_POST['firmware_version'] ?? '');
     $branchId = !empty($_POST['branch_id']) ? (int)$_POST['branch_id'] : null;
+    // Vazio e zero significam "herda do cliente" (v4.6.0). Gravar 0 faria todo
+    // ponto do equipamento virar excesso de velocidade.
+    $speedLimit = (isset($_POST['speed_limit_kmh']) && (int)$_POST['speed_limit_kmh'] > 0)
+        ? (int)$_POST['speed_limit_kmh'] : null;
     $isActive = !empty($_POST['is_active']) ? 1 : ((($_POST['action'] ?? '') === 'create') ? 1 : 0);
     $cameraCount = (int)($_POST['camera_count'] ?? 1);
 
@@ -111,13 +116,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $stmt = $db->prepare("
                         INSERT INTO devices (imei, device_name, customer_id, device_model_id, camera_count,
-                            streaming_rotation, streaming_watermark, firmware_version, branch_id, is_active, peripherals)
-                        VALUES (:imei, :name, :cid, :mid, :cc, :rot, :wm, :fw, :bid, :act, :per)
+                            streaming_rotation, streaming_watermark, firmware_version, branch_id,
+                            speed_limit_kmh, is_active, peripherals)
+                        VALUES (:imei, :name, :cid, :mid, :cc, :rot, :wm, :fw, :bid, :spd, :act, :per)
                     ");
                     $stmt->execute([
                         ':imei' => $imei, ':name' => $deviceName, ':cid' => $customerId ?? 1,
                         ':mid' => $modelId, ':cc' => $cameraCount, ':rot' => $rotation,
                         ':wm' => $watermark, ':fw' => $firmware ?: null, ':bid' => $branchId,
+                        ':spd' => $speedLimit,
                         ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
                     ]);
                     $message = 'Equipamento cadastrado com sucesso.';
@@ -128,14 +135,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $db->prepare("
                     UPDATE devices SET device_name = :name, device_model_id = :mid, camera_count = :cc,
                         streaming_rotation = :rot, streaming_watermark = :wm,
-                        firmware_version = :fw, branch_id = :bid, is_active = :act,
-                        peripherals = :per
+                        firmware_version = :fw, branch_id = :bid, speed_limit_kmh = :spd,
+                        is_active = :act, peripherals = :per
                     WHERE imei = :imei
                 ");
                 $stmt->execute([
                     ':name' => $deviceName, ':mid' => $modelId, ':cc' => $cameraCount,
                     ':rot' => $rotation, ':wm' => $watermark, ':fw' => $firmware ?: null,
-                    ':bid' => $branchId, ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
+                    ':bid' => $branchId, ':spd' => $speedLimit,
+                    ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
                     ':imei' => $editImei,
                 ]);
                 $message = 'Equipamento atualizado.';
@@ -383,6 +391,17 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <option value="<?= $b['id'] ?>" <?= $sel ?>><?= htmlspecialchars($b['name']) ?></option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+            <div class="form-group">
+                <label>Limite de velocidade (km/h)</label>
+                <input type="number" name="speed_limit_kmh" min="1" max="300"
+                       value="<?= htmlspecialchars((string)($editDevice['speed_limit_kmh'] ?? '')) ?>"
+                       placeholder="Herda do cliente" class="text-mono" style="font-family:'JetBrains Mono',monospace;">
+                <small class="text-muted" style="font-size:11px;">
+                    Em branco = herda do cliente, e sem limite no cliente vale o padrão de
+                    <?= DEFAULT_SPEED_LIMIT_KMH ?> km/h. Alimenta
+                    <a href="/relatorios/velocidade">Excesso de Velocidade</a>.
+                </small>
             </div>
         </div>
 

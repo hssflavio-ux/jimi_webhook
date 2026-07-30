@@ -16,6 +16,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/export_helper.php';
 require_once __DIR__ . '/../includes/mailer.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // fmt_duration(), resolve_current_state()
 
 /** Máximo de tentativas de um job com falha transitória (só 'notification'). */
 const JOB_MAX_ATTEMPTS = 3;
@@ -156,13 +157,16 @@ function processReportJob($db, $job): array {
  * Fonte de dados de cada tipo de relatório.
  *
  * @param PDO    $db
- * @param string $type alarms|occurrences|positions|trips|devices
+ * @param string $type alarms|occurrences|positions|trips|devices|stops|idling|ignition|speeding|fleet_status
  * @param mixed  $cid  customer_id do job
  * @param string $from Data inicial (Y-m-d H:i:s)
  * @param string $to   Data final (Y-m-d H:i:s)
  * @returns array|null [headers, PDOStatement executado, fn(row): array] ou null se tipo desconhecido
  */
 function buildReportSource($db, string $type, $cid, string $from, string $to): ?array {
+    // Os tipos da v4.6.0 (stops/idling/ignition/speeding/fleet_status) leem as
+    // tabelas do state_builder. Duração é apresentada por fmt_duration(), a
+    // mesma dos relatórios na tela — export e tela têm de dizer a mesma coisa.
     switch ($type) {
         case 'alarms':
             $stmt = $db->prepare("
@@ -251,6 +255,113 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 fn($r) => [$r['imei'], $r['device_name'] ?? $r['imei'], $r['model_name'] ?? '',
                            $r['is_active'] ? 'Sim' : 'Não', fmt_brt($r['last_communication'], 'd/m/Y H:i', ''),
                            fmt_brt($r['last_position_at'], 'd/m/Y H:i', ''), $r['camera_count'] ?? 0, $r['firmware_version'] ?? ''],
+            ];
+
+        // ── v4.6.0 — recortes de device_state_segments ────────────────
+        case 'stops':
+        case 'idling':
+            $state = $type === 'stops' ? 'parado' : 'ocioso';
+            $stmt = $db->prepare("
+                SELECT s.imei, COALESCE(d.device_name, s.imei) AS device_name,
+                       s.started_at, s.ended_at,
+                       COALESCE(s.duration_s, TIMESTAMPDIFF(SECOND, s.started_at, UTC_TIMESTAMP())) AS dur_s,
+                       s.start_lat, s.start_lng
+                FROM device_state_segments s
+                LEFT JOIN devices d ON d.imei = s.imei
+                WHERE s.customer_id = :cid AND s.state = :state AND s.started_at BETWEEN :df AND :dt
+                ORDER BY s.started_at ASC
+            ");
+            $stmt->execute([':cid' => $cid, ':state' => $state, ':df' => $from, ':dt' => $to]);
+            return [
+                ['IMEI', 'Equipamento', 'Início', 'Fim', 'Duração', 'Latitude', 'Longitude'],
+                $stmt,
+                fn($r) => [$r['imei'], $r['device_name'],
+                           fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
+                           $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
+                           fmt_duration((int)$r['dur_s']), $r['start_lat'], $r['start_lng']],
+            ];
+
+        case 'ignition':
+            // Mesma derivação por LAG do handlers/rel_ignicao.php: transição é
+            // a fronteira entre segmentos cujo estado do MOTOR difere, com os
+            // segmentos offline fora da janela.
+            $stmt = $db->prepare("
+                SELECT t.*, CASE WHEN t.state = 'parado' THEN 'Ignição desligada' ELSE 'Ignição ligada' END AS event_label
+                FROM (
+                    SELECT s.imei, COALESCE(d.device_name, s.imei) AS device_name,
+                           s.state, s.started_at, s.start_lat, s.start_lng,
+                           COALESCE(s.duration_s, TIMESTAMPDIFF(SECOND, s.started_at, UTC_TIMESTAMP())) AS dur_s,
+                           LAG(s.state) OVER (PARTITION BY s.imei ORDER BY s.started_at) AS prev_state
+                    FROM device_state_segments s
+                    LEFT JOIN devices d ON d.imei = s.imei
+                    WHERE s.customer_id = :cid AND s.state <> 'offline'
+                      AND s.started_at BETWEEN DATE_SUB(:df, INTERVAL 2 DAY) AND :dt
+                ) t
+                WHERE t.prev_state IS NOT NULL
+                  AND (t.state = 'parado') <> (t.prev_state = 'parado')
+                  AND t.started_at BETWEEN :df2 AND :dt2
+                ORDER BY t.started_at ASC
+            ");
+            $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to, ':df2' => $from, ':dt2' => $to]);
+            return [
+                ['IMEI', 'Equipamento', 'Data/Hora', 'Evento', 'Permanência no estado', 'Latitude', 'Longitude'],
+                $stmt,
+                fn($r) => [$r['imei'], $r['device_name'], fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
+                           $r['event_label'], fmt_duration((int)$r['dur_s']), $r['start_lat'], $r['start_lng']],
+            ];
+
+        case 'speeding':
+            $stmt = $db->prepare("
+                SELECT e.imei, COALESCE(d.device_name, e.imei) AS device_name,
+                       e.started_at, e.ended_at,
+                       COALESCE(e.duration_s, TIMESTAMPDIFF(SECOND, e.started_at, UTC_TIMESTAMP())) AS dur_s,
+                       e.max_speed, e.avg_speed, e.limit_kmh, e.max_lat, e.max_lng
+                FROM speeding_events e
+                LEFT JOIN devices d ON d.imei = e.imei
+                WHERE e.customer_id = :cid AND e.started_at BETWEEN :df AND :dt
+                ORDER BY e.started_at ASC
+            ");
+            $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to]);
+            return [
+                ['IMEI', 'Equipamento', 'Início', 'Fim', 'Duração', 'Vel. máxima (km/h)',
+                 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)', 'Latitude', 'Longitude'],
+                $stmt,
+                fn($r) => [$r['imei'], $r['device_name'],
+                           fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
+                           $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
+                           fmt_duration((int)$r['dur_s']),
+                           $r['max_speed'], $r['avg_speed'] ?? '', (int)$r['limit_kmh'],
+                           number_format((float)$r['max_speed'] - (int)$r['limit_kmh'], 1, ',', ''),
+                           $r['max_lat'], $r['max_lng']],
+            ];
+
+        case 'fleet_status':
+            // Foto do agora: o período do job é ignorado de propósito. O estado
+            // é resolvido em PHP por resolve_current_state() — a mesma função da
+            // tela — porque o segmento aberto não sabe do silêncio posterior.
+            $stmt = $db->prepare("
+                SELECT d.imei, d.device_name, ds.last_gps_time, ds.last_latitude, ds.last_longitude,
+                       ds.last_speed, s.state AS seg_state, s.started_at AS seg_started_at
+                FROM devices d
+                LEFT JOIN device_statistics ds ON ds.imei = d.imei
+                LEFT JOIN device_state_segments s ON s.imei = d.imei AND s.ended_at IS NULL
+                WHERE d.customer_id = :cid AND d.is_active = 1
+                ORDER BY d.device_name, d.imei
+            ");
+            $stmt->execute([':cid' => $cid]);
+            $nowUtc = gmdate('Y-m-d H:i:s');
+            return [
+                ['IMEI', 'Equipamento', 'Estado', 'Tempo no estado', 'Última posição',
+                 'Velocidade (km/h)', 'Latitude', 'Longitude'],
+                $stmt,
+                function ($r) use ($nowUtc) {
+                    $state = resolve_current_state($r['seg_state'], $r['last_gps_time'], $nowUtc);
+                    $since = $state === 'offline' ? $r['last_gps_time'] : ($r['seg_started_at'] ?: $r['last_gps_time']);
+                    $inState = $since ? max(0, strtotime($nowUtc) - strtotime($since)) : null;
+                    return [$r['imei'], $r['device_name'] ?? $r['imei'], fleet_state_label($state),
+                            fmt_duration($inState), fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s', 'Nunca'),
+                            $r['last_speed'] ?? '', $r['last_latitude'], $r['last_longitude']];
+                },
             ];
     }
     return null;

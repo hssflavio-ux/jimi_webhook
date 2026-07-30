@@ -36,6 +36,11 @@
  *   /relatorios/alarmes               → rel_alarmes.php
  *   /relatorios/ocorrencias           → rel_ocorrencias.php
  *   /relatorios/geocercas             → rel_geocercas.php
+ *   /relatorios/paradas               → rel_paradas.php
+ *   /relatorios/ociosidade            → rel_ociosidade.php
+ *   /relatorios/ignicao               → rel_ignicao.php
+ *   /relatorios/velocidade            → rel_velocidade.php
+ *   /relatorios/status-frota          → rel_status_frota.php
  *   /geocercas                        → geocercas.php
  *   /perfil                           → perfil.php
  *   /camerasdata ...                  → AJAX endpoints
@@ -96,6 +101,11 @@ if (empty($segments)) {
             'alarmes'      => 'rel_alarmes.php',
             'ocorrencias'  => 'rel_ocorrencias.php',
             'geocercas'    => 'rel_geocercas.php',
+            'paradas'      => 'rel_paradas.php',
+            'ociosidade'   => 'rel_ociosidade.php',
+            'ignicao'      => 'rel_ignicao.php',
+            'velocidade'   => 'rel_velocidade.php',
+            'status-frota' => 'rel_status_frota.php',
         ],
         'ocorrencias' => [
             'dashboard' => 'ocorrencias_dashboard.php',
@@ -193,6 +203,11 @@ $screenByHandler = [
     'rel_alarmes.php'           => 'relatorios',
     'rel_ocorrencias.php'       => 'relatorios',
     'rel_geocercas.php'         => 'relatorios',
+    'rel_paradas.php'           => 'relatorios',
+    'rel_ociosidade.php'        => 'relatorios',
+    'rel_ignicao.php'           => 'relatorios',
+    'rel_velocidade.php'        => 'relatorios',
+    'rel_status_frota.php'      => 'relatorios',
     'geocercas.php'             => 'geocercas',
     'ativos.php'                => 'ativos',
     'ativos_novo.php'           => 'ativos',

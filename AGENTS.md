@@ -193,6 +193,8 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.2.1.sql   # catálogo de câm
 mysql -u root -p jimi_tracker < mysql/migration_v4.3.0.sql   # índice composto trips (customer_id, started_at)
 mysql -u root -p jimi_tracker < mysql/migration_v4.4.0.sql   # motor de notificações (regras + sino + fila de e-mail)
 mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql   # credenciais SMTP cadastráveis (senha cifrada)
+mysql -u root -p jimi_tracker < mysql/migration_v4.5.0.sql   # geocercas e POIs (cerca + vínculo + estado + eventos)
+mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios operacionais (segmentos de estado + excesso de velocidade)
 
 # No build step needed — pure PHP
 ```
@@ -209,9 +211,9 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql   # credenciais SMTP 
 
 **Vídeos**: `/video/aovivo` · `/video/playback` · `/video/downloads`
 
-**Relatórios**: `/relatorios/posicoes` · `/relatorios/deslocamento` · `/relatorios/desatualizados` · `/relatorios/alarmes` · `/relatorios/ocorrencias`
+**Relatórios**: `/relatorios/posicoes` · `/relatorios/deslocamento` · `/relatorios/desatualizados` · `/relatorios/alarmes` · `/relatorios/ocorrencias` · `/relatorios/geocercas` (v4.5.0) · `/relatorios/status-frota` · `/relatorios/paradas` · `/relatorios/ociosidade` · `/relatorios/ignicao` · `/relatorios/velocidade` (v4.6.0)
 
-**Cadastros**: `/ativos` · `/chips` · `/clientes` · `/equipamentos` · `/grupos-permissao` · `/motoristas` · `/config-ocorrencias` · `/usuarios`
+**Cadastros**: `/ativos` · `/chips` · `/clientes` · `/equipamentos` · `/geocercas` (v4.5.0) · `/grupos-permissao` · `/motoristas` · `/config-ocorrencias` · `/config-notificacoes` · `/config-smtp` (v4.4.x) · `/usuarios`
 
 **AJAX novos**: `/ocorrenciasdata` (polling do dashboard DMS) · `/exportardata` (polling da fila)
 
@@ -223,10 +225,22 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql   # credenciais SMTP 
 
 **Alterações**: `users`(+user_type,+permission_group_id,+photo_url) · `customers`(+reseller_id,+brand_color,+logo_url,+occurrence_config_id,+faceid_enabled) · `devices`(+sim_card_id,+peripherals,+streaming_rotation,+streaming_watermark,+firmware_version,+branch_id) · `media_files`(+channel,+download_status).
 
+### Tabelas novas (v4.4.0 → v4.6.0)
+
+`notification_rules`, `notifications` (v4.4.0) · `smtp_settings` (v4.4.1) · `geofences`, `geofence_devices`, `geofence_state`, `geofence_events` (v4.5.0) · `device_state_segments`, `speeding_events` (v4.6.0).
+
+**Alterações**: `jobs`(+attempts, `type` com `notification`) · `devices`(+speed_limit_kmh) · `customers`(+default_speed_limit_kmh).
+
+> `device_state_segments` sustenta 4 das 5 telas da v4.6.0 (paradas, ociosidade, ignição, status da frota). A invariante que a torna auditável: os segmentos de um equipamento são **contíguos e sem sobreposição** (`ended_at` de um = `started_at` do seguinte), de onde a soma das durações de um dia fecha em 86.400 s. Quem altera `scripts/state_builder.php` tem de preservar isso — é o único teste que pega furo de segmentação.
+
 ### Núcleo: motor de ocorrências
 
 `includes/occurrence_engine.php` (a criar), chamado **dentro de `pushalarm.php`** após o INSERT do alarme: resolve o `occurrence_config` do cliente → aplica o parâmetro do tipo de alarme → cria ou agrupa a ocorrência (dedup por janela). Ver `PROJETO_YUV.md` §7.
 
-### Workers (cron, a criar)
+### Workers (cron)
 
-`scripts/worker.php` (fila `jobs`: relatórios/downloads) · `scripts/trip_builder.php` (viagens) · `scripts/metrics_rollup.php` (KPIs Resumo/BI).
+`scripts/worker.php` a cada 1 min (fila `jobs`: relatórios/downloads/e-mail) · `scripts/trip_builder.php` a cada 15 min (viagens) · `scripts/metrics_rollup.php` a cada 5 min (KPIs Resumo/BI) · `scripts/log_cleanup.php` diário · `scripts/geofence_worker.php` a cada 2 min (travessias de cerca) · `scripts/state_builder.php` a cada 15 min (segmentos de estado + excesso de velocidade).
+
+O array `CRON_JOBS` de `scripts/crontab-setup.sh` é a fonte única — atualizar lá, nunca o crontab à mão. **`deploy.sh` NÃO instala cron**: worker novo exige `bash scripts/crontab-setup.sh --install`, e a falha é silenciosa (a tela funciona, o relatório fica vazio para sempre).
+
+`scripts/trip_builder.php` e `scripts/state_builder.php` compartilham os limiares de `includes/fleet_state.php` (`STOP_SPEED_KMH`, `STOP_IDLE_SECONDS`). Não redeclarar localmente: "parado" tem de significar o mesmo nos dois, ou os relatórios se contradizem.

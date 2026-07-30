@@ -135,6 +135,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <option value="positions">Posições GPS</option>
                     <option value="trips">Viagens (Deslocamento)</option>
                     <option value="devices">Equipamentos</option>
+                    <option value="stops">Paradas</option>
+                    <option value="idling">Ociosidade</option>
+                    <option value="ignition">Ignição</option>
+                    <option value="speeding">Excesso de Velocidade</option>
+                    <option value="fleet_status">Status da Frota (foto do agora)</option>
                 </select>
             </div>
             <div>
