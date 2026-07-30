@@ -11,7 +11,13 @@
 | 2 | **v4.5.0** | Geocercas + POI com relatório de entrada/saída | `migration_v4.5.0.sql` | ✅ feita, a publicar |
 | 3 | **v4.6.0** | Relatórios Parada / Ociosidade / Ignição / Velocidade / Status da Frota | `migration_v4.6.0.sql` | ✅ feita, a publicar |
 | 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` | ✅ feita, a publicar |
-| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §5 | — | ⬜ pendente |
+| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §5 | — | ⬜ pendente (depois da validação) |
+
+> **Antes da Fase 5**: `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` — publicar as três versões e validar
+> o envio agendado contra o provedor real. O SMTP já foi cadastrado e testado no homolog, mas o
+> caminho **cron → dispatcher → worker → e-mail com anexo** nunca rodou fora do SMTP de captura
+> local. O plano também levanta duas decisões pendentes (download sem autenticação e retenção de
+> `storage/reports`) que a wiki precisa refletir — daí a ordem.
 
 > **Status em 30/07/2026 — IMPLEMENTAÇÃO COMPLETA (Fases 1 a 4)**:
 > - Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`).
