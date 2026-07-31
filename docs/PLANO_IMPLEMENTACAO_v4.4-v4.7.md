@@ -10,24 +10,18 @@
 | — | **v4.4.1** | Credenciais de SMTP cadastráveis pela interface (`/config-smtp`) | `migration_v4.4.1.sql` | ✅ publicada |
 | 2 | **v4.5.0** | Geocercas + POI com relatório de entrada/saída | `migration_v4.5.0.sql` | ✅ feita, a publicar |
 | 3 | **v4.6.0** | Relatórios Parada / Ociosidade / Ignição / Velocidade / Status da Frota | `migration_v4.6.0.sql` | ✅ feita, a publicar |
-| 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` | ✅ feita, a publicar |
-| **5** | — | **Atualizar a Central de Ajuda (`/wiki`)** — ver §5 | — | ⬜ pendente (depois da validação) |
+| 4 | **v4.7.0** | Relatório agendado por e-mail + modelos de relatório | `migration_v4.7.0.sql` | ✅ publicada |
+| **5** | **v4.7.1** | **Central de Ajuda (`/wiki`) atualizada** — ver §5 | — | ✅ feita, a publicar |
 
-> **Antes da Fase 5**: `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` — publicar as três versões e validar
-> o envio agendado contra o provedor real. O SMTP já foi cadastrado e testado no homolog, mas o
-> caminho **cron → dispatcher → worker → e-mail com anexo** nunca rodou fora do SMTP de captura
-> local. O plano também levanta duas decisões pendentes (download sem autenticação e retenção de
-> `storage/reports`) que a wiki precisa refletir — daí a ordem.
-
-> **Status em 30/07/2026 — IMPLEMENTAÇÃO COMPLETA (Fases 1 a 4)**:
-> - Fase 1 **concluída e publicada no homolog** (v4.4.0 + v4.4.1, commit `4e60322`).
-> - Fase 2 (**v4.5.0 — geocercas**) **implementada e verificada localmente** (commit `16f3184`); falta publicar.
-> - Fase 3 (**v4.6.0 — relatórios operacionais**) **implementada e verificada localmente**; falta publicar.
-> - Fase 4 (**v4.7.0 — relatório agendado + modelos**) **implementada e verificada localmente**; falta publicar.
-> - **Resta apenas a Fase 5** (atualizar a `/wiki`), que por decisão registrada é o último passo da iniciativa.
-> - **Publicação pendente das TRÊS versões de uma vez**: `sudo ./scripts/deploy.sh` (o gate semântico aplica v4.5.0, v4.6.0 e v4.7.0 em sequência) + `bash scripts/crontab-setup.sh --install` (**7 workers** — o deploy não instala cron) + marcar **"Geocercas"** e **"Agendamentos"** em `/grupos-permissao` para grupos restritos. As 5 telas da Fase 3 **não** precisam de liberação: herdam a permissão `relatorios` existente.
-> - **Backfill depois de publicar**: `php scripts/state_builder.php 30` fora do horário de pico. Sem ele, os 4 relatórios de estado só mostram dados a partir da primeira execução do cron.
-> - **Para o envio agendado funcionar**: credenciais em `/config-smtp` (ou `.env`) **e `APP_URL` correta** — é a base do link quando o anexo passa de `MAIL_MAX_ATTACH_MB`. O envio real nunca foi validado contra provedor externo; localmente foi validado contra um SMTP de captura.
+> **Status em 30/07/2026 (noite) — INICIATIVA COMPLETA (Fases 1 a 5)**:
+> - Fases 1 a 4 **implementadas e publicadas no homolog** — conferido nesta sessão: código em `a1a879b`, `/ping` e `system_info` em **4.7.0**, as 9 tabelas da série criadas, **os 7 workers no cron** com escrita recente nos logs, backfill do `state_builder` feito (2.049 segmentos) e SMTP global cadastrado e testado.
+> - Fase 5 (**v4.7.1 — `/wiki`**) **implementada e verificada localmente**; falta publicar. Junto dela vieram as duas decisões do Bloco 3 do plano de validação (ver abaixo).
+> - **O que resta da iniciativa não é código**: o **Bloco 2** do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` — exercitar `cron → dispatcher → worker → e-mail com anexo` contra o provedor real. Depende de uma caixa de entrada de verdade e, por isso, do usuário. Localmente o caminho foi validado contra um SMTP de captura; no homolog, só o botão "Enviar e-mail de teste" de `/config-smtp`.
+> - **Para o envio agendado funcionar**: credenciais em `/config-smtp` (já cadastradas no homolog) **e `APP_URL` correta** — é a base do link quando o anexo passa de `MAIL_MAX_ATTACH_MB`, e um `APP_URL` errado produz e-mail com link quebrado **sem nenhum erro no log**.
+>
+> **Decisões do Bloco 3 (§3 do plano de validação), tomadas e implementadas na v4.7.1**:
+> 1. **Download sem autenticação** → **opção B (token no nome)**, e não a rota autenticada. A hipótese virou fato antes da correção: no homolog, um arquivo colocado em `storage/reports/` respondeu **200 com o conteúdo** a um `curl` sem cookie. O nome agora leva 32 hex de `random_bytes(16)`, o que elimina a enumeração por `job_id` sequencial. A rota autenticada (opção A) foi descartada porque **quebraria o link do e-mail**, que é exatamente o caminho que a Fase 4 criou; a URL assinada com validade (opção C) continua sendo o alvo melhor e fica registrada como pendente — o token não resolve link vazado ou encaminhado. `storage/.htaccess` com `Options -Indexes` entrou em qualquer cenário, como o plano previa.
+> 2. **Retenção** → implementada: `REPORT_RETENTION_DAYS` (padrão 30) no `log_cleanup.php`, purgando `storage/reports` **e** `report_schedule_runs`; `/exportar` passa a mostrar "Expirado" em vez de link quebrado. `storage/media` ficou de fora de propósito — vídeo de ocorrência é evidência, não subproduto de consulta.
 >
 > **Desvios da Fase 3 em relação ao plano original**, todos deliberados:
 > 1. **`includes/report_segments.php`** (não previsto): Paradas e Ociosidade são a mesma consulta com um `state` diferente. Dois handlers de 250 linhas quase idênticos reintroduziriam na exibição exatamente a duplicação que §3.1 eliminou no banco. Os handlers viraram ~30 linhas de configuração.
@@ -825,7 +819,29 @@ multi-tenant sem 2º cliente, `TEST_IMEI` ausente, rate-limit destrutivo).
 
 ---
 
-# FASE 5 — Atualizar a Central de Ajuda (`/wiki`)
+# FASE 5 — Atualizar a Central de Ajuda (`/wiki`) — ✅ FEITA (v4.7.1)
+
+> **Executada em 30/07/2026.** `handlers/wiki.php` saiu da v4.3.0 para a v4.7.1 com **12 seções
+> novas**: Notificações (sino/pop-up/som/e-mail), Config. Notificações, Servidor de E-mail,
+> Geocercas, Relatório de Geocercas, Status da Frota, Paradas, Ociosidade, Ignição, Excesso de
+> Velocidade, Agendamentos e Modelos salvos. Índice, seções de Clientes/Equipamentos (limite de
+> velocidade), Grupos de Permissão (18 → **22** telas) e Exportar (tipos novos, "Expirado", link
+> secreto) foram atualizados junto.
+>
+> **Verificação**: 43 asserções sobre a **página renderizada autenticada** — nenhum link do índice
+> sem seção correspondente, as 12 seções presentes, 18 regras de negócio conferidas por texto, os
+> 22 nomes de tela batendo com `handlers/grupos_permissao.php` e os rótulos do menu lateral com a
+> mesma grafia da wiki. Uma armadilha do ambiente ficou registrada: a porta **8124 é recusada pelo
+> Windows** (faixa excluída), e a primeira execução do teste passou 2 asserções *por vacuidade*
+> com o HTML vazio — o script ganhou um `abort` explícito quando a página não responde.
+>
+> **Desvio deliberado em relação ao §5.3**: a Fase 1 pedia documentar a wiki "depois da validação"
+> do envio agendado, para descrever o comportamento já validado do link. O Bloco 2 depende de uma
+> caixa de entrada real (do usuário) e não podia ser concluído nesta sessão; o **Bloco 3**, que é o
+> que a wiki de fato precisava refletir (o link é secreto mas não exige login; o arquivo expira em
+> 30 dias), **foi decidido e implementado antes** — então a wiki descreve comportamento
+> implementado, não presumido. O que a validação com provedor real pode acrescentar é entregabilidade
+> (spam/SPF), que não muda o texto das telas.
 
 ## 5.1 Quando
 

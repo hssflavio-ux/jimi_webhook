@@ -37,6 +37,14 @@ $data = array_map(function($j) {
         : ($params['format'] ?? 'csv');
     if (!in_array($format, ['csv', 'xlsx', 'pdf'], true)) $format = 'csv';
 
+    // Purgado por REPORT_RETENTION_DAYS (v4.7.1): o job segue 'concluido' e o
+    // result_path segue gravado, mas o arquivo não existe mais em disco. O
+    // campo é informado em vez de o result_path virar null — quem já guardou o
+    // caminho continua enxergando o mesmo valor, e quem desenha o botão sabe
+    // que ele levaria a um 404.
+    $expired = $j['status'] === 'concluido' && $j['result_path']
+        && !is_file(__DIR__ . '/../' . $j['result_path']);
+
     return [
         'id'           => (int)$j['id'],
         'name'         => $params['report_name'] ?? null,
@@ -45,6 +53,7 @@ $data = array_map(function($j) {
         'format'       => $format,
         'mime_type'    => export_mime_type($format),
         'result_path'  => $j['result_path'],
+        'expired'      => $expired,
         'error_message' => $j['error_message'],
         'created_at'   => $j['created_at'],
         'updated_at'   => $j['updated_at'],

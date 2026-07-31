@@ -1,9 +1,113 @@
-# STATUS.md — Jimi Webhook System v4.7.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.7.1 (YUV Parity)
 
-> **Última atualização**: 30/07/2026 — **v4.7.0: relatório agendado por e-mail + modelos de relatório** (Fase 4 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`, **a última da série**). O relatório configurado uma vez chega sozinho por e-mail — diária, semanal ou mensal — para até 3 destinatários, em `/agendamentos`, com histórico de execuções. E os filtros usados com frequência viram **modelos** reutilizáveis em 10 telas de relatório. Novos: `mysql/migration_v4.7.0.sql`, `includes/schedule.php`, `includes/report_templates.php`, `scripts/schedule_dispatcher.php`, `handlers/agendamentos.php`, `tests/agendamentos.spec.js`. Alterados: `worker.php` (entrega por e-mail, contagem de linhas, teto de 100 mil), `exportar.php`, 9 handlers `rel_*` + `report_segments.php` (barra de modelos), `router.php`, `layout_base.php`, `grupos_permissao.php`, `crontab-setup.sh`, `deploy.sh`, `.env.example`, `navigation.spec.js`.
+> **Última atualização**: 30/07/2026 (noite) — **v4.7.1: download seguro, retenção de relatórios e a Central de Ajuda em dia**. Fecha a iniciativa do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`: as duas decisões pendentes do Bloco 3 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` **e a Fase 5**. Sem tela nova e **sem migração**. Alterados: `scripts/worker.php` (nome do arquivo com 32 hex aleatórios, relatório e vídeo), `scripts/log_cleanup.php` (`REPORT_RETENTION_DAYS`), `handlers/exportar.php` + `exportardata.php` ("Expirado"), `handlers/wiki.php` (12 seções novas, saiu da v4.3.0 para a v4.7.1), `.gitignore`, `.env.example`. Novo: `storage/.htaccess` (versionado).
+>
+> ### ▶️ RETOMAR AQUI — estado em 30/07/2026 (noite)
+>
+> #### 1. Onde cada ponta está (tudo conferido nesta sessão, não presumido)
+>
+> | Ponta | Estado | Como foi conferido |
+> |---|---|---|
+> | **Git local** | `main` = `origin/main` = **`a1a879b`** | `git log --oneline -1` |
+> | **Working tree** | **v4.7.1 NÃO commitada** — 12 arquivos alterados + 1 novo | `git status --short` |
+> | **Homolog (código)** | **`a1a879b`** — igual ao GitHub | `ssh … git log -1` |
+> | **Homolog (`/ping`)** | **`4.7.0`** | `curl http://localhost/ping` |
+> | **Homolog (banco)** | `system_info.version` = **`4.7.0`**, atualizado em 29/07 22:41 | `SELECT * FROM system_info` |
+> | **Tabelas da série** | as 9 criadas (`geofence*`×4, `device_state_segments`, `speeding_events`, `report_schedule*`×2, `report_templates`) | `SHOW TABLES LIKE …` |
+> | **Cron** | **7 workers rodando** | `logs/state_builder.log`, `geofence.log`, `schedule.log` com escrita nos últimos minutos |
+> | **Backfill** | feito — **2.049 segmentos**, de 03/07 até agora, 4 equipamentos | `SELECT MIN/MAX(started_at)` |
+> | **SMTP** | global cadastrado: `smtp.task.com.br:465/ssl`, remetente `camera@telecomtrack.com.br`, **teste sem erro em 29/07 23:39** | `SELECT … FROM smtp_settings` |
+> | **Agendamentos** | **nenhum criado** (`report_schedules` vazia) | `SELECT COUNT(*)` |
+> | **Geocercas** | 1 cerca, 4 eventos | `SELECT COUNT(*)` |
+>
+> **Portanto: o Bloco 1 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` está CONCLUÍDO.** O bloco anterior deste arquivo dizia `92725cb` / `4.4.1` e estava **errado** — a publicação aconteceu depois de ele ter sido escrito. Lição: conferir o servidor antes de confiar no STATUS.
+>
+> #### 2. O que esta sessão entregou — v4.7.1 (working tree, a commitar e publicar)
+>
+> **Bloco 3.1 — download sem autenticação.** A hipótese do plano virou fato **antes** da correção:
+> ```
+> $ echo PROBE-ACESSO-PUBLICO > /var/www/jimi_webhook/storage/reports/probe_test.txt
+> $ curl -s -w '%{http_code}' http://localhost/storage/reports/probe_test.txt
+> 200   →  "PROBE-ACESSO-PUBLICO"
+> ```
+> Adotada a **opção B** (token no nome), não a A (rota autenticada): o link do relatório grande no e-mail **precisa** abrir sem sessão, e a opção A quebraria justamente o caminho que a Fase 4 criou. Nome agora com **32 hex de `random_bytes(16)`**, em relatórios **e** vídeos. Mais `storage/.htaccess` versionado (`Options -Indexes` + negar execução de `.php/.phtml/.phar/.cgi/.pl/.py/.sh`). **Não** usa `php_flag engine off` — só existe em mod_php e daria 500 sob PHP-FPM.
+>
+> **Bloco 3.2 — retenção.** `REPORT_RETENTION_DAYS` (padrão 30, `0` desliga) no `log_cleanup.php`, purgando `storage/reports` **e** `report_schedule_runs`. `/exportar` mostra **"Expirado"** em vez de link para 404. `storage/media` intocado de propósito (evidência, não subproduto).
+>
+> **Fase 5 — `/wiki`** da v4.3.0 para a v4.7.1: 12 seções novas (Notificações, Config. Notificações, Servidor de E-mail, Geocercas, e os relatórios de Geocercas / Status da Frota / Paradas / Ociosidade / Ignição / Excesso de Velocidade, mais Agendamentos e Modelos salvos), limiares de cada estado, Grupos de Permissão de 18 → **22** telas, e Exportar com os tipos novos.
+>
+> **Arquivos**: `scripts/worker.php`, `scripts/log_cleanup.php`, `handlers/exportar.php`, `handlers/exportardata.php`, `handlers/wiki.php`, `.gitignore`, `.env.example`, `CHANGELOG.md`, `STATUS.md`, `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`, `docs/PLANO_VALIDACAO_AGENDAMENTOS.md`, `.agents/memory/MEMORY.md` — e **novo**: `storage/.htaccess`.
+>
+> **Verificado (local, PHP 8.3 + MySQL 8.0)**: `php -l` **0 erros** em `handlers config core includes scripts web`; **48 asserções** do Bloco 3 (32 em sandbox isolado com banco de teste próprio — inclusive "banco fora não impede a limpeza de disco" e a armadilha do `'0'` falsy desligando a purga — e 16 ponta-a-ponta com o `worker.php` real: job enfileirado → `report_90_20260731_020446_cb883b4b….xlsx` gerado → `/exportar` com "Baixar" → arquivo removido → **"Expirado"**, job ainda `concluido`); **43 asserções** da wiki sobre a página renderizada autenticada (nenhum link do índice sem seção, 12 seções presentes, 18 regras conferidas por texto, 22 telas do RBAC batendo com `grupos_permissao.php`); **Playwright: 84 passed / 0 failed / 5 skipped** (suíte inteira, com credenciais).
+>
+> #### 3. PRÓXIMOS PASSOS, em ordem
+>
+> **Passo 1 — commitar a v4.7.1** (não foi feito; o working tree está sujo).
+> ```bash
+> git add -A && git commit   # mensagem: security+feat, ver o CHANGELOG [Unreleased] 4.7.1
+> git push
+> ```
+>
+> **Passo 2 — publicar** *(exige sudo; o tool não tem a senha — rodar via `! ssh -t administrador@189.22.240.43 "..."`)*
+> ```bash
+> sudo ./scripts/deploy.sh
+> ```
+> - **Não há migração na v4.7.1.** O gate semântico não tem o que aplicar e o banco fica em `4.7.0`. Se quiser que o `/ping` reporte `4.7.1`, subir `SYSTEM_VERSION` no `.env.example` **antes** do deploy (o script propaga para o `.env` sozinho).
+> - **Cron não muda** — nenhum worker novo nesta versão.
+> - O `deploy.sh` **não** é alterado por esta versão, então **não** haverá re-execução (um só cabeçalho `=== DEPLOY:` no log).
+>
+> **Passo 3 — conferir a publicação** *(só leitura, sem sudo — o tool consegue fazer)*
+> ```bash
+> ls -la /var/www/jimi_webhook/storage/.htaccess          # tem de existir (veio no git pull)
+> curl -s -o /dev/null -w '%{http_code}\n' http://localhost/storage/reports/   # esperado: 403
+> sudo crontab -l | grep -c 'scripts/'                    # esperado: 7 (o cron é do ROOT: `crontab -l` como administrador devolve 0)
+> ```
+> Repetir a sonda da enumeração: gerar um relatório por `/exportar` e conferir que o nome tem os 32 hex.
+>
+> **Passo 4 — conferir `APP_URL`** ⚠️ *(exige sudo: o `.env` do servidor é `640 www-data:www-data` e o usuário `administrador` NÃO consegue lê-lo)*
+> ```bash
+> sudo grep -E '^(APP_URL|APP_KEY|SYSTEM_VERSION|MAIL_MAX_ATTACH_MB|NOTIFY_ENABLED|REPORT_RETENTION_DAYS)=' /var/www/jimi_webhook/.env
+> ```
+> `APP_URL` é o item mais silencioso do plano inteiro: errada, o e-mail sai, o provedor aceita, o histórico marca "enviado" — e o destinatário recebe um link que dá 404. Tem de ser a URL pela qual o usuário realmente acessa, com esquema e **sem** barra final.
+>
+> **Passo 5 — Bloco 2: validar o envio agendado contra o provedor real** — **o único item que depende do usuário** (é preciso uma caixa de entrada de verdade). Roteiro completo de 14 itens em `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` §2.2. O essencial:
+> 1. Criar em `/agendamentos` um agendamento **diário**, **XLSX**, tipo **Alarmes** (é o que tem dado de ontem no homolog; `speeding`/`stops` também têm, depois do backfill já feito), para um e-mail real.
+> 2. Conferir no banco que `next_run_at` ficou em **UTC** = `send_hour` BRT + 3 h.
+> 3. Forçar o disparo sem esperar 24 h:
+>    ```sql
+>    UPDATE report_schedules SET next_run_at = DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 MINUTE) WHERE id = ?;
+>    ```
+>    ou, na mão: `php scripts/schedule_dispatcher.php` (aceita `--dry`) e depois `php scripts/worker.php`.
+> 4. **Confirmar a chegada**: assunto com nome + período, anexo `.xlsx`, **abrindo no Excel pt-BR**, e que não caiu em spam.
+> 5. Caminho do link: baixar `MAIL_MAX_ATTACH_MB` para `0.01`, repetir, e confirmar que o e-mail vem **sem anexo** e com botão de download que **abre em janela anônima**. ⚠️ **O item 8 do roteiro mudou de sentido com a v4.7.1**: o link *deve* baixar sem login — é o desenho — e o que protege agora é o nome imprevisível; o que o teste precisa confirmar é que **o endereço antigo e previsível não existe mais**.
+> 6. `skip_if_empty` nos dois modos; 3 falhas consecutivas desativando e notificando o criador; reativar zerando o contador.
+> 7. Permissão do arquivo gerado pelo cron (roda como **root**) sendo legível pelo Apache (**www-data**).
+> 8. Fuso na virada: agendamento às **22:00 BRT** tem de gravar `next_run_at` em **01:00 UTC do dia seguinte**.
+> 9. Registrar o fuso do SO, do PHP e da sessão MySQL **aqui no STATUS**, medidos e não presumidos.
+>
+> #### 4. Backlog — o que fica em aberto depois disso
+>
+> | # | Item | Por quê importa |
+> |---|---|---|
+> | 1 | **URL assinada com validade** (`?exp=…&sig=…`) para o link do relatório | O token elimina a enumeração, mas **não** protege link vazado ou encaminhado. É o alvo registrado desde a decisão do Bloco 3.1 |
+> | 2 | **`/geocercas?action=excluir&id=N` sem CSRF** (v4.5.0) | `csrf_verify()` não lê da query string: um `<img src="…">` em qualquer página que um admin logado abra apaga a cerca. Vale como passe focado varrendo `handlers/*.php` inteiro por outros `action=` destrutivos em GET |
+> | 3 | **Os 4 SQL mais antigos embutem `USE jimi_tracker`** | Impede montar cópia limpa de teste e já rebaixou o banco de dev para `4.0.0` uma vez. Detalhado no bloco da v4.7.0 abaixo |
+> | 4 | **Entregabilidade (SPF/DKIM)** | Só vira problema se o item 6 do roteiro do Bloco 2 falhar. O `mailer.php` **não assina DKIM**; se precisar assinar, a decisão é trocar por API HTTP transacional, não implementar DKIM artesanal (Bloco 4 do plano de validação) |
+> | 5 | **`notificacoes.spec.js` nunca foi escrita** | O sino da v4.4.0 segue sem cobertura E2E — lacuna conhecida desde a Fase 1 |
+>
+> #### 5. Armadilhas do ambiente (custaram tempo nesta sessão)
+>
+> - **`bash -n` nos `.sh` falha no Windows e é FALSO POSITIVO**: `core.autocrlf=true` deixa o working tree em CRLF, mas o índice — o que o servidor recebe — é LF. Lintar de verdade com `git show :scripts/deploy.sh | bash -n`.
+> - **Porta 8124 é recusada pelo Windows** (faixa excluída) para servidor de teste local; **8123 funciona**.
+> - **`glob('*')` não casa dotfile** — conferir `.htaccess`/`.gitkeep` com `file_exists()`, não pela listagem.
+> - **Asserção sobre ausência passa por vacuidade**: com o HTML vazio, "nenhum link morto" e "não sobrou o rodapé antigo" passaram. Todo script de verificação precisa **abortar** se o fixture não respondeu.
+> - **Negação no `.gitignore` dentro de diretório excluído não funciona**: foi preciso `storage/*` + `!storage/.htaccess`, não `storage/` + negação.
+>
+> Anterior — **v4.7.0: relatório agendado por e-mail + modelos de relatório** (Fase 4 de `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`, **a última da série**). O relatório configurado uma vez chega sozinho por e-mail — diária, semanal ou mensal — para até 3 destinatários, em `/agendamentos`, com histórico de execuções. E os filtros usados com frequência viram **modelos** reutilizáveis em 10 telas de relatório. Novos: `mysql/migration_v4.7.0.sql`, `includes/schedule.php`, `includes/report_templates.php`, `scripts/schedule_dispatcher.php`, `handlers/agendamentos.php`, `tests/agendamentos.spec.js`. Alterados: `worker.php` (entrega por e-mail, contagem de linhas, teto de 100 mil), `exportar.php`, 9 handlers `rel_*` + `report_segments.php` (barra de modelos), `router.php`, `layout_base.php`, `grupos_permissao.php`, `crontab-setup.sh`, `deploy.sh`, `.env.example`, `navigation.spec.js`.
 > **Verificado (local, PHP 8.3 + MySQL 8.0)**: lint **0 erros** em todo o projeto + `bash -n` nos 2 scripts; migração **idempotente** (2×, exit 0, banco em `4.7.0`); **143 asserções** em 2 suítes (71 de fuso/agendamento/entrega com **servidor SMTP de captura** inspecionando o `.eml`; 72 de HTTP autenticado — CRUD, CSRF, escopo multi-tenant, ciclo completo dos modelos) — **0 falhas**; **Playwright: 84 passed / 0 failed / 5 skipped** (suíte inteira).
 >
-> ### ▶️ RETOMAR AQUI — estado em 30/07/2026
+> ### ~~▶️ RETOMAR AQUI — estado em 30/07/2026 (manhã)~~ — **SUPERADO**
+> ⚠️ **Este bloco está desatualizado**: a v4.7.0 foi commitada (`a1a879b`) e **publicada** no homolog depois que ele foi escrito. Vale o bloco do topo. Mantido pelo registro das decisões, não do estado.
 > **A implementação do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md` está COMPLETA (Fases 1 a 4).** Falta commitar a v4.7.0, publicar e, depois, a Fase 5.
 >
 > **Git**: `main` local = `origin/main` = **`24eb6c8`** (v4.6.0, "fleet status monitoring"). A **v4.7.0 está no working tree, NÃO commitada** — 26 arquivos alterados + 6 novos (`agendamentos.php`, `schedule.php`, `report_templates.php`, `schedule_dispatcher.php`, `migration_v4.7.0.sql`, `agendamentos.spec.js`).

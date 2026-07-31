@@ -12,8 +12,14 @@ node_modules/
 playwright-report/
 test-results/
 
-# Arquivos gerados em runtime (relatórios, mídia)
-storage/
+# Arquivos gerados em runtime (relatórios, mídia).
+# `storage/*` em vez de `storage/`: o diretório precisa continuar visível ao git
+# para que a exceção abaixo funcione — negação dentro de diretório excluído é
+# ignorada pelo git. O .htaccess é versionado porque é ele que impede a listagem
+# do diretório no servidor, e chegar lá pelo `git pull` do deploy é o único
+# caminho que não depende de alguém lembrar de criá-lo à mão.
+storage/*
+!storage/.htaccess
 
 # IDE
 .vscode/

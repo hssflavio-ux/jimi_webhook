@@ -236,8 +236,18 @@ try {
                 <td class="text-mono"><?= fmt_brt($j['created_at']) ?></td>
                 <td class="text-mono"><?= fmt_brt($j['updated_at']) ?></td>
                 <td style="text-align:center;">
-                    <?php if ($j['status'] === 'concluido' && $j['result_path']): ?>
+                    <?php
+                    // Arquivo purgado por REPORT_RETENTION_DAYS (v4.7.1): o job
+                    // continua 'concluido' e o result_path continua gravado, mas
+                    // o arquivo não existe mais. Mostrar o botão daria 404 sem
+                    // explicação — "Expirado" diz o que aconteceu.
+                    $fileGone = $j['status'] === 'concluido' && $j['result_path']
+                        && !is_file(__DIR__ . '/../' . $j['result_path']);
+                    ?>
+                    <?php if ($j['status'] === 'concluido' && $j['result_path'] && !$fileGone): ?>
                     <a href="<?= htmlspecialchars($j['result_path']) ?>" class="btn btn-primary btn-sm" style="padding:4px 12px;font-size:12px;">Baixar</a>
+                    <?php elseif ($fileGone): ?>
+                    <span class="badge" style="font-size:11px;" title="Arquivo removido pela retenção de <?= (int)(getenv('REPORT_RETENTION_DAYS') !== false && getenv('REPORT_RETENTION_DAYS') !== '' ? (int)getenv('REPORT_RETENTION_DAYS') : 30) ?> dias. Gere o relatório novamente.">Expirado</span>
                     <?php elseif ($j['status'] === 'falhou'): ?>
                     <span class="badge badge-error" style="font-size:11px;">Falhou</span>
                     <?php else: ?>

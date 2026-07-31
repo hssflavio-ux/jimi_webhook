@@ -5,6 +5,34 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.7.1
+
+Fecha a iniciativa do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`: as duas decisões que o
+Bloco 3 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` deixou em aberto e a **Fase 5** (a
+Central de Ajuda). Nenhuma tela nova e nenhuma migração — é a versão que torna
+publicável o que as quatro fases anteriores entregaram.
+
+### Security
+- **O nome do relatório gerado deixa de ser adivinhável.** `storage/` é servido como estático (o `.htaccess` da raiz só reescreve o que **não** é arquivo, `!-f`), então `storage/reports/<arquivo>` nunca passou por `require_login()`. O nome era `report_<job_id>_<timestamp>.<ext>` — `job_id` sequencial e timestamp com granularidade de segundo, isto é, **enumerável**: num sistema multi-tenant, o relatório de posições de um cliente era baixável por quem não é dele e não está logado. Confirmado no homolog antes da correção (`curl` sem cookie → **200** e o conteúdo). Agora o nome leva **32 hex de `random_bytes(16)`**. O mesmo vale para o vídeo baixado em `storage/media`, pelo mesmo motivo e com a mesma correção.
+  - **Por que token e não rota autenticada**: o relatório agendado que passa de `MAIL_MAX_ATTACH_MB` viaja como **link** dentro do e-mail, e exigir login quebraria justamente esse caminho. O token mantém o link funcionando e elimina a enumeração. Uma URL assinada com validade (`?exp=…&sig=…`) continua sendo o alvo melhor e está registrado como tal — não foi feito aqui.
+- **`storage/.htaccess`** (versionado): `Options -Indexes` — com índice ligado, o token do nome não valeria nada, bastaria listar o diretório — e negação de execução para `.php`/`.phtml`/`.phar`/`.cgi`/`.pl`/`.py`/`.sh`. Não usa `php_flag engine off`: essa diretiva só existe em mod_php e derruba o Apache com 500 sob PHP-FPM, que é a configuração deste projeto. O `.gitignore` passou de `storage/` para `storage/*` + `!storage/.htaccess`, porque negação dentro de diretório excluído o git ignora — e o arquivo precisa chegar ao servidor pelo `git pull` do deploy, não pela memória de quem publica.
+
+### Added
+- **Retenção dos relatórios gerados** (`REPORT_RETENTION_DAYS`, padrão **30**): o `scripts/log_cleanup.php` — que já roda diariamente e já sabe ler o `.env` sem banco — passa a apagar os arquivos de `storage/reports` além da idade e, junto, as linhas de `report_schedule_runs` mais antigas que isso. Antes, **nada** apagava relatório: um agendamento diário produzia 1 arquivo por dia indefinidamente, cada um uma cópia de dado de cliente parada em disco.
+  - `0` **desliga** a purga. O valor é lido sem `?:` de propósito: `'0'` é falsy em PHP e o operador devolveria o padrão de 30 dias justamente para quem escreveu 0 querendo desligar — a mesma armadilha já documentada em `occurrence_engine.php`.
+  - A conexão é PDO direto em `try/catch`, e não `Database::getInstance()`: o construtor da classe dá `exit` em falha e este script precisa continuar limpando disco com o banco fora. Banco indisponível apenas pula a purga do histórico, com aviso no log.
+  - **`storage/media` fica intocado**: vídeo de ocorrência é evidência vinculada a uma tratativa, não subproduto de consulta. Apagá-lo por idade é decisão de produto.
+- **Central de Ajuda atualizada para a v4.7.1** (Fase 5 do plano, o último passo da iniciativa): `handlers/wiki.php` estava congelada na v4.3.0. Entraram 12 seções — **Notificações** (sino, pop-up, som, e-mail), **Config. Notificações**, **Servidor de E-mail**, **Geocercas**, **Relatório de Geocercas**, **Status da Frota**, **Paradas**, **Ociosidade**, **Ignição**, **Excesso de Velocidade**, **Agendamentos** e **Modelos salvos** — com os limiares que definem cada estado (3 km/h, 30 min de silêncio, 80 km/h de limite padrão).
+  - A wiki documenta o que **só ela** pode explicar: que o sistema **notifica por ocorrência e não por alarme** (uma rajada de 12 alarmes vira 1 aviso — é o agrupamento funcionando, e sem esse parágrafo o operador conclui que o sistema falhou), o teto de 60 notificações/hora, e que o link do relatório grande é **secreto mas não exige login**.
+
+### Changed
+- **`/exportar`** mostra **"Expirado"** no lugar do botão Baixar quando o arquivo já foi purgado — o job continua `concluido` e o `result_path` continua gravado, mas o botão levaria a um 404 sem explicação. `/exportardata` ganhou o campo `expired` (o `result_path` foi preservado como estava: quem já o guardou continua vendo o mesmo valor).
+- **`.env.example`**: `REPORT_RETENTION_DAYS` documentado.
+
+### Notas de implementação
+- **Verificação**: `php -l` limpo; **48 asserções** em 2 suítes (32 da retenção e do nome tokenizado, em sandbox isolado com banco de teste próprio — inclusive o caso "banco fora não impede a limpeza de disco" — e 16 ponta-a-ponta com o `worker.php` real gerando o arquivo e a tela indo de "Baixar" a "Expirado") + **43 asserções** da wiki, com a página renderizada autenticada e conferida contra o código: nenhum link do índice sem seção, os 22 nomes de tela do RBAC batendo com `grupos_permissao.php` e os rótulos do menu lateral com a mesma grafia.
+- **O que continua pendente e não é código**: o envio agendado nunca rodou contra provedor real a partir do cron (Bloco 2 do plano de validação) — localmente foi validado contra um SMTP de captura, e no homolog só o botão "Enviar e-mail de teste" foi exercitado.
+
 ## [Unreleased] — 4.7.0
 
 ### Added

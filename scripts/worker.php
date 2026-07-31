@@ -117,7 +117,15 @@ function processReportJob($db, $job): array {
     if (!$source) return ['status' => 'falhou', 'error' => 'Tipo de relatório não reconhecido'];
     [$headers, $stmt, $mapper] = $source;
 
-    $filename = 'report_' . $job['id'] . '_' . date('Ymd_His') . '.' . $format;
+    // O nome carrega 32 hex aleatórios (v4.7.1) porque `storage/` é servido como
+    // estático pelo Apache — o .htaccess da raiz só reescreve o que NÃO é arquivo
+    // (`!-f`), então o download não passa por require_login(). Sem o token, o nome
+    // era `report_<job_id>_<timestamp>` — job_id sequencial e timestamp com
+    // granularidade de segundo, isto é, ENUMERÁVEL, e num sistema multi-tenant
+    // isso é vazamento entre clientes. O token não substitui a autenticação; ele
+    // torna a URL impossível de adivinhar, que é o que o link enviado por e-mail
+    // (acima de MAIL_MAX_ATTACH_MB) precisa para continuar funcionando sem login.
+    $filename = 'report_' . $job['id'] . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(16)) . '.' . $format;
     $filepath = $dir . '/' . $filename;
 
     // Teto de linhas (v4.7.0). SYNC_EXPORT_MAX_ROWS não se aplica ao caminho
@@ -624,7 +632,9 @@ function processVideoJob($db, $job): array {
 
     if ($err) return ['status' => 'falhou', 'error' => $err];
 
-    $filename = 'video_' . $job['id'] . '_' . date('Ymd_His') . '.mp4';
+    // Token aleatório pelo mesmo motivo do relatório (ver processReportJob):
+    // storage/ é servido como estático, e vídeo de ocorrência é dado de cliente.
+    $filename = 'video_' . $job['id'] . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(16)) . '.mp4';
     file_put_contents($dir . '/' . $filename, $data);
 
     return ['status' => 'concluido', 'path' => 'storage/media/' . $filename];

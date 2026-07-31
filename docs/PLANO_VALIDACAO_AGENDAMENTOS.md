@@ -4,6 +4,44 @@
 **Base**: v4.7.0 no working tree; homolog em `92725cb` / banco `4.4.1`.
 **Data**: 30/07/2026.
 
+> ## ▶️ Estado em 30/07/2026 (noite)
+>
+> | Bloco | Estado |
+> |---|---|
+> | **1 — Publicar** | ✅ **feito**. Homolog em `a1a879b` / banco **4.7.0**, `/ping` concordando, 9 tabelas criadas, **7 workers no cron** (logs com escrita nos últimos minutos), backfill do `state_builder` rodado (2.049 segmentos, de 03/07 em diante), SMTP global cadastrado e testado. |
+> | **2 — Validar o envio agendado** | ⬜ **pendente e bloqueado no usuário**: exige uma caixa de entrada real. Nenhum agendamento foi criado no homolog ainda (`report_schedules` está vazia). O roteiro de 14 itens do §2.2 continua valendo integralmente. |
+> | **3 — Decidir sobre download e retenção** | ✅ **decidido e implementado na v4.7.1** — ver abaixo. |
+> | **4 — Entregabilidade** | ⬜ só se aplica se o item 6 do roteiro falhar, o que depende do Bloco 2. |
+>
+> ### O que o Bloco 3 virou
+>
+> **§3.1 — download sem autenticação → opção B (token no nome), com C como alvo.**
+> A hipótese foi **confirmada no servidor** antes da correção, exatamente como o próprio plano
+> mandava medir:
+> ```
+> $ echo PROBE-ACESSO-PUBLICO > /var/www/jimi_webhook/storage/reports/probe_test.txt
+> $ curl -s -o /dev/null -w '%{http_code}' http://localhost/storage/reports/probe_test.txt
+> 200          # e o corpo devolveu "PROBE-ACESSO-PUBLICO"
+> ```
+> A correção está em `scripts/worker.php`: o nome do arquivo passa a levar 32 hex de
+> `random_bytes(16)` (relatórios **e** vídeos), o que elimina a enumeração por `job_id` sequencial.
+> A **opção A foi descartada** porque quebraria o link do e-mail — o caminho que a Fase 4 criou de
+> propósito para o anexo grande. A **opção C (URL assinada com validade) continua sendo o alvo** e
+> fica registrada como pendente: o token impede adivinhar, mas não protege link vazado ou
+> encaminhado. `storage/.htaccess` com `Options -Indexes` entrou junto, como o plano previa em
+> qualquer cenário, mais a negação de execução de script no diretório.
+>
+> **§3.2 — retenção → implementada.** `REPORT_RETENTION_DAYS` (padrão 30) no
+> `scripts/log_cleanup.php`, purgando `storage/reports` **e** `report_schedule_runs`; `0` desliga.
+> `/exportar` mostra **"Expirado"** no lugar do botão quando o arquivo já foi purgado, em vez de um
+> link para 404. `storage/media` ficou de fora: vídeo de ocorrência é evidência vinculada a uma
+> tratativa, não subproduto de consulta.
+>
+> ### Ajuste ao item 8 do roteiro
+> O item 8 ("o link baixa de fora") continua valendo, mas a resposta esperada mudou: o link **deve**
+> baixar sem login — é o desenho — e o que protege o arquivo agora é o nome imprevisível. O que o
+> teste precisa confirmar é que o **endereço antigo, previsível, não existe mais**.
+
 ## Por que este plano existe
 
 O SMTP **já está cadastrado e testado no homolog** — o botão "Enviar e-mail de teste" de

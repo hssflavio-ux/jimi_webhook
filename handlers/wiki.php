@@ -1,11 +1,21 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.3.0
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.7.1
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
  * ações disponíveis e resultados esperados. Sem jargão técnico, sem caminhos
  * de URL e sem seções de integração/infra (webhooks, motor, segurança).
+ *
+ * Atualizada na v4.7.1 (Fase 5 de docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md) com o
+ * que as quatro fases entregaram: notificações (sino/pop-up/som/e-mail),
+ * geocercas, os cinco relatórios operacionais, agendamento de relatório por
+ * e-mail e modelos de filtro salvos.
+ *
+ * Duas regras de negócio que o usuário PRECISA entender e que só existem aqui:
+ * o sistema notifica por OCORRÊNCIA e não por alarme (12 alarmes em rajada =
+ * 1 aviso, e isso é o desenho funcionando), e o link do relatório grande é
+ * secreto mas não exige login — ambas com callout próprio.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
@@ -407,25 +417,37 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="#rastreamento" style="padding-left:20px;font-size:12px">Rastreamento</a>
         <a href="#bi" style="padding-left:20px;font-size:12px">BI</a>
         <a href="#ocorrencias-dashboard" style="padding-left:20px;font-size:12px">Dashboard Ocorrências</a>
+        <a href="#notificacoes">Notificações</a>
         <a href="#videos">Vídeos</a>
         <a href="#video-aovivo" style="padding-left:20px;font-size:12px">Ao Vivo</a>
         <a href="#video-playback" style="padding-left:20px;font-size:12px">Playback</a>
         <a href="#video-downloads" style="padding-left:20px;font-size:12px">Downloads</a>
         <a href="#relatorios">Relatórios</a>
         <a href="#rel-comum" style="padding-left:20px;font-size:12px">Comum a todos</a>
+        <a href="#rel-modelos" style="padding-left:20px;font-size:12px">Modelos salvos</a>
         <a href="#rel-posicoes" style="padding-left:20px;font-size:12px">Posições</a>
         <a href="#rel-deslocamento" style="padding-left:20px;font-size:12px">Deslocamento</a>
         <a href="#rel-desatualizados" style="padding-left:20px;font-size:12px">Desatualizados</a>
         <a href="#rel-alarmes" style="padding-left:20px;font-size:12px">Alarmes</a>
         <a href="#rel-ocorrencias" style="padding-left:20px;font-size:12px">Ocorrências</a>
+        <a href="#rel-geocercas" style="padding-left:20px;font-size:12px">Geocercas</a>
+        <a href="#rel-status-frota" style="padding-left:20px;font-size:12px">Status da Frota</a>
+        <a href="#rel-paradas" style="padding-left:20px;font-size:12px">Paradas</a>
+        <a href="#rel-ociosidade" style="padding-left:20px;font-size:12px">Ociosidade</a>
+        <a href="#rel-ignicao" style="padding-left:20px;font-size:12px">Ignição</a>
+        <a href="#rel-velocidade" style="padding-left:20px;font-size:12px">Excesso de Velocidade</a>
+        <a href="#agendamentos" style="padding-left:20px;font-size:12px">Agendamentos</a>
         <a href="#cadastros">Cadastros</a>
         <a href="#ativos" style="padding-left:20px;font-size:12px">Ativos</a>
         <a href="#chips" style="padding-left:20px;font-size:12px">Chips</a>
         <a href="#clientes" style="padding-left:20px;font-size:12px">Clientes</a>
         <a href="#equipamentos" style="padding-left:20px;font-size:12px">Equipamentos</a>
+        <a href="#geocercas" style="padding-left:20px;font-size:12px">Geocercas</a>
         <a href="#grupos-permissao" style="padding-left:20px;font-size:12px">Grupos de Permissão</a>
         <a href="#motoristas" style="padding-left:20px;font-size:12px">Motoristas</a>
         <a href="#config-ocorrencias" style="padding-left:20px;font-size:12px">Config. Ocorrências</a>
+        <a href="#config-notificacoes" style="padding-left:20px;font-size:12px">Config. Notificações</a>
+        <a href="#config-smtp" style="padding-left:20px;font-size:12px">Servidor de E-mail</a>
         <a href="#usuarios" style="padding-left:20px;font-size:12px">Usuários</a>
         <a href="#operacoes">Operações</a>
         <a href="#comandos" style="padding-left:20px;font-size:12px">Comandos</a>
@@ -736,6 +758,68 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<h2 id="notificacoes">Notificações</h2>
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<p>Um alarme importante não depende mais de alguém estar com o dashboard aberto na tela certa. Quando uma ocorrência nova é criada, o sistema avisa pelos canais que você escolher: <strong>sino</strong>, <strong>pop-up</strong>, <strong>som</strong> e <strong>e-mail</strong>.</p>
+
+<div class="mockup">
+<div class="mockup-header">Sino no topo da tela</div>
+<div class="mockup-body">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+        <div style="position:relative;display:inline-block">
+            <span style="font-size:18px">🔔</span>
+            <span style="position:absolute;top:-6px;right:-8px;background:#cf202f;color:#fff;font-size:10px;font-weight:600;padding:1px 5px;border-radius:100px">3</span>
+        </div>
+    </div>
+    <div style="max-width:340px;margin-left:auto;border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden">
+        <div style="padding:10px 14px;background:#f5f6f8;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;font-weight:600">Notificações</span>
+            <span style="font-size:11px;color:var(--primary)">Marcar todas como lidas</span>
+        </div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hairline-soft);background:var(--primary-soft)">
+            <div style="font-size:12px;font-weight:600">Uso de celular — CAM-001</div>
+            <div style="font-size:11px;color:var(--muted)">Risco alto · há 2 minutos</div>
+        </div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hairline-soft)">
+            <div style="font-size:12px;font-weight:600">Saída de cerca: Pátio Central</div>
+            <div style="font-size:11px;color:var(--muted)">FJR7B59 · há 18 minutos</div>
+        </div>
+        <div style="padding:10px 14px">
+            <div style="font-size:12px;font-weight:600">Sonolência — CAM-004</div>
+            <div style="font-size:11px;color:var(--muted)">Risco alto · há 40 minutos</div>
+        </div>
+    </div>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Canal</th><th>Como se comporta</th></tr>
+<tr><td><strong>Sino</strong></td><td>O número vermelho ao lado do sino conta as não lidas. Clicar abre o painel com as mais recentes; clicar em uma delas leva à tela do evento e marca como lida. <strong>Marcar todas como lidas</strong> zera o contador.</td></tr>
+<tr><td><strong>Pop-up</strong></td><td>Um aviso aparece na tela no momento em que o evento chega, sem precisar recarregar a página.</td></tr>
+<tr><td><strong>Som</strong></td><td>Um alerta sonoro acompanha o pop-up. Útil para quem monitora vários veículos e não fica olhando o tempo todo para a tela.</td></tr>
+<tr><td><strong>E-mail</strong></td><td>Mensagem para até 3 endereços por regra. Sai <strong>desligado</strong> por padrão — ninguém recebe e-mail sem ter pedido.</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Detalhe</th><th>Como funciona</th></tr>
+<tr><td>Atualização</td><td>O sino se atualiza sozinho a cada 30 segundos. Com a aba em segundo plano ele pausa e volta a atualizar quando você retorna.</td></tr>
+<tr><td>Quem vê o quê</td><td>Cada usuário vê apenas as notificações do cliente em que está posicionado. Trocar de cliente troca a caixa de notificações.</td></tr>
+<tr><td>Quais eventos notificam</td><td>Ocorrências de comportamento (conforme as regras em <em>Cadastros › Config. Notificações</em>), entradas e saídas de geocerca e avisos do próprio sistema — por exemplo, um agendamento de relatório desativado por falhas.</td></tr>
+<tr><td>Limpeza automática</td><td>Notificações lidas somem depois de 30 dias; as não lidas, depois de 90. Não é preciso limpar a caixa manualmente.</td></tr>
+</table>
+
+<div class="callout warn">
+<strong>O sistema avisa por ocorrência, não por alarme.</strong> Um motorista distraído por meio minuto pode gerar uma dezena de alarmes seguidos da câmera. O sistema agrupa esses alarmes em <strong>uma</strong> ocorrência e envia <strong>um</strong> aviso — o comportamento é esse de propósito. Se você espera 12 avisos e recebe 1, o agrupamento está funcionando, não falhando. (A janela de agrupamento é configurada em <em>Cadastros › Config. Ocorrências</em>.)
+</div>
+
+<div class="callout info">
+<strong>Freio contra enxurrada:</strong> se um mesmo cliente passar de 60 notificações em uma hora, o sistema grava uma única notificação-resumo dizendo quantos avisos foram suprimidos e para de notificar até a hora virar. É o que impede um equipamento com defeito de encher a caixa de todo mundo.
+</div>
+
+<p>As regras — o que notifica, por qual canal e para quem — ficam em <strong>Cadastros › Config. Notificações</strong>. O envio de e-mail depende também do <strong>Cadastros › Servidor de E-mail</strong>.</p>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="videos">Vídeos</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
@@ -880,6 +964,41 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <strong>Horários sempre em Brasília:</strong> Todas as datas e horas exibidas nos relatórios — e as que você digita nos filtros — estão no horário de Brasília. Os equipamentos transmitem em outro fuso, e o sistema faz a conversão sozinho.
 </div>
 
+<h3 id="rel-modelos">Modelos salvos</h3>
+<p><strong>Objetivo:</strong> Guardar uma combinação de filtros que você usa com frequência e reaplicá-la em um clique, em vez de preencher tudo de novo toda vez.</p>
+
+<div class="mockup">
+<div class="mockup-header">Barra de modelos — aparece acima dos filtros</div>
+<div class="mockup-body">
+    <div class="filter-bar-mock">
+        <span style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted)">Modelos</span>
+        <div class="filter-mock">Frota SP — risco alto</div>
+        <span class="btn-mock outline">Excluir</span>
+        <span class="btn-mock">Salvar filtros atuais como modelo</span>
+    </div>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Salvar filtros atuais como modelo</td><td>Pede um nome e guarda os filtros que estão na tela naquele momento</td></tr>
+<tr><td>Escolher um modelo na lista</td><td>A tela recarrega já com aqueles filtros preenchidos e o resultado gerado</td></tr>
+<tr><td>Excluir</td><td>Apaga o modelo selecionado</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Detalhe</th><th>Como funciona</th></tr>
+<tr><td>Onde aparece</td><td>Em todas as telas de relatório. A barra fica escondida enquanto não há modelo salvo nem filtro aplicado — numa tela recém-aberta não há o que guardar.</td></tr>
+<tr><td>De quem é o modelo</td><td>Seu. Cada usuário vê apenas os próprios modelos; ninguém enxerga nem apaga o modelo de outra pessoa.</td></tr>
+<tr><td>Não se misturam</td><td>Um modelo pertence à tela em que foi criado. Um modelo de Alarmes não aparece na lista de Posições.</td></tr>
+<tr><td>Limite</td><td>Até 20 modelos por relatório, por usuário.</td></tr>
+<tr><td>O que <em>não</em> é guardado</td><td>Página, ordenação e formato de exportação ficam de fora — senão o modelo abriria sempre na página 7 ou baixaria um arquivo em vez de mostrar a tela.</td></tr>
+</table>
+
+<div class="callout tip">
+<strong>O período faz parte do modelo.</strong> Se o modelo foi salvo com um intervalo de datas fixo, ele volta com aquelas mesmas datas — ajuste o período depois de aplicar. Para receber o relatório pronto e recorrente, o caminho é <a href="#agendamentos" style="color:inherit">Agendamentos</a>.
+</div>
+
 <h3 id="rel-posicoes">Posições</h3>
 <p><strong>Objetivo:</strong> Histórico de posições de um ativo em um período. Mostra o trajeto percorrido no mapa + tabela paginada com data/hora, endereço, velocidade e ignição. Pode ser exportado em Excel ou PDF.</p>
 
@@ -994,6 +1113,211 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Exportar</td><td>Baixa Excel ou PDF</td></tr>
 </table>
 
+<h3 id="rel-geocercas">Geocercas</h3>
+<p><strong>Objetivo:</strong> Saber quando cada veículo entrou e saiu das áreas desenhadas em <em>Cadastros › Geocercas</em>, e quanto tempo ficou dentro de cada uma.</p>
+
+<p>O relatório tem <strong>duas modalidades</strong>, escolhidas no primeiro campo do filtro:</p>
+
+<table class="tbl-mock">
+<tr><th>Modalidade</th><th>O que mostra</th></tr>
+<tr><td><strong>Entradas e saídas</strong></td><td>Uma linha por travessia: data/hora, geocerca, equipamento, se foi entrada ou saída, a velocidade no instante da travessia e o local no mapa.</td></tr>
+<tr><td><strong>Permanência</strong></td><td>Uma linha por visita: geocerca, equipamento, hora de entrada, hora de saída e quanto tempo ficou dentro. Quem entrou e ainda não saiu aparece como <strong>"em permanência"</strong>.</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar por geocerca</td><td>Restringe a uma cerca específica ou mostra todas</td></tr>
+<tr><td>Filtrar por tipo</td><td>Só entradas, só saídas ou ambas (na modalidade Entradas e saídas)</td></tr>
+<tr><td>Ver Mapa</td><td>Abre em nova aba o ponto exato onde a travessia aconteceu</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF com a modalidade e os filtros da tela</td></tr>
+</table>
+
+<div class="callout info">
+<strong>A velocidade da travessia é a primeira pergunta de quem audita uma saída não autorizada</strong> — por isso ela aparece na própria linha do evento, sem precisar abrir o mapa.
+</div>
+
+<h3 id="rel-status-frota">Status da Frota</h3>
+<p><strong>Objetivo:</strong> Uma foto de <em>agora</em>: quantos veículos estão em movimento, ociosos, parados e sem comunicação — com o percentual de cada estado e a lista por trás de cada número.</p>
+
+<div class="mockup">
+<div class="mockup-header">Status da Frota</div>
+<div class="mockup-body">
+    <div class="kpi-row">
+        <div class="kpi-box blue"><div class="kpi-label">Em movimento</div><div class="kpi-val">12</div></div>
+        <div class="kpi-box yellow"><div class="kpi-label">Ocioso</div><div class="kpi-val">3</div></div>
+        <div class="kpi-box"><div class="kpi-label">Parado</div><div class="kpi-val">28</div></div>
+        <div class="kpi-box red"><div class="kpi-label">Sem comunicação</div><div class="kpi-val">5</div></div>
+    </div>
+    <table class="tbl-mock">
+    <tr><th>Equipamento</th><th>Cliente</th><th>Estado</th><th>Tempo no estado</th><th>Última posição</th><th>Velocidade</th></tr>
+    <tr><td>CAM-001</td><td>Frota Principal</td><td><span class="pill-mock blue">Em movimento</span></td><td>1h 12min</td><td>18/07 14:22:10</td><td class="mono">54 km/h</td></tr>
+    <tr><td>FJR7B59</td><td>Frota Principal</td><td><span class="pill-mock yellow">Ocioso</span></td><td>22min</td><td>18/07 14:21:58</td><td class="mono">0 km/h</td></tr>
+    <tr><td>CAM-004</td><td>Frota Principal</td><td><span class="pill-mock red">Sem comunicação</span></td><td>6h 40min</td><td>18/07 07:41:03</td><td class="mono">—</td></tr>
+    </table>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Clicar num estado</td><td>Filtra a lista para mostrar só os equipamentos naquele estado</td></tr>
+<tr><td>Filtrar por cliente ou equipamento</td><td>Recalcula os quatro números e a lista</td></tr>
+<tr><td>Ver Mapa</td><td>Abre a última posição conhecida do equipamento</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF com a foto atual</td></tr>
+</table>
+
+<div class="callout info">
+<strong>A soma dos quatro estados é sempre o total de equipamentos ativos do cliente</strong> — nenhum veículo fica de fora e nenhum é contado duas vezes. Se o total não bater com o que você espera, o que está diferente é a quantidade de equipamentos ativos, não a conta.
+</div>
+
+<div class="callout warn">
+<strong>Esta tela não tem filtro de período</strong>, e é a única assim: ela responde "como está a frota agora". Para o histórico, use Paradas, Ociosidade ou Ignição. Pelo mesmo motivo, o Status da Frota não pode ser agendado por e-mail — "o estado da frota de ontem às 7h" não significa nada.
+</div>
+
+<h3 id="rel-paradas">Paradas</h3>
+<p><strong>Objetivo:</strong> Todos os períodos em que cada veículo esteve com a <strong>ignição desligada</strong>, com início, fim, duração e local.</p>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar por cliente, equipamento e período + Gerar</td><td>Lista as paradas da mais antiga para a mais recente</td></tr>
+<tr><td>Duração mínima</td><td>Esconde paradas curtas — útil para separar "parou no semáforo" de "ficou a tarde toda parado"</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Início, Duração e Equipamento</td></tr>
+<tr><td>Ver Mapa</td><td>Mostra onde o veículo estava parado</td></tr>
+<tr><td>Indicadores no topo</td><td>Quantidade de paradas, tempo total parado, duração média, maior parada e número de equipamentos</td></tr>
+</table>
+
+<h3 id="rel-ociosidade">Ociosidade</h3>
+<p><strong>Objetivo:</strong> Os períodos em que o veículo ficou <strong>com o motor ligado e imóvel</strong> — combustível queimado sem deslocamento.</p>
+
+<div class="callout warn">
+<strong>Ociosidade não é o mesmo que Parada.</strong> As duas telas somam tempos diferentes e respondem perguntas diferentes: ociosidade é <em>motor ligado sem sair do lugar</em> (desperdício de combustível); parada é <em>ignição desligada</em> (veículo fora de operação). Um veículo não pode estar nos dois estados ao mesmo tempo.
+</div>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar + Gerar</td><td>Mesmos filtros, colunas e indicadores do relatório de Paradas</td></tr>
+<tr><td>Duração mínima</td><td>Descarta as ociosidades curtas e deixa à vista as que custam combustível</td></tr>
+</table>
+
+<h3 id="rel-ignicao">Ignição</h3>
+<p><strong>Objetivo:</strong> Cada vez que a ignição foi <strong>ligada</strong> ou <strong>desligada</strong>, com o horário e quanto tempo o veículo permaneceu no estado que aquele acionamento abriu.</p>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar por evento</td><td>Só "Ignição ligada", só "Ignição desligada" ou os dois</td></tr>
+<tr><td>Indicadores no topo</td><td>Quantas vezes ligou, quantas desligou, tempo total de motor ligado, tempo de motor desligado e número de equipamentos</td></tr>
+<tr><td>Ver Mapa</td><td>Mostra onde o acionamento aconteceu</td></tr>
+</table>
+
+<div class="callout info">
+<strong>Sair do movimento e ficar ocioso não é acionamento de ignição.</strong> O motor continua ligado; o que mudou foi a velocidade. Só a passagem de ligada para desligada (e vice-versa) entra neste relatório — é o que faz o número de "ignições desligadas" bater exatamente com a quantidade de paradas do mesmo período.
+</div>
+
+<div class="callout warn">
+<strong>Períodos sem comunicação não geram acionamento.</strong> Se o equipamento passou horas sem transmitir, ninguém sabe o que a ignição fez nesse intervalo — e o relatório não inventa um "desligou" no começo do silêncio nem um "ligou" no fim.
+</div>
+
+<h3 id="rel-velocidade">Excesso de Velocidade</h3>
+<p><strong>Objetivo:</strong> Os trechos em que o veículo rodou acima do limite configurado, com velocidade máxima atingida, limite vigente, excedente e duração da infração.</p>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Filtrar + Gerar</td><td>Lista as infrações do período, da mais antiga para a mais recente</td></tr>
+<tr><td>Excedente mínimo</td><td>Mostra só quem passou mais de X km/h do limite — separa os 2 km/h de margem de medição dos 30 km/h que exigem conversa com o motorista</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Início, Duração, Equipamento e Velocidade máxima</td></tr>
+<tr><td>Ver Mapa</td><td>Abre o ponto onde a <strong>velocidade máxima</strong> foi registrada — não onde a infração começou</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Regra</th><th>Como funciona</th></tr>
+<tr><td>Qual limite vale</td><td>O do equipamento, se ele tiver um. Sem isso, o limite padrão do cliente. Sem nenhum dos dois, <strong>80 km/h</strong>.</td></tr>
+<tr><td>Onde configurar</td><td>Por equipamento em <em>Cadastros › Equipamentos</em>; por frota em <em>Cadastros › Clientes</em>.</td></tr>
+<tr><td>Um pico não é infração</td><td>Um único ponto acima do limite é descartado — é indistinguível de erro de leitura do GPS. São necessários pelo menos dois envios seguidos acima do limite.</td></tr>
+<tr><td>Velocidade igual ao limite</td><td>Não é infração. A apuração é <em>acima</em> do limite.</td></tr>
+<tr><td>Limite mostrado</td><td>É o que estava vigente quando a infração foi apurada. Mudar o limite hoje não reescreve o histórico.</td></tr>
+</table>
+
+<div class="callout tip">
+<strong>Como os quatro estados são definidos</strong> — vale para Status da Frota, Paradas, Ociosidade e Ignição:
+<ul style="margin:8px 0 0 18px;line-height:1.7">
+    <li><strong>Em movimento</strong> — ignição ligada e velocidade acima de 3 km/h.</li>
+    <li><strong>Ocioso</strong> — ignição ligada e velocidade de até 3 km/h (o veículo está imóvel; abaixo disso o que se mede é oscilação do GPS, não deslocamento).</li>
+    <li><strong>Parado</strong> — ignição desligada.</li>
+    <li><strong>Sem comunicação</strong> — mais de 30 minutos sem nenhuma posição. É ausência de dado, não um estado do veículo: durante o silêncio, ninguém sabe o que o veículo fez.</li>
+</ul>
+</div>
+
+<div class="callout warn">
+<strong>Estes cinco relatórios são montados em segundo plano</strong>, a cada 15 minutos, e não no instante da consulta. Duas consequências: (1) o que aconteceu nos últimos minutos pode ainda não aparecer; (2) o histórico começa na data em que o recurso foi ativado no seu ambiente — períodos anteriores só aparecem se o administrador tiver pedido a recuperação do histórico na implantação.
+</div>
+
+<h3 id="agendamentos">Agendamentos</h3>
+<p><strong>Objetivo:</strong> Configurar um relatório uma única vez e recebê-lo por e-mail na frequência escolhida, sem precisar entrar no sistema para gerá-lo.</p>
+
+<div class="mockup">
+<div class="mockup-header">Agendamentos</div>
+<div class="mockup-body">
+    <div style="margin-bottom:16px"><span class="btn-mock">+ Novo Agendamento</span></div>
+    <table class="tbl-mock">
+    <tr><th>Nome</th><th>Relatório</th><th>Recorrência</th><th>Destinatários</th><th>Próximo envio</th><th>Status</th><th></th></tr>
+    <tr>
+        <td>Velocidade semanal</td><td>Excesso de Velocidade <span class="pill-mock gray">XLSX</span></td>
+        <td>Toda segunda às 07:00 (BRT)</td><td>gestor@empresa.com.br</td>
+        <td class="mono">03/08 07:00</td><td><span class="pill-mock green">Ativo</span></td>
+        <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Editar</span></td>
+    </tr>
+    <tr>
+        <td>Alarmes do dia</td><td>Alarmes <span class="pill-mock gray">PDF</span></td>
+        <td>Todo dia às 06:00 (BRT)</td><td>operacao@empresa.com.br +1</td>
+        <td class="mono">31/07 06:00</td>
+        <td><span class="pill-mock gray">Inativo</span> <span class="pill-mock yellow">3/3 falhas</span></td>
+        <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Ativar</span></td>
+    </tr>
+    </table>
+    <div style="font-size:12px;font-weight:600;color:var(--muted);margin:18px 0 8px">Histórico de execuções</div>
+    <table class="tbl-mock">
+    <tr><th>Quando</th><th>Agendamento</th><th>Período coberto</th><th>Registros</th><th>Situação</th></tr>
+    <tr><td>28/07 07:00</td><td>Velocidade semanal</td><td>21/07 a 27/07</td><td class="mono">34</td><td><span class="pill-mock green">Enviado</span></td></tr>
+    <tr><td>27/07 06:00</td><td>Alarmes do dia</td><td>26/07</td><td class="mono">0</td><td><span class="pill-mock gray">Vazio</span></td></tr>
+    <tr><td>26/07 06:00</td><td>Alarmes do dia</td><td>25/07</td><td class="mono">18</td><td><span class="pill-mock red">Falhou</span></td></tr>
+    </table>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Campo</th><th>O que preencher</th></tr>
+<tr><td>Nome</td><td>Como o agendamento aparece na lista e no assunto do e-mail</td></tr>
+<tr><td>Relatório e formato</td><td>Qual relatório enviar, em Excel, CSV ou PDF</td></tr>
+<tr><td>Frequência</td><td><strong>Diária</strong>, <strong>semanal</strong> (com o dia da semana) ou <strong>mensal</strong> (com o dia do mês)</td></tr>
+<tr><td>Hora do envio</td><td>Hora cheia, no <strong>horário de Brasília</strong></td></tr>
+<tr><td>Destinatários</td><td>Até 3 endereços, separados por vírgula</td></tr>
+<tr><td>Não enviar quando não houver registro</td><td>Marcado, o envio é pulado nos períodos sem nada a relatar (o histórico registra "Vazio"). Desmarcado, o e-mail sai mesmo assim, dizendo que não houve registro</td></tr>
+<tr><td>Agendamento ativo</td><td>Desmarcado, o agendamento fica guardado mas não dispara</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Editar</td><td>Abre o formulário com os dados atuais; salvar recalcula o próximo envio</td></tr>
+<tr><td>Desativar / Ativar</td><td>Suspende ou retoma os envios. Ativar recalcula o próximo envio e zera o contador de falhas</td></tr>
+<tr><td>Excluir</td><td>Remove o agendamento e todo o seu histórico (pede confirmação)</td></tr>
+<tr><td>Histórico de execuções</td><td>Mostra cada disparo: quando, período coberto, quantos registros e se foi enviado, ficou vazio ou falhou — com a mensagem de erro do provedor de e-mail quando falha</td></tr>
+</table>
+
+<div class="callout info">
+<strong>O período é sempre o anterior fechado</strong>, nunca o que está em curso: <strong>ontem</strong> na frequência diária, <strong>a semana passada</strong> (segunda a domingo) na semanal e <strong>o mês passado</strong> na mensal. Um relatório do dia que ainda não terminou chegaria pela metade.
+</div>
+
+<div class="callout warn">
+<strong>Relatório grande chega como link, não como anexo.</strong> Acima do tamanho máximo de anexo configurado no sistema, o e-mail traz um botão para baixar o arquivo em vez do arquivo em si — provedores de e-mail recusam anexos grandes, e um e-mail recusado é pior do que um link. <strong>Esse link vale por tempo limitado</strong>: por padrão o arquivo é apagado do servidor depois de 30 dias, e a partir daí a tela Exportar passa a mostrá-lo como <em>Expirado</em>. Guarde o arquivo se precisar dele por mais tempo — ou apenas gere o relatório de novo.
+</div>
+
+<div class="callout warn">
+<strong>Três falhas seguidas desativam o agendamento.</strong> Se o e-mail não puder ser entregue três vezes consecutivas — endereço inexistente, servidor de e-mail fora do ar —, o agendamento é desativado e quem o criou recebe um aviso no sino. Corrija o destinatário e clique em <strong>Ativar</strong>: o contador zera. Um envio bem-sucedido no meio do caminho também zera a contagem, porque a regra é <em>três seguidas</em>.
+</div>
+
+<div class="callout tip">
+<strong>Dia do mês vai até 28</strong> na frequência mensal, de propósito: 29, 30 e 31 não existem em todos os meses, e pular fevereiro nunca é o que se quis dizer.
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="cadastros">Cadastros</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -1070,6 +1394,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Entrar como (impersonar)</td><td>Revendedor passa a ver o sistema como aquele cliente. A ação fica registrada para auditoria</td></tr>
 <tr><td>Cor da marca</td><td>A cor escolhida é aplicada ao menu lateral do cliente</td></tr>
 <tr><td>FaceID</td><td>Habilita a identificação facial de motoristas para o cliente</td></tr>
+<tr><td><strong>Limite de velocidade padrão</strong></td><td>Vale para toda a frota do cliente no relatório de <a href="#rel-velocidade" style="color:inherit">Excesso de Velocidade</a>. Um equipamento com limite próprio ignora este valor; sem nenhum dos dois, o sistema usa 80 km/h</td></tr>
 </table>
 
 <h3 id="equipamentos">Equipamentos</h3>
@@ -1107,10 +1432,68 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Importar CSV</td><td>Envie um arquivo CSV com as colunas imei, nome, modelo e nº de câmeras — os equipamentos são cadastrados em lote</td></tr>
 <tr><td>Atualizar Firmware</td><td>Abre janela para enviar a atualização de software ao equipamento</td></tr>
 <tr><td>Selecionar periféricos</td><td>Tags clicáveis (estilo chip) para adicionar/remover periféricos do dispositivo</td></tr>
+<tr><td><strong>Limite de velocidade</strong></td><td>Limite em km/h só deste equipamento, usado no relatório de <a href="#rel-velocidade" style="color:inherit">Excesso de Velocidade</a>. Em branco, vale o limite padrão do cliente</td></tr>
 </table>
 
+<h3 id="geocercas">Geocercas</h3>
+<p><strong>Objetivo:</strong> Desenhar áreas no mapa e ser avisado quando um veículo entra ou sai delas — pátio, base do cliente, região proibida, ponto de coleta.</p>
+
+<div class="mockup">
+<div class="mockup-header">Geocercas — Desenho no mapa</div>
+<div class="mockup-body">
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+            <div class="form-mock" style="display:flex;flex-direction:column;gap:10px">
+                <div class="form-mock-field"><label>Nome</label><div class="input-mock">Pátio Central</div></div>
+                <div class="form-mock-field"><label>Tipo</label><div class="input-mock">Geocerca</div></div>
+                <div class="form-mock-field"><label>Formato</label>
+                    <div style="display:flex;gap:10px;margin-top:4px;font-size:13px">
+                        <span class="pill-mock blue">● Círculo</span><span class="pill-mock gray">○ Polígono</span>
+                    </div>
+                </div>
+                <div class="form-mock-field"><label>Raio (metros)</label><div class="input-mock">200</div></div>
+                <div class="form-mock-field"><label>Alertar em</label><div class="input-mock">Entrada e saída</div></div>
+                <div class="form-mock-field"><label>E-mails de alerta (até 3)</label><div class="input-mock dim">operacao@empresa.com.br</div></div>
+            </div>
+        </div>
+        <div style="flex:1;min-width:220px">
+            <div class="map-mock" style="height:200px;background:url('/assets/img/wiki_map_streets.png') center/cover no-repeat">
+                <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <circle cx="50" cy="50" r="26" fill="#0052ff" fill-opacity=".12" stroke="#0052ff" stroke-width="2" vector-effect="non-scaling-stroke"/>
+                </svg>
+                <div class="map-mock-dot" style="top:50%;left:50%"></div>
+                <span class="map-credit">© OpenStreetMap</span>
+            </div>
+            <div style="margin-top:10px;font-size:12px;color:var(--muted)">Equipamentos vinculados: <strong style="color:var(--ink)">CAM-001, FJR7B59</strong></div>
+        </div>
+    </div>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Campo</th><th>O que preencher</th></tr>
+<tr><td>Tipo</td><td><strong>Geocerca</strong> (área que gera eventos e alertas) ou <strong>Ponto de Interesse</strong> (referência no mapa)</td></tr>
+<tr><td>Formato</td><td><strong>Círculo</strong> — clique no mapa define o centro e o campo Raio define o tamanho. <strong>Polígono</strong> — cada clique adiciona um vértice e o botão fecha a área (mínimo de 3 vértices)</td></tr>
+<tr><td>Alertar em</td><td>Entrada e saída, somente entrada, somente saída ou não alertar. <strong>O evento é sempre registrado no relatório</strong>; esta opção decide apenas se o sistema avisa</td></tr>
+<tr><td>E-mails de alerta</td><td>Até 3 endereços que recebem aviso das travessias desta cerca (além do sino e do pop-up)</td></tr>
+<tr><td>Cor</td><td>Como a cerca aparece desenhada no mapa</td></tr>
+<tr><td>Equipamentos</td><td>Quais veículos são avaliados contra esta cerca. <strong>Sem nenhum vinculado, a cerca não gera evento nenhum</strong></td></tr>
+</table>
+
+<div class="callout tip">
+<strong>Desenhar uma cerca não gera entradas retroativas.</strong> Ao criar uma cerca sobre a garagem, os veículos que já estão lá dentro não disparam uma enxurrada de "entradas": o sistema apenas anota onde cada um estava. O primeiro evento só sai numa travessia de verdade. Editar a geometria de uma cerca existente reinicia essa contagem pelo mesmo motivo.
+</div>
+
+<div class="callout info">
+<strong>Veículo parado na borda não gera dezenas de eventos.</strong> A fronteira funciona como uma faixa: para registrar a saída, o veículo precisa se afastar cerca de 50 metros da borda. Um caminhão estacionado exatamente em cima da linha produz um par de eventos, não trinta.
+</div>
+
 <h3 id="grupos-permissao">Grupos de Permissão <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
-<p><strong>Objetivo:</strong> Matriz de permissões de acesso. Cada grupo define quais telas (18) e ações (Ver, Criar, Editar, Excluir, Exportar) um usuário pode acessar. Mostra contagem de usuários vinculados a cada grupo.</p>
+<p><strong>Objetivo:</strong> Matriz de permissões de acesso. Cada grupo define quais telas (22) e ações (Ver, Criar, Editar, Excluir, Exportar) um usuário pode acessar. Mostra contagem de usuários vinculados a cada grupo.</p>
+
+<div class="callout warn">
+<strong>Tela nova nasce fechada.</strong> Quando o sistema ganha uma tela — Geocercas, Agendamentos, Config. Notificações e Servidor de E-mail são as mais recentes —, ela não vem marcada nos grupos já existentes. Quem está em um grupo restrito não a vê no menu e recebe "acesso negado" ao abrir o endereço direto, até que um administrador marque a linha correspondente aqui. Administradores não são afetados. Os relatórios são exceção: todos compartilham a mesma linha <strong>Relatórios</strong>, então quem já via Alarmes passa a ver os relatórios novos automaticamente.
+</div>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
@@ -1160,6 +1543,64 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Excluir perfil</td><td>Só permitido se nenhum cliente estiver usando o perfil</td></tr>
 <tr><td>Vincular ao cliente</td><td>No cadastro do cliente, selecionar o perfil de ocorrências</td></tr>
 </table>
+
+<h3 id="config-notificacoes">Configuração de Notificações <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Definir o que gera aviso, por qual canal e para quem. Cada regra combina um tipo de alarme com os canais desejados — <a href="#notificacoes" style="color:inherit">sino, pop-up, som e e-mail</a>.</p>
+
+<div class="mockup">
+<div class="mockup-header">Config. Notificações — Regras</div>
+<div class="mockup-body">
+    <table class="tbl-mock">
+    <tr><th>Alarme</th><th>Escopo</th><th>Risco mínimo</th><th>Canais</th><th>Destinatários</th><th>Status</th></tr>
+    <tr><td>Categoria: DMS</td><td>Frota Principal</td><td>Alto</td><td>Sino, Pop-up, Som, E-mail</td><td>seguranca@empresa.com.br</td><td><span class="pill-mock green">Ativa</span></td></tr>
+    <tr><td>SOS / Pânico</td><td><span class="pill-mock gray">Global</span></td><td>Qualquer</td><td>Sino, Pop-up</td><td>—</td><td><span class="pill-mock green">Ativa</span></td></tr>
+    </table>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Campo</th><th>O que preencher</th></tr>
+<tr><td>Tipo de alarme</td><td>Um alarme específico ou uma <strong>categoria inteira</strong>. Escolher a categoria cobre todos os alarmes dela de uma vez — bem mais simples do que cadastrar um por um</td></tr>
+<tr><td>Risco mínimo</td><td>Qualquer risco, "baixo ou maior", "médio ou maior" ou "somente alto". Filtra pelo risco que o perfil de ocorrências atribuiu ao alarme</td></tr>
+<tr><td>Canais</td><td>Sino, pop-up em tempo real, som e e-mail — marque os que quiser combinar</td></tr>
+<tr><td>Destinatários</td><td>Até 3 endereços, usados quando o canal E-mail está marcado</td></tr>
+<tr><td>Regra ativa</td><td>Desmarcada, a regra fica guardada mas não vale</td></tr>
+</table>
+
+<div class="callout info">
+<strong>A regra do cliente vence a regra global.</strong> Regras <em>globais</em> (escopo "Global", só administrador cria) valem para todos os clientes que não tenham regra própria para aquele alarme. Assim que um cliente cadastra a sua, é ela que passa a valer para ele — sem precisar apagar a global.
+</div>
+
+<div class="callout warn">
+<strong>E-mail não funciona sem servidor cadastrado.</strong> Marcar o canal E-mail aqui não basta: é preciso cadastrar as credenciais em <a href="#config-smtp" style="color:inherit">Cadastros › Servidor de E-mail</a>. Sem isso, sino, pop-up e som continuam funcionando normalmente — só o e-mail não sai.
+</div>
+
+<h3 id="config-smtp">Servidor de E-mail <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Cadastrar as credenciais do servidor que envia os e-mails do sistema — alertas de notificação e relatórios agendados.</p>
+
+<table class="tbl-mock">
+<tr><th>Campo</th><th>O que preencher</th></tr>
+<tr><td>Servidor e porta</td><td>Endereço do provedor e a porta de envio</td></tr>
+<tr><td>Segurança</td><td><strong>STARTTLS</strong> (normalmente porta 587), <strong>SSL/TLS implícito</strong> (porta 465) ou sem criptografia</td></tr>
+<tr><td>Usuário e senha</td><td>Credenciais da conta de envio</td></tr>
+<tr><td>E-mail e nome do remetente</td><td>Como a mensagem aparece na caixa de quem recebe</td></tr>
+<tr><td>Ativo</td><td>Desmarcado, a configuração é ignorada</td></tr>
+</table>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Salvar</td><td>Grava as credenciais. A senha é guardada cifrada e <strong>nunca é reexibida</strong> no formulário — deixar o campo em branco ao editar mantém a senha atual</td></tr>
+<tr><td><strong>Enviar e-mail de teste</strong></td><td>Dispara uma mensagem para o endereço informado e mostra na tela o resultado. Falhando, exibe o erro que o provedor devolveu — é a forma mais rápida de descobrir porta errada, senha errada ou bloqueio do provedor</td></tr>
+<tr><td>Excluir</td><td>Remove a configuração</td></tr>
+</table>
+
+<div class="callout info">
+<strong>Escopo global ou por cliente.</strong> A configuração <em>global</em> atende todo o sistema. Um cliente pode ter a sua própria — útil quando ele quer que os e-mails saiam do próprio domínio. Vale, nesta ordem: a configuração do cliente, depois a global.
+</div>
+
+<div class="callout tip">
+<strong>Se os e-mails caírem na caixa de spam</strong>, o ajuste não é no sistema: é preciso que o domínio do remetente autorize o servidor de envio (registros SPF/DKIM no DNS). Fale com quem administra o domínio.
+</div>
 
 <h3 id="usuarios">Usuários <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
 <p><strong>Objetivo:</strong> Gestão de usuários do sistema com duas abas: <strong>Minha Empresa</strong> (usuários internos) e <strong>Meus Clientes</strong> (usuários dos clientes). Campos: nome, e-mail, senha, função (admin/operador/visualizador), tipo (revendedor/cliente), cliente vinculado, grupo de permissão, foto.</p>
@@ -1246,8 +1687,17 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Pedido criado</td><td>Entra na fila com status "pendente" e é processado em até 1 minuto</td></tr>
 <tr><td>Baixar (status "concluído")</td><td>Download do arquivo gerado</td></tr>
 <tr><td>Auto-atualização</td><td>O status dos relatórios se atualiza sozinho na tela</td></tr>
-<tr><td>Tipos disponíveis</td><td>Alarmes, Ocorrências, Posições, Viagens, Dispositivos</td></tr>
+<tr><td>Tipos disponíveis</td><td>Alarmes, Ocorrências, Posições, Viagens, Equipamentos, Paradas, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota</td></tr>
+<tr><td>Agendados</td><td>A tela também resume os <a href="#agendamentos" style="color:inherit">agendamentos</a> ativos e quando cada um envia da próxima vez</td></tr>
 </table>
+
+<div class="callout warn">
+<strong>"Expirado" no lugar do botão Baixar.</strong> Os arquivos gerados são apagados do servidor depois de 30 dias — cada um é uma cópia de dados da sua frota parada em disco, e guardá-los para sempre não é seguro nem necessário. Passado esse prazo, a linha continua na lista, mas com a marca <em>Expirado</em> em vez do botão. Para ter o arquivo de novo, basta pedir o relatório outra vez.
+</div>
+
+<div class="callout tip">
+<strong>O endereço do arquivo é secreto, não protegido por login.</strong> Cada relatório recebe um nome longo e aleatório justamente para que o link enviado por e-mail funcione sem exigir que a pessoa entre no sistema. A contrapartida é que <strong>qualquer um com o link consegue baixar o arquivo</strong> — trate-o como você trataria o próprio relatório em anexo e evite encaminhá-lo para fora de quem deve vê-lo.
+</div>
 
 <h3 id="checklist">Checklist e Inspeção</h3>
 <p><strong>Objetivo:</strong> Criar checklists de inspeção veicular (ex: checklist diário de pneus, freios, iluminação) e preenchê-los para veículos específicos. Cada checklist tem itens configuráveis: OK/Não OK, texto, número e foto.</p>
@@ -1298,7 +1748,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
-JIMI Webhook System v4.3.0 — Central de Ajuda — Última atualização: 23/07/2026
+JIMI Webhook System v4.7.1 — Central de Ajuda — Última atualização: 30/07/2026
 </p>
 
     </div><!-- /.wiki-content -->

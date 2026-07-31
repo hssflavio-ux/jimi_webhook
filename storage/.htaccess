@@ -1,0 +1,27 @@
+# ============================================================
+# storage/ — arquivos gerados em runtime (relatórios e mídia)
+# ============================================================
+# Este diretório é servido como ESTÁTICO: o .htaccess da raiz só reescreve o
+# que não é arquivo existente (`RewriteCond %{REQUEST_FILENAME} !-f`), então
+# nada aqui passa por require_login(). É de propósito — o relatório agendado
+# que ultrapassa MAIL_MAX_ATTACH_MB viaja como LINK no e-mail, e esse link
+# precisa abrir sem sessão.
+#
+# O que protege o conteúdo é o nome: desde a v4.7.1 todo arquivo gerado leva
+# 32 hex aleatórios (scripts/worker.php), o que torna a URL impossível de
+# adivinhar. Antes disso o nome era `report_<job_id>_<timestamp>` — enumerável.
+#
+# Este arquivo fecha os dois furos que o token não cobre.
+
+# 1. Sem listagem de diretório: com índice ligado, o token do nome não vale
+#    nada — bastaria abrir /storage/reports/ e ler todos.
+Options -Indexes
+
+# 2. Nada de execução aqui dentro. O diretório é gravado por worker que roda
+#    como root e fica com permissão larga; se algum dia um caminho de escrita
+#    aceitar conteúdo controlado pelo usuário, o arquivo é servido como texto,
+#    nunca interpretado. (`php_flag engine off` NÃO serve: só existe em
+#    mod_php e derruba o Apache com 500 sob PHP-FPM, que é o caso aqui.)
+<FilesMatch "\.(?i:php|phtml|phps|phar|cgi|pl|py|sh)$">
+    Require all denied
+</FilesMatch>
