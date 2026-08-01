@@ -43,9 +43,21 @@ else
 fi
 
 # Módulos PHP críticos
+#
+# `zip` entrou na v4.7.2 depois de o homolog rodar MESES sem ele: XLSX é o
+# formato padrão de /exportar E do relatório agendado, e sem ZipArchive o
+# worker morria com fatal ("Class ZipArchive not found"), deixando o job preso
+# em 'processando' e a execução em 'enfileirado' para sempre — sem erro no
+# histórico, porque o fatal mata o processo antes de qualquer UPDATE. Esta
+# checagem é justamente o que teria pego isso no primeiro deploy.
+#
+# `openssl` é o que permite ao includes/mailer.php abrir ssl://smtp:465.
+#
+# -x casa a linha inteira: sem ele, "pdo" casaria com "pdo_mysql" e um php sem
+# PDO passaria batido desde que tivesse pdo_sqlite.
 echo "  Verificando módulos PHP..."
-for mod in pdo pdo_mysql json mbstring; do
-    php -m 2>/dev/null | grep -qi "$mod" && echo "  ✓ php-$mod" || { echo "  ✗ FALHA: php-$mod — instale com: sudo apt install php-$mod"; exit 1; }
+for mod in pdo pdo_mysql json mbstring zip openssl; do
+    php -m 2>/dev/null | grep -qix "$mod" && echo "  ✓ php-$mod" || { echo "  ✗ FALHA: php-$mod — instale com: sudo apt install php$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")-$mod"; exit 1; }
 done
 
 # PHP-FPM (necessário para fastcgi_finish_request)

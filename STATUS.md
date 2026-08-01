@@ -55,9 +55,65 @@
 >
 > **Fuso**: `Logger` e `/ping` em BRT (ver §1).
 >
-> #### 3. Onde a v4.7.2 parou
+> #### 3. Bloco 2 do plano de validação — EXECUTADO contra o provedor real
 >
-> Ver o bloco de resultado ao fim desta seção (preenchido ao término da sessão).
+> **O agendamento saiu do papel: e-mail enviado de verdade, pelo `smtp.task.com.br`, com XLSX
+> de 419 linhas anexado.** 39 asserções em 3 roteiros, 0 falhas. O que foi medido:
+>
+> | # | Item do roteiro §2.2 | Resultado |
+> |---|---|---|
+> | 1 | Agendamento diário XLSX de Alarmes, 3 destinatários | ✅ criado, `is_active=1` |
+> | 2 | `next_run_at` em UTC | ✅ `2026-08-02 10:00 UTC` = `07:00 BRT` |
+> | 3 | Disparo (dispatcher → job → worker) | ✅ `1 job enfileirado`, execução `enviado` |
+> | 7 | Caminho do link (`MAIL_MAX_ATTACH_MB=0.01`) | ✅ log com `"link":true`, URL absoluta a partir de `APP_URL` |
+> | 8 | Link abre sem login | ✅ HTTP 200 — **é o desenho**; o que protege é o nome imprevisível |
+> | 9 | Vazio nos dois modos (tipo `occurrences`, zerado) | ✅ sem `skip_if_empty` **envia**; com ele, status `vazio` e nada sai |
+> | 12 | Permissão do arquivo gerado pelo **root** | ✅ `0644 root` — legível pelo `www-data` do Apache |
+> | 13 | Virada do dia: 22:00 BRT | ✅ `2026-08-02 01:00 UTC`, dia seguinte |
+> | — | Nome com 32 hex | ✅ `report_2_20260801_184516_7901fbee…xlsx` |
+> | — | Endereço antigo previsível | ✅ **404** |
+> | — | Listagem de `storage/reports` | ✅ **403** |
+> | — | Guard novo da v4.7.2 (APP_URL vazia) | ✅ execução `falhou` citando `APP_URL`, com o arquivo ainda gerado e baixável |
+>
+> **⚠️ Falta só o que depende de olho humano** (itens 4, 5 e 6): confirmar a chegada nas caixas
+> de `flaviohses@gmail.com`, `flavio.pessoal@gmail.com` e `flaviohs@hotmail.com`, abrir o `.xlsx`
+> no **Excel pt-BR** e verificar se caiu em spam. Se cair, o Bloco 4 (SPF/DKIM) passa a valer —
+> o `mailer.php` **não assina DKIM**.
+>
+> **Agendamento deixado ativo** (`#5`, "VALIDACAO BLOCO2 20260801_184515") com `next_run_at` em
+> `2026-08-02 10:00 UTC` = **02/08 07:00 BRT**, para exercitar o **cron real** sem forçar nada.
+> Apague-o em `/agendamentos` quando não quiser mais receber.
+>
+> #### 4. 🔴 O achado mais grave da sessão — `php-zip` nunca esteve instalado
+>
+> O Bloco 2 só passou na segunda tentativa. Na primeira, o worker morreu com:
+> ```
+> PHP Fatal error: Uncaught Error: Class "ZipArchive" not found
+>   in /var/www/jimi_webhook/includes/export_helper.php:123
+> ```
+> **XLSX é o formato padrão** de `/exportar` e do relatório agendado. Ou seja: **nenhuma
+> exportação XLSX jamais funcionou no homolog** — e falhava do pior jeito possível, porque o
+> fatal mata o processo **antes** de qualquer `UPDATE` de status: o job ficava preso em
+> `processando`, a execução em `enfileirado`, e o histórico não registrava erro nenhum. Quem
+> olhasse a tela veria "em andamento" para sempre.
+>
+> Corrigido: `apt install php8.3-zip` + restart do PHP-FPM (conferido nos dois caminhos, CLI e
+> web). **Mas a raiz não era a extensão — era a ausência de checagem**: o `deploy.sh` validava
+> `pdo pdo_mysql json mbstring` e nunca `zip`. Agora valida `zip` e `openssl`, com `grep -qix`
+> (linha inteira; antes `pdo` casava com `pdo_mysql`).
+>
+> ⚠️ **Mudança de infra fora do git** — se este servidor for reconstruído, ou se produção subir
+> do zero, `php8.3-zip` precisa entrar no provisionamento. O deploy agora **aborta** se faltar,
+> em vez de deixar quebrar em silêncio meses depois.
+>
+> #### 5. Backlog novo desta sessão
+>
+> | # | Item | Por quê importa |
+> |---|---|---|
+> | 1 | **Fatal no worker deixa job preso em `processando`** | O retry por `attempts` não cobre fatal: o processo morre antes do `UPDATE`. Um job travado nunca é retomado nem reportado. Vale um "varredor de jobs órfãos" (status `processando` há mais de N minutos → `falhou`) |
+> | 2 | **`checklist` não está na matriz de `/grupos-permissao`** | Por isso não foi possível pôr `require_permission()` na exclusão sem dar 403 a todo grupo restrito. A tela é "fase futura", mas o CRUD está vivo e alcançável |
+> | 3 | **`putenv()` é herdado por processo filho** | Armadilha de teste, não de produção: script que já leu o `.env` e chama `shell_exec('php scripts/worker.php')` faz o filho herdar os valores VELHOS, porque `config/database.php` só define `if (!getenv($key))`. Use `env -u VAR` ao testar mudança de `.env`. Sob cron não ocorre (ambiente limpo) |
+> | 4 | **Servidor não alcança o próprio IP público** | Sem hairpin NAT: `curl http://189.22.240.43/...` de dentro do servidor dá HTTP 0. Sondas de dentro têm de usar `localhost` |
 >
 > ---
 >
