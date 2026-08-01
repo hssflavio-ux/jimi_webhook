@@ -335,6 +335,53 @@ function brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom = '', $timeTo =
     }
 }
 
+/* ── Escopo multi-tenant dos relatórios ─────────────────────────────────── */
+
+/**
+ * Resolve por qual cliente um relatório deve filtrar (v4.7.3).
+ *
+ * ⚠️ CORRIGE UM VAZAMENTO CROSS-TENANT REAL. Até a v4.7.2, nove telas
+ * repetiam este padrão:
+ *
+ *     if (!$isAdmin && !$filterCust) { ...filtra pelo cliente da sessão... }
+ *     elseif ($filterCust)          { ...filtra pelo cliente PEDIDO NA URL... }
+ *
+ * Um usuário **não-admin** que acrescentasse `?customer_id=N` caía no
+ * `elseif`: o primeiro ramo exige `!$filterCust`, que passa a ser falso. Ou
+ * seja, o parâmetro que deveria ser um filtro do admin virava um **seletor de
+ * cliente para qualquer um**, sem nenhuma verificação de posse. Confirmado
+ * empiricamente em 01/08/2026: um `operator` do cliente B leu alarmes,
+ * equipamentos e status de frota do cliente A só mudando a URL.
+ *
+ * Regras agora:
+ *  - **admin/revendedor**: honra o pedido; sem pedido, `null` = todos os
+ *    clientes (comportamento preservado — esta função não muda o que o admin
+ *    enxerga).
+ *  - **demais**: SEMPRE o cliente da sessão. O `?customer_id` é ignorado por
+ *    completo, não validado — não há resposta diferente entre "cliente que não
+ *    existe" e "cliente que não é seu", então nem a existência vaza.
+ *  - **sem cliente na sessão**: devolve `0`, que não casa com nenhuma linha.
+ *    Falha FECHADA de propósito: antes, `if ($customerId)` simplesmente não
+ *    acrescentava filtro nenhum, e um usuário mal provisionado via **tudo**.
+ *
+ * Nota: `$isAdmin` inclui `user_type === 'revendedor'` por convenção do
+ * projeto. Se um revendedor deve poder filtrar QUALQUER cliente ou só os
+ * dele é uma pergunta de produto em aberto — esta função preserva o
+ * comportamento atual de propósito, para fechar a falha sem mudar semântica
+ * de perfil no mesmo passe.
+ *
+ * @param mixed    $requested          Valor cru de $_GET['customer_id']
+ * @param bool     $isAdmin            role === 'admin' || user_type === 'revendedor'
+ * @param int|null $sessionCustomerId  get_customer_id()
+ * @returns int|null  ID para filtrar, ou null para "sem filtro" (só admin)
+ */
+function report_customer_scope($requested, bool $isAdmin, $sessionCustomerId): ?int {
+    if ($isAdmin) {
+        return ($requested !== null && $requested !== '') ? (int)$requested : null;
+    }
+    return ($sessionCustomerId !== null && $sessionCustomerId !== '') ? (int)$sessionCustomerId : 0;
+}
+
 /* ── UI comum dos relatórios (ordenação + voltar) ───────────────────────── */
 
 /**

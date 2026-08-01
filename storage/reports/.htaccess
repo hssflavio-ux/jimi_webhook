@@ -1,0 +1,18 @@
+# ============================================================
+# storage/reports/ — acesso direto NEGADO (v4.7.3)
+# ============================================================
+# O download do relatório passa por `/download?j=…&exp=…&sig=…`
+# (handlers/download.php), que confere assinatura HMAC e prazo antes de
+# entregar o arquivo com readfile().
+#
+# POR QUE NEGAR AQUI TAMBÉM. Assinar a URL não protege nada enquanto o caminho
+# direto continuar aberto: quem tivesse o link antigo — inadivinhável desde a
+# v4.7.1, mas ETERNO — seguiria baixando para sempre, e o prazo seria
+# decorativo. É esta diretiva que dá sentido à assinatura.
+#
+# `storage/media` fica FORA desta regra de propósito: é vídeo de ocorrência,
+# servido por outro caminho, e não passou pela mesma revisão.
+#
+# Efeito colateral aceito e desejado: links de relatório em e-mails ENVIADOS
+# ANTES da v4.7.3 param de funcionar. Eles eram exatamente o problema.
+Require all denied

@@ -19,11 +19,24 @@ require_once __DIR__ . '/../includes/mailer.php';
 require_once __DIR__ . '/../includes/fleet_state.php'; // fmt_duration(), resolve_current_state()
 require_once __DIR__ . '/../includes/schedule.php';    // SCHEDULE_MAX_ROWS, SCHEDULE_MAX_FAILURES
 require_once __DIR__ . '/../includes/notification_engine.php'; // notify() ao desativar agendamento
+require_once __DIR__ . '/../includes/download_token.php';      // download_url() do link do e-mail
 
 /** Máximo de tentativas de um job com falha transitória (só 'notification'). */
 const JOB_MAX_ATTEMPTS = 3;
 
+/**
+ * Minutos após os quais um job em 'processando' é considerado órfão.
+ *
+ * Tem de ser MAIOR que o job legítimo mais lento — um relatório no teto de
+ * 100 mil linhas leva minutos. 15 min dá folga larga: o worker roda a cada
+ * 1 min, então nada honesto fica 15 min sem terminar nem falhar.
+ */
+const JOB_ORPHAN_MINUTES = 15;
+
 $db = Database::getInstance()->getConnection();
+
+// Antes de pegar trabalho novo, recupera o que ficou pendurado
+reapOrphanJobs($db);
 
 $stmt = $db->prepare("SELECT * FROM jobs WHERE status = 'pendente' ORDER BY created_at ASC LIMIT 5");
 $stmt->execute();
@@ -63,6 +76,77 @@ foreach ($jobs as $job) {
 }
 
 echo 'Worker executado: ' . count($jobs) . " jobs processados.\n";
+
+/**
+ * Recupera jobs órfãos — presos em 'processando' além de JOB_ORPHAN_MINUTES.
+ *
+ * ⚠️ POR QUE ISTO EXISTE (v4.7.3). O laço acima marca 'processando' ANTES de
+ * trabalhar e só grava o desfecho DEPOIS. Um **erro fatal** — não uma exceção,
+ * que o `catch` pega, mas um fatal de verdade, como `Class "ZipArchive" not
+ * found` — mata o processo entre os dois pontos. O job então fica em
+ * 'processando' PARA SEMPRE: nunca mais é selecionado (a query pega só
+ * 'pendente'), nunca falha, nunca notifica, e o `attempts`/retry não alcança
+ * porque nem chegou a rodar. A tela mostra "em andamento" indefinidamente.
+ *
+ * Aconteceu de verdade no homolog em 01/08/2026: `php-zip` não estava
+ * instalado, e o job 1 ficou encalhado sem nada no histórico do agendamento.
+ * O sintoma era indistinguível de "ainda processando".
+ *
+ * `updated_at` serve como relógio porque a coluna é ON UPDATE
+ * CURRENT_TIMESTAMP: ela marca exatamente quando o job entrou em
+ * 'processando'.
+ *
+ * Fecha as DUAS pontas: o job e, quando houver, a execução do agendamento —
+ * senão a `report_schedule_runs` continuaria em 'enfileirado' e a regra das
+ * 3 falhas nunca contaria esta.
+ *
+ * @param PDO $db Conexão ativa
+ * @returns int Quantidade de jobs recuperados
+ */
+function reapOrphanJobs($db): int {
+    $stmt = $db->prepare(
+        "SELECT * FROM jobs
+         WHERE status = 'processando'
+           AND updated_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL :m MINUTE)"
+    );
+    $stmt->bindValue(':m', JOB_ORPHAN_MINUTES, PDO::PARAM_INT);
+    $stmt->execute();
+    $orfaos = $stmt->fetchAll();
+
+    if (!$orfaos) {
+        return 0;
+    }
+
+    $msg = sprintf(
+        'Job interrompido: ficou mais de %d min em "processando" sem concluir. '
+        . 'Causa provável: erro fatal no worker (o processo morre antes de registrar a falha). '
+        . 'Verifique logs/worker.log.',
+        JOB_ORPHAN_MINUTES
+    );
+
+    foreach ($orfaos as $job) {
+        $db->prepare(
+            "UPDATE jobs SET status = 'falhou', error_message = :err WHERE id = :id"
+        )->execute([':err' => $msg, ':id' => $job['id']]);
+
+        // A execução do agendamento é a outra metade do encalhe
+        if (!empty($job['schedule_run_id'])) {
+            $sid = 0;
+            if (!empty($job['params'])) {
+                $p = json_decode((string)$job['params'], true);
+                $sid = isset($p['schedule_id']) ? (int)$p['schedule_id'] : 0;
+            }
+            finishScheduleRun($db, (int)$job['schedule_run_id'], $sid, 'falhou', 0, $msg);
+        }
+
+        Logger::warning('Worker: job órfão recuperado', [
+            'job_id' => $job['id'], 'type' => $job['type'], 'desde' => $job['updated_at'],
+        ]);
+        echo "Job {$job['id']}: órfão recuperado (preso em 'processando' desde {$job['updated_at']}).\n";
+    }
+
+    return count($orfaos);
+}
 
 /**
  * Encerra um job com falha, aplicando retry quando a falha é transitória.
@@ -252,7 +336,7 @@ function deliverScheduledReport($db, array $job, array $params, string $filepath
         $to,
         'Relatório: ' . (string)($params['report_name'] ?? 'Relatório')
             . ' — ' . (string)($params['periodo_label'] ?? ''),
-        buildScheduledReportEmailHtml($params, $rowCount, $asLink, $relPath, $size),
+        buildScheduledReportEmailHtml($params, $rowCount, $asLink, $relPath, $size, (int)$job['id']),
         $attachments,
         $cid
     );
@@ -379,11 +463,10 @@ function scheduleMimeType(string $relPath): string {
  * @param int    $size     Tamanho em bytes
  * @returns string HTML completo
  */
-function buildScheduledReportEmailHtml(array $params, int $rowCount, bool $asLink, string $relPath, int $size): string {
+function buildScheduledReportEmailHtml(array $params, int $rowCount, bool $asLink, string $relPath, int $size, int $jobId = 0): string {
     $accent = '#0052ff';
     $nome   = htmlspecialchars((string)($params['report_name'] ?? 'Relatório'), ENT_QUOTES, 'UTF-8');
     $per    = htmlspecialchars((string)($params['periodo_label'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $base   = rtrim((string)(getenv('APP_URL') ?: ''), '/');
 
     $corpo = $rowCount === 0
         ? 'Nenhum registro foi encontrado no período.'
@@ -392,9 +475,16 @@ function buildScheduledReportEmailHtml(array $params, int $rowCount, bool $asLin
     $anexo = '';
     if ($asLink) {
         $mb = number_format($size / 1024 / 1024, 1, ',', '.');
-        $url = htmlspecialchars($base . '/' . $relPath, ENT_QUOTES, 'UTF-8');
+        // Link ASSINADO com validade (v4.7.3), não mais o caminho direto para
+        // storage/reports — que era inadivinhável desde a v4.7.1, mas eterno,
+        // e viaja por servidores de e-mail de terceiros. Ver
+        // includes/download_token.php. Valida por DOWNLOAD_LINK_TTL (7 dias),
+        // dentro da retenção de 30 dias do arquivo.
+        $url = htmlspecialchars(download_url($jobId), ENT_QUOTES, 'UTF-8');
+        $validade = round(DOWNLOAD_LINK_TTL / 86400);
         $anexo = '<p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#5b616e;">'
-               . 'O arquivo tem ' . $mb . ' MB e ficou grande demais para anexo. Baixe pelo link:'
+               . 'O arquivo tem ' . $mb . ' MB e ficou grande demais para anexo. Baixe pelo link '
+               . '(válido por ' . $validade . ' dias):'
                . '</p><p style="margin:12px 0 0;">'
                . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#fff;'
                . 'text-decoration:none;padding:12px 24px;border-radius:100px;font-weight:600;font-size:14px;">'

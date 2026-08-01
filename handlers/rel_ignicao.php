@@ -62,14 +62,14 @@ $wideFrom = gmdate('Y-m-d H:i:s', strtotime($utcFrom . ' -2 days'));
 $innerWhere  = "WHERE s.state <> 'offline' AND s.started_at BETWEEN :wf AND :dt";
 $params = [':wf' => $wideFrom, ':dt' => $utcTo, ':df2' => $utcFrom, ':dt2' => $utcTo];
 
-if (!$isAdmin && !$filterCust) {
-    if ($customerId) {
-        $innerWhere .= ' AND s.customer_id = :cid';
-        $params[':cid'] = $customerId;
-    }
-} elseif ($filterCust) {
-    $innerWhere .= ' AND s.customer_id = :fcid';
-    $params[':fcid'] = (int)$filterCust;
+// Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope().
+// Resolvido UMA vez e reusado nas duas consultas desta tela (a da grade e a
+// do tempo agregado, mais abaixo): se divergirem, os dois números da tela
+// deixam de fechar, que é justamente o teste de aceite da segmentação.
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
+    $innerWhere .= ' AND s.customer_id = :cid';
+    $params[':cid'] = $scopeCust;
 }
 if ($filterImei !== '') {
     $innerWhere .= ' AND s.imei LIKE :imei';
@@ -171,14 +171,10 @@ try {
     // teste de aceite da segmentação.
     $timeWhere  = 'WHERE s.started_at BETWEEN :df3 AND :dt3';
     $timeParams = [':df3' => $utcFrom, ':dt3' => $utcTo];
-    if (!$isAdmin && !$filterCust) {
-        if ($customerId) {
-            $timeWhere .= ' AND s.customer_id = :cid3';
-            $timeParams[':cid3'] = $customerId;
-        }
-    } elseif ($filterCust) {
-        $timeWhere .= ' AND s.customer_id = :fcid3';
-        $timeParams[':fcid3'] = (int)$filterCust;
+    // Mesmo $scopeCust da consulta da grade, de propósito (ver acima)
+    if ($scopeCust !== null) {
+        $timeWhere .= ' AND s.customer_id = :cid3';
+        $timeParams[':cid3'] = $scopeCust;
     }
     if ($filterImei !== '') {
         $timeWhere .= ' AND s.imei LIKE :imei3';

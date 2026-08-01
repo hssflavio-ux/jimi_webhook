@@ -20,6 +20,20 @@ test-results/
 # caminho que não depende de alguém lembrar de criá-lo à mão.
 storage/*
 !storage/.htaccess
+# storage/reports precisa existir no checkout para o .htaccess dele chegar ao
+# servidor — é ele que NEGA o acesso direto ao arquivo, agora que o download
+# passa por /download com assinatura (v4.7.3). Sem isto, o link antigo e
+# eterno continuaria funcionando e assinar não protegeria nada.
+#
+# ⚠️ SÃO TRÊS LINHAS, e a do meio é obrigatória. `!storage/reports/` sozinho
+# desfaz o ignore do DIRETÓRIO INTEIRO — o que, num ambiente de dev que já
+# gerou relatórios, põe dado real de cliente na área de stage (78 arquivos, na
+# primeira tentativa desta versão). `storage/reports/*` volta a ignorar o
+# conteúdo, e só então a última linha libera o único arquivo que deve ser
+# versionado.
+!storage/reports/
+storage/reports/*
+!storage/reports/.htaccess
 
 # IDE
 .vscode/

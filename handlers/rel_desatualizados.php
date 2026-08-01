@@ -32,14 +32,11 @@ $detailOrderBy = "ORDER BY ds.last_gps_time IS NULL $nullsOrder, ds.last_gps_tim
 
 $where = '';
 $params = [];
-if (!$isAdmin && !$filterCust) {
-    if ($customerId) {
-        $where = 'WHERE d.customer_id = :cid';
-        $params[':cid'] = $customerId;
-    }
-} elseif ($filterCust) {
-    $where = 'WHERE d.customer_id = :fcid';
-    $params[':fcid'] = (int)$filterCust;
+// Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
+    $where = 'WHERE d.customer_id = :cid';
+    $params[':cid'] = $scopeCust;
 }
 
 // Bucketização — última posição vem de device_statistics.last_gps_time

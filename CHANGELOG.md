@@ -5,6 +5,40 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.7.3
+
+Passe de dívida técnica, disparado pela auditoria dos **critérios de aceite globais do
+`PROJETO_YUV.md` §11** — nove itens que estavam marcados mentalmente como "ok" e nunca
+tinham sido medidos como conjunto. Sem tela nova e **sem migração**.
+
+### Security
+- 🔴 **VAZAMENTO CROSS-TENANT: `?customer_id=N` na URL dava acesso aos dados de qualquer cliente.** Nove pontos do código repetiam este padrão:
+  ```php
+  if (!$isAdmin && !$filterCust) { /* filtra pelo cliente da SESSÃO */ }
+  elseif ($filterCust)           { /* filtra pelo cliente PEDIDO NA URL */ }
+  ```
+  Um usuário **não-admin** que acrescentasse `?customer_id=N` fazia `!$filterCust` virar falso, o primeiro ramo era pulado e o `elseif` filtrava pelo cliente **pedido**, sem nenhuma verificação de posse. O parâmetro que existia para o admin escolher um cliente virava, para qualquer usuário, um **seletor livre de tenant**.
+  - **Confirmado empiricamente antes da correção**, não deduzido do código: um usuário `operator`/`cliente` do cliente B leu alarmes, equipamentos e status de frota do cliente A só mudando a URL. A sonda de sanidade (sem o parâmetro, o mesmo usuário vê apenas o seu) prova que o fixture era real.
+  - **Telas afetadas**: `/relatorios/alarmes`, `/ocorrencias`, `/desatualizados`, `/ignicao`, `/velocidade`, `/paradas`, `/ociosidade`, `/status-frota` e `/equipamentos`.
+  - **Correção**: `report_customer_scope()` em `includes/functions.php`, único ponto de decisão. Para não-admin o `?customer_id` é **ignorado por completo** — não validado — porque validar produziria respostas diferentes para "cliente inexistente" e "cliente que não é seu", vazando a existência. Sem cliente na sessão devolve `0`, que não casa com nada: falha **fechada**, onde antes `if ($customerId)` simplesmente omitia o filtro e um usuário mal provisionado via **tudo**.
+  - `bi.php` já usava a forma correta (`if ($isAdmin && $filterCust)`) e ficou como estava — é o que mostra que o padrão errado era descuido, não desenho.
+  - **Em aberto de propósito**: `$isAdmin` inclui `user_type === 'revendedor'`, então um revendedor continua podendo filtrar qualquer cliente. Se deve poder é pergunta de produto; esta correção fecha a falha sem mudar semântica de perfil no mesmo passe.
+- **Link do relatório agora é assinado e expira** (`/download?j=…&exp=…&sig=…`, `includes/download_token.php`). O token de 32 hex da v4.7.1 matou a enumeração, mas não o link **vazado ou encaminhado**: conhecida a URL, ela valia para sempre, para qualquer um, sem login — e esses links viajam por e-mail e ficam parados em caixas de entrada. Agora há HMAC sobre `(job_id, expiração)` com `APP_KEY`, validade de 7 dias no e-mail e 1 hora no botão de `/exportar`.
+  - **`storage/reports/.htaccess` com `Require all denied`** entrou junto, e é o que dá sentido à assinatura: com o caminho direto ainda aberto, o link antigo e eterno continuaria funcionando e o prazo seria decorativo. **Efeito colateral aceito**: links de relatório em e-mails enviados antes desta versão param de funcionar — eles eram exatamente o problema.
+  - Assina o **ID do job**, não o caminho: o caminho vem do banco na hora do download, então não existe superfície de path traversal. `hash_equals()` para comparação em tempo constante, e o prazo é conferido **depois** da assinatura (o contrário diria ao atacante que a assinatura estava certa).
+
+### Fixed
+- **Job preso em `processando` para sempre.** O worker marca `processando` antes de trabalhar e só grava o desfecho depois; um **erro fatal** — não uma exceção, que o `catch` pega — mata o processo entre os dois pontos, e o job nunca mais é selecionado (a fila pega só `pendente`), nunca falha, nunca notifica. Aconteceu de verdade com o `php-zip` ausente (v4.7.2). `reapOrphanJobs()` recupera o que passou de 15 min e fecha **as duas pontas**: o job e a execução do agendamento, que sem isso ficaria em `enfileirado` e nunca contaria para a regra das 3 falhas.
+- **Os SQL antigos deixaram de embutir o nome do banco.** `jimi_tracker.sql` (que também tinha `CREATE DATABASE`), `migration_v2.0.0`, `v3.1.0`, `v4.0.0` e `hotfix_login_log` ignoravam o banco passado ao cliente `mysql`. Consequência real, ocorrida em 30/07/2026: apontar a cadeia para um banco de teste executava os primeiros arquivos contra o `jimi_tracker` **real** e rebaixava `system_info.version` para `4.0.0` — justamente o valor que o gate do `deploy.sh` lê. **Verificado**: cópia limpa montada em `jimi_teste_copia` chegou a `4.7.0` com 54 tabelas, e o banco real não foi tocado.
+  - O comando de instalação em `CLAUDE.md` mudou: o `CREATE DATABASE` agora é explícito, e trocar o nome do banco em todas as linhas passa a bastar.
+
+### Notas de implementação
+- **O que a auditoria do §11 encontrou e o que NÃO encontrou** — o valor de registrar os dois:
+  - *CSRF em todos os POST*: **sustenta**. 22 handlers tratam POST, 21 chamam `csrf_verify()`; as exceções (`login`, `setup`) são legítimas. Nenhuma escrita no banco restou alcançável por GET — varredura por profundidade de blocos sobre 76 escritas; `customer_switch.php` e `sendcommand.php` apareceram como suspeitos e se confirmaram seguros (guarda incondicional e rejeição de não-POST).
+  - *Prepared statements*: **sustenta**, checado nos três lugares onde PDO não protege sozinho. (a) Interpolação em `query()`/`exec()`: só duas no projeto, ambas benignas (`(int)` vindo do banco; literal constante). (b) `ORDER BY` dinâmico em ~10 telas — PDO não parametriza identificador — protegido por whitelist estrita (`in_array(..., true)` com fallback) em `report_sort_params()`, e `$order` restrito a `ASC|DESC`. (c) `LIMIT $perPage OFFSET $offset`, presente em 22 pontos e **invisível à primeira varredura**, que só olhava `query()`/`exec()` e não `prepare()`: todos os 22 derivam de `max(1, (int)$_GET['page'])` com `$perPage` literal, e os `$limit` de endpoints AJAX são `min(max((int)…))` — nenhuma string do usuário chega ao SQL.
+  - *Multi-tenancy*: **NÃO sustentava** — ver acima.
+- **Verificação**: `php -l` **0 erros** em 110 arquivos; **21 asserções** de escopo cross-tenant com dois clientes e um usuário não-admin reais, exercitando as **9 telas** por HTTP e com guarda de vacuidade em cada uma (HTML curto, `Fatal error`, `Warning:` ou "Erro interno" invalidam a asserção seguinte); **12 asserções** do download assinado, das quais 9 negativas — assinatura forjada, ausente, prazo vencido, `exp` esticado com assinatura válida, assinatura reusada em outro job, `result_path` com `../` e arquivo purgado; **5 asserções** do varredor de órfãos, incluindo as duas que importam (job de 2 min **não** é tocado; 2ª execução é idempotente); e a prova da cópia limpa de banco.
+
 ## [Unreleased] — 4.7.2
 
 Versão de correção, sem tela nova e **sem migração**. Nasceu de duas perguntas do

@@ -218,6 +218,8 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql   # relatórios agend
 
 **AJAX novos**: `/ocorrenciasdata` (polling do dashboard DMS) · `/exportardata` (polling da fila)
 
+**`/download` (v4.7.3)** — `download.php`, único caminho para baixar relatório gerado. **Não exige login de propósito**: a autorização é a assinatura HMAC com prazo na URL (`?j=&exp=&sig=`, ver `includes/download_token.php`), porque é este link que viaja no e-mail do relatório grande. O acesso direto a `storage/reports/` passou a ser **negado** (`storage/reports/.htaccess`) — sem isso a assinatura não protegeria nada, já que o link antigo continuaria valendo para sempre.
+
 > `router.php` precisa generalizar o parse para subrotas de 2 segmentos (`video/*`, `relatorios/*`, `ocorrencias/*`).
 
 ### Tabelas novas (migração v4.0.0)

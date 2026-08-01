@@ -20,7 +20,11 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 
 ```bash
 # Fresh database install
-mysql -u root -p < mysql/jimi_tracker.sql
+# Desde a v4.7.3 nenhum .sql embute `USE`/`CREATE DATABASE` — o banco vem da
+# linha de comando, então dá para instalar (ou montar cópia de teste) com
+# qualquer nome, trocando `jimi_tracker` em todas as linhas abaixo.
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS jimi_tracker DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -u root -p jimi_tracker < mysql/jimi_tracker.sql
 mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
@@ -100,6 +104,8 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 ## Key files
 
 - `handlers/router.php` — front controller / route table
+- `includes/download_token.php` + `handlers/download.php` — link de relatório **assinado com validade** (`/download?j=&exp=&sig=`). Único caminho de download: `storage/reports/` é negado no Apache. Sem login de propósito — a autorização é a assinatura, porque o link viaja por e-mail
+- `includes/functions.php` → **`report_customer_scope()`** — ponto único do escopo multi-tenant dos relatórios. Toda tela nova que aceite `?customer_id` **tem** de passar por ela: para não-admin o parâmetro é ignorado, não validado
 - `config/WebhookHandler.php` — abstract base for all `push*.php` receivers
 - `config/database.php` — PDO singleton + `.env` parser
 - `includes/auth.php` — `require_login()`, `require_admin()`, `get_jimi_user()`, `get_customer_id()`, `login_user()`, `set_customer_context()`

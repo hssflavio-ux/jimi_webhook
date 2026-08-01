@@ -51,14 +51,11 @@ $validSorts = ['started_at', 'max_speed', 'duration_s', 'imei'];
 $where  = 'WHERE e.started_at BETWEEN :df AND :dt';
 $params = [':df' => $utcFrom, ':dt' => $utcTo];
 
-if (!$isAdmin && !$filterCust) {
-    if ($customerId) {
-        $where .= ' AND e.customer_id = :cid';
-        $params[':cid'] = $customerId;
-    }
-} elseif ($filterCust) {
-    $where .= ' AND e.customer_id = :fcid';
-    $params[':fcid'] = (int)$filterCust;
+// Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
+    $where .= ' AND e.customer_id = :cid';
+    $params[':cid'] = $scopeCust;
 }
 if ($filterImei !== '') {
     $where .= ' AND e.imei LIKE :imei';

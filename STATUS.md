@@ -1,4 +1,57 @@
-# STATUS.md — Jimi Webhook System v4.7.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.7.3 (YUV Parity)
+
+> ### ▶️ RETOMAR AQUI — v4.7.3, passe de dívida técnica (01/08/2026, fim da tarde)
+>
+> Feito a pedido de "trate as dívidas e depois os outros itens", começando pela auditoria dos
+> **critérios de aceite globais do `PROJETO_YUV.md` §11** — nunca verificados como conjunto.
+>
+> #### 🔴 O achado: vazamento cross-tenant por `?customer_id=N`
+>
+> Nove pontos permitiam que **qualquer usuário não-admin lesse os dados de qualquer cliente**
+> apenas acrescentando `?customer_id=N` à URL. Não foi deduzido do código: foi **provado** com
+> dois clientes e um usuário `operator` reais, que leu alarmes, equipamentos e status de frota
+> de outro tenant. Telas afetadas: os relatórios de Alarmes, Ocorrências, Desatualizados,
+> Ignição, Velocidade, Paradas, Ociosidade, Status da Frota e a tela de Equipamentos.
+>
+> Corrigido com `report_customer_scope()` (`includes/functions.php`), ponto único de decisão.
+> Para não-admin o parâmetro é **ignorado**, não validado — validar diria, pela resposta, se o
+> cliente existe. Sem cliente na sessão o filtro vira `0`: falha **fechada**, onde antes a
+> ausência de contexto simplesmente omitia o filtro e mostrava tudo.
+>
+> ⚠️ **Deixado em aberto de propósito**: `$isAdmin` inclui `user_type='revendedor'`, então um
+> revendedor segue podendo filtrar qualquer cliente. É pergunta de produto, não de segurança
+> óbvia — e mudar semântica de perfil no mesmo passe que fecha uma falha é como se introduz a
+> próxima.
+>
+> #### O que a auditoria do §11 NÃO encontrou (vale tanto quanto)
+>
+> - **CSRF em todos os POST**: sustenta. 22 handlers tratam POST, 21 chamam `csrf_verify()`
+>   (`login` e `setup` são exceções legítimas). Varredura por profundidade de blocos sobre **76
+>   escritas** no banco: nenhuma restou alcançável por GET.
+> - **Prepared statements**: sustenta. Duas interpolações no projeto inteiro, ambas benignas. O
+>   `ORDER BY` dinâmico de ~10 telas é protegido por whitelist estrita em `report_sort_params()`.
+>
+> #### Demais dívidas fechadas nesta versão
+>
+> | Dívida | Estado |
+> |---|---|
+> | **URL assinada com validade** para o link do relatório | ✅ `/download?j=&exp=&sig=`, HMAC com `APP_KEY`, 7 dias no e-mail e 1 h em `/exportar`. **`storage/reports/.htaccess` com `Require all denied`** entrou junto — sem negar o caminho direto, assinar não protege nada |
+> | **Varredor de jobs órfãos** | ✅ `reapOrphanJobs()` no worker, teto de 15 min, fechando job **e** execução do agendamento |
+> | **`USE jimi_tracker` nos SQL antigos** | ✅ removido de **5** arquivos (não 4 — `hotfix_login_log.sql` também). Provado: cópia limpa em banco de outro nome chega a 4.7.0/54 tabelas sem tocar no real |
+>
+> ⚠️ **Quebra intencional**: links de relatório em e-mails enviados **antes** da v4.7.3 param de
+> funcionar. Eram precisamente o problema que a assinatura resolve.
+>
+> #### Dívidas que continuam abertas
+>
+> | Item | Por quê ficou |
+> |---|---|
+> | 🔴 **`TEST_EMAIL_B` nunca provisionado** | **É a causa-raiz de o vazamento ter sobrevivido.** `tests/multitenant.spec.js` existe desde a Fase M.4 exatamente para pegar isolamento entre clientes, mas **pula inteiro** sem o segundo usuário — nunca rodou uma vez. Ganhou agora o caso da escalada por `?customer_id`, que continua pulando. **Criar esse usuário vale mais do que qualquer teste novo**: é a diferença entre ter a rede e ter a rede pendurada |
+| **`notificacoes.spec.js` nunca escrita** | O sino da v4.4.0 segue sem cobertura E2E |
+> | **`checklist` fora da matriz de `/grupos-permissao`** | Impede pôr `require_permission()` na tela sem dar 403 a grupo restrito |
+> | **Escopo do revendedor** | Ver acima |
+> | **Fase F do YUV** (checklist completo, licenciamento, white-label) | É produto, não dívida — vem depois, conforme combinado |
+
 
 > ### ▶️ RETOMAR AQUI — estado em 01/08/2026 (tarde)
 >

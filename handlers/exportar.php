@@ -11,6 +11,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/download_token.php'; // download_path() no botão Baixar
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -245,7 +246,11 @@ try {
                         && !is_file(__DIR__ . '/../' . $j['result_path']);
                     ?>
                     <?php if ($j['status'] === 'concluido' && $j['result_path'] && !$fileGone): ?>
-                    <a href="<?= htmlspecialchars($j['result_path']) ?>" class="btn btn-primary btn-sm" style="padding:4px 12px;font-size:12px;">Baixar</a>
+                    <?php // Link assinado (v4.7.3). O acesso direto a storage/reports/
+                          // passou a ser negado no .htaccess, então apontar para
+                          // result_path daria 403. TTL curto aqui: o usuário está
+                          // logado e clica na hora — o prazo de 7 dias é do e-mail. ?>
+                    <a href="<?= htmlspecialchars(download_path((int)$j['id'], 3600)) ?>" class="btn btn-primary btn-sm" style="padding:4px 12px;font-size:12px;">Baixar</a>
                     <?php elseif ($fileGone): ?>
                     <span class="badge" style="font-size:11px;" title="Arquivo removido pela retenção de <?= (int)(getenv('REPORT_RETENTION_DAYS') !== false && getenv('REPORT_RETENTION_DAYS') !== '' ? (int)getenv('REPORT_RETENTION_DAYS') : 30) ?> dias. Gere o relatório novamente.">Expirado</span>
                     <?php elseif ($j['status'] === 'falhou'): ?>

@@ -6,7 +6,7 @@
 -- Execute: mysql -u root -p jimi_tracker < mysql/migration_v3.1.0.sql
 -- ============================================================
 
-USE `jimi_tracker`;
+-- Sem `USE` (v4.7.3) — ver nota em migration_v2.0.0.sql
 
 -- ------------------------------------------------------------
 -- 1. Tabela: customers (Clientes — multi-tenant)

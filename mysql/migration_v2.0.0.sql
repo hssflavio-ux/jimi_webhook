@@ -5,7 +5,9 @@
 -- Execute: mysql -u root -p jimi_tracker < mysql/migration_v2.0.0.sql
 -- ============================================================
 
-USE `jimi_tracker`;
+-- Sem `USE` (v4.7.3): o banco vem do cliente mysql (`mysql ... <DB> < arquivo`),
+-- como o deploy.sh já faz com DB_NAME. Fixar o nome aqui ignorava esse
+-- parâmetro e impedia instalar/testar em banco com outro nome.
 
 -- ------------------------------------------------------------
 -- 1. Novas colunas: heartbeats (pushhb — Seção 1.2)

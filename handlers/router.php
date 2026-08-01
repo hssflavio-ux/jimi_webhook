@@ -75,9 +75,12 @@ if (empty($segments)) {
                       'pushevent'];
     // NOTA: 'checklist' fica fora daqui de propósito — resolve via $subrouteMap
     // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
+    // 'download' (v4.7.3) NÃO exige login de propósito: a autorização é a
+    // assinatura HMAC com prazo na própria URL, porque é este o link que vai
+    // no e-mail do relatório grande. Ver includes/download_token.php.
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas','geocercas','agendamentos','wiki'];
+                     'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',

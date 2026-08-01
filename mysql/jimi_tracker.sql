@@ -15,9 +15,21 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 
--- Copiando estrutura do banco de dados para jimi_tracker
-CREATE DATABASE IF NOT EXISTS `jimi_tracker` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
-USE `jimi_tracker`;
+-- Este arquivo NÃO cria nem seleciona banco (v4.7.3). Crie-o antes e informe o
+-- nome ao cliente mysql:
+--
+--   mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS jimi_tracker \
+--       DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+--   mysql -u root -p jimi_tracker < mysql/jimi_tracker.sql
+--
+-- Antes havia `CREATE DATABASE`+`USE jimi_tracker` fixos aqui, o que fazia o
+-- arquivo IGNORAR o banco passado na linha de comando. Três consequências:
+-- instalar com outro nome exigia editar o SQL; não era possível montar uma
+-- cópia limpa de teste a partir do repositório; e apontar a cadeia de
+-- migrações para um banco de teste executava os primeiros arquivos contra o
+-- jimi_tracker REAL — o que em 30/07/2026 rebaixou `system_info.version` para
+-- 4.0.0 no banco de desenvolvimento (justamente o valor que o gate do
+-- deploy.sh lê para decidir o que aplicar).
 
 -- Copiando estrutura para tabela jimi_tracker.alarm_types
 CREATE TABLE IF NOT EXISTS `alarm_types` (

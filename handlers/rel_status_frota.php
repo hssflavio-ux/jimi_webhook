@@ -47,14 +47,11 @@ $perPage     = 25;
 
 $where  = 'WHERE d.is_active = 1';
 $params = [];
-if (!$isAdmin && !$filterCust) {
-    if ($customerId) {
-        $where .= ' AND d.customer_id = :cid';
-        $params[':cid'] = $customerId;
-    }
-} elseif ($filterCust) {
-    $where .= ' AND d.customer_id = :fcid';
-    $params[':fcid'] = (int)$filterCust;
+// Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
+    $where .= ' AND d.customer_id = :cid';
+    $params[':cid'] = $scopeCust;
 }
 if ($filterImei !== '') {
     $where .= ' AND (d.imei LIKE :imei OR d.device_name LIKE :imei2)';

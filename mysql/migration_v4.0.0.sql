@@ -10,7 +10,7 @@
 -- Execute: mysql -u root -p jimi_tracker < mysql/migration_v4.0.0.sql
 -- ============================================================
 
-USE `jimi_tracker`;
+-- Sem `USE` (v4.7.3) — ver nota em migration_v2.0.0.sql
 
 -- ------------------------------------------------------------
 -- Auxiliares idempotentes (herdados do padrão v3.1.0)

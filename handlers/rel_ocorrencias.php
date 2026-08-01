@@ -45,14 +45,11 @@ $where = 'WHERE o.last_alarm_at BETWEEN :df AND :dt';
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
 $params = [':df' => $utcFrom, ':dt' => $utcTo];
 
-if (!$isAdmin && !$filterCust) {
-    if ($customerId) {
-        $where .= ' AND o.customer_id = :cid';
-        $params[':cid'] = $customerId;
-    }
-} elseif ($filterCust) {
-    $where .= ' AND o.customer_id = :fcid';
-    $params[':fcid'] = (int)$filterCust;
+// Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
+    $where .= ' AND o.customer_id = :cid';
+    $params[':cid'] = $scopeCust;
 }
 if ($filterImei) {
     $where .= ' AND o.imei LIKE :imei';

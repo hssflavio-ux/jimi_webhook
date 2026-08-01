@@ -79,14 +79,12 @@ function render_segment_report(array $cfg): void
     $where  = 'WHERE s.state = :state AND s.started_at BETWEEN :df AND :dt';
     $params = [':state' => $state, ':df' => $utcFrom, ':dt' => $utcTo];
 
-    if (!$isAdmin && !$filterCust) {
-        if ($customerId) {
-            $where .= ' AND s.customer_id = :cid';
-            $params[':cid'] = $customerId;
-        }
-    } elseif ($filterCust) {
-        $where .= ' AND s.customer_id = :fcid';
-        $params[':fcid'] = (int)$filterCust;
+    // Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope().
+    // Este ponto sozinho cobria /relatorios/paradas e /relatorios/ociosidade.
+    $scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+    if ($scopeCust !== null) {
+        $where .= ' AND s.customer_id = :cid';
+        $params[':cid'] = $scopeCust;
     }
     if ($filterImei !== '') {
         $where .= ' AND s.imei LIKE :imei';

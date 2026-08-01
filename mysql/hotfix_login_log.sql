@@ -9,7 +9,7 @@
 -- mas crie-a para ativar rate limiting.
 -- ============================================================
 
-USE `jimi_tracker`;
+-- Sem `USE` (v4.7.3) — ver nota em migration_v2.0.0.sql
 
 CREATE TABLE IF NOT EXISTS `login_log` (
     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
