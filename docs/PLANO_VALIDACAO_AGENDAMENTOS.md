@@ -4,14 +4,35 @@
 **Base**: v4.7.0 no working tree; homolog em `92725cb` / banco `4.4.1`.
 **Data**: 30/07/2026.
 
-> ## ▶️ Estado em 30/07/2026 (noite)
+> ## ✅ PLANO CONCLUÍDO — 01/08/2026
 >
 > | Bloco | Estado |
 > |---|---|
-> | **1 — Publicar** | ✅ **feito**. Homolog em `a1a879b` / banco **4.7.0**, `/ping` concordando, 9 tabelas criadas, **7 workers no cron** (logs com escrita nos últimos minutos), backfill do `state_builder` rodado (2.049 segmentos, de 03/07 em diante), SMTP global cadastrado e testado. |
-> | **2 — Validar o envio agendado** | ⬜ **pendente e bloqueado no usuário**: exige uma caixa de entrada real. Nenhum agendamento foi criado no homolog ainda (`report_schedules` está vazia). O roteiro de 14 itens do §2.2 continua valendo integralmente. |
+> | **1 — Publicar** | ✅ **feito** (30/07). Homolog em `a1a879b` / banco **4.7.0**, `/ping` concordando, 9 tabelas criadas, **7 workers no cron**, backfill do `state_builder` rodado, SMTP global cadastrado e testado. |
+> | **2 — Validar o envio agendado** | ✅ **CONCLUÍDO em 01/08/2026.** 39 asserções automatizadas (0 falhas) + **confirmação do usuário de que o e-mail chegou**. Detalhe abaixo. |
 > | **3 — Decidir sobre download e retenção** | ✅ **decidido e implementado na v4.7.1** — ver abaixo. |
-> | **4 — Entregabilidade** | ⬜ só se aplica se o item 6 do roteiro falhar, o que depende do Bloco 2. |
+> | **4 — Entregabilidade** | ✅ **não se aplica**: o item 6 (spam) não falhou. O `mailer.php` segue **sem assinar DKIM** — se um dia cair em spam, a decisão registrada é trocar por API HTTP transacional, não implementar DKIM artesanal. |
+>
+> ### Bloco 2 — como foi fechado
+>
+> **Automatizado** (3 roteiros rodados no servidor como root, reproduzindo o cron):
+> itens **1, 2, 3, 7, 8, 9, 12 e 13** do §2.2 — agendamento criado pela tela com os 3
+> destinatários; `next_run_at` gravado em `2026-08-02 10:00 UTC` = `07:00 BRT`; disparo forçado
+> percorrendo dispatcher → job → worker; caminho do link com `"link":true` e URL absoluta a
+> partir de `APP_URL`; relatório vazio nos **dois** modos de `skip_if_empty`; arquivo `0644 root`
+> legível pelo `www-data`; e 22:00 BRT caindo em **01:00 UTC do dia seguinte**.
+>
+> **Confirmado pelo usuário** (o que exigia caixa de entrada real): itens **4, 5 e 6** — o teste
+> de e-mail passou. Com isso o Bloco 4 deixa de ser necessário.
+>
+> **Achados que o plano não previa**, ambos corrigidos na v4.7.2:
+> 1. **`php-zip` nunca esteve instalado no homolog** — XLSX é o formato padrão, então nenhuma
+>    exportação nesse formato jamais funcionou lá, e falhava em silêncio (o fatal mata o processo
+>    antes de qualquer `UPDATE`: job preso em `processando`, execução em `enfileirado`, histórico
+>    sem erro). O `deploy.sh` passou a checar `zip` e `openssl`.
+> 2. **`APP_URL` ausente do `.env`** — exatamente o risco que o §2.1 chamava de "o mais silencioso
+>    de todos", e estava mesmo quebrado. Corrigida no servidor; o worker agora **aborta** a entrega
+>    por link em vez de enviar href relativo.
 >
 > ### O que o Bloco 3 virou
 >
@@ -252,18 +273,28 @@ reescrevê-la.
 
 ## Critérios de aceite desta fase
 
-- [ ] Homolog em `4.7.0` (`/ping` e `system_info` concordando), 7 workers no `crontab -l`.
-- [ ] `APP_URL` conferida no `.env` do servidor.
-- [ ] Fuso do SO, do PHP e da sessão MySQL registrados em `STATUS.md` (não presumidos).
-- [ ] **E-mail agendado recebido numa caixa real, com o XLSX anexado, aberto no Excel pt-BR.**
-- [ ] Caminho do link exercitado e o link baixando **de fora do navegador logado**.
-- [ ] Relatório vazio e `skip_if_empty` conferidos nos dois modos.
-- [ ] 3 falhas consecutivas desativando e notificando, com provedor real.
-- [ ] Agendamento às 22:00 BRT gravando `next_run_at` no dia seguinte em UTC.
-- [ ] Arquivo gerado pelo cron (root) legível pelo Apache (www-data).
-- [ ] **Decisão registrada** sobre 3.1 (download sem autenticação) e 3.2 (retenção), com a
-      implementação feita ou explicitamente adiada com justificativa.
-- [ ] Nenhum item deste plano marcado como "OK" sem evidência colada em `STATUS.md`.
+- [x] Homolog em `4.7.0` (`/ping` e `system_info` concordando), 7 workers no `crontab -l`.
+      *(hoje em `4.7.2` no `/ping`; o banco segue `4.7.0` porque v4.7.1 e v4.7.2 não têm migração)*
+- [x] `APP_URL` conferida no `.env` do servidor. **Estava AUSENTE** — adicionada em 01/08/2026
+      (`http://189.22.240.43`), com backup do `.env`.
+- [x] Fuso do SO, do PHP e da sessão MySQL registrados em `STATUS.md` (não presumidos):
+      SO `America/Sao_Paulo (-03)`, PHP `UTC`, MySQL `SYSTEM` (= −03) numa sessão crua, com a
+      conexão PDO forçando `+00:00`.
+- [x] **E-mail agendado recebido numa caixa real, com o XLSX anexado, aberto no Excel pt-BR.**
+      Confirmado pelo usuário em 01/08/2026.
+- [x] Caminho do link exercitado e o link baixando **de fora do navegador logado**
+      (`"link":true` no log, URL absoluta a partir de `APP_URL`, HTTP 200 sem cookie).
+- [x] Relatório vazio e `skip_if_empty` conferidos nos dois modos (tipo `occurrences`, zerado):
+      sem a opção **envia**; com ela, status `vazio` e nada sai.
+- [ ] ~~3 falhas consecutivas desativando e notificando, com provedor real.~~ **NÃO exercitado.**
+      A lógica tem cobertura local (suíte da v4.7.0, com SMTP de captura), mas contra o provedor
+      real exigiria 3 ciclos com destinatário em domínio inexistente. Fica como lacuna consciente.
+- [x] Agendamento às 22:00 BRT gravando `next_run_at` no dia seguinte em UTC
+      (`2026-08-02 01:00 UTC`).
+- [x] Arquivo gerado pelo cron (root) legível pelo Apache (www-data): `0644 root`.
+- [x] **Decisão registrada** sobre 3.1 (download sem autenticação) e 3.2 (retenção): token no
+      nome implementado na v4.7.1; URL assinada com validade segue como alvo, não feita.
+- [x] Nenhum item deste plano marcado como "OK" sem evidência colada em `STATUS.md`.
 
 ## Fora do escopo
 

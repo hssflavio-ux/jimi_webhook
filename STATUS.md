@@ -75,10 +75,16 @@
 > | — | Listagem de `storage/reports` | ✅ **403** |
 > | — | Guard novo da v4.7.2 (APP_URL vazia) | ✅ execução `falhou` citando `APP_URL`, com o arquivo ainda gerado e baixável |
 >
-> **⚠️ Falta só o que depende de olho humano** (itens 4, 5 e 6): confirmar a chegada nas caixas
-> de `flaviohses@gmail.com`, `flavio.pessoal@gmail.com` e `flaviohs@hotmail.com`, abrir o `.xlsx`
-> no **Excel pt-BR** e verificar se caiu em spam. Se cair, o Bloco 4 (SPF/DKIM) passa a valer —
-> o `mailer.php` **não assina DKIM**.
+> **✅ Itens 4, 5 e 6 — CONFIRMADOS PELO USUÁRIO em 01/08/2026**: o teste de e-mail passou. Os
+> envios foram para `flaviohses@gmail.com`, `flavio.pessoal@gmail.com` e `flaviohs@hotmail.com`.
+> **Com isso o `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` está CONCLUÍDO** — e o Bloco 4 (SPF/DKIM)
+> deixa de ser necessário, porque o item 6 não falhou. Fica o registro de que o `mailer.php`
+> **não assina DKIM**: se um dia começar a cair em spam, a decisão registrada é trocar por API
+> HTTP transacional, não implementar DKIM artesanal.
+>
+> **Única lacuna consciente do roteiro**: o item 10 (**3 falhas consecutivas desativam e
+> notificam**) não foi exercitado contra o provedor real — exigiria 3 ciclos com destinatário em
+> domínio inexistente. A lógica tem cobertura local, com SMTP de captura, desde a v4.7.0.
 >
 > **Agendamento deixado ativo** (`#5`, "VALIDACAO BLOCO2 20260801_184515") com `next_run_at` em
 > `2026-08-02 10:00 UTC` = **02/08 07:00 BRT**, para exercitar o **cron real** sem forçar nada.
@@ -114,6 +120,21 @@
 > | 2 | **`checklist` não está na matriz de `/grupos-permissao`** | Por isso não foi possível pôr `require_permission()` na exclusão sem dar 403 a todo grupo restrito. A tela é "fase futura", mas o CRUD está vivo e alcançável |
 > | 3 | **`putenv()` é herdado por processo filho** | Armadilha de teste, não de produção: script que já leu o `.env` e chama `shell_exec('php scripts/worker.php')` faz o filho herdar os valores VELHOS, porque `config/database.php` só define `if (!getenv($key))`. Use `env -u VAR` ao testar mudança de `.env`. Sob cron não ocorre (ambiente limpo) |
 > | 4 | **Servidor não alcança o próprio IP público** | Sem hairpin NAT: `curl http://189.22.240.43/...` de dentro do servidor dá HTTP 0. Sondas de dentro têm de usar `localhost` |
+>
+> #### 6. ▶️ PRÓXIMO PASSO — a iniciativa v4.4–v4.7 acabou; o que vem depois é escolha
+>
+> Com o Bloco 2 fechado, **`docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md` e
+> `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` estão ambos CONCLUÍDOS**. Não há próximo passo obrigatório
+> herdado — o que existe é dívida acumulada e o roadmap YUV. Em ordem de risco:
+>
+> | Prioridade | Item | Onde |
+> |---|---|---|
+> | **Alta** | **URL assinada com validade** (`?exp=…&sig=…`) para o link do relatório | O token do nome elimina a enumeração, mas **não** protege link vazado ou encaminhado — e agora esses links viajam por e-mail de verdade, comprovadamente |
+> | **Alta** | **Varredor de jobs órfãos** (`processando` há mais de N min → `falhou`) | Backlog #1 acima. O `php-zip` mostrou que um fatal no worker some sem deixar rastro no histórico |
+> | Média | **Os 4 SQL mais antigos embutem `USE jimi_tracker`** | Impede montar cópia limpa de teste; já rebaixou o banco de dev para `4.0.0` uma vez |
+> | Média | **`notificacoes.spec.js` nunca foi escrita** | O sino da v4.4.0 segue sem cobertura E2E |
+> | Média | **`checklist` fora da matriz de `/grupos-permissao`** | Backlog #2 acima |
+> | — | **Roadmap YUV** (`PROJETO_YUV.md`) | As telas de paridade que ainda faltam — é o rumo do produto, não dívida |
 >
 > ---
 >
