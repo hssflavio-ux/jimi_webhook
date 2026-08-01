@@ -42,6 +42,31 @@
 > ⚠️ **Quebra intencional**: links de relatório em e-mails enviados **antes** da v4.7.3 param de
 > funcionar. Eram precisamente o problema que a assinatura resolve.
 >
+> #### ✅ PUBLICADO E VERIFICADO no homolog — `8c676fd`, 01/08/2026 16:52 BRT
+>
+> `/ping` em **4.7.3**. As migrações reportaram "desnecessária" (banco segue em `4.7.0`, correto —
+> nem a v4.7.1, nem a v4.7.2, nem a v4.7.3 têm migração). A checagem de módulos nova passou
+> (`php-zip`, `php-openssl`).
+>
+> **O `.htaccess` só pode ser verificado no servidor** — `php -S` do ambiente local não processa
+> `.htaccess`, então esta era a única prova possível de que a assinatura não é decorativa:
+>
+> | Sonda | Resultado |
+> |---|---|
+> | `storage/reports/.htaccess` chegou pelo `git pull` | ✅ presente |
+> | `GET` direto num `.xlsx` real de cliente | ✅ **403** |
+> | Listagem de `storage/reports/` | ✅ 403 |
+> | `storage/media/` (não devia ser afetado) | ✅ 403 de listagem, **não** 500 |
+> | `/download?j=1` sem assinatura | ✅ 403 |
+> | **Link assinado, gerado com a `APP_KEY` real** | ✅ **200**, conteúdo real, `Content-Disposition: attachment`, `Cache-Control: private, no-store` |
+> | O **mesmo** arquivo pelo caminho direto | ✅ 403 |
+>
+> ⚠️ **Armadilha do ambiente registrada**: o homolog ficou **inacessível por ~1 min** no meio desta
+> sessão — ICMP respondia (máquina de pé) mas as portas 22, 80 e 3306 davam timeout **as três
+> juntas**. Voltou sozinho. Padrão compatível com `fail2ban`/firewall reagindo ao volume de
+> conexões SSH de uma sessão longa. Se acontecer de novo: sondar antes de concluir que o serviço
+> caiu, e considerar espaçar os comandos remotos.
+>
 > #### Dívidas que continuam abertas
 >
 > | Item | Por quê ficou |
