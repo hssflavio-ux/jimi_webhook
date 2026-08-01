@@ -221,6 +221,27 @@ function deliverScheduledReport($db, array $job, array $params, string $filepath
     $size     = is_file($filepath) ? (int)filesize($filepath) : 0;
     $asLink   = $size > $maxBytes;
 
+    // APP_URL ausente + entrega por link = a pior combinação possível: o e-mail
+    // sai, o provedor aceita, o histórico marca "enviado" — e o destinatário
+    // recebe uma URL relativa que não abre em caixa de entrada nenhuma. Falhar
+    // aqui é melhor do que entregar link morto em silêncio: o erro fica visível
+    // no histórico do agendamento e alimenta a regra das 3 falhas.
+    // (Encontrado no homolog em 01/08/2026: APP_URL simplesmente não estava
+    // no .env, e nada no código reclamava.)
+    if ($asLink && rtrim((string)(getenv('APP_URL') ?: ''), '/') === '') {
+        $msg = sprintf(
+            'APP_URL não configurada no .env: o arquivo tem %.1f MB (acima de %.1f MB) '
+            . 'e seria entregue como link, mas não há endereço base para montá-lo.',
+            $size / 1048576,
+            $maxBytes / 1048576
+        );
+        finishScheduleRun($db, $runId, $scheduleId, 'falhou', $rowCount, $msg);
+        Logger::error('Worker: entrega por link abortada — APP_URL ausente', [
+            'job_id' => $job['id'], 'size_mb' => round($size / 1048576, 2),
+        ]);
+        return;
+    }
+
     $attachments = $asLink ? [] : [[
         'path' => $filepath,
         'name' => scheduleAttachmentName($params, $relPath),
@@ -697,9 +718,14 @@ function buildNotificationEmailHtml(array $p): string {
     $title = htmlspecialchars((string)($p['title'] ?? 'Notificação'), ENT_QUOTES, 'UTF-8');
     $body  = htmlspecialchars((string)($p['body'] ?? ''), ENT_QUOTES, 'UTF-8');
 
+    // Sem APP_URL o botão viraria um href relativo ("/agendamentos"), que em
+    // cliente de e-mail não resolve para lugar nenhum. Melhor omitir o botão do
+    // que exibir um que não funciona — título e corpo já carregam a informação.
+    // Aqui não se pode falhar o envio, ao contrário do relatório entregue por
+    // link: lá a URL É o conteúdo; aqui é só um atalho.
     $link = '';
-    if (!empty($p['link_url'])) {
-        $base = rtrim((string)(getenv('APP_URL') ?: ''), '/');
+    $base = rtrim((string)(getenv('APP_URL') ?: ''), '/');
+    if (!empty($p['link_url']) && $base !== '') {
         $url  = htmlspecialchars($base . $p['link_url'], ENT_QUOTES, 'UTF-8');
         $link = '<p style="margin:24px 0 0;">'
               . '<a href="' . $url . '" style="display:inline-block;background:' . $accent . ';color:#fff;'

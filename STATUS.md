@@ -1,6 +1,67 @@
-# STATUS.md — Jimi Webhook System v4.7.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.7.2 (YUV Parity)
 
-> **Última atualização**: 30/07/2026 (noite) — **v4.7.1: download seguro, retenção de relatórios e a Central de Ajuda em dia**. Fecha a iniciativa do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`: as duas decisões pendentes do Bloco 3 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` **e a Fase 5**. Sem tela nova e **sem migração**. Alterados: `scripts/worker.php` (nome do arquivo com 32 hex aleatórios, relatório e vídeo), `scripts/log_cleanup.php` (`REPORT_RETENTION_DAYS`), `handlers/exportar.php` + `exportardata.php` ("Expirado"), `handlers/wiki.php` (12 seções novas, saiu da v4.3.0 para a v4.7.1), `.gitignore`, `.env.example`. Novo: `storage/.htaccess` (versionado).
+> ### ▶️ RETOMAR AQUI — estado em 01/08/2026 (tarde)
+>
+> #### 0. O STATUS mentiu de novo — e a mesma lição de 30/07 vale outra vez
+>
+> O bloco abaixo (30/07, noite) afirmava que a **v4.7.1 não estava commitada** e listava
+> "commitar / publicar / conferir" como Passos 1 a 3. **Os três já tinham sido feitos** — a
+> publicação aconteceu depois que aquele texto foi escrito, exatamente como havia acontecido
+> na iteração anterior. Conferido nesta sessão, não presumido:
+>
+> | Ponta | Estado real em 01/08 15:00 BRT | Como foi conferido |
+> |---|---|---|
+> | Git local / `origin` / homolog | os três em **`0685630`** | `git rev-list --left-right --count origin/main...main` = `0 0`; `ssh … git log -1` |
+> | `storage/.htaccess` | presente; `GET /storage/reports/` → **403** | `curl -w '%{http_code}'` |
+> | `report_cleanup` (v4.7.1) | rodou **31/07 e 01/08** às 06:10 UTC | `logs/log_cleanup.log` — prova de que o código novo está no cron |
+> | Cron | **7 workers**, todos com escrita no dia | `ls -la` dos 7 `.log` |
+> | Banco | `4.7.0` (correto — a v4.7.1 não tem migração) | `SELECT * FROM system_info` |
+> | Segmentos | **2.425** (eram 2.049 em 30/07) | `SELECT COUNT(*) FROM device_state_segments` |
+>
+> **Regra que fica**: antes de escrever "pendente" no STATUS, conferir o servidor. Um STATUS
+> escrito no meio de uma sessão descreve o estado de quando foi escrito, não o de quando é lido.
+>
+> #### 1. Fusos — MEDIDOS, não presumidos (fecha um critério de aceite do Bloco 1)
+>
+> | Ponta | Valor | Consequência |
+> |---|---|---|
+> | SO do servidor | `America/Sao_Paulo (-03)` | **é o relógio que dispara o cron** |
+> | PHP (CLI e FPM) | `UTC` (`date.timezone => UTC`) | `date()` produz UTC → é o que grava no banco |
+> | MySQL `@@global`/`@@session` | `SYSTEM` (= −03) | ⚠️ **armadilha**: consulta manual pelo cliente `mysql` vem em **BRT**; a conexão PDO do app força `+00:00`. Ao conferir `next_run_at` na mão, use `SET time_zone='+00:00'` |
+>
+> **Decisão registrada (01/08/2026)**: trabalhar em **GMT-3 apenas na superfície visível**. O
+> armazenamento continua UTC — é o que os devices transmitem (GMT 0) e o que os 146 pontos de
+> `fmt_brt()`/`CONVERT_TZ`/`brt_day_range_to_utc()` esperam. Converter o banco para −03 exigiria
+> migrar toda coluna de data de ~22 tabelas, reescrever esses 146 pontos e converter o timestamp
+> na entrada dos webhooks — alto risco e, na prática, irreversível. O que mudou na v4.7.2 foi só
+> o carimbo do `Logger` (e o nome do arquivo diário) e o `/ping`. **Nenhuma linha do banco foi
+> tocada.**
+>
+> #### 2. O que esta sessão entregou — v4.7.2
+>
+> **Segurança — exclusão por GET sem CSRF em QUATRO telas, não uma.** O `STATUS` registrava só
+> `/geocercas`; a varredura por `action=` destrutivo em GET achou mais três:
+> `/config-notificacoes`, `/config-ocorrencias` e `/checklist`. Este último era o pior: **sem
+> CSRF, sem checagem de escopo e sem permissão** — o `id` da query string apagava o checklist de
+> qualquer cliente. As quatro viraram POST com `csrf_field()`.
+>
+> **`APP_URL` estava AUSENTE do `.env` do homolog.** É o item que o `PLANO_VALIDACAO_AGENDAMENTOS.md`
+> chamava de "o mais silencioso de todos", e ele estava mesmo quebrado: sem a variável o botão
+> "Baixar relatório" do e-mail vira href **relativo**, o provedor aceita, o histórico marca
+> "enviado" e só o destinatário descobre. Corrigido no servidor (`APP_URL=http://189.22.240.43`,
+> com backup do `.env`) **e** no código, que agora aborta a entrega por link em vez de mandar link
+> morto. ⚠️ **O `deploy.sh` sincroniza apenas `SYSTEM_VERSION`** — ele **não** copia chaves novas
+> do `.env.example` para o `.env`. Toda variável nova é trabalho manual no servidor.
+>
+> **Fuso**: `Logger` e `/ping` em BRT (ver §1).
+>
+> #### 3. Onde a v4.7.2 parou
+>
+> Ver o bloco de resultado ao fim desta seção (preenchido ao término da sessão).
+>
+> ---
+>
+> **Última atualização anterior**: 30/07/2026 (noite) — **v4.7.1: download seguro, retenção de relatórios e a Central de Ajuda em dia**. Fecha a iniciativa do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`: as duas decisões pendentes do Bloco 3 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` **e a Fase 5**. Sem tela nova e **sem migração**. Alterados: `scripts/worker.php` (nome do arquivo com 32 hex aleatórios, relatório e vídeo), `scripts/log_cleanup.php` (`REPORT_RETENTION_DAYS`), `handlers/exportar.php` + `exportardata.php` ("Expirado"), `handlers/wiki.php` (12 seções novas, saiu da v4.3.0 para a v4.7.1), `.gitignore`, `.env.example`. Novo: `storage/.htaccess` (versionado).
 >
 > ### ▶️ RETOMAR AQUI — estado em 30/07/2026 (noite)
 >

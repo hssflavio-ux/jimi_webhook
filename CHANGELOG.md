@@ -5,7 +5,36 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [Unreleased] — 4.7.1
+## [Unreleased] — 4.7.2
+
+Versão de correção, sem tela nova e **sem migração**. Nasceu de duas perguntas do
+usuário — "qual é o status?" e "trabalhe tudo em GMT-3" — e do que a conferência do
+servidor revelou por baixo delas.
+
+### Security
+- **Exclusão destrutiva por GET, sem token CSRF, em QUATRO telas.** `csrf_verify()` não lê da query string, então `GET ?action=excluir&id=N` estava inteiramente fora do alcance da proteção: bastava um `<img src="/geocercas?action=excluir&id=3">` em qualquer página que um usuário logado abrisse para o navegador enviar o cookie de sessão sozinho e concluir a exclusão — sem clique, sem confirmação, sem rastro que parecesse ataque. Todas as quatro passam a **POST com `csrf_field()`**:
+  - **`/geocercas`** — apagava a cerca e, por `ON DELETE CASCADE`, todo o histórico de eventos dela. Era o caso já registrado no `STATUS.md`.
+  - **`/config-notificacoes`** — apagava regra de notificação, inclusive regra **global**.
+  - **`/config-ocorrencias`** — apagava perfil de ocorrências.
+  - **`/checklist`** — o pior dos quatro: além de não ter CSRF, **não tinha checagem de escopo nenhuma**, então o `id` da query string apagava o checklist de *qualquer* cliente, e os itens dele junto. Ganhou a verificação de escopo (global só admin; cliente só o próprio). **Não** ganhou `require_permission()` de propósito: a tela não está na matriz de `/grupos-permissao` e `can()` nega tela ausente da matriz — exigir permissão ali daria 403 a todo usuário de grupo restrito.
+  - O padrão aplicado é o mesmo nos quatro: o bloco de exclusão fica **dentro** do POST e **mutuamente exclusivo** do bloco de salvar (guarda `action !== 'excluir'`). Sem essa exclusividade, um POST de exclusão cairia também no `save` com o formulário vazio e criaria um registro em branco como efeito colateral.
+- **`/geocercas`**: todo caminho da exclusão termina em `exit` (Post/Redirect/Get com enum de flash fechado). O detalhe da exceção vai para o log em vez da tela.
+
+### Fixed
+- **`APP_URL` ausente no `.env` do homolog** — encontrada na conferência de 01/08/2026, e é o defeito mais silencioso da série do agendamento: sem ela o `$base` fica vazio, o botão "Baixar relatório" do e-mail vira um href **relativo** que não resolve em caixa de entrada nenhuma, o provedor aceita o envio e o histórico marca **"enviado"**. Ninguém descobre exceto o destinatário.
+  - O `scripts/worker.php` agora **aborta** a entrega quando o relatório passa de `MAIL_MAX_ATTACH_MB` e `APP_URL` está vazia, registrando o motivo no histórico do agendamento (que por sua vez alimenta a regra das 3 falhas). Falhar visível é melhor do que entregar link morto.
+  - O e-mail de **notificação** apenas **omite o botão** no mesmo caso, em vez de renderizar um link quebrado: ali a URL é um atalho, não o conteúdo.
+  - `.env.example` passa a marcar `APP_URL` como obrigatória quando há relatório agendado.
+
+### Changed
+- **Log e `/ping` em BRT (GMT-3).** O SO do servidor é `America/Sao_Paulo` e o PHP roda em `UTC`: o mesmo evento aparecia com **três horas de diferença** conforme se olhasse o `ls -la` (mtime, BRT) ou o conteúdo do arquivo (carimbo, UTC). Agora `Logger` carimba em BRT, **e o nome do arquivo diário também** — se só o carimbo mudasse, tudo entre 21:00 e 00:00 BRT cairia no arquivo do dia seguinte e `tail logs/webhook_$(date +%F).log` no servidor apontaria para o arquivo errado nessa faixa. `/ping` ganhou o campo `timezone`, para a resposta não depender de quem a lê saber o fuso.
+  - **O armazenamento continua em UTC e nenhuma linha do banco foi tocada.** É o desenho correto: os devices transmitem GMT 0, a conexão PDO força `time_zone = '+00:00'` e a conversão para BRT acontece na exibição (`fmt_brt()`, `CONVERT_TZ`), em 146 pontos do código. `Logger::stamp()` existe **só** para texto lido por gente e traz o aviso de nunca ser usado para montar valor destinado ao banco — gravar BRT numa coluna UTC misturaria dois fusos na mesma coluna, dano silencioso e caro de desfazer. Os `date()` que alimentam o banco (`metrics_rollup.php`, os `push*.php`, `occurrence_engine.php`) foram auditados um a um e deixados intactos.
+- **`SYSTEM_VERSION`** de `4.7.0` para `4.7.2` no `.env.example`: o `/ping` do homolog reportava `4.7.0` mesmo com o código da v4.7.1 publicado, porque a v4.7.1 não subiu a variável.
+
+### Notas de implementação
+- **Verificação**: `php -l` **0 erros** em 108 arquivos (`handlers config core includes scripts web`); **15 asserções** de fuso com o PHP forçado em UTC, cobrindo a virada do dia nos dois sentidos (02:00 UTC → dia BRT anterior; 23:30 UTC → mesmo dia) e o **horário de verão histórico** — 16/02/2018 09:00 UTC dá **07:00** BRT porque o DST vigorava, e somar 3 h fixas erraria em uma hora; mais as duas asserções que provam que o armazenamento não mudou (`date()` do processo continua UTC, fuso default intocado).
+
+## [4.7.1] — 2026-07-30
 
 Fecha a iniciativa do `docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md`: as duas decisões que o
 Bloco 3 do `docs/PLANO_VALIDACAO_AGENDAMENTOS.md` deixou em aberto e a **Fase 5** (a

@@ -21,7 +21,9 @@ $message = '';
 $messageType = '';
 
 // ── POST ──────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// A guarda `action !== 'excluir'` mantém este bloco e o de exclusão mutuamente
+// exclusivos (ver o bloco de exclusão abaixo).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'excluir') {
     csrf_verify();
     $cfgId = !empty($_POST['config_id']) ? (int)$_POST['config_id'] : null;
     $name  = trim($_POST['name'] ?? '');
@@ -71,14 +73,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── Delete ─────────────────────────────────────────────────────
-if (($_GET['action'] ?? '') === 'excluir' && !empty($_GET['id'])) {
-    $stmt = $db->prepare("DELETE FROM checklist_items WHERE config_id = ?");
-    $stmt->execute([(int)$_GET['id']]);
-    $stmt = $db->prepare("DELETE FROM checklist_configs WHERE id = ?");
-    $stmt->execute([(int)$_GET['id']]);
-    $message = 'Checklist excluído.';
-    $messageType = 'success';
+// ── POST: Delete ───────────────────────────────────────────────
+// Até a v4.7.2 esta exclusão era `GET ?action=excluir&id=N` e era a mais
+// exposta do projeto: sem token CSRF (o `csrf_verify()` não lê da query
+// string), sem checagem de escopo e sem confirmação do lado do servidor —
+// qualquer `<img src="/checklist?action=excluir&id=1">` apagava o checklist
+// e todos os itens dele usando a sessão de quem abrisse a página.
+//
+// `require_permission()` NÃO é chamado de propósito: a tela "checklist" não
+// está na matriz de /grupos-permissao, e `can()` nega tela ausente da matriz —
+// exigir permissão aqui daria 403 para todo usuário de grupo restrito.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'excluir' && !empty($_POST['id'])) {
+    csrf_verify();
+    $delId = (int)$_POST['id'];
+
+    $stmt = $db->prepare("SELECT customer_id FROM checklist_configs WHERE id = ?");
+    $stmt->execute([$delId]);
+    $owner = $stmt->fetchColumn();
+
+    if ($owner === false) {
+        $message = 'Checklist não encontrado.';
+        $messageType = 'error';
+    } elseif (!$isAdmin && ($owner === null || (int)$owner !== (int)$customerId)) {
+        // Checklist global (customer_id NULL) só o admin exclui.
+        $message = 'Checklist fora do seu escopo.';
+        $messageType = 'error';
+    } else {
+        $stmt = $db->prepare("DELETE FROM checklist_items WHERE config_id = ?");
+        $stmt->execute([$delId]);
+        $stmt = $db->prepare("DELETE FROM checklist_configs WHERE id = ?");
+        $stmt->execute([$delId]);
+        $message = 'Checklist excluído.';
+        $messageType = 'success';
+    }
 }
 
 // ── List ──────────────────────────────────────────────────────
@@ -193,7 +220,12 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $c['item_count'] ?></td>
                 <td style="text-align:center;">
                     <a href="?action=editar&id=<?= $c['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
-                    <a href="?action=excluir&id=<?= $c['id'] ?>" onclick="return confirm('Excluir?')" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</a>
+                    <form method="post" action="/checklist" style="display:inline" onsubmit="return confirm('Excluir?')">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="excluir">
+                        <input type="hidden" name="id" value="<?= (int)$c['id'] ?>">
+                        <button type="submit" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</button>
+                    </form>
                 </td>
             </tr>
             <?php endforeach; endif; ?>

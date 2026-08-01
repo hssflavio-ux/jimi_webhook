@@ -60,7 +60,7 @@ $after = count(glob($logDir . '/*.log*') ?: []);
 
 echo sprintf(
     "[%s] log_cleanup OK — retenção %dd, teto %dMB: %d rotacionado(s), %d removido(s), %d arquivo(s) restante(s)\n",
-    date('Y-m-d H:i:s'),
+    Logger::stamp(),
     $days,
     $maxMb,
     $rotated,
@@ -81,7 +81,7 @@ $reportsDir     = __DIR__ . '/../storage/reports';
 
 if ($reportDays <= 0) {
     echo sprintf("[%s] report_cleanup — desligado (REPORT_RETENTION_DAYS=%s)\n",
-        date('Y-m-d H:i:s'), $rawRetention);
+        Logger::stamp(), $rawRetention);
     exit(0);
 }
 
@@ -134,12 +134,12 @@ try {
     // Banco fora não pode derrubar a limpeza de disco, que é o motivo de este
     // script não usar a classe Database.
     echo sprintf("[%s] report_cleanup — histórico não purgado (banco indisponível: %s)\n",
-        date('Y-m-d H:i:s'), $e->getMessage());
+        Logger::stamp(), $e->getMessage());
 }
 
 echo sprintf(
     "[%s] report_cleanup OK — retenção %dd: %d arquivo(s) removido(s) (%.1f MB), %d mantido(s), %s execução(ões) de histórico removida(s)\n",
-    date('Y-m-d H:i:s'),
+    Logger::stamp(),
     $reportDays,
     $filesRemoved,
     $bytesFreed / 1048576,

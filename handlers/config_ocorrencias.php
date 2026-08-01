@@ -26,7 +26,9 @@ $message = '';
 $messageType = '';
 
 // ── POST: Salvar/Criar perfil ──────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// A guarda `action !== 'excluir'` mantém este bloco e o de exclusão mutuamente
+// exclusivos (ver o bloco de exclusão abaixo).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'excluir') {
     csrf_verify();
     $configId = !empty($_POST['config_id']) ? (int)$_POST['config_id'] : null;
     // RBAC ação fina (v4.2.0 — Fase B2)
@@ -91,12 +93,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ── GET: Excluir ───────────────────────────────────────────────
 $action = $_GET['action'] ?? '';
-if ($action === 'excluir' && !empty($_GET['id'])) {
+
+// ── POST: Excluir ──────────────────────────────────────────────
+// Era GET até a v4.7.2, portanto fora do alcance do `csrf_verify()`, que não
+// lê da query string: um `<img src>` apagava o perfil de ocorrências.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'excluir' && !empty($_POST['id'])) {
+    csrf_verify();
     // RBAC ação fina (v4.2.0 — Fase B2)
     require_permission('config-ocorrencias', 'delete');
-    $delId = (int)$_GET['id'];
+    $delId = (int)$_POST['id'];
     $stmt = $db->prepare("SELECT COUNT(*) as cnt FROM customers WHERE occurrence_config_id = :id");
     $stmt->execute([':id' => $delId]);
     $linked = (int)$stmt->fetch()['cnt'];
@@ -312,10 +318,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td style="text-align:center;">
                     <div style="display:flex;gap:4px;justify-content:center;">
                         <a href="?action=editar&id=<?= $cfg['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
-                        <a href="?action=excluir&id=<?= $cfg['id'] ?>"
-                           onclick="return confirm('Excluir este perfil?')"
-                           class="btn btn-outline btn-sm"
-                           style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</a>
+                        <form method="post" action="/config-ocorrencias" style="display:inline"
+                              onsubmit="return confirm('Excluir este perfil?')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="excluir">
+                            <input type="hidden" name="id" value="<?= (int)$cfg['id'] ?>">
+                            <button type="submit" class="btn btn-outline btn-sm"
+                                    style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</button>
+                        </form>
                     </div>
                 </td>
             </tr>

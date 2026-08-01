@@ -8,8 +8,14 @@
  * GET                              → lista
  * GET ?action=nova                 → formulário de criação
  * GET ?action=editar&id=N          → formulário de edição
- * GET ?action=excluir&id=N         → exclusão (CASCATA em vínculos/estado/eventos)
+ * POST action=excluir&id=N         → exclusão (CASCATA em vínculos/estado/eventos)
  * POST                             → salva (CSRF obrigatório)
+ *
+ * ⚠️ A exclusão era `GET ?action=excluir&id=N` até a v4.7.2. `csrf_verify()`
+ * não lê da query string, então bastava um `<img src="/geocercas?action=
+ * excluir&id=3">` em QUALQUER página que um administrador logado abrisse para
+ * apagar a cerca e todo o histórico de eventos dela — o navegador manda o
+ * cookie de sessão sozinho. Agora é POST com token, como o resto do CRUD.
  *
  * O desenho usa Leaflet puro, sem leaflet-draw: círculo = clique no mapa
  * define o centro e um campo numérico define o raio; polígono = cliques
@@ -42,6 +48,10 @@ const GEOFENCE_FLASH = [
     'atualizada'             => ['Geocerca atualizada.', 'success'],
     'criada_sem_device'      => ['Geocerca criada. Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.', 'warning'],
     'atualizada_sem_device'  => ['Geocerca atualizada. Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.', 'warning'],
+    'excluida'               => ['Geocerca excluída.', 'success'],
+    'nao_encontrada'         => ['Geocerca não encontrada.', 'error'],
+    'fora_escopo'            => ['Geocerca fora do seu escopo.', 'error'],
+    'erro_excluir'           => ['Erro ao excluir a geocerca. O detalhe foi registrado no log.', 'error'],
 ];
 if (!empty($_GET['msg']) && isset(GEOFENCE_FLASH[$_GET['msg']])) {
     [$message, $messageType] = GEOFENCE_FLASH[$_GET['msg']];
@@ -69,6 +79,44 @@ function parse_geofence_emails(string $raw): array
 // ── POST: salvar ───────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
+
+    // ── POST: excluir ──────────────────────────────────────────
+    // Fica DENTRO do bloco POST, depois do csrf_verify(), justamente para
+    // herdar a verificação do token — era essa a falha da versão anterior.
+    if (($_POST['action'] ?? '') === 'excluir' && !empty($_POST['id'])) {
+        require_permission('geocercas', 'delete');
+        $delId = (int)$_POST['id'];
+        try {
+            $stmt = $db->prepare("SELECT customer_id FROM geofences WHERE id = :id");
+            $stmt->execute([':id' => $delId]);
+            $ownerId = $stmt->fetchColumn();
+
+            if ($ownerId === false) {
+                header('Location: /geocercas?msg=nao_encontrada');
+                exit;
+            }
+            if (!$isAdmin && (int)$ownerId !== (int)$customerId) {
+                header('Location: /geocercas?msg=fora_escopo');
+                exit;
+            }
+
+            // Vínculos, estado e eventos saem por ON DELETE CASCADE
+            $db->prepare("DELETE FROM geofences WHERE id = :id")->execute([':id' => $delId]);
+            header('Location: /geocercas?msg=excluida');
+            exit;
+        } catch (Throwable $e) {
+            // TODO caminho daqui tem de terminar em exit: sem isso a execução
+            // cai na lógica de SALVAR logo abaixo, com um POST que não tem
+            // nenhum campo do formulário — criaria uma cerca vazia como efeito
+            // colateral de uma exclusão que falhou.
+            Logger::error('Geocercas: falha ao excluir', [
+                'geofence_id' => $delId, 'erro' => $e->getMessage(),
+            ]);
+            header('Location: /geocercas?msg=erro_excluir');
+            exit;
+        }
+    }
+
     $fenceId = !empty($_POST['fence_id']) ? (int)$_POST['fence_id'] : null;
     require_permission('geocercas', $fenceId ? 'edit' : 'create');
 
@@ -228,32 +276,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $action = $_GET['action'] ?? '';
-
-// ── GET: excluir ───────────────────────────────────────────────
-if ($action === 'excluir' && !empty($_GET['id'])) {
-    require_permission('geocercas', 'delete');
-    try {
-        $stmt = $db->prepare("SELECT customer_id FROM geofences WHERE id = :id");
-        $stmt->execute([':id' => (int)$_GET['id']]);
-        $ownerId = $stmt->fetchColumn();
-
-        if ($ownerId === false) {
-            $message = 'Geocerca não encontrada.';
-            $messageType = 'error';
-        } elseif (!$isAdmin && (int)$ownerId !== (int)$customerId) {
-            $message = 'Geocerca fora do seu escopo.';
-            $messageType = 'error';
-        } else {
-            // Vínculos, estado e eventos saem por ON DELETE CASCADE
-            $db->prepare("DELETE FROM geofences WHERE id = :id")->execute([':id' => (int)$_GET['id']]);
-            $message = 'Geocerca excluída.';
-            $messageType = 'success';
-        }
-    } catch (Throwable $e) {
-        $message = 'Erro ao excluir: ' . $e->getMessage();
-        $messageType = 'error';
-    }
-}
 
 // ── GET: editar ────────────────────────────────────────────────
 $editFence = null;
@@ -656,10 +678,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                            style="padding:4px 10px;font-size:12px;">Eventos</a>
                         <a href="?action=editar&id=<?= (int)$g['id'] ?>" class="btn btn-outline btn-sm"
                            style="padding:4px 10px;font-size:12px;">Editar</a>
-                        <a href="?action=excluir&id=<?= (int)$g['id'] ?>"
-                           onclick="return confirm('Excluir esta geocerca? Os eventos históricos dela também serão removidos.')"
-                           class="btn btn-outline btn-sm"
-                           style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</a>
+                        <form method="post" action="/geocercas" style="display:inline"
+                              onsubmit="return confirm('Excluir esta geocerca? Os eventos históricos dela também serão removidos.')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="excluir">
+                            <input type="hidden" name="id" value="<?= (int)$g['id'] ?>">
+                            <button type="submit" class="btn btn-outline btn-sm"
+                                    style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</button>
+                        </form>
                     </div>
                 </td>
             </tr>

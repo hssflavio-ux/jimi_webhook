@@ -47,7 +47,10 @@ function parse_rule_emails(string $raw): array
 }
 
 // ── POST: salvar ───────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// A guarda `action !== 'excluir'` torna este bloco e o de exclusão mutuamente
+// exclusivos: sem ela, um POST de exclusão cairia aqui também e tentaria salvar
+// uma regra sem nenhum campo preenchido.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'excluir') {
     csrf_verify();
     $ruleId = !empty($_POST['rule_id']) ? (int)$_POST['rule_id'] : null;
     require_permission('config-notificacoes', $ruleId ? 'edit' : 'create');
@@ -133,12 +136,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $action = $_GET['action'] ?? '';
 
-// ── GET: excluir ───────────────────────────────────────────────
-if ($action === 'excluir' && !empty($_GET['id'])) {
+// ── POST: excluir ──────────────────────────────────────────────
+// Era GET até a v4.7.2 — e `csrf_verify()` não lê da query string, então um
+// `<img src="/config-notificacoes?action=excluir&id=N">` numa página qualquer
+// apagava a regra de um admin logado sem nenhuma interação dele.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'excluir' && !empty($_POST['id'])) {
+    csrf_verify();
     require_permission('config-notificacoes', 'delete');
     try {
         $stmt = $db->prepare("SELECT customer_id FROM notification_rules WHERE id = :id");
-        $stmt->execute([':id' => (int)$_GET['id']]);
+        $stmt->execute([':id' => (int)$_POST['id']]);
         $target = $stmt->fetch();
 
         if (!$target) {
@@ -151,7 +158,7 @@ if ($action === 'excluir' && !empty($_GET['id'])) {
             $message = 'Regra fora do seu escopo.';
             $messageType = 'error';
         } else {
-            $db->prepare("DELETE FROM notification_rules WHERE id = :id")->execute([':id' => (int)$_GET['id']]);
+            $db->prepare("DELETE FROM notification_rules WHERE id = :id")->execute([':id' => (int)$_POST['id']]);
             $message = 'Regra excluída.';
             $messageType = 'success';
         }
@@ -417,10 +424,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <div style="display:flex;gap:4px;justify-content:center;">
                         <a href="?action=editar&id=<?= (int)$r['id'] ?>" class="btn btn-outline btn-sm"
                            style="padding:4px 10px;font-size:12px;">Editar</a>
-                        <a href="?action=excluir&id=<?= (int)$r['id'] ?>"
-                           onclick="return confirm('Excluir esta regra?')"
-                           class="btn btn-outline btn-sm"
-                           style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</a>
+                        <form method="post" action="/config-notificacoes" style="display:inline"
+                              onsubmit="return confirm('Excluir esta regra?')">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="action" value="excluir">
+                            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+                            <button type="submit" class="btn btn-outline btn-sm"
+                                    style="padding:4px 10px;font-size:12px;color:var(--error);">Excluir</button>
+                        </form>
                     </div>
                     <?php endif; ?>
                 </td>

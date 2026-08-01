@@ -55,9 +55,19 @@ function ping_system_version(): string
     return 'desconhecida';
 }
 
+// Carimbo em BRT (v4.7.2). O PHP roda em UTC e o armazenamento é UTC, mas o
+// /ping é lido por gente conferindo um deploy — e a operação daqui é GMT-3.
+// O campo `timezone` existe para que a resposta seja autoexplicativa: sem ele,
+// quem comparar o `timestamp` com o relógio do servidor não tem como saber se
+// a diferença é fuso ou atraso. Conversão local, sem `require`, para preservar
+// a propriedade de o /ping responder com o banco fora.
+$agora = (new DateTime('now', new DateTimeZone('UTC')))
+    ->setTimezone(new DateTimeZone('America/Sao_Paulo'));
+
 echo json_encode([
     'code'      => 0,
     'message'   => 'pong',
     'version'   => ping_system_version(),
-    'timestamp' => date('Y-m-d H:i:s'),
+    'timestamp' => $agora->format('Y-m-d H:i:s'),
+    'timezone'  => 'America/Sao_Paulo (GMT-3)',
 ]);

@@ -63,13 +63,50 @@ test.describe.serial('CRUD Geocercas', () => {
         await expect(authedPage.locator('.toast')).toContainText('3 pontos');
     });
 
+    // A exclusão é POST com CSRF desde a v4.7.2 — era `<a href="?action=excluir">`,
+    // fora do alcance do csrf_verify(), que não lê da query string. O seletor
+    // mudou de `a` para `button` por causa disso.
     test('excluir cerca', async ({ authedPage }) => {
         await authedPage.goto('/geocercas');
         const row = authedPage.locator('tr', { hasText: nomeEditado });
         await expect(row).toBeVisible();
         authedPage.once('dialog', (dialog) => dialog.accept());
-        await row.locator('a:has-text("Excluir")').click();
+        await row.locator('button:has-text("Excluir")').click();
         await expect(authedPage.locator('table')).not.toContainText(nomeEditado);
+    });
+
+    // Guarda de regressão da v4.7.2: a exclusão não pode voltar a ser alcançável
+    // por GET. Um `<img src="/geocercas?action=excluir&id=N">` em qualquer página
+    // que um usuário logado abrisse apagaria a cerca e, por CASCATA, todo o
+    // histórico de eventos dela — o navegador manda o cookie de sessão sozinho.
+    test('exclusão NÃO é acionável por GET', async ({ authedPage }) => {
+        // Cria uma cerca só para esta asserção — desenhando no mapa, que é
+        // como o usuário cria (os campos de geometria são ocultos)
+        const alvo = `Cerca CSRF ${Date.now()}`;
+        await authedPage.goto('/geocercas?action=nova');
+        await authedPage.fill('input[name="name"]', alvo);
+        await authedPage.fill('input[name="radius_m"]', '300');
+        const map = authedPage.locator('#fenceMap');
+        await expect(map).toBeVisible();
+        await map.click({ position: { x: 250, y: 200 } });
+        await expect(authedPage.locator('#centerLat')).not.toHaveValue('');
+        await authedPage.click('button[type="submit"]:has-text("Salvar Geocerca")');
+        await expect(authedPage.locator('table')).toContainText(alvo);
+
+        // Descobre o id pelo formulário de exclusão da própria linha
+        const id = await authedPage.locator('tr', { hasText: alvo })
+            .locator('input[name="id"]').inputValue();
+
+        // A tentativa por GET tem de ser inócua
+        await authedPage.goto(`/geocercas?action=excluir&id=${id}`);
+        await authedPage.goto('/geocercas');
+        await expect(authedPage.locator('table')).toContainText(alvo);
+
+        // Limpa: exclui de verdade, pelo caminho suportado
+        authedPage.once('dialog', (dialog) => dialog.accept());
+        await authedPage.locator('tr', { hasText: alvo })
+            .locator('button:has-text("Excluir")').click();
+        await expect(authedPage.locator('table')).not.toContainText(alvo);
     });
 });
 

@@ -13,17 +13,33 @@
  */
 
 class Logger {
-    
+
     const DEBUG = 'DEBUG';
     const INFO = 'INFO';
     const WARNING = 'WARNING';
     const ERROR = 'ERROR';
     const CRITICAL = 'CRITICAL';
-    
+
+    /**
+     * Fuso de EXIBIÇÃO do log (v4.7.2).
+     *
+     * O armazenamento do sistema continua em UTC — os devices transmitem GMT 0
+     * e a conexão PDO força `time_zone = '+00:00'`. O log, porém, não é dado:
+     * é texto lido por gente, e a operação daqui é GMT-3. Converter só na hora
+     * de carimbar mantém as duas coisas verdadeiras ao mesmo tempo, sem tocar
+     * em uma linha do banco.
+     *
+     * Antes desta versão o log saía em UTC enquanto o `mtime` do arquivo saía
+     * em BRT (o SO do servidor é America/Sao_Paulo): o mesmo evento aparecia
+     * com três horas de diferença conforme se olhasse o `ls` ou o conteúdo.
+     */
+    const DISPLAY_TZ = 'America/Sao_Paulo';
+
     private static $logDir = __DIR__ . '/../logs';
     private static $logLevel = self::INFO; // Nível mínimo para logar
     private static $requestId = null;
     private static $envLevelApplied = false;
+    private static $displayTz = null;
     
     /**
      * Inicializa logger com request ID único
@@ -38,12 +54,57 @@ class Logger {
     }
     
     /**
+     * Relógio de exibição do log, sempre em BRT (ver DISPLAY_TZ).
+     *
+     * Não depende de `includes/functions.php` de propósito: o Logger é
+     * carregado por todo webhook e não pode passar a exigir o resto do app.
+     * Também não mexe em `date_default_timezone_set()`, que valeria para o
+     * processo inteiro e faria `date()` gravar BRT em coluna UTC.
+     *
+     * @param float|null $timestamp Epoch com fração; null usa o agora
+     * @returns DateTime Instante já convertido para o fuso de exibição
+     */
+    private static function displayClock($timestamp = null) {
+        if (self::$displayTz === null) {
+            self::$displayTz = new DateTimeZone(self::DISPLAY_TZ);
+        }
+
+        $epoch = ($timestamp === null) ? microtime(true) : (float)$timestamp;
+
+        // 'U.u' preserva os microssegundos; createFromFormat devolve em UTC,
+        // e só então convertemos — somar offset na mão erraria no histórico
+        // anterior a 2019, quando o horário de verão ainda vigorava aqui.
+        $dt = DateTime::createFromFormat('U.u', sprintf('%.6F', $epoch), new DateTimeZone('UTC'));
+        if ($dt === false) {
+            $dt = new DateTime('@' . (int)$epoch);
+        }
+
+        return $dt->setTimezone(self::$displayTz);
+    }
+
+    /**
+     * Carimbo de data/hora em BRT para saída de CONSOLE/LOG.
+     *
+     * ⚠️ Use isto SOMENTE para texto que uma pessoa vai ler (echo de script de
+     * cron, cabeçalho de log). **Nunca** para montar valor que vá ao banco: as
+     * colunas são UTC, e gravar BRT numa delas mistura dois fusos na mesma
+     * coluna — dano silencioso e caro de desfazer. Para o banco continue com
+     * `date('Y-m-d H:i:s')` (o PHP roda em UTC) ou `UTC_TIMESTAMP()` no SQL.
+     *
+     * @param string $format Formato aceito por DateTime::format()
+     * @returns string Data/hora já em America/Sao_Paulo
+     */
+    public static function stamp($format = 'Y-m-d H:i:s') {
+        return self::displayClock()->format($format);
+    }
+
+    /**
      * Gera ID único para rastrear request
      */
     private static function generateRequestId() {
         return sprintf(
             '%s-%s',
-            date('YmdHis'),
+            self::displayClock()->format('YmdHis'),
             substr(md5(uniqid('', true)), 0, 8)
         );
     }
@@ -134,11 +195,8 @@ class Logger {
      * Formata entrada de log em formato estruturado
      */
     private static function formatLogEntry($level, $message, array $context) {
-        // Timestamp com microsegundos (cast evita deprecation float→int no PHP 8.1+)
-        $timestamp = microtime(true);
-        $datetime = date('Y-m-d H:i:s', (int)$timestamp);
-        $microseconds = sprintf('%06d', ($timestamp - floor($timestamp)) * 1000000);
-        $fullTimestamp = $datetime . '.' . $microseconds;
+        // Timestamp com microsegundos, em BRT (ver DISPLAY_TZ)
+        $fullTimestamp = self::displayClock(microtime(true))->format('Y-m-d H:i:s.u');
         
         // Request ID para rastrear
         if (self::$requestId === null) {
@@ -181,8 +239,12 @@ class Logger {
      */
     private static function writeToFile($level, $entry) {
         try {
-            // Nome do arquivo com data (rotação diária)
-            $date = date('Y-m-d');
+            // Nome do arquivo com data (rotação diária) — em BRT, igual ao
+            // carimbo das linhas. Se o nome ficasse em UTC e o conteúdo em
+            // BRT, tudo entre 21:00 e 00:00 BRT cairia no arquivo do dia
+            // SEGUINTE; e `tail logs/webhook_$(date +%F).log` no servidor
+            // (cujo SO é BRT) apontaria para o arquivo errado nessa faixa.
+            $date = self::displayClock()->format('Y-m-d');
             $filename = sprintf('%s/webhook_%s.log', self::$logDir, $date);
             
             // Criar arquivo com flag para append
@@ -286,7 +348,7 @@ class Logger {
      */
     public static function getDailyStats() {
         try {
-            $today = date('Y-m-d');
+            $today = self::displayClock()->format('Y-m-d');
             $filename = sprintf('%s/webhook_%s.log', self::$logDir, $today);
             
             if (!file_exists($filename)) {
