@@ -23,6 +23,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_status_frota', '/relatorios/status-frota');
 
@@ -163,7 +164,9 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     require_once __DIR__ . '/../includes/export_helper.php';
 
     $expRows = [];
-    foreach (array_slice($filtered, 0, SYNC_EXPORT_MAX_ROWS) as $r) {
+    $srcExp = array_slice($filtered, 0, SYNC_EXPORT_MAX_ROWS);
+    $geoExp = geocode_map_rows($srcExp, 'last_latitude', 'last_longitude', 2000);
+    foreach ($srcExp as $r) {
         $expRows[] = [
             $r['device_name'] ?? $r['imei'],
             $r['imei'],
@@ -173,13 +176,12 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s'),
             $r['last_speed'] !== null ? number_format((float)$r['last_speed'], 1, ',', '') : '—',
             (int)$r['limit_kmh'],
-            $r['last_latitude'],
-            $r['last_longitude'],
+            geocode_cell($geoExp, $r['last_latitude'], $r['last_longitude']),
         ];
     }
     stream_export($export, 'status_frota',
         ['Equipamento', 'IMEI', 'Cliente', 'Estado', 'Tempo no estado', 'Última posição',
-         'Velocidade (km/h)', 'Limite (km/h)', 'Latitude', 'Longitude'],
+         'Velocidade (km/h)', 'Limite (km/h)', 'Endereço'],
         $expRows, 'Status da Frota',
         'Foto de ' . fmt_brt($nowUtc, 'd/m/Y H:i:s') . ' (BRT)'
         . ($filterState !== '' ? ' — ' . fleet_state_label($filterState) : ''));

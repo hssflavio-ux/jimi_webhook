@@ -73,14 +73,16 @@ if ($generated && $selImei) {
                 ORDER BY g.$sort $order
                 LIMIT " . SYNC_EXPORT_MAX_ROWS);
             $expStmt->execute($params);
+            // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+            $src = $expStmt->fetchAll();
+            $geoExp = geocode_map_rows($src, 'latitude', 'longitude', 2000);
             $expRows = [];
-            while ($r = $expStmt->fetch()) {
+            foreach ($src as $r) {
                 $expRows[] = [
                     fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
                     $r['imei'],
                     $r['device_name'],
-                    $r['latitude'],
-                    $r['longitude'],
+                    geocode_cell($geoExp, $r['latitude'], $r['longitude']),
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
                     $r['ignition'] ? 'Ligada' : 'Desligada',
                     in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
@@ -92,7 +94,7 @@ if ($generated && $selImei) {
                   . ($timeMode === 'diaria' ? ' (em cada dia do período)' : ' (contínua)')
                 : '';
             stream_export($export, 'relatorio_posicoes',
-                ['Data/Hora', 'IMEI', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
+                ['Data/Hora', 'IMEI', 'Dispositivo', 'Endereço', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
                 $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo$faixa");
         }
 
@@ -121,21 +123,13 @@ if ($generated && $selImei) {
             }
         }
 
-        // Endereço geocodificado (B3 — padrão YUV): lote cache-only para a página
-        // + resolve no máx. 3 misses inline (rate limit Nominatim 1 req/s) — o
-        // cache enche progressivamente a cada visualização.
-        $geoCache = geocode_cache_lookup(array_map(
-            fn($r) => [(float)$r['latitude'], (float)$r['longitude']], $rows));
-        $inlineBudget = 3;
-        foreach ($rows as $r) {
-            $lat = round((float)$r['latitude'], 6);
-            $lng = round((float)$r['longitude'], 6);
-            $key = $lat . ',' . $lng;
-            if ($lat == 0 || isset($geoCache[$key]) || $inlineBudget <= 0) continue;
-            $addr = reverse_geocode($lat, $lng);
-            if ($addr !== null) $geoCache[$key] = $addr;
-            $inlineBudget--;
-        }
+        // Endereço geocodificado. Até a v4.7.x havia um orçamento de apenas
+        // 3 resoluções por página, imposto pelo rate limit de 1 req/s do
+        // Nominatim PÚBLICO — com o resultado de que a coluna ficava quase
+        // sempre vazia e o cache acumulou 82 linhas em meses. Com o Nominatim
+        // interno (~450 pts/s) e o cache mantido quente pelo geocode_worker,
+        // a página resolve tudo de uma vez.
+        $geoCache = geocode_map_rows($rows);
     } catch (Exception $e) {}
 }
 

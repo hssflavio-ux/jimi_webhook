@@ -12,6 +12,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_alarmes', '/relatorios/alarmes');
 
@@ -90,8 +91,12 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         ORDER BY a.$sort $order
         LIMIT " . SYNC_EXPORT_MAX_ROWS);
     $expStmt->execute($params);
+    // fetchAll ANTES do laço: o endereço é resolvido em UM lote paralelo.
+    // Resolver dentro do while faria uma chamada HTTP por linha (v4.8.0).
+    $src = $expStmt->fetchAll();
+    $geo = geocode_map_rows($src);
     $expRows = [];
-    while ($r = $expStmt->fetch()) {
+    foreach ($src as $r) {
         $expRows[] = [
             fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'),
             $r['customer_name'],
@@ -101,12 +106,11 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             ((int)($r['msg_class'] ?? 0) === 0 ? 'JIMI' : 'JT/T'),
             $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
             $r['status'],
-            $r['latitude'],
-            $r['longitude'],
+            geocode_cell($geo, $r['latitude'], $r['longitude']),
         ];
     }
     stream_export($export, 'relatorio_alarmes',
-        ['Data/Hora', 'Cliente', 'IMEI', 'Código', 'Nome do Alarme', 'Protocolo', 'Velocidade (km/h)', 'Status', 'Latitude', 'Longitude'],
+        ['Data/Hora', 'Cliente', 'IMEI', 'Código', 'Nome do Alarme', 'Protocolo', 'Velocidade (km/h)', 'Status', 'Endereço'],
         $expRows, 'Relatório de Alarmes', "Período (BRT): $dateFrom a $dateTo");
 }
 
@@ -136,6 +140,10 @@ $dataStmt = $db->prepare("
 ");
 $dataStmt->execute($params);
 $rows = $dataStmt->fetchAll();
+
+// Endereços da página, em um lote (v4.8.0). Com o cache quente pelo
+// geocode_worker isto é uma consulta ao banco — 25 linhas em ~1,2 ms.
+$geoPagina = geocode_map_rows($rows);
 
 // Dropdowns
 $custStmt = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name");
@@ -239,12 +247,13 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Protocolo</th>
                 <th>Velocidade</th>
                 <th>Status</th>
+                <th>Endereço</th>
                 <th>Mapa</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
@@ -267,6 +276,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <span class="badge"><?= htmlspecialchars($r['status']) ?></span>
                     <?php endif; ?>
                 </td>
+                <td><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
                 <td>
                     <?php if ($hasCoords): ?>
                     <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"

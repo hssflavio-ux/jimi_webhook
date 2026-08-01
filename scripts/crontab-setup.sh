@@ -24,6 +24,11 @@ WORKER_ENTRIES=(
     "scripts/geofence_worker.php:geofence.log:2 min:*/2 * * * *"
     "scripts/state_builder.php:state_builder.log:15 min:*/15 * * * *"
     "scripts/schedule_dispatcher.php:schedule.log:1 h (min 5):5 * * * *"
+    # v4.8.0 — mantém o cache de endereços quente. Sem ele os relatórios
+    # resolveriam o geocode na hora, e o tempo de página cresceria junto com a
+    # frota (medido: 4,7 s por dia de posições hoje; ~2 min com 25× a frota).
+    # Aqui o custo é 0,4 s por execução no mesmo cenário.
+    "scripts/geocode_worker.php:geocode.log:5 min:*/5 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

@@ -19,6 +19,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_velocidade', '/relatorios/velocidade');
 
@@ -94,7 +95,10 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     try {
         $stmt = $db->prepare("$selectCols $from ORDER BY $orderBy LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $stmt->execute($params);
-        while ($r = $stmt->fetch()) {
+        // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+        $src = $stmt->fetchAll();
+        $geoExp = geocode_map_rows($src, 'max_lat', 'max_lng', 2000);
+        foreach ($src as $r) {
             $expRows[] = [
                 fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                 $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
@@ -106,8 +110,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                 number_format((float)($r['avg_speed'] ?? 0), 1, ',', ''),
                 (int)$r['limit_kmh'],
                 number_format((float)$r['over_by'], 1, ',', ''),
-                $r['max_lat'],
-                $r['max_lng'],
+                geocode_cell($geoExp, $r['max_lat'], $r['max_lng']),
             ];
         }
     } catch (Throwable $e) { /* tabela ausente → export vazio */ }
@@ -115,7 +118,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     stream_export($export, 'relatorio_velocidade',
         ['Início', 'Fim', 'Duração', 'Equipamento', 'IMEI', 'Cliente',
          'Vel. máxima (km/h)', 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)',
-         'Latitude', 'Longitude'],
+         'Endereço'],
         $expRows, 'Relatório de Excesso de Velocidade', "Período (BRT): $dateFrom a $dateTo");
 }
 
