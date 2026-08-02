@@ -463,7 +463,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
 <div class="intro">
-<p>O <strong>JIMI Webhook System</strong> é uma plataforma de rastreamento e telemetria de vídeo para frotas de veículos. Ela acompanha os rastreadores e câmeras inteligentes instalados nos veículos e oferece um painel completo para monitoramento ao vivo, vídeos, relatórios e gestão de ocorrências de comportamento do motorista.</p>
+<p>A <strong>bycamera</strong> é uma plataforma de rastreamento e telemetria de vídeo para frotas de veículos. Ela acompanha os rastreadores e câmeras inteligentes instalados nos veículos e oferece um painel completo para monitoramento ao vivo, vídeos, relatórios e gestão de ocorrências de comportamento do motorista.</p>
 
 <p><strong>O que o sistema faz:</strong></p>
 <ul style="font-size:14px;line-height:1.8;color:var(--body)">
@@ -499,7 +499,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <div class="mockup-header">Tela de Setup — Primeiro Acesso</div>
 <div class="mockup-body">
     <div style="max-width:420px;margin:0 auto;text-align:center">
-        <div style="font-size:22px;font-weight:700;margin-bottom:4px">JIMI</div>
+        <img src="/web/assets/logo.png" alt="bycamera" style="height:30px;width:auto;margin-bottom:4px">
         <div style="font-size:12px;color:var(--muted);margin-bottom:24px">Configuração Inicial</div>
         <div class="form-mock" style="text-align:left;display:flex;flex-direction:column;gap:12px">
             <div class="form-mock-field"><label>Nome Completo</label><div class="input-mock">Administrador</div></div>
@@ -519,8 +519,8 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <div class="mockup-header">Tela de Login</div>
 <div class="mockup-body">
     <div style="max-width:400px;margin:0 auto;text-align:center">
-        <div style="font-size:24px;font-weight:700;margin-bottom:6px">JIMI</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:28px">Sistema de Rastreamento</div>
+        <img src="/web/assets/logo.png" alt="bycamera" style="height:34px;width:auto;margin-bottom:6px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:28px">Videomonitoramento inteligente</div>
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left">
             <div><label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase">E-mail</label><div class="input-mock" style="width:100%;margin-top:4px">usuario@exemplo.com</div></div>
             <div><label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase">Senha</label><div class="input-mock dim" style="width:100%;margin-top:4px">••••••••</div></div>
@@ -1748,7 +1748,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
-JIMI Webhook System v4.7.1 — Central de Ajuda — Última atualização: 30/07/2026
+bycamera — Central de Ajuda — Última atualização: 30/07/2026
 </p>
 
     </div><!-- /.wiki-content -->

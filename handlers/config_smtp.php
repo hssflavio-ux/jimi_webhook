@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username  = trim($_POST['username'] ?? '');
             $password  = (string)($_POST['password'] ?? '');
             $fromEmail = trim($_POST['from_email'] ?? '');
-            $fromName  = trim($_POST['from_name'] ?? 'Jimi Tracker');
+            $fromName  = trim($_POST['from_name'] ?? 'bycamera');
             $timeout   = max(5, min(120, (int)($_POST['timeout_s'] ?? 20)));
             $isActive  = !empty($_POST['is_active']) ? 1 : 0;
 
@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $html = '<!doctype html><html lang="pt-BR"><body style="font-family:Helvetica,Arial,sans-serif;color:#0a0b0d;">'
-                  . '<h2 style="font-size:18px;font-weight:600;">Teste de envio — JIMI Tracker</h2>'
+                  . '<h2 style="font-size:18px;font-weight:600;">Teste de envio — bycamera</h2>'
                   . '<p style="font-size:14px;line-height:1.6;color:#5b616e;">'
                   . 'Se você está lendo esta mensagem, o servidor SMTP cadastrado está funcionando '
                   . 'e as notificações por e-mail serão entregues.</p>'
@@ -172,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   . ':' . (int)$row['port'] . ' (' . htmlspecialchars($row['secure']) . ') — enviado em '
                   . fmt_brt(gmdate('Y-m-d H:i:s'), 'd/m/Y H:i') . ' BRT.</p></body></html>';
 
-            $result = send_mail([$testTo], 'Teste de envio — JIMI Tracker', $html, [], $scopeCustomerId);
+            $result = send_mail([$testTo], 'Teste de envio — bycamera', $html, [], $scopeCustomerId);
 
             $upd = $db->prepare(
                 "UPDATE smtp_settings SET last_test_at = NOW(), last_test_ok = :ok, last_test_error = :err WHERE id = :id"
@@ -369,7 +369,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <div class="form-group">
                 <label>Nome do remetente</label>
                 <input type="text" name="from_name"
-                       value="<?= htmlspecialchars($row['from_name'] ?? 'Jimi Tracker') ?>">
+                       value="<?= htmlspecialchars($row['from_name'] ?? 'bycamera') ?>">
             </div>
         </div>
 

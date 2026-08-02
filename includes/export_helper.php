@@ -228,8 +228,12 @@ class PdfWriter
      * ainda tratar o canal alfa com `/SMask`, o que multiplicaria o tamanho
      * deste writer artesanal por ganho nenhum num logo de cabeçalho.
      *
-     * Achata sobre BRANCO antes: o logo tem transparência e JPEG não tem canal
-     * alfa — sem o achatamento o fundo transparente sairia PRETO.
+     * Achata sobre BRANCO antes — e isto **só é necessário porque o asset é a
+     * versão de fundo transparente**. JPEG não tem canal alfa; sem achatar, o
+     * fundo transparente sairia PRETO no PDF. (Houve um passo intermediário em
+     * que o asset era `logo_bycamera.png`, que já vem com fundo branco sólido:
+     * ali este achatamento era inócuo. Trocado para o transparente por servir
+     * em qualquer fundo do frontend, incluindo a sidebar escura.)
      *
      * Redimensiona para 360 px porque o original tem ~1780 px e ocupa ~60 pt no
      * PDF; embutir o arquivo cheio inflaria cada relatório em centenas de KB.

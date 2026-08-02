@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.8.0
+
+### Added
+- **Geocode reverso pelo Nominatim interno** (`10.1.0.15:8080`) e **endereço no lugar de latitude/longitude em todos os relatórios** — ver a nota de arquitetura em `includes/geocode.php`. O formato é **"rua, cidade, estado"**, com cascata de alternativas por campo porque o Nominatim não garante as mesmas chaves em rodovia e zona rural, que é onde a frota mais anda.
+- **`scripts/geocode_worker.php`** (cron 5 min) mantém o cache quente. A decisão entre geocodificar na entrada, na saída ou em segundo plano foi **medida**, não presumida: saída com cache frio custa 4,7 s por dia de posições (117 s a 25× a frota); com cache quente, 0,148 ms/ponto; o pré-aquecimento roda a 349 pts/s, ou 0,4 s por execução a 25×. Na entrada custaria 27 ms por ponto **dentro da transação do webhook**, acoplando a gravação da posição do veículo à disponibilidade do geocode.
+- **Marca nos relatórios**: `report_brand()` em 10 telas e logo embutido no PDF como XObject `/DCTDecode`.
+
+### Changed
+- **O produto passa a se chamar `bycamera` no frontend.** Login, sidebar, `<title>`, setup, wiki, marca d'água do vídeo ao vivo e o remetente padrão de e-mail. O placeholder de "pontinhos + texto JIMI" do login e da sidebar deu lugar ao logo real.
+  - **O que NÃO foi renomeado, de propósito**: o badge de **protocolo** `JIMI` (contra `JT/T 808`) é nome técnico real — `msgClass=0` é o protocolo JIMI, e trocá-lo tornaria a tela mentirosa. Também ficaram intactos `jimicloud.com`, o nome do banco, o cookie `jimi_token`, as chaves de `localStorage` (renomear resetaria o estado de UI salvo dos usuários) e identificadores internos como `get_jimi_user()` — churn sem ganho para quem usa.
+  - O verificador de marca precisou aprender essa distinção: a primeira varredura acusou `/relatorios/alarmes` porque contava o badge de protocolo de cada linha da grade.
+
+### Notas de implementação
+- **Dois padrões diferentes para o endereço, por um motivo.** Nos exports síncronos é `fetchAll` + resolução em lote paralelo; nos assíncronos do `worker.php` a resolução foi para o **SQL** (`LEFT JOIN geocode_cache`), porque ali as linhas são consumidas em streaming — export agendado chega a 100 mil linhas, e `fetchAll` estouraria memória.
+- **O gargalo não era o que parecia.** A primeira medição concluiu "o Nominatim satura em concorrência 5"; era artefato de ter o `INSERT` no cache dentro do laço. Cada `INSERT` em autocommit custa **72 ms** neste servidor (fsync por commit) contra **2,2 ms** da chamada à API — 33× mais caro **gravar** o resultado do que obtê-lo. Com `geocode_persist()` em transação única, o Nominatim escala a 448 pts/s.
+- **Precisão medida, não estimada**: arredondar a chave de cache para 4 casas (11 m) muda a **rua** em 10% dos pontos — e para uma rua diferente, não uma variação de grafia. Mantidas 6 casas.
+- ⚠️ **XLSX ficou sem logo**: o writer é artesanal e começa direto no `writeHeader`, sem conceito de título; embutir imagem exigiria `drawing1.xml` + rels + media + content-types. Registrado, não feito pela metade.
+- ⚠️ **Retrabalho evitável, registrado como lição**: o asset começou como `logo_bycamera.png`, que tem **fundo branco sólido**, e mesmo assim foi escrito um achatamento sobre branco "porque o logo tem transparência" — falso para aquele arquivo. Existiam dois logos e o outro (`by_camera_fundo_transparente.png`) já era transparente. Agora o asset é o transparente, que serve tanto no card claro do login quanto na sidebar near-black com **uma** imagem — e aí o achatamento no PDF passa a ser genuinamente necessário, porque JPEG não tem canal alfa.
+
 ## [Unreleased] — 4.7.3
 
 Passe de dívida técnica, disparado pela auditoria dos **critérios de aceite globais do

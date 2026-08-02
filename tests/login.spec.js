@@ -28,7 +28,12 @@ test.describe('Login', () => {
 
         test('login correto redireciona para / com sidebar', async ({ page }) => {
             await loginViaUI(page, CREDS.email, CREDS.password);
-            await expect(page.locator('.sidebar-brand-name')).toHaveText('JIMI');
+            // A marca deixou de ser o texto "JIMI" e passou a ser o logo
+            // (v4.8.0). A asserção continua provando que a sidebar renderizou
+            // com a marca — só mudou a representação.
+            const marca = page.locator('.sidebar-brand-logo');
+            await expect(marca).toBeVisible();
+            await expect(marca).toHaveAttribute('src', /logo\.png$/);
             await expect(page.locator('.main-header')).toBeVisible();
         });
 

@@ -327,7 +327,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <!-- Banner de Comunicado -->
 <div id="announce-banner" class="announce-banner info">
-    <span id="announce-text">Bem-vindo ao JIMI v4.0. Explore os novos recursos do painel.</span>
+    <span id="announce-text">Bem-vindo à bycamera. Explore os novos recursos do painel.</span>
     <span class="announce-close" onclick="dismissBanner()">&times;</span>
 </div>
 
@@ -556,7 +556,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 (function() {
     var TOUR_KEY = 'jimi_tour_seen_v4';
     var steps = [
-        { title: 'Bem-vindo ao JIMI v4.0', body: 'Esta é sua central de rastreamento. Acompanhe equipamentos, alarmes e ocorrências em tempo real.' },
+        { title: 'Bem-vindo à bycamera', body: 'Esta é sua central de rastreamento. Acompanhe equipamentos, alarmes e ocorrências em tempo real.' },
         { title: 'KPIs em Tempo Real', body: 'No topo você vê o resumo da sua frota: equipamentos ativos, conectividade, ocorrências pendentes e dispositivos desatualizados.' },
         { title: 'Mapa de Posições', body: 'O mapa mostra a última posição conhecida de cada equipamento. Clique nos pontos para ver detalhes.' },
         { title: 'Gráficos de Atividade', body: 'Acompanhe a evolução de alarmes e ocorrências ao longo do dia nos gráficos abaixo.' },

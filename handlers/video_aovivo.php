@@ -71,7 +71,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <div style="font-size:14px;">Selecione um dispositivo e canal</div>
                 <div style="font-size:12px;margin-top:4px;opacity:.7;">Clique em "Iniciar Transmissão" para começar</div>
             </div>
-            <div class="watermark-overlay" id="watermark">JIMI</div>
+            <div class="watermark-overlay" id="watermark">bycamera</div>
             <video id="vid-player" controls playsinline style="display:none;width:100%;max-height:520px;"></video>
         </div>
 

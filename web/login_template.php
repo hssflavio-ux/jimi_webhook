@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>JIMI — Entrar</title>
+<title>bycamera — Entrar</title>
 <!-- PWA -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0052ff">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="JIMI">
+<meta name="apple-mobile-web-app-title" content="bycamera">
 <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,11 +26,11 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:var(--surface-soft);color:var(--body);min-height:100vh;display:flex;align-items:center;justify-content:center}
 .login-card{background:var(--surface);border:1px solid var(--hairline);border-radius:24px;padding:40px;width:100%;max-width:400px}
-.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px}
-.logo-dots{display:flex;gap:5px}
-.logo-dots span{width:9px;height:9px;border-radius:9999px}
-.p1{background:var(--primary)}.p2{background:var(--primary)}.p3{background:var(--primary)}
-.logo-text{font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.5px}
+/* A marca substituiu o placeholder de pontinhos + texto "JIMI" (v4.8.0).
+   O asset é a versão de fundo TRANSPARENTE, então assenta tanto no card claro
+   do login quanto na sidebar escura, sem precisar de duas imagens. */
+.logo{display:flex;align-items:center;margin-bottom:28px}
+.logo img{height:38px;width:auto;max-width:100%;display:block}
 h1{font-size:28px;font-weight:400;color:var(--ink);margin-bottom:6px;letter-spacing:-.5px}
 .sub{font-size:14px;color:var(--muted);margin-bottom:28px}
 .fg{margin-bottom:16px}
@@ -62,10 +62,7 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
 <body>
 <div class="login-card">
     <div class="logo">
-        <div class="logo-dots">
-            <span class="p1"></span><span class="p2"></span><span class="p3"></span>
-        </div>
-        <div class="logo-text">JIMI</div>
+        <img src="/web/assets/logo.png" alt="bycamera — videomonitoramento inteligente">
     </div>
     <h1>Entrar no sistema</h1>
     <p class="sub">Insira suas credenciais para acessar o painel.</p>

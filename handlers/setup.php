@@ -63,7 +63,7 @@ if ($success) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JIMI — Configuração Inicial</title>
+<title>bycamera — Configuração Inicial</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -104,7 +104,7 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
     </div>
     <h1>Configuração Inicial</h1>
-    <p class="sub">Crie o primeiro administrador do sistema JIMI.</p>
+    <p class="sub">Crie o primeiro administrador do sistema bycamera.</p>
 
     <?php if ($error): ?>
     <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>

@@ -144,14 +144,14 @@ function nav_icon($name) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>JIMI — <?= htmlspecialchars($page_title) ?></title>
+<title>bycamera — <?= htmlspecialchars($page_title) ?></title>
 <!-- PWA -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0052ff">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="JIMI">
+<meta name="apple-mobile-web-app-title" content="bycamera">
 <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
 <meta name="csrf-token" content="<?= htmlspecialchars(csrf_token()) ?>">
 <script>
@@ -254,6 +254,12 @@ body {
     gap: 10px;
 }
 
+/* Marca real no lugar do placeholder de pontinhos + texto "JIMI" (v4.8.0).
+   O asset de fundo TRANSPARENTE é o que permite usar a MESMA imagem aqui, na
+   sidebar near-black, e no card branco do login. */
+.sidebar-brand-logo { height: 26px; width: auto; max-width: 100%; display: block; }
+/* Sidebar recolhida: só o símbolo cabe, então a imagem sai de cena */
+.sidebar.collapsed .sidebar-brand-logo { display: none; }
 .sidebar-brand-dots { display: flex; gap: 5px; }
 .sidebar-brand-dots span { width: 8px; height: 8px; border-radius: 50%; }
 .sb-p1 { background: var(--primary); }
@@ -996,10 +1002,8 @@ if (!empty($customer['brand_color'])) {
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-        <div class="sidebar-brand-dots">
-            <span class="sb-p1"></span><span class="sb-p2"></span><span class="sb-p3"></span>
-        </div>
-        <div class="sidebar-brand-name">JIMI</div>
+        <img class="sidebar-brand-logo" src="/web/assets/logo.png"
+             alt="bycamera — videomonitoramento inteligente">
         <div class="sidebar-brand-version">v<?= getenv('SYSTEM_VERSION') ?: '4.0' ?></div>
     </div>
 
