@@ -192,7 +192,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Rota do Deslocamento</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Rota do Deslocamento</h2>
     <div style="display:flex;align-items:center;gap:12px;">
         <?php if (!$error): ?>
         <span style="font-size:13px;color:var(--muted);">

@@ -205,7 +205,7 @@ unset($cardQ['page'], $cardQ['export'], $cardQ['state']);
 $cardBase = http_build_query($cardQ);
 ?>
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Status da Frota</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Status da Frota</h2>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
@@ -239,7 +239,7 @@ $cardBase = http_build_query($cardQ);
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="IMEI ou nome..."
                    style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:170px;">
         </div>
@@ -302,7 +302,7 @@ $cardBase = http_build_query($cardQ);
     <table>
         <thead>
             <tr>
-                <th>Equipamento</th>
+                <th>Placa</th>
                 <th>Cliente</th>
                 <th>Estado</th>
                 <th>Tempo no estado</th>

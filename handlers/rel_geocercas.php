@@ -26,7 +26,7 @@ require_once __DIR__ . '/../includes/report_templates.php';
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_geocercas', '/relatorios/geocercas');
 
-$page_title = 'Relatório de Geocercas';
+$page_title = 'Relatório de Cercas';
 $current_route = 'rel_geocercas';
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
@@ -246,7 +246,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Geocercas</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Cercas</h2>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
@@ -285,7 +285,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="Buscar..."
                    style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
         </div>
@@ -340,7 +340,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>Geocerca</th>
-                <th>Equipamento</th>
+                <th>Placa</th>
                 <th><?= report_sort_link('event_time', 'Entrada', $sort, $order) ?></th>
                 <th>Saída</th>
                 <th>Permanência</th>

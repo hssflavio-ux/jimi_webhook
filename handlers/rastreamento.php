@@ -134,8 +134,10 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'
 var markers = {};
 var bounds = [];
 
+// Balão identifica o veículo pela PLACA (p.name = devices.device_name), nunca
+// pelo IMEI: quem opera a frota reconhece a placa, não o número do rastreador.
 function popupHtml(p) {
-    return '<b>' + (p.name||'') + '</b><br>IMEI: ' + p.imei + '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
+    return '<b>Placa: ' + (p.name || p.imei) + '</b><br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
 }
 
 mapData.forEach(function(p) {

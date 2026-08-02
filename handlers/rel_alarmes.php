@@ -37,8 +37,20 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
 
 // Ordenação: whitelist de colunas + default crescente por data/hora
-$validSorts = ['alarm_time', 'alarm_type', 'alarm_name', 'imei'];
+// `device_name` é coluna de devices, por isso o ORDER BY usa prefixo próprio
+// mais abaixo — os demais são de alarms.
+$validSorts = ['alarm_time', 'alarm_name', 'device_name'];
 [$sort, $order] = report_sort_params($validSorts, 'alarm_time', 'ASC');
+$orderBy = $sort === 'device_name' ? "d.device_name $order" : "a.$sort $order";
+
+// Placas do cliente — o filtro virou seleção de placa (era caixa de texto de
+// IMEI). Carregado antes do export porque este roda antes da grade.
+$devices = [];
+try {
+    $dvStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
+    $dvStmt->execute([':cid' => $customerId]);
+    $devices = $dvStmt->fetchAll();
+} catch (Throwable $e) {}
 
 $where = 'WHERE a.alarm_time BETWEEN :df AND :dt';
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
@@ -51,9 +63,11 @@ if ($scopeCust !== null) {
     $where .= ' AND d.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
+// Filtro por PLACA (o campo é `imei` na URL por retrocompatibilidade com
+// links e modelos salvos, mas o que o usuário escolhe é a placa).
 if ($filterImei) {
-    $where .= ' AND a.imei LIKE :imei';
-    $params[':imei'] = "%$filterImei%";
+    $where .= ' AND a.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
 if ($filterTypes) {
     $ph = [];
@@ -82,13 +96,13 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     require_permission('relatorios', 'export');
     require_once __DIR__ . '/../includes/export_helper.php';
     $expStmt = $db->prepare("
-        SELECT a.imei, a.alarm_type, a.alarm_name, a.alarm_time, a.status, a.msg_class,
-               a.speed, a.latitude, a.longitude, COALESCE(c.name, '—') as customer_name
+        SELECT a.imei, a.alarm_name, a.alarm_time, a.status,
+               a.speed, a.latitude, a.longitude,
+               COALESCE(d.device_name, a.imei) AS device_name
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
-        LEFT JOIN customers c ON c.id = d.customer_id
         $where
-        ORDER BY a.$sort $order
+        ORDER BY $orderBy
         LIMIT " . SYNC_EXPORT_MAX_ROWS);
     $expStmt->execute($params);
     // fetchAll ANTES do laço: o endereço é resolvido em UM lote paralelo.
@@ -96,22 +110,31 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $src = $expStmt->fetchAll();
     $geo = geocode_map_rows($src);
     $expRows = [];
+    $statusLabels = ['active' => 'Ativo', 'resolved' => 'Resolvido'];
     foreach ($src as $r) {
         $expRows[] = [
+            $r['device_name'],
             fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'),
-            $r['customer_name'],
-            $r['imei'],
-            $r['alarm_type'],
-            $r['alarm_name'] ?? '—',
-            ((int)($r['msg_class'] ?? 0) === 0 ? 'JIMI' : 'JT/T'),
+            $r['alarm_name'] ?: '—',
+            $statusLabels[$r['status']] ?? $r['status'],
             $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
-            $r['status'],
             geocode_cell($geo, $r['latitude'], $r['longitude']),
+            (float)$r['latitude'] != 0.0
+                ? sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $r['latitude'], $r['longitude'])
+                : '—',
         ];
     }
+    // Placa no subtítulo, como no de Posições: o PDF circula fora da tela
+    $placaSel = 'Todas as placas';
+    if ($filterImei) {
+        $ps = $db->prepare("SELECT COALESCE(device_name, imei) FROM devices WHERE imei = ?");
+        $ps->execute([$filterImei]);
+        $placaSel = 'Placa: ' . ($ps->fetchColumn() ?: $filterImei);
+    }
     stream_export($export, 'relatorio_alarmes',
-        ['Data/Hora', 'Cliente', 'IMEI', 'Código', 'Nome do Alarme', 'Protocolo', 'Velocidade (km/h)', 'Status', 'Endereço'],
-        $expRows, 'Relatório de Alarmes', "Período (BRT): $dateFrom a $dateTo");
+        ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Endereço', 'Mapa'],
+        $expRows, 'Relatório de Alarmes',
+        "$placaSel  |  Período (BRT): $dateFrom a $dateTo");
 }
 
 // Count
@@ -127,15 +150,13 @@ $offset = ($page - 1) * $perPage;
 
 // Data
 $dataStmt = $db->prepare("
-    SELECT a.id, a.imei, a.alarm_type, a.alarm_name, a.alarm_time,
-           a.status, a.msg_class, a.speed, a.latitude, a.longitude,
-           d.device_model,
-           COALESCE(c.name, '—') as customer_name
+    SELECT a.id, a.imei, a.alarm_name, a.alarm_time,
+           a.status, a.speed, a.latitude, a.longitude,
+           COALESCE(d.device_name, a.imei) AS device_name
     FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
-    LEFT JOIN customers c ON c.id = d.customer_id
     $where
-    ORDER BY a.$sort $order
+    ORDER BY $orderBy
     LIMIT $perPage OFFSET $offset
 ");
 $dataStmt->execute($params);
@@ -161,7 +182,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Alarmes</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Alarmes</h2>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
@@ -185,9 +206,14 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei ?? '') ?>" placeholder="Buscar..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:160px;">
+                <option value="">Todas</option>
+                <?php foreach ($devices as $d): ?>
+                <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $filterImei === $d['imei'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?></option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <?php if ($branchList): ?>
         <div>
@@ -239,34 +265,26 @@ require_once __DIR__ . '/../web/layout_base.php';
     <table>
         <thead>
             <tr>
+                <th><?= report_sort_link('device_name', 'Placa', $sort, $order) ?></th>
                 <th><?= report_sort_link('alarm_time', 'Data/Hora', $sort, $order) ?></th>
-                <th>Cliente</th>
-                <th><?= report_sort_link('imei', 'IMEI', $sort, $order) ?></th>
-                <th><?= report_sort_link('alarm_type', 'Código', $sort, $order) ?></th>
                 <th><?= report_sort_link('alarm_name', 'Nome do Alarme', $sort, $order) ?></th>
-                <th>Protocolo</th>
-                <th>Velocidade</th>
                 <th>Status</th>
+                <th>Velocidade</th>
                 <th>Endereço</th>
                 <th>Mapa</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
-                $proto = (int)($r['msg_class'] ?? 0) === 0 ? 'JIMI' : 'JT/T';
             ?>
             <tr>
+                <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['alarm_time'], 'd/m/Y H:i:s') ?></td>
-                <td><?= htmlspecialchars($r['customer_name']) ?></td>
-                <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
-                <td><span class="text-mono"><?= htmlspecialchars($r['alarm_type']) ?></span></td>
-                <td><?= htmlspecialchars($r['alarm_name'] ?? '—') ?></td>
-                <td><span class="badge <?= $proto === 'JIMI' ? 'badge-primary' : 'badge-info' ?>"><?= $proto ?></span></td>
-                <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
+                <td><?= htmlspecialchars($r['alarm_name'] ?: '—') ?></td>
                 <td>
                     <?php if ($r['status'] === 'active'): ?>
                     <span class="badge badge-warning">Ativo</span>
@@ -276,6 +294,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <span class="badge"><?= htmlspecialchars($r['status']) ?></span>
                     <?php endif; ?>
                 </td>
+                <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
                 <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
                 <td>
                     <?php if ($hasCoords): ?>

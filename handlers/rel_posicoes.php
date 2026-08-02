@@ -34,6 +34,12 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 $generated = !empty($_GET['gerar']);
 
+// Lista de placas — carregada AQUI porque o export síncrono roda antes da
+// grade e precisa dela para pôr a PLACA (não o IMEI) no subtítulo do PDF.
+$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
+$devices->execute([':cid' => $customerId]);
+$devices = $devices->fetchAll();
+
 // Ordenação: só por data/hora; default crescente (mais antigo no topo)
 [$sort, $order] = report_sort_params(['gps_time'], 'gps_time', 'ASC');
 
@@ -66,9 +72,14 @@ if ($generated && $selImei) {
             $expStmt = $db->prepare("
                 SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                        g.acc AS ignition, g.status AS gps_status, g.gsm_signal,
-                       COALESCE(d.device_name, g.imei) as device_name
+                       COALESCE(d.device_name, g.imei) as device_name,
+                       COALESCE(dr.name, '—') as driver_name
                 FROM gps_data g
                 LEFT JOIN devices d ON d.imei = g.imei
+                LEFT JOIN trips tr ON tr.imei = g.imei
+                                  AND g.gps_time >= tr.started_at
+                                  AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
+                LEFT JOIN drivers dr ON dr.id = tr.driver_id
                 $where
                 ORDER BY g.$sort $order
                 LIMIT " . SYNC_EXPORT_MAX_ROWS);
@@ -79,23 +90,32 @@ if ($generated && $selImei) {
             $expRows = [];
             foreach ($src as $r) {
                 $expRows[] = [
-                    fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
-                    $r['imei'],
                     $r['device_name'],
+                    $r['driver_name'],
+                    fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
                     geocode_cell($geoExp, $r['latitude'], $r['longitude']),
+                    (float)$r['latitude'] != 0.0
+                        ? sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $r['latitude'], $r['longitude'])
+                        : '—',
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
                     $r['ignition'] ? 'Ligada' : 'Desligada',
                     in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
-                    $r['gsm_signal'] ?? '—',
                 ];
             }
             $faixa = ($timeFrom || $timeTo)
                 ? ' — faixa horária: ' . ($timeFrom ?: '00:00') . ' a ' . ($timeTo ?: '23:59')
                   . ($timeMode === 'diaria' ? ' (em cada dia do período)' : ' (contínua)')
                 : '';
+            // Subtítulo com a PLACA, não o IMEI: é o identificador que o
+            // usuário escolheu no filtro e o que ele reconhece no papel.
+            $placaSel = $selImei;
+            foreach ($devices as $dv) {
+                if ($dv['imei'] === $selImei) { $placaSel = $dv['device_name'] ?: $selImei; break; }
+            }
             stream_export($export, 'relatorio_posicoes',
-                ['Data/Hora', 'IMEI', 'Dispositivo', 'Endereço', 'Velocidade (km/h)', 'Ignição', 'GPS', 'Sinal GSM'],
-                $expRows, 'Relatório de Posições', "IMEI $selImei — Período (BRT): $dateFrom a $dateTo$faixa");
+                ['Placa', 'Motorista', 'Data/Hora', 'Endereço', 'Mapa', 'Velocidade (km/h)', 'Ignição', 'Sinal GPS'],
+                $expRows, 'Relatório de Posições',
+                "Placa: $placaSel  |  Período (BRT): $dateFrom a $dateTo$faixa");
         }
 
         $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data g $where");
@@ -107,9 +127,18 @@ if ($generated && $selImei) {
         $stmt = $db->prepare("
             SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                    g.acc AS ignition, g.status AS gps_status,
-                   COALESCE(d.device_name, g.imei) as device_name
+                   COALESCE(d.device_name, g.imei) as device_name,
+                   COALESCE(dr.name, '—') as driver_name
             FROM gps_data g
             LEFT JOIN devices d ON d.imei = g.imei
+            -- Motorista NÃO existe em gps_data nem em devices: o único vínculo
+            -- no schema é trips.driver_id. Então o condutor de uma posição é o
+            -- da VIAGEM que a contém — posição fora de viagem fica sem
+            -- motorista, que é a leitura correta e não um furo.
+            LEFT JOIN trips tr ON tr.imei = g.imei
+                              AND g.gps_time >= tr.started_at
+                              AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
+            LEFT JOIN drivers dr ON dr.id = tr.driver_id
             $where
             ORDER BY g.$sort $order
             LIMIT $perPage OFFSET $offset
@@ -133,9 +162,7 @@ if ($generated && $selImei) {
     } catch (Exception $e) {}
 }
 
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
-$devices->execute([':cid' => $customerId]);
-$devices = $devices->fetchAll();
+// ($devices já foi carregado antes do bloco de export)
 
 $page_title = 'Relatório de Posições';
 $current_route = 'rel_posicoes';
@@ -148,7 +175,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Posições</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Posições</h2>
     <?php if ($generated && $selImei): ?>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
@@ -164,7 +191,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <input type="hidden" name="gerar" value="1">
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Ativo</label>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
                 <option value="">— Selecione —</option>
                 <?php foreach ($devices as $d): ?>
@@ -217,25 +244,25 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="table-wrap">
     <table>
         <thead>
-            <tr><th><?= report_sort_link('gps_time', 'Data/Hora', $sort, $order) ?></th><th>IMEI</th><th>Dispositivo</th><th>Endereço</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
+            <tr><th>Placa</th><th>Motorista</th><th><?= report_sort_link('gps_time', 'Data/Hora', $sort, $order) ?></th><th>Endereço</th><th>Mapa</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);"><?= $generated ? 'Nenhuma posição encontrada' : 'Selecione um ativo e clique em Gerar' ?></td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);"><?= $generated ? 'Nenhuma posição encontrada' : 'Selecione uma placa e clique em Gerar' ?></td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r): ?>
             <tr>
+                <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
+                <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['gps_time'], 'd/m/Y H:i:s') ?></td>
-                <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
-                <td><?= htmlspecialchars($r['device_name']) ?></td>
-                <td style="max-width:320px;">
-                    <?php
-                    $geoKey = round((float)$r['latitude'], 6) . ',' . round((float)$r['longitude'], 6);
-                    if (isset($geoCache[$geoKey])): ?>
-                        <span style="font-size:12px;"><?= htmlspecialchars($geoCache[$geoKey]) ?></span>
-                    <?php elseif ((float)$r['latitude'] != 0): ?>
-                        <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16" target="_blank"
-                           class="text-mono" style="font-size:12px;"><?= number_format((float)$r['latitude'], 6) ?>, <?= number_format((float)$r['longitude'], 6) ?></a>
+                <td class="cell-endereco">
+                    <?php $geoKey = round((float)$r['latitude'], 6) . ',' . round((float)$r['longitude'], 6); ?>
+                    <?= isset($geoCache[$geoKey]) ? htmlspecialchars($geoCache[$geoKey]) : '—' ?>
+                </td>
+                <td>
+                    <?php if ((float)$r['latitude'] != 0): ?>
+                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
+                       target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
                 <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
@@ -263,7 +290,8 @@ function toggleMap() {
         var bounds = [];
         mapData.forEach(function(p) {
             bounds.push([p.lat, p.lng]);
-            L.marker([p.lat, p.lng]).addTo(mapInstance).bindPopup(p.imei + '<br>' + (p.name||''));
+            // Placa, não IMEI (ver rastreamento.php)
+            L.marker([p.lat, p.lng]).addTo(mapInstance).bindPopup('<b>Placa: ' + (p.name || p.imei) + '</b>');
         });
         if (bounds.length > 0) mapInstance.fitBounds(bounds);
         else mapInstance.setView([-15.78, -47.93], 5);

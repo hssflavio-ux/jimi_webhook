@@ -46,6 +46,57 @@ $rows = [];
 $totalRows = 0;
 $totalPages = 1;
 
+// Lista de placas — carregada AQUI e não depois da grade, porque o export
+// síncrono roda antes e precisa dela para montar o subtítulo do PDF.
+$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
+$devices->execute([':cid' => $customerId]);
+$devices = $devices->fetchAll();
+
+/**
+ * URL absoluta da rota de uma viagem, para a coluna "Rota" do export.
+ *
+ * Em CSV/XLSX a célula vira um endereço clicável; no PDF é texto, mas ainda
+ * permite copiar. Sem APP_URL devolve o caminho relativo — melhor do que vazio.
+ *
+ * @param int $tripId
+ * @returns string
+ */
+function rota_url(int $tripId): string
+{
+    $base = rtrim((string)(getenv('APP_URL') ?: ''), '/');
+    return $base . '/relatorios/deslocamento/rota?trip_id=' . $tripId;
+}
+
+/**
+ * Subtítulo do export: o FILTRO aplicado, não só o período.
+ *
+ * Um PDF de relatório circula solto — vai por e-mail, é impresso, é anexado a
+ * processo. Sem dizer de qual placa e de qual período ele trata, o documento
+ * não se sustenta fora da tela que o gerou.
+ *
+ * @param string $selImei  IMEI selecionado ('' = todos)
+ * @param array  $devices  Lista imei/device_name do cliente
+ * @param string $dateFrom Dia inicial (BRT)
+ * @param string $dateTo   Dia final (BRT)
+ * @param string $mode     'viagens' | 'diario'
+ * @returns string
+ */
+function desloc_subtitulo(string $selImei, array $devices, string $dateFrom, string $dateTo, string $mode): string
+{
+    $placa = 'Todas as placas';
+    if ($selImei !== '') {
+        foreach ($devices as $d) {
+            if ($d['imei'] === $selImei) {
+                $placa = 'Placa: ' . ($d['device_name'] ?: $selImei);
+                break;
+            }
+        }
+        if ($placa === 'Todas as placas') $placa = 'Placa: ' . $selImei;
+    }
+    $modo = $mode === 'diario' ? ' — fechamento diário' : '';
+    return $placa . '  |  Período (BRT): ' . $dateFrom . ' a ' . $dateTo . $modo;
+}
+
 // Fechamento diário: agrega as viagens do dia BRT (primeira ignição ligada →
 // última desligada). Viagem que cruza a meia-noite conta inteira no dia em que
 // começou. CONVERT_TZ por offset fixo (BRT sem DST), convenção do projeto.
@@ -94,7 +145,6 @@ if ($generated) {
                 while ($r = $expStmt->fetch()) {
                     $expRows[] = [
                         fmt_brt($r['primeira_on'], 'd/m/Y'),
-                        $r['imei'],
                         $r['device_name'],
                         fmt_brt($r['primeira_on'], 'd/m/Y H:i'),
                         $r['ultima_off'] ? fmt_brt($r['ultima_off'], 'd/m/Y H:i') : '—',
@@ -107,8 +157,9 @@ if ($generated) {
                     ];
                 }
                 stream_export($export, 'relatorio_deslocamento_diario',
-                    ['Dia', 'IMEI', 'Dispositivo', 'Primeira Ignição', 'Última Ign. Deslig.', 'Jornada', 'Em Movimento', 'Distância (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
-                    $expRows, 'Relatório de Deslocamento — Fechamento Diário', "Período (BRT): $dateFrom a $dateTo");
+                    ['Dia', 'Placa', 'Primeira Ignição', 'Última Ign. Deslig.', 'Jornada', 'Em Movimento', 'Distância (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
+                    $expRows, 'Relatório de Deslocamento — Fechamento Diário',
+                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode));
             } else {
                 $expStmt = $db->prepare("
                     SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
@@ -121,23 +172,23 @@ if ($generated) {
                     LIMIT " . SYNC_EXPORT_MAX_ROWS);
                 $expStmt->execute($params);
                 while ($r = $expStmt->fetch()) {
+                    // Mesma ordem da tela: placa, motorista, início, fim,
+                    // duração, vel. máx, distância, alarmes, rota.
                     $expRows[] = [
-                        $r['imei'],
                         $r['device_name'],
                         $r['driver_name'],
                         fmt_brt($r['started_at']),
-                        $r['start_addr'] ?? '—',
                         $r['ended_at'] ? fmt_brt($r['ended_at']) : '—',
-                        $r['end_addr'] ?? '—',
                         fmt_duration((int)($r['duration_s'] ?? 0)),
                         $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
                         $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
                         (int)($r['alarm_count'] ?? 0),
+                        rota_url((int)$r['id']),
                     ];
                 }
                 stream_export($export, 'relatorio_deslocamento',
-                    ['IMEI', 'Dispositivo', 'Motorista', 'Início', 'Local Início', 'Término', 'Local Fim', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes'],
-                    $expRows, 'Relatório de Deslocamento', "Período (BRT): $dateFrom a $dateTo");
+                    ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes', 'Rota'],
+                    $expRows, 'Relatório de Deslocamento', desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode));
             }
         } catch (Exception $e) { /* tabela trips ausente → export vazio */ }
     }
@@ -189,9 +240,7 @@ function fmt_duration(int $s): string {
     return sprintf('%dh%02dm', floor($s / 3600), floor(($s % 3600) / 60));
 }
 
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
-$devices->execute([':cid' => $customerId]);
-$devices = $devices->fetchAll();
+// ($devices já foi carregado antes do bloco de export)
 
 $page_title = 'Relatório de Deslocamento';
 $current_route = 'rel_deslocamento';
@@ -200,7 +249,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Deslocamento</h2><?= report_brand_end() ?>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Deslocamento</h2>
     <?php if ($generated): ?>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
@@ -223,7 +272,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Ativo</label>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
                 <option value="">Todos</option>
                 <?php foreach ($devices as $d): ?>
@@ -261,7 +310,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <?php if ($mode === 'diario'): ?>
             <tr>
                 <th><?= report_sort_link('dia', 'Dia', $sort, $order) ?></th>
-                <th>Dispositivo</th>
+                <th>Placa</th>
                 <th>Primeira Ignição</th>
                 <th>Última Ign. Deslig.</th>
                 <th>Jornada</th>
@@ -274,8 +323,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             </tr>
             <?php else: ?>
             <tr>
-                <th>IMEI</th>
-                <th>Dispositivo</th>
+                <th>Placa</th>
                 <th>Motorista</th>
                 <th><?= report_sort_link('started_at', 'Início', $sort, $order) ?></th>
                 <th><?= report_sort_link('ended_at', 'Término', $sort, $order) ?></th>
@@ -289,7 +337,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">
+            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">
                 <?= $generated ? 'Nenhuma viagem encontrada no período.' : 'Selecione os filtros e clique em Gerar.' ?>
             </td></tr>
             <?php elseif ($mode === 'diario'): ?>
@@ -301,7 +349,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             ?>
             <tr>
                 <td class="text-mono"><?= $diaBrt ?></td>
-                <td><?= htmlspecialchars($r['device_name']) ?><br><span class="text-mono" style="font-size:10px;color:var(--muted);"><?= htmlspecialchars($r['imei']) ?></span></td>
+                <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['primeira_on'], 'H:i') ?></td>
                 <td class="text-mono"><?= $r['ultima_off'] ? fmt_brt($r['ultima_off'], $offFmt) : '—' ?></td>
                 <td><?= fmt_duration((int)($r['jornada_s'] ?? 0)) ?></td>
@@ -316,8 +364,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <?php else: ?>
             <?php foreach ($rows as $r): ?>
             <tr>
-                <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
-                <td><?= htmlspecialchars($r['device_name']) ?></td>
+                <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['started_at']) ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['start_addr']??'—', 0, 40)) ?></span></td>
                 <td class="text-mono"><?= $r['ended_at'] ? fmt_brt($r['ended_at']) : '—' ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['end_addr']??'—', 0, 40)) ?></span></td>

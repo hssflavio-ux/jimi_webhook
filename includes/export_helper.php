@@ -400,7 +400,12 @@ class PdfWriter
         // o JPEG do logo foi preparado; sem ele o cabeçalho segue como era.
         self::prepareLogo();
         if (self::$logoJpeg !== null) {
-            $h = 18.0;
+            // 26 pt numa página A4 paisagem (842 pt de largura) dá ~96 pt de
+            // marca — legível ao lado de um título de 12 pt sem competir com
+            // ele. Ficou em 18 pt enquanto o asset ainda tinha a moldura
+            // transparente em volta, quando a arte ocupava 26% da altura e a
+            // marca saía como um risco no canto.
+            $h = 26.0;
             $w = $h * (self::$logoW / max(1, self::$logoH));
             $x = self::PAGE_W - self::MARGIN - $w;
             // `cm` é a matriz de posicionamento: a escala É o tamanho final.
