@@ -224,7 +224,7 @@ include __DIR__ . '/../web/layout_base.php';
                         <?= htmlspecialchars($r['device_name'] ?? $r['imei']) ?>
                     </a>
                 </td>
-                <td><?= htmlspecialchars(geocode_cell($geoPagina ?? [], $r['latitude'], $r['longitude'])) ?></td>
+                <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoPagina ?? [], $r['latitude'], $r['longitude'])) ?></td>
                 <td><?= round($r['speed'] ?? 0) ?> km/h</td>
                 <td><?= $r['direction'] ?? '-' ?>°</td>
                 <td>

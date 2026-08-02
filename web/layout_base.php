@@ -569,6 +569,12 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--canvas-soft); }
 
+/* Coluna de endereço (v4.8.0). Sem largura mínima, "Rua Professora Zelia Dulce
+   de Campos Maia, Sorocaba, São Paulo" quebra em SETE linhas e infla a altura
+   de toda a linha da grade — a tabela já rola na horizontal, então dar espaço
+   aqui não custa nada. Confirmado por screenshot antes e depois. */
+.cell-endereco { min-width: 230px; max-width: 340px; line-height: 1.35; }
+
 /* Cabeçalho ordenável (relatórios): seta ▲/▼ na coluna ativa, ⇅ nas demais */
 .sort-link {
     display: inline-flex;

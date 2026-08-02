@@ -258,7 +258,7 @@ case 'trajetos':
             <?php foreach ($tracks as $t): ?>
             <tr>
                 <td><?= fmt_brt_dt($t['gps_time']) ?></td>
-                <td><?= htmlspecialchars(geocode_cell($geoTrack, $t['latitude'], $t['longitude'])) ?></td>
+                <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoTrack, $t['latitude'], $t['longitude'])) ?></td>
                 <td><?= round($t['speed'] ?? 0) ?> km/h</td>
                 <td><?= $t['direction'] ?? '-' ?>°</td>
                 <td><?= $t['altitude'] ?? '-' ?> m</td>

@@ -276,7 +276,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <span class="badge"><?= htmlspecialchars($r['status']) ?></span>
                     <?php endif; ?>
                 </td>
-                <td><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
+                <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
                 <td>
                     <?php if ($hasCoords): ?>
                     <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
