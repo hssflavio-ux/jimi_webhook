@@ -73,9 +73,10 @@ if ($generated && $selImei) {
                 SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                        g.acc AS ignition, g.status AS gps_status, g.gsm_signal,
                        COALESCE(d.device_name, g.imei) as device_name,
-                       COALESCE(dr.name, '—') as driver_name
+                       COALESCE(dg.name, g.driver_name, dr.name, '—') as driver_name
                 FROM gps_data g
                 LEFT JOIN devices d ON d.imei = g.imei
+                LEFT JOIN drivers dg ON dg.id = g.driver_id
                 LEFT JOIN trips tr ON tr.imei = g.imei
                                   AND g.gps_time >= tr.started_at
                                   AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
@@ -128,13 +129,17 @@ if ($generated && $selImei) {
             SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                    g.acc AS ignition, g.status AS gps_status,
                    COALESCE(d.device_name, g.imei) as device_name,
-                   COALESCE(dr.name, '—') as driver_name
+                   -- Motorista, em três níveis de precedência (v4.8.0):
+                   --   1. o que a CÂMERA mandou junto com a posição
+                   --   2. o nome cru, quando veio sem cadastro local
+                   --   3. o condutor da VIAGEM que contém o ponto (fallback)
+                   -- O nível 1 é o que a migração v4.8.0 tornou possível; os
+                   -- outros dois mantêm o relatório útil no histórico já
+                   -- gravado e nos equipamentos que não enviam o campo.
+                   COALESCE(dg.name, g.driver_name, dr.name, '—') as driver_name
             FROM gps_data g
             LEFT JOIN devices d ON d.imei = g.imei
-            -- Motorista NÃO existe em gps_data nem em devices: o único vínculo
-            -- no schema é trips.driver_id. Então o condutor de uma posição é o
-            -- da VIAGEM que a contém — posição fora de viagem fica sem
-            -- motorista, que é a leitura correta e não um furo.
+            LEFT JOIN drivers dg ON dg.id = g.driver_id
             LEFT JOIN trips tr ON tr.imei = g.imei
                               AND g.gps_time >= tr.started_at
                               AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())

@@ -11,10 +11,60 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
 
 class PushGPSHandler extends WebhookHandler {
-    public function __construct() { 
-        parent::__construct(HANDLER_NAME); 
+    /** Cache por requisição: evita reconsultar o mesmo motorista a cada item do lote. */
+    private array $driverCache = [];
+
+    public function __construct() {
+        parent::__construct(HANDLER_NAME);
     }
-    
+
+    /**
+     * Casa o identificador de motorista enviado pelo equipamento com o cadastro
+     * local (`drivers.identifier`).
+     *
+     * ⚠️ NÃO cria motorista. Um cadastro criado sozinho a partir de um webhook
+     * entraria sem cliente, sem CNH e sem filial — e a tela de Motoristas
+     * passaria a ter registros-fantasma que ninguém sabe de onde vieram. Se o
+     * identificador não bate com nada, `driver_name` guarda o texto cru e o
+     * vínculo fica nulo: o dado não se perde e o cadastro não se suja.
+     *
+     * @param string|int|null $identificador Valor de driverId vindo do device
+     * @param string|null     $nome          Valor de driverName (só para log)
+     * @returns int|null drivers.id, ou null se não houver correspondência
+     */
+    private function resolveDriverId($identificador, ?string $nome): ?int
+    {
+        $ident = is_string($identificador) ? trim($identificador) : $identificador;
+        if ($ident === null || $ident === '' || $ident === '0') {
+            return null;
+        }
+        $chave = (string)$ident;
+        if (array_key_exists($chave, $this->driverCache)) {
+            return $this->driverCache[$chave];
+        }
+
+        $id = null;
+        try {
+            $stmt = $this->db->prepare(
+                "SELECT id FROM drivers WHERE identifier = :i AND is_active = 1 LIMIT 1"
+            );
+            $stmt->execute([':i' => $chave]);
+            $found = $stmt->fetchColumn();
+            $id = $found !== false ? (int)$found : null;
+        } catch (Throwable $e) {
+            // Coluna/tabela ausente não pode derrubar a ingestão de posição
+            $id = null;
+        }
+
+        if ($id === null) {
+            Logger::debug('pushgps: motorista sem cadastro local', [
+                'identifier' => $chave, 'nome' => $nome,
+            ]);
+        }
+        $this->driverCache[$chave] = $id;
+        return $id;
+    }
+
     protected function processItem($item) {
         $imei = $this->validateRequired($item, 'imei', 'IMEI');
         
@@ -42,6 +92,17 @@ class PushGPSHandler extends WebhookHandler {
         $undecodedAddInfo = $item['undecodedGpsAddInfo'] ?? null;
         $driverLicenseStatus = $item['driverLicenseStatus'] ?? null;
         $driverLicense  = $item['driverLicense'] ?? null;
+
+        // ── Motorista junto com a posição (v4.8.0) ──────────────
+        // A doc oficial da Jimi confirma `driverId`/`driverName` viajando ao
+        // lado das coordenadas nos dois protocolos, e o pushalarm.php já os
+        // consome. Aqui o caminho fica PRÉ-PROGRAMADO: se o equipamento mandar,
+        // grava; se não mandar, as colunas ficam nulas e o Relatório de
+        // Posições segue resolvendo o condutor pela viagem que contém o ponto.
+        // Nada depende de o campo existir — é adição, não requisito.
+        $driverIdRaw = $item['driverId']   ?? $item['driver_id']   ?? null;
+        $driverName  = $item['driverName'] ?? $item['driver_name'] ?? null;
+        $driverId    = $this->resolveDriverId($driverIdRaw, $driverName);
         $buzzerAlarmStatus  = $item['buzzerAlarmStatus']  ?? null;
         $creditCardStatus   = $item['creditCardStatus']   ?? null;
         $doorStatus     = $item['doorStatus']     ?? null;
@@ -71,6 +132,7 @@ class PushGPSHandler extends WebhookHandler {
                 device_status_code, altitude,
                 post_type, post_method, undecoded_gps_add_info,
                 driver_license_status, driver_license,
+                driver_id, driver_name,
                 buzzer_alarm_status, credit_card_status,
                 door_status, sos_status, temperature, transparent_data,
                 raw_data
@@ -82,6 +144,7 @@ class PushGPSHandler extends WebhookHandler {
                 :device_status_code, :altitude,
                 :post_type, :post_method, :undecoded_add_info,
                 :driver_license_status, :driver_license,
+                :driver_id, :driver_name,
                 :buzzer_alarm_status, :credit_card_status,
                 :door_status, :sos_status, :temperature, :transparent_data,
                 :raw_data
@@ -100,6 +163,8 @@ class PushGPSHandler extends WebhookHandler {
             ':undecoded_add_info' => $undecodedAddInfo,
             ':driver_license_status' => $driverLicenseStatus,
             ':driver_license' => $driverLicense,
+            ':driver_id' => $driverId,
+            ':driver_name' => $driverName,
             ':buzzer_alarm_status' => $buzzerAlarmStatus,
             ':credit_card_status' => $creditCardStatus,
             ':door_status' => $doorStatus, ':sos_status' => $sosStatus,

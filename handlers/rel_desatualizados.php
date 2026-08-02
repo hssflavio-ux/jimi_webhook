@@ -67,6 +67,51 @@ try {
     $bucketCounts = array_fill_keys(array_keys($buckets), 0);
 }
 
+// ── Grade TOTAL (v4.8.0) ────────────────────────────────────────
+// Antes esta tela só tinha as faixas e o drill-down por faixa: para ver a frota
+// inteira ordenada por tempo sem transmitir era preciso abrir uma faixa de cada
+// vez e comparar de cabeça. A grade abaixo responde a pergunta direta — "quem
+// está calado, do menos para o mais" — e a coluna é reordenável.
+//
+// Ordena pelo TEMPO SEM TRANSMITIR, não pela data: são a mesma informação
+// invertida, e o usuário pensa em "há quantos dias", não em "desde quando".
+// `last_gps_time IS NULL` (nunca posicionou) vai para o extremo de MAIS tempo,
+// que é onde pertence — nunca transmitir é o pior caso, não a ausência de caso.
+$totalRows = [];
+try {
+    $tStmt = $db->prepare("
+        SELECT d.imei, d.device_name, ds.last_gps_time, ds.last_latitude, ds.last_longitude,
+               ds.last_acc_status,
+               COALESCE(c.name, '—') AS customer_name,
+               TIMESTAMPDIFF(MINUTE, ds.last_gps_time, UTC_TIMESTAMP()) AS mins_since
+        FROM devices d
+        LEFT JOIN customers c ON c.id = d.customer_id
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        " . ($where ?: '') . "
+        ORDER BY ds.last_gps_time IS NULL " . ($order === 'ASC' ? 'ASC' : 'DESC') . ",
+                 ds.last_gps_time " . ($order === 'ASC' ? 'DESC' : 'ASC') . "
+        LIMIT 1000");
+    $tStmt->execute($params);
+    $totalRows = $tStmt->fetchAll();
+} catch (Throwable $e) {}
+
+require_once __DIR__ . '/../includes/geocode.php';
+$geoTotal = $totalRows ? geocode_map_rows($totalRows, 'last_latitude', 'last_longitude') : [];
+
+/**
+ * "há 3 dias", "há 5 h", "há 12 min" — ou 'Nunca'.
+ *
+ * @param int|null $mins Minutos desde a última posição (null = nunca)
+ * @returns string
+ */
+function tempo_sem_transmitir(?int $mins): string
+{
+    if ($mins === null) return 'Nunca transmitiu';
+    if ($mins < 60)     return 'há ' . $mins . ' min';
+    if ($mins < 1440)   return 'há ' . intdiv($mins, 60) . ' h';
+    return 'há ' . intdiv($mins, 1440) . ' dia(s)';
+}
+
 $detailRows = [];
 if ($detailBucket && isset($buckets[$detailBucket])) {
     try {
@@ -187,6 +232,58 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="font-size:11px;color:var(--muted);">Total: <?= $total ?> dispositivos</div>
 </div>
 <?php endif; ?>
+
+<!-- Grade total: a frota inteira ordenada por tempo sem transmitir (v4.8.0) -->
+<div class="flex-between mb-12">
+    <h3 style="font-size:15px;font-weight:600;color:var(--ink);">
+        Frota completa
+        <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= count($totalRows) ?>)</span>
+    </h3>
+</div>
+<div class="table-wrap mb-24">
+    <table>
+        <thead>
+            <tr>
+                <th>Placa</th>
+                <th><?= report_sort_link('last_gps_time', 'Sem transmitir há', $sort, $order) ?></th>
+                <th>Data/Hora</th>
+                <th>Endereço</th>
+                <th>Mapa</th>
+                <th>Ignição</th>
+                <th>Status do GPS</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($totalRows)): ?>
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
+            <?php else: foreach ($totalRows as $r):
+                $mins = $r['last_gps_time'] === null ? null : (int)$r['mins_since'];
+                $temCoord = !empty($r['last_latitude']) && (float)$r['last_latitude'] != 0.0;
+                // Sem posição há mais de 30 min o GPS não é "válido", é silêncio
+                $gpsOk = $mins !== null && $mins <= 30;
+            ?>
+            <tr>
+                <td class="text-mono"><?= htmlspecialchars($r['device_name'] ?: $r['imei']) ?></td>
+                <td><?= $mins === null
+                        ? '<span class="badge" style="color:var(--error);">Nunca transmitiu</span>'
+                        : htmlspecialchars(tempo_sem_transmitir($mins)) ?></td>
+                <td class="text-mono"><?= $r['last_gps_time'] ? fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s') : '—' ?></td>
+                <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoTotal, $r['last_latitude'], $r['last_longitude'])) ?></td>
+                <td>
+                    <?php if ($temCoord): ?>
+                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['last_latitude'] ?>&mlon=<?= $r['last_longitude'] ?>&zoom=16"
+                       target="_blank" class="badge badge-primary">Ver Mapa</a>
+                    <?php else: echo '—'; endif; ?>
+                </td>
+                <td><?= $r['last_acc_status'] === null ? '—' : ((int)$r['last_acc_status'] === 1 ? 'Ligada' : 'Desligada') ?></td>
+                <td><?= $gpsOk
+                        ? '<span class="badge badge-success">Válido</span>'
+                        : '<span class="badge badge-warning">Sem sinal</span>' ?></td>
+            </tr>
+            <?php endforeach; endif; ?>
+        </tbody>
+    </table>
+</div>
 
 <?php if ($detailBucket): ?>
 <div class="flex-between mb-12">
