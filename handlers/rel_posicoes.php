@@ -96,7 +96,8 @@ if ($generated && $selImei) {
                     fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
                     geocode_cell($geoExp, $r['latitude'], $r['longitude']),
                     (float)$r['latitude'] != 0.0
-                        ? sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $r['latitude'], $r['longitude'])
+                        ? new ExportLink(sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16',
+                                                 $r['latitude'], $r['longitude']))
                         : '—',
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
                     $r['ignition'] ? 'Ligada' : 'Desligada',

@@ -120,7 +120,8 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
             geocode_cell($geo, $r['latitude'], $r['longitude']),
             (float)$r['latitude'] != 0.0
-                ? sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $r['latitude'], $r['longitude'])
+                ? new ExportLink(sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16',
+                                         $r['latitude'], $r['longitude']))
                 : '—',
         ];
     }

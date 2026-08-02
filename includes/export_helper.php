@@ -14,6 +14,37 @@
  */
 
 /**
+ * Célula que é um LINK: rótulo visível + URL escondida atrás dele (v4.8.2).
+ *
+ * Cada formato resolve do seu jeito, porque as capacidades diferem:
+ *   XLSX → `=HYPERLINK("url";"MAPA")`, clicável, mostrando só o rótulo
+ *   PDF  → texto do rótulo + anotação /Link cobrindo a célula
+ *   CSV  → só o rótulo (CSV não tem hyperlink; ver nota em csv_cell())
+ *
+ * Antes disso a URL crua ia como texto na célula: enchia a coluna, não era
+ * clicável em lugar nenhum, e era exatamente o que se via como "o link do
+ * mapa não funciona".
+ */
+final class ExportLink
+{
+    public string $url;
+    public string $label;
+
+    /**
+     * @param string $url   Endereço de destino
+     * @param string $label Texto exibido na célula
+     */
+    public function __construct(string $url, string $label = 'MAPA')
+    {
+        $this->url   = $url;
+        $this->label = $label;
+    }
+
+    /** @returns string Rótulo — usado onde não há suporte a link. */
+    public function __toString(): string { return $this->label; }
+}
+
+/**
  * Writer XLSX incremental (memória constante — linhas vão para arquivo temporário).
  */
 class XlsxWriter
@@ -73,6 +104,21 @@ class XlsxWriter
         $out = '';
         foreach (array_values($cells) as $i => $v) {
             $ref = self::cellRef($i, $this->rowNum);
+
+            // Célula de LINK (v4.8.2): vira =HYPERLINK("url";"rótulo"), que o
+            // Excel mostra como o rótulo e abre ao clique. Antes a URL crua ia
+            // como texto — poluía a coluna e não era clicável, que é o que o
+            // usuário via como "o link não funciona".
+            if ($v instanceof ExportLink) {
+                // Aspas duplas dobram dentro de string de fórmula do Excel
+                $u = str_replace('"', '""', $v->url);
+                $t = str_replace('"', '""', $v->label);
+                $out .= '<c r="' . $ref . '" t="str"><f>'
+                      . self::xml('HYPERLINK("' . $u . '","' . $t . '")')
+                      . '</f></c>';
+                continue;
+            }
+
             $s = (string)($v ?? '');
             // Números "de verdade" (evita perder precisão de IMEI com 15+ dígitos)
             if ($s !== '' && is_numeric($s) && strlen($s) < 12 && !preg_match('/^0\d/', $s)) {
@@ -212,6 +258,9 @@ class PdfWriter
     private string $filepath;
     private string $title;
     private string $subtitle;
+
+    /** Anotações /Link acumuladas: ['page'=>idx, 'rect'=>[x0,y0,x1,y1], 'uri'=>...]. */
+    private array $annots = [];
 
     /** JPEG do logo pronto para embutir (null = sem logo). */
     private static ?string $logoJpeg = null;
@@ -366,8 +415,26 @@ class PdfWriter
             $streamId = $next++;
             $pageId   = $next++;
             $objects[$streamId] = "<< /Length " . strlen($content) . " >>\nstream\n" . $content . "\nendstream";
+
+            // Anotações /Link desta página (v4.8.2). Cada uma é um objeto
+            // próprio; a página as referencia em /Annots. Sem isto o "MAPA"
+            // azul seria enfeite: o PDF não deriva link de texto sublinhado.
+            $annotRefs = [];
+            foreach ($this->annots as $a) {
+                if ($a['page'] !== $i) continue;
+                $aid = $next++;
+                $objects[$aid] = sprintf(
+                    "<< /Type /Annot /Subtype /Link /Rect [%.2f %.2f %.2f %.2f] /Border [0 0 0] "
+                    . "/A << /Type /Action /S /URI /URI (%s) >> >>",
+                    $a['rect'][0], $a['rect'][1], $a['rect'][2], $a['rect'][3],
+                    self::esc($a['uri'])
+                );
+                $annotRefs[] = "$aid 0 R";
+            }
+            $annots = $annotRefs ? ' /Annots [' . implode(' ', $annotRefs) . ']' : '';
+
             $objects[$pageId]   = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " . self::PAGE_W . ' ' . self::PAGE_H . "] "
-                                . "/Resources << /Font << /F1 3 0 R /F2 4 0 R >>$resImg >> /Contents $streamId 0 R >>";
+                                . "/Resources << /Font << /F1 3 0 R /F2 4 0 R >>$resImg >>$annots /Contents $streamId 0 R >>";
             $kids[] = "$pageId 0 R";
         }
         $objects[2] = "<< /Type /Pages /Kids [" . implode(' ', $kids) . "] /Count " . count($kids) . " >>";
@@ -448,13 +515,32 @@ class PdfWriter
         $maxChars = (int)floor($this->colW / (self::FONT_SIZE * 0.52)) - 1;
 
         foreach (array_values($cells) as $i => $v) {
-            $txt = (string)($v ?? '');
+            $ehLink = $v instanceof ExportLink;
+            $txt = $ehLink ? $v->label : (string)($v ?? '');
             if (mb_strlen($txt) > $maxChars) {
                 $txt = mb_substr($txt, 0, max(1, $maxChars - 1)) . '…';
             }
             $x = $x0 + $i * $this->colW + 2;
-            $this->buf .= "BT $font " . self::FONT_SIZE . " Tf $color rg "
+
+            // Link: azul + sublinhado, e uma anotação /Link cobrindo a célula.
+            // Sem a anotação o PDF teria um texto azul decorativo que não abre
+            // nada — pior do que texto normal, porque promete clique.
+            $cor = $ehLink ? '0 0.32 1' : $color;
+            $this->buf .= "BT $font " . self::FONT_SIZE . " Tf $cor rg "
                         . sprintf('%.2f %.2f', $x, $yText) . ' Td (' . self::esc($txt) . ") Tj ET\n";
+
+            if ($ehLink) {
+                $larg = mb_strlen($txt) * self::FONT_SIZE * 0.52;
+                $this->buf .= sprintf("%s RG 0.4 w %.2f %.2f m %.2f %.2f l S\n",
+                    $cor, $x, $yText - 1.2, $x + $larg, $yText - 1.2);
+                // Guardada por PÁGINA: a anotação vive no objeto da página, e o
+                // buffer atual ainda não sabe em qual página vai parar.
+                $this->annots[] = [
+                    'page' => count($this->pages),   // índice da página em construção
+                    'rect' => [$x - 1, $yText - 2.5, $x + $larg + 1, $yText + self::FONT_SIZE],
+                    'uri'  => $v->url,
+                ];
+            }
         }
 
         // Linha divisória inferior (cinza-claro)
@@ -566,7 +652,16 @@ function stream_export(string $format, string $basename, array $headers, iterabl
         $out = fopen('php://output', 'w');
         fwrite($out, "\xEF\xBB\xBF"); // BOM UTF-8 (Excel pt-BR)
         fputcsv($out, $headers, ';');
-        foreach ($rows as $row) fputcsv($out, $row, ';');
+        foreach ($rows as $row) {
+            // CSV não tem hyperlink: a célula de link vira a URL, de propósito.
+            // Escrever só "MAPA" aqui deixaria a coluna inútil — em XLSX e PDF
+            // o rótulo esconde o endereço porque ali ele fica CLICÁVEL; num
+            // arquivo de texto puro, esconder seria perder o dado.
+            foreach ($row as $k => $v) {
+                if ($v instanceof ExportLink) $row[$k] = $v->url;
+            }
+            fputcsv($out, $row, ';');
+        }
         fclose($out);
         exit;
     }
