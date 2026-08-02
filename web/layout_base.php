@@ -255,8 +255,10 @@ body {
 }
 
 /* Marca real no lugar do placeholder de pontinhos + texto "JIMI" (v4.8.0).
-   O asset de fundo TRANSPARENTE é o que permite usar a MESMA imagem aqui, na
-   sidebar near-black, e no card branco do login. */
+   ⚠️ Usa `logo-dark.png`, NÃO o `logo.png`. Fundo transparente resolve o
+   FUNDO, não o LOGOTIPO: a palavra "bycamera" é quase preta e SOME no
+   near-black desta sidebar — só o símbolo azul sobrava. Confirmado por
+   screenshot. A variante clareia o texto e preserva o azul da marca. */
 .sidebar-brand-logo { height: 26px; width: auto; max-width: 100%; display: block; }
 /* Sidebar recolhida: só o símbolo cabe, então a imagem sai de cena */
 .sidebar.collapsed .sidebar-brand-logo { display: none; }
@@ -1002,7 +1004,7 @@ if (!empty($customer['brand_color'])) {
 <!-- Sidebar -->
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-brand">
-        <img class="sidebar-brand-logo" src="/web/assets/logo.png"
+        <img class="sidebar-brand-logo" src="/web/assets/logo-dark.png"
              alt="bycamera — videomonitoramento inteligente">
         <div class="sidebar-brand-version">v<?= getenv('SYSTEM_VERSION') ?: '4.0' ?></div>
     </div>
