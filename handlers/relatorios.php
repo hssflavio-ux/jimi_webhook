@@ -7,6 +7,7 @@
  * Substitui a antiga aba dedicada de Alarmes.
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_login();
 
 $customer_id = get_customer_id();
@@ -94,7 +95,9 @@ if ($reportType === 'alarmes') {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
-    $columns = ['Data/Hora', 'Dispositivo', 'Latitude', 'Longitude', 'Velocidade', 'Direção', 'Mapa'];
+    $columns = ['Data/Hora', 'Dispositivo', 'Endereço', 'Velocidade', 'Direção', 'Mapa'];
+    // Endereços da página em um lote (v4.8.0) — substitui as colunas de coordenada
+    $geoPagina = geocode_map_rows($rows);
 
 } elseif ($reportType === 'comandos') {
     $where = "d.customer_id = :cid";
@@ -221,8 +224,7 @@ include __DIR__ . '/../web/layout_base.php';
                         <?= htmlspecialchars($r['device_name'] ?? $r['imei']) ?>
                     </a>
                 </td>
-                <td class="text-mono"><?= number_format($r['latitude'], 6) ?></td>
-                <td class="text-mono"><?= number_format($r['longitude'], 6) ?></td>
+                <td><?= htmlspecialchars(geocode_cell($geoPagina ?? [], $r['latitude'], $r['longitude'])) ?></td>
                 <td><?= round($r['speed'] ?? 0) ?> km/h</td>
                 <td><?= $r['direction'] ?? '-' ?>°</td>
                 <td>

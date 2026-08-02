@@ -205,7 +205,7 @@ unset($cardQ['page'], $cardQ['export'], $cardQ['state']);
 $cardBase = http_build_query($cardQ);
 ?>
 <div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Status da Frota</h2>
+    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Status da Frota</h2><?= report_brand_end() ?>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>

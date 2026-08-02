@@ -335,6 +335,43 @@ function brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom = '', $timeTo =
     }
 }
 
+/* ── Marca nos relatórios ───────────────────────────────────────────────── */
+
+/** Caminho do logo servido por HTTP (web/assets é servido como estático). */
+const REPORT_LOGO_URL  = '/web/assets/logo.png';
+/** Caminho em disco, para embutir no PDF. */
+const REPORT_LOGO_PATH = __DIR__ . '/../web/assets/logo.png';
+
+/**
+ * Marca + separador, para abrir o cabeçalho de uma tela de relatório.
+ *
+ * Usado dentro do `<div class="flex-between">` já existente em cada tela,
+ * envolvendo a marca e o `<h2>` num único filho flex — sem isso o
+ * `space-between` distribuiria logo, título e botões em três pontos da linha,
+ * jogando o título para o meio.
+ *
+ * Centralizado para que trocar a marca seja uma edição, não catorze.
+ *
+ * @returns string HTML de abertura (precisa ser fechado com report_brand_end())
+ */
+function report_brand(): string
+{
+    return '<div style="display:flex;align-items:center;gap:12px;min-width:0;">'
+         . '<img src="' . REPORT_LOGO_URL . '" alt="bycamera" '
+         . 'style="height:30px;width:auto;flex:0 0 auto;">'
+         . '<span style="width:1px;height:24px;background:var(--hairline);flex:0 0 auto;"></span>';
+}
+
+/**
+ * Fecha o bloco aberto por report_brand().
+ *
+ * @returns string
+ */
+function report_brand_end(): string
+{
+    return '</div>';
+}
+
 /* ── Escopo multi-tenant dos relatórios ─────────────────────────────────── */
 
 /**

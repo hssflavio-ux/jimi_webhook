@@ -368,6 +368,36 @@ function reverse_geocode(float $lat, float $lng): ?string
 }
 
 /**
+ * Coluna `endereco` para consultas que resolvem o endereço no PRÓPRIO SQL.
+ *
+ * Usada junto com `geo_join()`. Existe para o caminho de STREAMING do
+ * `scripts/worker.php`, onde as linhas são consumidas uma a uma (export
+ * assíncrono chega a 100 mil linhas) e portanto **não cabe** `fetchAll()` +
+ * resolução em lote em memória. Deixar o banco fazer o LEFT JOIN evita tanto o
+ * estouro de memória quanto uma consulta por linha; o índice único
+ * `uk_geocode_coords (lat,lng)` torna o join direto.
+ */
+const GEO_ADDR_SQL = 'gc.address AS endereco';
+
+/**
+ * LEFT JOIN no cache de endereços para uma coluna de coordenada.
+ *
+ * ⚠️ `$colLat`/`$colLng` entram por interpolação: são **identificadores de
+ * coluna**, que o PDO não parametriza. Nunca passe valor vindo do usuário —
+ * todos os chamadores usam literais escritos no código.
+ *
+ * @param string $colLat Ex.: 'a.latitude'
+ * @param string $colLng Ex.: 'a.longitude'
+ * @returns string Trecho SQL de JOIN
+ */
+function geo_join(string $colLat, string $colLng): string
+{
+    return "LEFT JOIN geocode_cache gc
+                   ON gc.lat = ROUND($colLat, " . GEOCODE_PRECISION . ")
+                  AND gc.lng = ROUND($colLng, " . GEOCODE_PRECISION . ")";
+}
+
+/**
  * Resolve os endereços de um conjunto de linhas já buscadas do banco.
  *
  * Existe para que cada chamador não repita o `array_map` de extração — e,

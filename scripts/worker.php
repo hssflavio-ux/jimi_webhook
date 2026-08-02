@@ -20,6 +20,7 @@ require_once __DIR__ . '/../includes/fleet_state.php'; // fmt_duration(), resolv
 require_once __DIR__ . '/../includes/schedule.php';    // SCHEDULE_MAX_ROWS, SCHEDULE_MAX_FAILURES
 require_once __DIR__ . '/../includes/notification_engine.php'; // notify() ao desativar agendamento
 require_once __DIR__ . '/../includes/download_token.php';      // download_url() do link do e-mail
+require_once __DIR__ . '/../includes/geocode.php';             // GEO_ADDR_SQL/geo_join() nos exports
 
 /** Máximo de tentativas de um job com falha transitória (só 'notification'). */
 const JOB_MAX_ATTEMPTS = 3;
@@ -529,17 +530,18 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
         case 'alarms':
             $stmt = $db->prepare("
                 SELECT a.imei, COALESCE(d.device_name, a.imei) as device_name, a.alarm_type,
-                       a.alarm_time, a.latitude, a.longitude, a.speed
+                       a.alarm_time, a.speed, " . GEO_ADDR_SQL . "
                 FROM alarms a
                 JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+                " . geo_join('a.latitude', 'a.longitude') . "
                 WHERE a.alarm_time BETWEEN :df AND :dt
                 ORDER BY a.alarm_time DESC
             ");
             $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to]);
             return [
-                ['IMEI', 'Dispositivo', 'Tipo Alarme', 'Data/Hora', 'Latitude', 'Longitude', 'Velocidade (km/h)'],
+                ['IMEI', 'Dispositivo', 'Tipo Alarme', 'Data/Hora', 'Endereço', 'Velocidade (km/h)'],
                 $stmt,
-                fn($r) => [$r['imei'], $r['device_name'], $r['alarm_type'], fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'), $r['latitude'], $r['longitude'], $r['speed']],
+                fn($r) => [$r['imei'], $r['device_name'], $r['alarm_type'], fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'), $r['endereco'] ?? '—', $r['speed']],
             ];
 
         case 'occurrences':
@@ -562,17 +564,18 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
         case 'positions':
             $stmt = $db->prepare("
                 SELECT g.imei, COALESCE(d.device_name, g.imei) as device_name,
-                       g.gps_time, g.latitude, g.longitude, g.speed, g.acc AS ignition, g.battery
+                       g.gps_time, g.speed, g.acc AS ignition, g.battery, " . GEO_ADDR_SQL . "
                 FROM gps_data g
                 JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
+                " . geo_join('g.latitude', 'g.longitude') . "
                 WHERE g.gps_time BETWEEN :df AND :dt AND ABS(g.latitude) > 0.0001 AND ABS(g.longitude) > 0.0001
                 ORDER BY g.gps_time DESC
             ");
             $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to]);
             return [
-                ['IMEI', 'Dispositivo', 'Data/Hora', 'Latitude', 'Longitude', 'Velocidade (km/h)', 'Ignição', 'Bateria (%)'],
+                ['IMEI', 'Dispositivo', 'Data/Hora', 'Endereço', 'Velocidade (km/h)', 'Ignição', 'Bateria (%)'],
                 $stmt,
-                fn($r) => [$r['imei'], $r['device_name'], fmt_brt($r['gps_time'], 'd/m/Y H:i:s'), $r['latitude'], $r['longitude'],
+                fn($r) => [$r['imei'], $r['device_name'], fmt_brt($r['gps_time'], 'd/m/Y H:i:s'), $r['endereco'] ?? '—',
                            $r['speed'], $r['ignition'], $r['battery']],
             ];
 
@@ -623,20 +626,21 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 SELECT s.imei, COALESCE(d.device_name, s.imei) AS device_name,
                        s.started_at, s.ended_at,
                        COALESCE(s.duration_s, TIMESTAMPDIFF(SECOND, s.started_at, UTC_TIMESTAMP())) AS dur_s,
-                       s.start_lat, s.start_lng
+                       " . GEO_ADDR_SQL . "
                 FROM device_state_segments s
                 LEFT JOIN devices d ON d.imei = s.imei
+                " . geo_join('s.start_lat', 's.start_lng') . "
                 WHERE s.customer_id = :cid AND s.state = :state AND s.started_at BETWEEN :df AND :dt
                 ORDER BY s.started_at ASC
             ");
             $stmt->execute([':cid' => $cid, ':state' => $state, ':df' => $from, ':dt' => $to]);
             return [
-                ['IMEI', 'Equipamento', 'Início', 'Fim', 'Duração', 'Latitude', 'Longitude'],
+                ['IMEI', 'Equipamento', 'Início', 'Fim', 'Duração', 'Endereço'],
                 $stmt,
                 fn($r) => [$r['imei'], $r['device_name'],
                            fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                            $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
-                           fmt_duration((int)$r['dur_s']), $r['start_lat'], $r['start_lng']],
+                           fmt_duration((int)$r['dur_s']), $r['endereco'] ?? '—'],
             ];
 
         case 'ignition':
@@ -644,7 +648,8 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             // a fronteira entre segmentos cujo estado do MOTOR difere, com os
             // segmentos offline fora da janela.
             $stmt = $db->prepare("
-                SELECT t.*, CASE WHEN t.state = 'parado' THEN 'Ignição desligada' ELSE 'Ignição ligada' END AS event_label
+                SELECT t.*, CASE WHEN t.state = 'parado' THEN 'Ignição desligada' ELSE 'Ignição ligada' END AS event_label,
+                       " . GEO_ADDR_SQL . "
                 FROM (
                     SELECT s.imei, COALESCE(d.device_name, s.imei) AS device_name,
                            s.state, s.started_at, s.start_lat, s.start_lng,
@@ -655,6 +660,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                     WHERE s.customer_id = :cid AND s.state <> 'offline'
                       AND s.started_at BETWEEN DATE_SUB(:df, INTERVAL 2 DAY) AND :dt
                 ) t
+                " . geo_join('t.start_lat', 't.start_lng') . "
                 WHERE t.prev_state IS NOT NULL
                   AND (t.state = 'parado') <> (t.prev_state = 'parado')
                   AND t.started_at BETWEEN :df2 AND :dt2
@@ -662,10 +668,10 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             ");
             $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to, ':df2' => $from, ':dt2' => $to]);
             return [
-                ['IMEI', 'Equipamento', 'Data/Hora', 'Evento', 'Permanência no estado', 'Latitude', 'Longitude'],
+                ['IMEI', 'Equipamento', 'Data/Hora', 'Evento', 'Permanência no estado', 'Endereço'],
                 $stmt,
                 fn($r) => [$r['imei'], $r['device_name'], fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
-                           $r['event_label'], fmt_duration((int)$r['dur_s']), $r['start_lat'], $r['start_lng']],
+                           $r['event_label'], fmt_duration((int)$r['dur_s']), $r['endereco'] ?? '—'],
             ];
 
         case 'speeding':
@@ -673,16 +679,17 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 SELECT e.imei, COALESCE(d.device_name, e.imei) AS device_name,
                        e.started_at, e.ended_at,
                        COALESCE(e.duration_s, TIMESTAMPDIFF(SECOND, e.started_at, UTC_TIMESTAMP())) AS dur_s,
-                       e.max_speed, e.avg_speed, e.limit_kmh, e.max_lat, e.max_lng
+                       e.max_speed, e.avg_speed, e.limit_kmh, " . GEO_ADDR_SQL . "
                 FROM speeding_events e
                 LEFT JOIN devices d ON d.imei = e.imei
+                " . geo_join('e.max_lat', 'e.max_lng') . "
                 WHERE e.customer_id = :cid AND e.started_at BETWEEN :df AND :dt
                 ORDER BY e.started_at ASC
             ");
             $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to]);
             return [
                 ['IMEI', 'Equipamento', 'Início', 'Fim', 'Duração', 'Vel. máxima (km/h)',
-                 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)', 'Latitude', 'Longitude'],
+                 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)', 'Endereço'],
                 $stmt,
                 fn($r) => [$r['imei'], $r['device_name'],
                            fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
@@ -690,7 +697,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                            fmt_duration((int)$r['dur_s']),
                            $r['max_speed'], $r['avg_speed'] ?? '', (int)$r['limit_kmh'],
                            number_format((float)$r['max_speed'] - (int)$r['limit_kmh'], 1, ',', ''),
-                           $r['max_lat'], $r['max_lng']],
+                           $r['endereco'] ?? '—'],
             ];
 
         case 'fleet_status':
@@ -698,11 +705,13 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             // é resolvido em PHP por resolve_current_state() — a mesma função da
             // tela — porque o segmento aberto não sabe do silêncio posterior.
             $stmt = $db->prepare("
-                SELECT d.imei, d.device_name, ds.last_gps_time, ds.last_latitude, ds.last_longitude,
-                       ds.last_speed, s.state AS seg_state, s.started_at AS seg_started_at
+                SELECT d.imei, d.device_name, ds.last_gps_time,
+                       ds.last_speed, s.state AS seg_state, s.started_at AS seg_started_at,
+                       " . GEO_ADDR_SQL . "
                 FROM devices d
                 LEFT JOIN device_statistics ds ON ds.imei = d.imei
                 LEFT JOIN device_state_segments s ON s.imei = d.imei AND s.ended_at IS NULL
+                " . geo_join('ds.last_latitude', 'ds.last_longitude') . "
                 WHERE d.customer_id = :cid AND d.is_active = 1
                 ORDER BY d.device_name, d.imei
             ");
@@ -710,7 +719,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             $nowUtc = gmdate('Y-m-d H:i:s');
             return [
                 ['IMEI', 'Equipamento', 'Estado', 'Tempo no estado', 'Última posição',
-                 'Velocidade (km/h)', 'Latitude', 'Longitude'],
+                 'Velocidade (km/h)', 'Endereço'],
                 $stmt,
                 function ($r) use ($nowUtc) {
                     $state = resolve_current_state($r['seg_state'], $r['last_gps_time'], $nowUtc);
@@ -718,7 +727,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                     $inState = $since ? max(0, strtotime($nowUtc) - strtotime($since)) : null;
                     return [$r['imei'], $r['device_name'] ?? $r['imei'], fleet_state_label($state),
                             fmt_duration($inState), fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s', 'Nunca'),
-                            $r['last_speed'] ?? '', $r['last_latitude'], $r['last_longitude']];
+                            $r['last_speed'] ?? '', $r['endereco'] ?? '—'];
                 },
             ];
     }

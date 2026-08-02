@@ -7,6 +7,7 @@
  * Alertas, Log, Relatórios, Vídeo, Comandos, Configurações.
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_login();
 
 $customer_id = get_customer_id();
@@ -88,6 +89,8 @@ if ($tab === 'trajetos') {
     $trackStmt->execute([$imei]);
     $tracks = $trackStmt->fetchAll(PDO::FETCH_ASSOC);
 }
+// Endereços do histórico em um lote (v4.8.0) — substitui as colunas de coordenada
+$geoTrack = $tracks ? geocode_map_rows($tracks) : [];
 
 // aba: alertas
 $alarms = [];
@@ -250,13 +253,12 @@ case 'trajetos':
 ?>
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Data/Hora</th><th>Latitude</th><th>Longitude</th><th>Velocidade</th><th>Direção</th><th>Altitude</th><th>Satélites</th><th>Ignição</th></tr></thead>
+        <thead><tr><th>Data/Hora</th><th>Endereço</th><th>Velocidade</th><th>Direção</th><th>Altitude</th><th>Satélites</th><th>Ignição</th></tr></thead>
         <tbody>
             <?php foreach ($tracks as $t): ?>
             <tr>
                 <td><?= fmt_brt_dt($t['gps_time']) ?></td>
-                <td class="text-mono"><?= number_format($t['latitude'], 6) ?></td>
-                <td class="text-mono"><?= number_format($t['longitude'], 6) ?></td>
+                <td><?= htmlspecialchars(geocode_cell($geoTrack, $t['latitude'], $t['longitude'])) ?></td>
                 <td><?= round($t['speed'] ?? 0) ?> km/h</td>
                 <td><?= $t['direction'] ?? '-' ?>°</td>
                 <td><?= $t['altitude'] ?? '-' ?> m</td>

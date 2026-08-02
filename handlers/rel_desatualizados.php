@@ -136,7 +136,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Desatualizados</h2>
+    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Desatualizados</h2><?= report_brand_end() ?>
 </div>
 
 <?php render_template_bar('rel_desatualizados', '/relatorios/desatualizados'); ?>

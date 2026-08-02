@@ -19,6 +19,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
@@ -153,8 +154,11 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                 ORDER BY e.$sort $order
                 LIMIT " . SYNC_EXPORT_MAX_ROWS);
             $stmt->execute($params);
+            // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+            $src = $stmt->fetchAll();
+            $geoExp = geocode_map_rows($src, 'latitude', 'longitude', 2000);
             $expRows = [];
-            while ($r = $stmt->fetch()) {
+            foreach ($src as $r) {
                 $expRows[] = [
                     fmt_brt($r['event_time'], 'd/m/Y H:i:s'),
                     $r['fence_name'],
@@ -162,12 +166,11 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                     $r['imei'],
                     $r['event_type'] === 'entrada' ? 'Entrada' : 'Saída',
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
-                    $r['latitude'],
-                    $r['longitude'],
+                    geocode_cell($geoExp, $r['latitude'], $r['longitude']),
                 ];
             }
             stream_export($export, 'relatorio_geocercas',
-                ['Data/Hora', 'Geocerca', 'Equipamento', 'IMEI', 'Evento', 'Velocidade (km/h)', 'Latitude', 'Longitude'],
+                ['Data/Hora', 'Geocerca', 'Equipamento', 'IMEI', 'Evento', 'Velocidade (km/h)', 'Endereço'],
                 $expRows, 'Relatório de Geocercas', "Período (BRT): $dateFrom a $dateTo");
         }
     } catch (Throwable $e) {
@@ -243,7 +246,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Geocercas</h2>
+    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Geocercas</h2><?= report_brand_end() ?>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>

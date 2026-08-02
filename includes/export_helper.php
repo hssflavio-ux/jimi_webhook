@@ -212,6 +212,70 @@ class PdfWriter
     private string $filepath;
     private string $title;
     private string $subtitle;
+
+    /** JPEG do logo pronto para embutir (null = sem logo). */
+    private static ?string $logoJpeg = null;
+    private static int $logoW = 0;
+    private static int $logoH = 0;
+    private static bool $logoTried = false;
+
+    /**
+     * Prepara o logo como JPEG para embutir no PDF.
+     *
+     * ⚠️ Converte para **JPEG** de propósito, em vez de embutir o PNG. Num PDF,
+     * JPEG entra como stream `/DCTDecode` — os bytes vão direto, sem
+     * recodificação. PNG exigiria decodificar, remontar como `/FlateDecode` e
+     * ainda tratar o canal alfa com `/SMask`, o que multiplicaria o tamanho
+     * deste writer artesanal por ganho nenhum num logo de cabeçalho.
+     *
+     * Achata sobre BRANCO antes: o logo tem transparência e JPEG não tem canal
+     * alfa — sem o achatamento o fundo transparente sairia PRETO.
+     *
+     * Redimensiona para 360 px porque o original tem ~1780 px e ocupa ~60 pt no
+     * PDF; embutir o arquivo cheio inflaria cada relatório em centenas de KB.
+     *
+     * Falha em silêncio se faltar GD ou o arquivo: perder o logo é aceitável,
+     * derrubar a exportação não é.
+     *
+     * @returns void
+     */
+    private static function prepareLogo(): void
+    {
+        if (self::$logoTried) return;
+        self::$logoTried = true;
+
+        $path = __DIR__ . '/../web/assets/logo.png';
+        if (!is_file($path) || !function_exists('imagecreatefrompng')) return;
+
+        try {
+            $src = @imagecreatefrompng($path);
+            if (!$src) return;
+
+            $w = imagesx($src);
+            $h = imagesy($src);
+            $tw = 360;
+            $th = max(1, (int)round($h * $tw / max(1, $w)));
+
+            $dst = imagecreatetruecolor($tw, $th);
+            imagefilledrectangle($dst, 0, 0, $tw, $th, imagecolorallocate($dst, 255, 255, 255));
+            imagecopyresampled($dst, $src, 0, 0, 0, 0, $tw, $th, $w, $h);
+
+            ob_start();
+            imagejpeg($dst, null, 88);
+            $jpg = (string)ob_get_clean();
+
+            imagedestroy($src);
+            imagedestroy($dst);
+
+            if ($jpg !== '') {
+                self::$logoJpeg = $jpg;
+                self::$logoW = $tw;
+                self::$logoH = $th;
+            }
+        } catch (\Throwable $e) {
+            self::$logoJpeg = null;
+        }
+    }
     private array $headers;
     private array $pages = [];      // content streams finalizados
     private string $buf = '';       // content stream da página corrente
@@ -277,8 +341,21 @@ class PdfWriter
         $objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
         $objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
 
+        // XObject do logo (v4.8.0). Ocupa o id 5 quando existe, e as páginas
+        // passam a partir do 6 — por isso $next depende dele.
+        $imgId = null;
+        $next  = 5;
+        if (self::$logoJpeg !== null) {
+            $imgId = $next++;
+            $objects[$imgId] = "<< /Type /XObject /Subtype /Image /Width " . self::$logoW
+                             . " /Height " . self::$logoH
+                             . " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode"
+                             . " /Length " . strlen(self::$logoJpeg) . " >>\nstream\n"
+                             . self::$logoJpeg . "\nendstream";
+        }
+        $resImg = $imgId !== null ? " /XObject << /Im1 $imgId 0 R >>" : '';
+
         $kids = [];
-        $next = 5;
         foreach ($this->pages as $i => $content) {
             $content .= "\nBT /F1 7 Tf 0.45 0.45 0.45 rg " . (self::PAGE_W - self::MARGIN - 60) . ' ' . (self::MARGIN - 16)
                       . " Td (P\xE1gina " . ($i + 1) . ' de ' . count($this->pages) . ") Tj ET";
@@ -286,7 +363,7 @@ class PdfWriter
             $pageId   = $next++;
             $objects[$streamId] = "<< /Length " . strlen($content) . " >>\nstream\n" . $content . "\nendstream";
             $objects[$pageId]   = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " . self::PAGE_W . ' ' . self::PAGE_H . "] "
-                                . "/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents $streamId 0 R >>";
+                                . "/Resources << /Font << /F1 3 0 R /F2 4 0 R >>$resImg >> /Contents $streamId 0 R >>";
             $kids[] = "$pageId 0 R";
         }
         $objects[2] = "<< /Type /Pages /Kids [" . implode(' ', $kids) . "] /Count " . count($kids) . " >>";
@@ -314,6 +391,19 @@ class PdfWriter
     {
         $this->buf = '';
         $this->y = self::PAGE_H - self::MARGIN;
+
+        // Marca no topo direito (v4.8.0), na mesma linha do título. Só entra se
+        // o JPEG do logo foi preparado; sem ele o cabeçalho segue como era.
+        self::prepareLogo();
+        if (self::$logoJpeg !== null) {
+            $h = 18.0;
+            $w = $h * (self::$logoW / max(1, self::$logoH));
+            $x = self::PAGE_W - self::MARGIN - $w;
+            // `cm` é a matriz de posicionamento: a escala É o tamanho final.
+            // q/Q isolam a transformação para não afetar o texto seguinte.
+            $this->buf .= sprintf("q %.2F 0 0 %.2F %.2F %.2F cm /Im1 Do Q\n",
+                                  $w, $h, $x, $this->y - $h);
+        }
 
         // Título (Helvetica-Bold 12) + subtítulo (Helvetica 8, cinza)
         $this->buf .= "BT /F2 12 Tf 0.04 0.04 0.05 rg " . self::MARGIN . ' ' . ($this->y - 12)

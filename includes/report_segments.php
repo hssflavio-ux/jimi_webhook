@@ -115,20 +115,23 @@ function render_segment_report(array $cfg): void
     $export = $_GET['export'] ?? '';
     if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         require_permission('relatorios', 'export');
+        require_once __DIR__ . '/geocode.php';   // endereço no lugar de lat/lng
         require_once __DIR__ . '/export_helper.php';
 
         $headers = ['Início', 'Fim', 'Duração', 'Equipamento', 'IMEI', 'Cliente'];
         if ($showDist) {
             $headers[] = 'Distância (km)';
         }
-        $headers[] = 'Latitude';
-        $headers[] = 'Longitude';
+        $headers[] = 'Endereço';
 
         $expRows = [];
         try {
             $stmt = $db->prepare("$selectCols $from ORDER BY $orderBy LIMIT " . SYNC_EXPORT_MAX_ROWS);
             $stmt->execute($params);
-            while ($r = $stmt->fetch()) {
+            // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+            $src = $stmt->fetchAll();
+            $geoExp = geocode_map_rows($src, 'start_lat', 'start_lng', 2000);
+            foreach ($src as $r) {
                 $row = [
                     fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                     $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
@@ -140,8 +143,7 @@ function render_segment_report(array $cfg): void
                 if ($showDist) {
                     $row[] = number_format((float)($r['distance_km'] ?? 0), 3, ',', '');
                 }
-                $row[] = $r['start_lat'];
-                $row[] = $r['start_lng'];
+                $row[] = geocode_cell($geoExp, $r['start_lat'], $r['start_lng']);
                 $expRows[] = $row;
             }
         } catch (Throwable $e) { /* tabela ausente → export vazio */ }

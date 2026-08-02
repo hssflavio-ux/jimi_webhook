@@ -21,6 +21,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
@@ -116,7 +117,10 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     try {
         $stmt = $db->prepare("SELECT * FROM ($sqlTrans) x ORDER BY x.$sort $order LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $stmt->execute($params);
-        while ($r = $stmt->fetch()) {
+        // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+        $src = $stmt->fetchAll();
+        $geoExp = geocode_map_rows($src, 'start_lat', 'start_lng', 2000);
+        foreach ($src as $r) {
             $expRows[] = [
                 fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                 $r['event_type'] === 'ligada' ? 'Ignição ligada' : 'Ignição desligada',
@@ -124,14 +128,13 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                 $r['imei'],
                 $r['customer_name'],
                 fmt_duration((int)$r['dur_s']),
-                $r['start_lat'],
-                $r['start_lng'],
+                geocode_cell($geoExp, $r['start_lat'], $r['start_lng']),
             ];
         }
     } catch (Throwable $e) { /* tabela ausente → export vazio */ }
 
     stream_export($export, 'relatorio_ignicao',
-        ['Data/Hora', 'Evento', 'Equipamento', 'IMEI', 'Cliente', 'Permanência no estado', 'Latitude', 'Longitude'],
+        ['Data/Hora', 'Evento', 'Equipamento', 'IMEI', 'Cliente', 'Permanência no estado', 'Endereço'],
         $expRows, 'Relatório de Ignição', "Período (BRT): $dateFrom a $dateTo");
 }
 
@@ -209,7 +212,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Ignição</h2>
+    <?= report_brand() ?><h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Ignição</h2><?= report_brand_end() ?>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
