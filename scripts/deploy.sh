@@ -339,6 +339,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.6.0" "mysql/migration_v4.6.0.sql" "relatórios operacionais"
     run_migration "4.7.0" "mysql/migration_v4.7.0.sql" "relatórios agendados + modelos"
     run_migration "4.8.0" "mysql/migration_v4.8.0.sql" "motorista na posição (gps_data)"
+    run_migration "4.8.1" "mysql/migration_v4.8.1.sql" "alarm_types só com alarmes oficiais"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
