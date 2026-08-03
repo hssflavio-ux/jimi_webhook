@@ -204,7 +204,7 @@ try {
 
 $customers = [];
 try {
-    $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+    $customers = report_customer_options($db);
 } catch (Throwable $e) {}
 
 require_once __DIR__ . '/../web/layout_base.php';

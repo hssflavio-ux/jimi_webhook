@@ -109,7 +109,7 @@ if ($generated) {
     } catch (Exception $e) {}
 }
 
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 $devices = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
 $devices->execute([':cid' => $customerId ?? 1]);
 $devices = $devices->fetchAll();

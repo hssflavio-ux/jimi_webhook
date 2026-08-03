@@ -33,13 +33,23 @@ $screens = [
     'equipamentos'          => 'Equipamentos',
     'geocercas'             => 'Geocercas',
     'agendamentos'          => 'Agendamentos',
+    'checklist'             => 'Checklist de Inspeção',
     'grupos-permissao'      => 'Grupos de Permissão',
     'motoristas'            => 'Motoristas',
     'config-ocorrencias'    => 'Config. Ocorrências',
     'config-notificacoes'   => 'Config. Notificações',
     'config-smtp'           => 'Servidor de E-mail',
     'usuarios'              => 'Usuários',
+    'wiki'                  => 'Central de Ajuda',
 ];
+// NOTA (v4.8.5): `checklist` e `wiki` entraram aqui porque uma tela que o
+// router protege mas que a matriz não lista é uma tela IMPOSSÍVEL de liberar —
+// `can()` nega tudo que não está no JSON do grupo, então o admin não tem como
+// conceder o que não aparece para marcar. Era o caso de `wiki`: grupo restrito
+// levava 403 na Ajuda, que está na sidebar de todo mundo. E `checklist` era o
+// inverso — fora da matriz E fora do router, ou seja, sem proteção nenhuma.
+// Toda tela nova precisa entrar nos DOIS lugares: aqui e no `$screenByHandler`
+// de handlers/router.php.
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();

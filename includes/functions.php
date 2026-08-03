@@ -401,9 +401,11 @@ function report_brand_end(): string
  * equipamentos e status de frota do cliente A só mudando a URL.
  *
  * Regras agora:
- *  - **admin/revendedor**: honra o pedido; sem pedido, `null` = todos os
- *    clientes (comportamento preservado — esta função não muda o que o admin
- *    enxerga).
+ *  - **admin de plataforma** (`role === 'admin'`): honra o pedido; sem pedido,
+ *    `null` = todos os clientes.
+ *  - **revendedor** (v4.8.5): honra o pedido **só se o cliente for dele**;
+ *    fora disso o parâmetro é ignorado e vale o cliente da sessão. Nunca
+ *    `null` — revendedor não tem visão "todos os clientes da base".
  *  - **demais**: SEMPRE o cliente da sessão. O `?customer_id` é ignorado por
  *    completo, não validado — não há resposta diferente entre "cliente que não
  *    existe" e "cliente que não é seu", então nem a existência vaza.
@@ -411,22 +413,106 @@ function report_brand_end(): string
  *    Falha FECHADA de propósito: antes, `if ($customerId)` simplesmente não
  *    acrescentava filtro nenhum, e um usuário mal provisionado via **tudo**.
  *
- * Nota: `$isAdmin` inclui `user_type === 'revendedor'` por convenção do
- * projeto. Se um revendedor deve poder filtrar QUALQUER cliente ou só os
- * dele é uma pergunta de produto em aberto — esta função preserva o
- * comportamento atual de propósito, para fechar a falha sem mudar semântica
- * de perfil no mesmo passe.
+ * A v4.7.3 deixou o revendedor de fora de propósito, para não mudar semântica
+ * de perfil no mesmo passe que fechava a falha. Fechado na v4.8.5: `$isAdmin`
+ * é `role==='admin' || user_type==='revendedor'` em ~10 handlers, e enquanto
+ * isso valesse, um revendedor lia os clientes de OUTRO revendedor com um
+ * `?customer_id=N` na URL — a mesma escalada da v4.7.3, um perfil acima.
  *
  * @param mixed    $requested          Valor cru de $_GET['customer_id']
  * @param bool     $isAdmin            role === 'admin' || user_type === 'revendedor'
  * @param int|null $sessionCustomerId  get_customer_id()
- * @returns int|null  ID para filtrar, ou null para "sem filtro" (só admin)
+ * @returns int|null  ID para filtrar, ou null para "sem filtro" (só admin de plataforma)
  */
 function report_customer_scope($requested, bool $isAdmin, $sessionCustomerId): ?int {
+    $req      = ($requested !== null && $requested !== '') ? (int)$requested : null;
+    $sessionId = ($sessionCustomerId !== null && $sessionCustomerId !== '') ? (int)$sessionCustomerId : 0;
+
     if ($isAdmin) {
-        return ($requested !== null && $requested !== '') ? (int)$requested : null;
+        $allowed = reseller_scope_ids();
+        if ($allowed !== null) {
+            // É revendedor, não admin de plataforma.
+            if ($req !== null && in_array($req, $allowed, true)) return $req;
+            return $sessionId;
+        }
+        return $req;
     }
-    return ($sessionCustomerId !== null && $sessionCustomerId !== '') ? (int)$sessionCustomerId : 0;
+    return $sessionId;
+}
+
+/**
+ * Opções do seletor de cliente das telas que filtram por `?customer_id`.
+ *
+ * Companheira obrigatória de `report_customer_scope()`. Restringir o FILTRO
+ * sem restringir a LISTA deixaria o revendedor lendo os **nomes** de todos os
+ * clientes da base — de outros revendedores inclusive — num `<select>` cujas
+ * opções, além do mais, não teriam efeito nenhum ao serem escolhidas. Eram 12
+ * handlers repetindo `SELECT id, name FROM customers WHERE is_active=1`.
+ *
+ * Admin de plataforma continua vendo todos. Em erro, lista vazia: falha
+ * fechada — o seletor some em vez de aparecer completo.
+ *
+ * @param PDO $db Conexão ativa
+ * @returns array<array{id:int,name:string}>
+ */
+function report_customer_options(PDO $db): array {
+    try {
+        $allowed = reseller_scope_ids();
+        if ($allowed === null) {
+            return $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name")->fetchAll();
+        }
+        if (!$allowed) return [];
+        // Os ids vêm de reseller_scope_ids(), que já os passou por (int) —
+        // interpolar aqui é seguro e evita montar N placeholders.
+        $in = implode(',', array_map('intval', $allowed));
+        return $db->query("SELECT id, name FROM customers WHERE is_active = 1 AND id IN ($in) ORDER BY name")->fetchAll();
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+/**
+ * Clientes que o usuário logado pode enxergar QUANDO ele é revendedor.
+ *
+ * Devolve `null` — "não se aplica, não restrinja" — para admin de plataforma
+ * (`role === 'admin'`) e para quem não é revendedor. Só nesses dois casos o
+ * chamador mantém o comportamento antigo.
+ *
+ * O conjunto é a UNIÃO de dois vínculos, e os dois são necessários:
+ *  - `customers.reseller_id = <user>` — carimbado por `handlers/clientes.php`
+ *    quando um revendedor cria um cliente. Era escrito e **nunca lido**: esta
+ *    função é o primeiro leitor da coluna.
+ *  - `customer_users` — o vínculo explícito. Sem ele, todo revendedor de base
+ *    já existente (onde `reseller_id` é NULL em 100% das linhas) passaria a
+ *    não enxergar cliente nenhum, que é trocar um vazamento por um apagão.
+ *
+ * Em erro de banco devolve lista **vazia**, não `null`: falha fechada.
+ *
+ * @returns int[]|null  IDs permitidos, ou null se a restrição não se aplica
+ */
+function reseller_scope_ids(): ?array {
+    if (!function_exists('get_jimi_user')) return null;
+    $user = get_jimi_user();
+    if (!$user) return null;
+    if (($user['role'] ?? '') === 'admin') return null;
+    if (($user['user_type'] ?? '') !== 'revendedor') return null;
+
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare(
+            "SELECT c.id FROM customers c WHERE c.reseller_id = :uid
+             UNION
+             SELECT cu.customer_id FROM customer_users cu WHERE cu.user_id = :uid2"
+        );
+        $stmt->execute([':uid' => $user['id'], ':uid2' => $user['id']]);
+        $cache = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Exception $e) {
+        $cache = [];
+    }
+    return $cache;
 }
 
 /* ── UI comum dos relatórios (ordenação + voltar) ───────────────────────── */

@@ -199,6 +199,8 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql   # relatórios agend
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.0.sql   # motorista na posição (gps_data)
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.1.sql   # alarm_types só com os alarmes da doc oficial
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.3.sql   # nomes DMS/ADAS conforme a doc + backfill de alarms
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.4.sql   # decisão sobre os 4 códigos JIMI ambíguos (só cinto fica)
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.5.sql   # Ajuda (wiki) liberada a grupo restrito
 
 # No build step needed — pure PHP
 ```

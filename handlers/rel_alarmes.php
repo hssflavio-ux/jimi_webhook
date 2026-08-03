@@ -171,8 +171,7 @@ $rows = $dataStmt->fetchAll();
 $geoPagina = geocode_map_rows($rows);
 
 // Dropdowns
-$custStmt = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name");
-$customers = $custStmt->fetchAll();
+$customers = report_customer_options($db);
 
 // Tipos de alarme oferecidos no filtro: SOMENTE DMS e ADAS (v4.8.3).
 //

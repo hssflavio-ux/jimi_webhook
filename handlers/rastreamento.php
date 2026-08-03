@@ -16,7 +16,7 @@ $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 $selCustomerId = $_GET['customer_id'] ?? ($customerId ?? ($customers[0]['id'] ?? 1));
 
 $devices = [];

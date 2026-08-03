@@ -341,6 +341,8 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.8.0" "mysql/migration_v4.8.0.sql" "motorista na posição (gps_data)"
     run_migration "4.8.1" "mysql/migration_v4.8.1.sql" "alarm_types só com alarmes oficiais"
     run_migration "4.8.3" "mysql/migration_v4.8.3.sql" "nomes DMS/ADAS conforme a doc oficial"
+    run_migration "4.8.4" "mysql/migration_v4.8.4.sql" "decisão sobre os códigos JIMI ambíguos"
+    run_migration "4.8.5" "mysql/migration_v4.8.5.sql" "Ajuda liberada a grupo restrito"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

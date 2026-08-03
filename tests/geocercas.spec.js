@@ -113,7 +113,11 @@ test.describe.serial('CRUD Geocercas', () => {
 test.describe('Relatório de Geocercas', () => {
     test('modalidade de eventos renderiza com KPIs', async ({ authedPage }) => {
         await authedPage.goto('/relatorios/geocercas');
-        await expect(authedPage.locator('h2')).toContainText('Relatório de Geocercas');
+        // A tela se chama "Relatório de Cercas" desde 7a0a75f, e é o nome certo:
+        // a sidebar tem DUAS entradas para o assunto — "Cercas" (este relatório,
+        // /relatorios/geocercas) e "Geocercas" (o CRUD, /geocercas). O h2 segue o
+        // label da sidebar de propósito, para o usuário saber em qual das duas está.
+        await expect(authedPage.locator('h2')).toContainText('Relatório de Cercas');
         await expect(authedPage.locator('body')).toContainText('Entradas');
         await expect(authedPage.locator('body')).toContainText('Saídas');
         await expect(authedPage.locator('table')).toBeVisible();

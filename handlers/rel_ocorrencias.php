@@ -144,7 +144,7 @@ try {
 }
 
 // Dropdowns
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 
 try {
     $typeStmt = $db->query("SELECT DISTINCT alarm_type FROM occurrences ORDER BY alarm_type");

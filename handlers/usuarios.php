@@ -110,7 +110,7 @@ $listStmt = $db->prepare("
 $listStmt->execute($listParams);
 $users = $listStmt->fetchAll();
 
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 $permGroups = [];
 try {
     $permGroups = $db->query("SELECT id, name, user_type FROM permission_groups ORDER BY name")->fetchAll();

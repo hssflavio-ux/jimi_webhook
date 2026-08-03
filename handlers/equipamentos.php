@@ -290,7 +290,7 @@ try {
 }
 
 // Dropdowns
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY model_name")->fetchAll();
 $branches = [];
 try {

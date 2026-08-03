@@ -1,6 +1,140 @@
-# STATUS.md — Jimi Webhook System v4.8.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.5 (YUV Parity)
 
-> ### ▶️ RETOMAR AQUI — v4.8.3 PUBLICADA no homolog (02/08/2026, 23h40)
+> ### ▶️ RETOMAR AQUI — v4.8.5 (03/08/2026)
+>
+> Sessão pedida como "itens 3, 5 e 6, depois publique no homolog". O **5** já estava
+> pronto da sessão anterior (v4.8.4, códigos ambíguos) e entrou na mesma leva.
+>
+> #### 🔴 O achado da sessão: revendedor lia a base inteira
+>
+> É a escalada da v4.7.3 um perfil acima, e aquela versão a deixou aberta de propósito
+> ("pergunta de produto"). **Medido com um revendedor puro real** (`user_type='revendedor'`,
+> `role='operator'`, vinculado só ao cliente 1), não deduzido do código:
+>
+> | Cenário | Antes | Depois |
+> |---|---|---|
+> | `?customer_id=2` (não é dele) | **via o cliente 2** | não vê |
+> | `?customer_id=1` (é dele) | via | vê (controle positivo) |
+> | **sem parâmetro nenhum** | **via o cliente 2** | não vê |
+> | Admin de plataforma, `?customer_id=2` | via | **continua vendo** |
+>
+> A terceira linha é pior do que o STATUS anterior registrava: **sem `?customer_id`**,
+> `report_customer_scope()` devolvia `null` = *sem filtro*. Não era preciso adulterar URL
+> nenhuma — a tela já abria com a base inteira.
+>
+> Faltava ainda a outra metade: **12 handlers** montavam o seletor de cliente com
+> `SELECT id, name FROM customers` cru, então o revendedor lia os **nomes** de todos os
+> clientes mesmo com o filtro corrigido. Agora passam todos por `report_customer_options()`.
+> Sondado nas 12 rotas: **0 vazamentos, 0 erros de PHP**, admin de plataforma inalterado.
+>
+> `customers.reseller_id` existia desde a v3.1.0, era **escrito** por `clientes.php` e
+> **nunca lido** — `reseller_scope_ids()` é o primeiro leitor. O escopo é a **união** dele
+> com `customer_users`, e o segundo termo não é redundância: `reseller_id` é NULL em 100%
+> das linhas, e sem ele todo revendedor existente ficaria sem ver cliente algum.
+>
+> #### As outras entregas
+>
+> | Item | O que era | O que ficou |
+> |---|---|---|
+> | **3** — 2 specs velhos | Falhavam desde a v4.8.2 | Corrigidos. A **tela** estava certa nos dois casos |
+> | **6a** — `notificacoes.spec.js` | O sino da v4.4.0 sem cobertura E2E | **9 testes**, 4 deles sobre dado **semeado** |
+> | **6b** — `checklist` fora da matriz | CRUD vivo **sem permissão nenhuma** | Na matriz, no router e com `require_permission()` |
+> | **6b bis** — 🆕 `wiki` | Protegida no router e **ausente** da matriz: 403 impossível de liberar | Na matriz + migração para os grupos gravados |
+> | **5** — códigos ambíguos | Da v4.8.4, pronta e não publicada | Entra nesta leva |
+>
+> O caso `wiki` é o **inverso** do `checklist` e apareceu ao varrer o primeiro: uma tela no
+> `$screenByHandler` do router mas fora de `$screens` é impossível de conceder, porque o
+> admin não tem o que marcar. Regra que fica registrada na própria matriz: **toda tela nova
+> entra nos dois lugares**. Só no router = inalcançável; só na matriz = desprotegida.
+>
+> #### Verificação
+>
+> `php -l` limpo em `handlers/ config/ core/ includes/`; as duas migrações testadas em
+> **banco-cópia** do homolog e **rodadas duas vezes** (idempotentes); sondas HTTP de
+> revendedor com controle positivo e **baseline provado por reversão do código**, não por
+> leitura dele. Exclusão de checklist conferida nos dois sentidos: a do cliente 2 é
+> **recusada** e a linha sobrevive no banco; a do cliente 1 (dele) **conclui**.
+>
+> **Suíte Playwright: 94 passaram, 6 puladas, 0 falharam.** As 2 que falhavam desde a
+> v4.8.2 estão agora entre as que passam, e 9 dos 94 são o spec de notificações novo.
+>
+> ⚠️ Uma primeira rodada foi **contaminada** por edições de handler feitas no meio dela.
+> Passou (94/0), mas não vale como prova — o número acima é de rodada limpa, árvore parada.
+>
+> As **6 puladas** seguem as mesmas: `TEST_EMAIL_B`/`TEST_PASSWORD_B` (multi-tenant) e
+> `TEST_IMEI`/`WEBHOOK_TOKEN` (webhook→ocorrência). **Continua sendo a pendência que mais
+> vale**: o vazamento do revendedor fechado hoje é exatamente o tipo de coisa que
+> `multitenant.spec.js` pegaria, e ele nunca rodou uma vez.
+>
+> ⚠️ **Residual consciente**: `get_available_customers()` (`includes/auth.php:278`) ainda
+> cai no "primeiro cliente ativo" quando o usuário não tem vínculo em `customer_users`.
+> Para um revendedor sem vínculo isso entrega o cliente de outro. **Não foi mexido**:
+> está no caminho de login, e nenhum usuário das duas bases depende do fallback (todos têm
+> vínculo explícito e são admin de plataforma). Merece passe próprio, com verificação de
+> login por perfil.
+>
+> ---
+>
+> ### v4.8.4 — códigos ambíguos (03/08/2026)
+>
+> #### Estado das três pontas
+>
+> | | git HEAD | `/ping` | `system_info` | Migração 4.8.4 |
+> |---|---|---|---|---|
+> | Local | v4.8.4 na working tree | — | 4.8.3 | **não aplicada** |
+> | **Homolog** (`189.22.240.43`) | `671887c` | 4.8.3 | 4.8.3 | **não aplicada** |
+> | **Produção** | — | — | — | **PENDENTE desde a 4.8.3 — nada tocado** |
+>
+> Nada foi aplicado a banco real: a migração foi validada só em banco-cópia
+> (`jimi_amb_test`, criado do `mysqldump` do homolog, rodada **duas vezes** com saída
+> idêntica, removido ao fim). **A v4.8.3 continua sem ir a produção** — a v4.8.4 entra
+> na mesma leva.
+>
+> #### O que a v4.8.4 fecha: a última pendência da lista da v4.8.3
+>
+> Os **quatro códigos JIMI ambíguos** (`80`, `81`, `131`, `132`) deixam de estar em
+> aberto. A doc foi **reconferida hoje** — 804 KB baixados, todas as `<tr>` da seção 1
+> parseadas — e o levantamento anterior se confirmou: são esses quatro **e mais
+> nenhum**, de 197 códigos JIMI. Em `80`/`81` as duas leituras são **espelhadas** (1.6
+> diz "fechou" onde 1.9 diz "abriu"), e as tabelas têm só duas colunas: não há modelo
+> nem firmware que sirva de desempate.
+>
+> **O impasse não foi resolvido pela doc — deixou de importar pelo escopo.** Decisão de
+> produto de 03/08: das cinco funcionalidades em disputa (abrir porta, fechar porta,
+> colisão, cinto afivelado, falha da câmera 1), a única que o sistema terá é **cinto NÃO
+> afivelado**. Então `132` entra como "DMS: Cinto Não Afivelado" e `80`/`81`/`131` ficam
+> de fora — nas **duas** leituras, porque a de 1.8 para o `131` é o cinto *afivelado*, o
+> evento positivo. Pela mesma regra, `166` (evento positivo, já catalogado) sai de `DMS`
+> para `Vehicle`: **o filtro cai de 33 para 32 chips**. É recategorização, não exclusão —
+> apagar trocaria um rótulo correto pelo genérico "Código 166 (JIMI)".
+>
+> ⚠️ **O que a decisão NÃO resolve, registrado de propósito**: ela diz o que queremos
+> ver, não o que o equipamento quis dizer. Se um firmware emitir `132` significando
+> *Camera 1 exception*, o sistema rotula falha de hardware como infração do motorista —
+> a classe de erro que a v4.8.3 corrigiu. Aceito porque (1) a incidência é **zero** (nem
+> uma linha com esses códigos em 3.583 alarmes do homolog), (2) cinto já está coberto por
+> `167` e `265-10`, não ambíguos, e (3) falha de câmera correlaciona com `107`/`161` e
+> chega sem mídia, então dá para conferir se aparecer.
+>
+> **Achado que o STATUS anterior não registrava**: os quatro códigos **nunca estiveram**
+> em `alarm_types`. A whitelist da `migration_v4.8.1.sql` os **lista** entre os oficiais,
+> o que dá a impressão contrária — mas whitelist só protege do `DELETE`, não cria linha.
+> Eram "oficiais" e ausentes ao mesmo tempo, caindo no fallback de `pushalarm.php:395`.
+>
+> #### ▶️ Próximo passo
+>
+> **Deploy de v4.8.3 + v4.8.4 em produção**, nesta ordem (o gate do `deploy.sh` decide
+> sozinho). Exige as **duas passadas** (`deploy.sh && deploy.sh --force`) porque o
+> `deploy.sh` mudou, e um `mysqldump alarm_types alarms` antes — a 4.8.3 reescreve
+> `alarms.alarm_name` em todo o histórico. A migração v4.8.4 emite no log **uma sonda
+> para produção**: `SELECT COUNT(*) FROM alarms WHERE msg_class=0 AND alarm_type IN
+> ('80','81','131')`. Se vier > 0, os códigos descartados chegam de verdade e a
+> ambiguidade precisa ser decidida com dado real (velocidade, `car_status`, presença de
+> mídia), não com a doc.
+>
+> ---
+>
+> ### v4.8.3 PUBLICADA no homolog (02/08/2026, 23h40)
 >
 > #### Estado dos três ambientes, CONFERIDO no fim da sessão (não presumido)
 >
@@ -115,10 +249,10 @@
 > | Item | Estado |
 > |---|---|
 > | **Deploy em PRODUÇÃO** | Não feito. Código e banco de produção intocados. Exige as duas passadas do `deploy.sh` e, como a migração **reescreve `alarms.alarm_name`**, um `mysqldump alarm_types alarms` antes |
-> | **2 specs velhas** | `geocercas.spec.js:116` e `agendamentos.spec.js:169` — decidir se a tela ou o teste é que está errado (o `h2` "Relatório de Cercas" pode ser o nome pretendido) |
+> | ~~**2 specs velhas**~~ | ✅ **FECHADO na v4.8.5** — a tela estava certa nos dois casos; os testes é que ficaram para trás |
 > | **6 specs puladas** | Faltam `TEST_EMAIL_B`, `TEST_IMEI` no ambiente. O 2º cliente para multi-tenant continua sendo a pendência antiga |
 > | **Quebra de linha sem dado real** | Ver a ressalva acima. Confirmar num PDF de produção, onde os endereços tendem a ser mais longos |
-> | **Ambiguidades da doc oficial** | `131`, `132`, `80`/`81` aparecem duas vezes na Alarm Reference com significados diferentes. **Não foram tocados** — não há como decidir pela doc |
+> | ~~**Ambiguidades da doc oficial**~~ | ✅ **FECHADO na v4.8.4** (03/08/2026) — resolvido por escopo de produto, não pela doc. Ver o bloco no topo |
 >
 > ---
 >
@@ -228,9 +362,9 @@
 > | Item | Por quê ficou |
 > |---|---|
 > | 🔴 **`TEST_EMAIL_B` nunca provisionado** | **É a causa-raiz de o vazamento ter sobrevivido.** `tests/multitenant.spec.js` existe desde a Fase M.4 exatamente para pegar isolamento entre clientes, mas **pula inteiro** sem o segundo usuário — nunca rodou uma vez. Ganhou agora o caso da escalada por `?customer_id`, que continua pulando. **Criar esse usuário vale mais do que qualquer teste novo**: é a diferença entre ter a rede e ter a rede pendurada |
-| **`notificacoes.spec.js` nunca escrita** | O sino da v4.4.0 segue sem cobertura E2E |
-> | **`checklist` fora da matriz de `/grupos-permissao`** | Impede pôr `require_permission()` na tela sem dar 403 a grupo restrito |
-> | **Escopo do revendedor** | Ver acima |
+> | ~~**`notificacoes.spec.js` nunca escrita**~~ | ✅ **FECHADO na v4.8.5** — 9 testes, 4 sobre dado semeado |
+> | ~~**`checklist` fora da matriz de `/grupos-permissao`**~~ | ✅ **FECHADO na v4.8.5** — na matriz, no router e com `require_permission()` |
+> | ~~**Escopo do revendedor**~~ | ✅ **FECHADO na v4.8.5** — era vazamento real, medido; ver o bloco no topo |
 > | **Fase F do YUV** (checklist completo, licenciamento, white-label) | É produto, não dívida — vem depois, conforme combinado |
 
 

@@ -26,6 +26,9 @@ $messageType = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'excluir') {
     csrf_verify();
     $cfgId = !empty($_POST['config_id']) ? (int)$_POST['config_id'] : null;
+    // RBAC ação fina (v4.8.5) — possível agora que 'checklist' entrou na matriz
+    // de /grupos-permissao e no $screenByHandler do router.
+    require_permission('checklist', $cfgId > 0 ? 'edit' : 'create');
     $name  = trim($_POST['name'] ?? '');
     $cust  = !empty($_POST['customer_id']) ? (int)$_POST['customer_id'] : null;
 
@@ -80,22 +83,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
 // qualquer `<img src="/checklist?action=excluir&id=1">` apagava o checklist
 // e todos os itens dele usando a sessão de quem abrisse a página.
 //
-// `require_permission()` NÃO é chamado de propósito: a tela "checklist" não
-// está na matriz de /grupos-permissao, e `can()` nega tela ausente da matriz —
-// exigir permissão aqui daria 403 para todo usuário de grupo restrito.
+// A v4.7.2 fechou o CSRF mas deixou a permissão em aberto, porque "checklist"
+// não estava na matriz de /grupos-permissao e `can()` nega tela ausente dela —
+// exigir permissão daria 403 a todo grupo restrito. A v4.8.5 pôs a tela na
+// matriz E no $screenByHandler do router, então a guarda fina agora cabe.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'excluir' && !empty($_POST['id'])) {
     csrf_verify();
+    require_permission('checklist', 'delete');
     $delId = (int)$_POST['id'];
 
     $stmt = $db->prepare("SELECT customer_id FROM checklist_configs WHERE id = ?");
     $stmt->execute([$delId]);
     $owner = $stmt->fetchColumn();
 
+    // Escopo da exclusão (v4.8.5). `$isAdmin` inclui `user_type='revendedor'`,
+    // e usar isso cru deixava um revendedor apagar o checklist de QUALQUER
+    // cliente — a mesma escalada que `report_customer_scope()` fecha na
+    // leitura, aqui num caminho DESTRUTIVO. O `require_permission()` acima não
+    // cobre: usuário sem grupo passa por `can()` sem restrição (role legado).
+    $escopoRevenda   = reseller_scope_ids();          // null = não é revendedor
+    $isPlatformAdmin = $isAdmin && $escopoRevenda === null;
+
     if ($owner === false) {
         $message = 'Checklist não encontrado.';
         $messageType = 'error';
-    } elseif (!$isAdmin && ($owner === null || (int)$owner !== (int)$customerId)) {
-        // Checklist global (customer_id NULL) só o admin exclui.
+    } elseif (!$isPlatformAdmin && (
+                 $owner === null                        // global: só admin de plataforma
+                 || ($escopoRevenda !== null
+                        ? !in_array((int)$owner, $escopoRevenda, true)
+                        : (int)$owner !== (int)$customerId)
+             )) {
         $message = 'Checklist fora do seu escopo.';
         $messageType = 'error';
     } else {
@@ -121,7 +138,7 @@ try {
     ")->fetchAll();
 } catch (Exception $e) {}
 
-$customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+$customers = report_customer_options($db);
 
 // Edit mode
 $editCfg = null;

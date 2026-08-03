@@ -129,12 +129,30 @@ test.describe.serial('Agendamentos — ciclo completo', () => {
 test.describe.serial('Modelos de relatório', () => {
     const modelo = `ZZ Modelo ${Date.now()}`;
 
+    // O filtro de placa virou um <select> populado com os equipamentos DO CLIENTE
+    // (7a0a75f). Um IMEI inventado não volta a ser exibido por ele — um <select>
+    // não seleciona opção que não existe —, então o valor tem de sair da própria
+    // lista, senão a asserção de "os campos voltam preenchidos" testa o vazio.
+    // Capturado uma vez por worker, para o spec valer em qualquer ambiente.
+    let imeiReal;
+
+    test.beforeAll(async ({ authedContext }) => {
+        const page = await authedContext.newPage();
+        await page.goto('/relatorios/alarmes');
+        // nth(0) é o "Todas" de value vazio
+        imeiReal = await page.locator('select[name="imei"] option').nth(1).getAttribute('value');
+        await page.close();
+        if (!imeiReal) {
+            throw new Error('nenhum equipamento cadastrado para este cliente — o spec de modelos precisa de ao menos um');
+        }
+    });
+
     test('barra de modelos só aparece quando há filtro ou modelo', async ({ authedPage }) => {
         await authedPage.goto('/relatorios/alarmes');
         // Numa tela recém-aberta não há o que guardar nem o que aplicar
         const semFiltro = await authedPage.locator('text=Salvar filtros atuais como').count();
 
-        await authedPage.goto('/relatorios/alarmes?imei=12345');
+        await authedPage.goto(`/relatorios/alarmes?imei=${imeiReal}`);
         await expect(authedPage.locator('input[name="tpl_name"]')).toBeVisible();
 
         // Só é significativo se antes realmente não aparecia
@@ -142,7 +160,7 @@ test.describe.serial('Modelos de relatório', () => {
     });
 
     test('salvar os filtros atuais como modelo', async ({ authedPage }) => {
-        await authedPage.goto('/relatorios/alarmes?imei=12345&alarm_status=active');
+        await authedPage.goto(`/relatorios/alarmes?imei=${imeiReal}&alarm_status=active`);
         await authedPage.fill('input[name="tpl_name"]', modelo);
         await authedPage.click('button:has-text("Salvar modelo")');
         await expect(authedPage.locator('body')).toContainText('Modelo salvo');
@@ -159,14 +177,14 @@ test.describe.serial('Modelos de relatório', () => {
         // final em vez de conferir logo após o selectOption, que corre com a
         // primeira delas.
         await Promise.all([
-            authedPage.waitForURL(/imei=12345/, { timeout: 15000 }),
+            authedPage.waitForURL(new RegExp(`imei=${imeiReal}`), { timeout: 15000 }),
             sel.selectOption({ label: modelo }),
         ]);
         await expect(authedPage).toHaveURL(/alarm_status=active/);
 
         // E os campos do formulário voltam preenchidos — é isso que o
         // usuário quer dizer com "reaplicar o modelo"
-        await expect(authedPage.locator('input[name="imei"]')).toHaveValue('12345');
+        await expect(authedPage.locator('select[name="imei"]')).toHaveValue(imeiReal);
         await expect(authedPage.locator('select[name="alarm_status"]')).toHaveValue('active');
     });
 

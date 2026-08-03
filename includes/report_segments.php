@@ -191,7 +191,7 @@ function render_segment_report(array $cfg): void
 
     $customers = [];
     try {
-        $customers = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name")->fetchAll();
+        $customers = report_customer_options($db);
     } catch (Throwable $e) {}
 
     // ── Renderização ───────────────────────────────────────────
