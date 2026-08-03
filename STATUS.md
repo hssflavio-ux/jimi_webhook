@@ -1,6 +1,47 @@
 # STATUS.md — Jimi Webhook System v4.8.5 (YUV Parity)
 
-> ### ▶️ RETOMAR AQUI — v4.8.5 (03/08/2026)
+> ### ✅ v4.8.5 PUBLICADA E VERIFICADA no homolog (03/08/2026, 10h32)
+>
+> | | git HEAD | `/ping` | `system_info` |
+> |---|---|---|---|
+> | Local / `origin/main` | `9ddc7e0` | — | 4.8.5 |
+> | **Homolog** (`189.22.240.43`) | **`9ddc7e0`** | **4.8.5** | **4.8.5** |
+> | **Produção** | — | — | **PENDENTE desde a 4.8.3 — nada tocado** |
+>
+> Sai junto a **v4.8.4** (códigos JIMI ambíguos), que estava pronta e não publicada.
+>
+> #### ⚠️ Armadilha nova, e ela quase passou batido
+>
+> As duas passadas do deploy rodaram, migrações aplicadas, código em `f8846af` — e
+> **`/ping` continuou anunciando 4.8.3**. Causa: `/ping` lê `SYSTEM_VERSION` do `.env`, e
+> a FASE 3b do `deploy.sh` sincroniza esse valor **a partir do `.env.example`**, que eu
+> tinha esquecido de bumpar. O sintoma aparecia num só lugar: **a própria sonda usada para
+> confirmar o deploy**. Um deploy podia ser dado por falho (ou por bem-sucedido na versão
+> errada) por causa disso. Corrigido em `9ddc7e0`.
+>
+> **Regra que fica**: bumpar versão exige tocar **`.env.example`** junto com o CHANGELOG e
+> a migration. Sem isso a verificação pós-deploy mente.
+>
+> #### Verificação pós-deploy, contra o servidor real
+>
+> | Sonda | Resultado |
+> |---|---|
+> | 16 rotas do dashboard, sessão injetada | **16× HTTP 200, 0 erro de PHP** |
+> | Filtro de alarmes | traz `Cinto Não Afivelado`; **não** traz o positivo `Cinto Afivelado` |
+> | `alarm_types` | `132`/`167`/`265-10` como Cinto Não Afivelado; `166` movido para `Vehicle`; **32 chips**; 0 ambíguo indevido |
+> | `/grupos-permissao` | matriz mostra **"Checklist de Inspeção"** e **"Central de Ajuda"** |
+> | `permission_groups` | "Operador Padrão" com `wiki: ["view"]`; curinga do "Administrador" intocado |
+> | Sessões de teste | removidas (0 restantes) |
+>
+> ⚠️ **O que essa verificação NÃO cobre**: o comportamento do **revendedor** foi provado
+> **localmente** (com baseline por reversão de código e controle positivo), não no homolog —
+> lá só existe **um cliente**, então não há para onde vazar, e criar um segundo cliente e um
+> revendedor no servidor de homologação seria mexer em dado que não é de teste. O que o
+> homolog prova é que o código novo está publicado e roda sem erro nas 16 telas.
+>
+> ---
+>
+> ### ▶️ O que a v4.8.5 entregou (03/08/2026)
 >
 > Sessão pedida como "itens 3, 5 e 6, depois publique no homolog". O **5** já estava
 > pronto da sessão anterior (v4.8.4, códigos ambíguos) e entrou na mesma leva.
