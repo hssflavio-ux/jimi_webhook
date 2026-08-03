@@ -115,7 +115,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     } catch (Exception $e) { /* tabela v4 ausente → export vazio */ }
     stream_export($export, 'relatorio_ocorrencias',
         ['Cliente', 'Filial', 'IMEI', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
-        $expRows, 'Relatório de Ocorrências', "Período (BRT): $dateFrom a $dateTo");
+        $expRows, 'Relatório de Ocorrências', report_period_label($dateFrom, $dateTo));
 }
 
 // Count

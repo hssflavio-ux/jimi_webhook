@@ -79,9 +79,11 @@ function rota_url(int $tripId): string
  * @param string $dateFrom Dia inicial (BRT)
  * @param string $dateTo   Dia final (BRT)
  * @param string $mode     'viagens' | 'diario'
+ * @param string $timeFrom Hora inicial do filtro ('H:i'; vazio = 00:00)
+ * @param string $timeTo   Hora final do filtro ('H:i'; vazio = 23:59)
  * @returns string
  */
-function desloc_subtitulo(string $selImei, array $devices, string $dateFrom, string $dateTo, string $mode): string
+function desloc_subtitulo(string $selImei, array $devices, string $dateFrom, string $dateTo, string $mode, string $timeFrom = '', string $timeTo = ''): string
 {
     $placa = 'Todas as placas';
     if ($selImei !== '') {
@@ -94,7 +96,8 @@ function desloc_subtitulo(string $selImei, array $devices, string $dateFrom, str
         if ($placa === 'Todas as placas') $placa = 'Placa: ' . $selImei;
     }
     $modo = $mode === 'diario' ? ' — fechamento diário' : '';
-    return $placa . '  |  Período (BRT): ' . $dateFrom . ' a ' . $dateTo . $modo;
+    // Período em DD/MM/AAAA com a hora sempre explícita — ver report_period_label()
+    return $placa . '  |  ' . report_period_label($dateFrom, $dateTo, $timeFrom, $timeTo) . $modo;
 }
 
 // Fechamento diário: agrega as viagens do dia BRT (primeira ignição ligada →
@@ -157,9 +160,12 @@ if ($generated) {
                     ];
                 }
                 stream_export($export, 'relatorio_deslocamento_diario',
-                    ['Dia', 'Placa', 'Primeira Ignição', 'Última Ign. Deslig.', 'Jornada', 'Em Movimento', 'Distância (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
+                    ['Dia', 'Placa', 'Primeira Ignição', 'Última Ignição', 'Jornada', 'Em Movimento', 'Distância (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
                     $expRows, 'Relatório de Deslocamento — Fechamento Diário',
-                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode));
+                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
+                    // Data/hora e os dois cabeçalhos longos pedem mais que as
+                    // colunas numéricas (jornada, km, alarmes, viagens).
+                    [1.0, 1.0, 1.3, 1.3, 0.9, 1.0, 1.0, 1.05, 0.8, 0.75]);
             } else {
                 $expStmt = $db->prepare("
                     SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
@@ -183,12 +189,17 @@ if ($generated) {
                         $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
                         $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
                         (int)($r['alarm_count'] ?? 0),
-                        rota_url((int)$r['id']),
+                        // Célula de LINK, como a coluna Mapa dos outros
+                        // relatórios (v4.8.2): a URL crua ocupava a coluna
+                        // inteira e, no PDF, ainda quebraria em três linhas.
+                        new ExportLink(rota_url((int)$r['id']), 'ROTA'),
                     ];
                 }
                 stream_export($export, 'relatorio_deslocamento',
                     ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes', 'Rota'],
-                    $expRows, 'Relatório de Deslocamento', desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode));
+                    $expRows, 'Relatório de Deslocamento',
+                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
+                    [1.0, 1.5, 1.3, 1.3, 0.85, 1.05, 1.0, 0.8, 0.7]);
             }
         } catch (Exception $e) { /* tabela trips ausente → export vazio */ }
     }
@@ -312,7 +323,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th><?= report_sort_link('dia', 'Dia', $sort, $order) ?></th>
                 <th>Placa</th>
                 <th>Primeira Ignição</th>
-                <th>Última Ign. Deslig.</th>
+                <th>Última Ignição</th>
                 <th>Jornada</th>
                 <th>Em Movimento</th>
                 <th>Distância</th>

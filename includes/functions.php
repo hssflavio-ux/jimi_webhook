@@ -548,6 +548,51 @@ function report_time_window(string $col, string $dateFrom, string $dateTo, strin
 }
 
 /**
+ * Rótulo do período para o cabeçalho dos relatórios exportados (v4.8.3).
+ *
+ * Ponto único do texto "Período: …" que sai no subtítulo do PDF. Três decisões,
+ * todas vindas de como o documento é lido fora da tela que o gerou:
+ *
+ *   1. SEM o sufixo "(BRT)". O sistema inteiro exibe em horário de Brasília e
+ *      nunca oferece outro fuso; anotar o fuso em cada relatório só levantava a
+ *      dúvida de que pudesse haver outro.
+ *   2. Data em DD/MM/AAAA, não no ISO `Y-m-d` que vem do `<input type="date">`.
+ *      "2026-08-01 a 2026-08-02" é o valor cru do formulário vazando no papel.
+ *   3. A HORA É SEMPRE ESCRITA, inclusive quando o filtro de faixa horária ficou
+ *      vazio — aí ela vira `00:00:00`/`23:59:59`, que é exatamente a janela
+ *      consultada. Omitir a hora deixava ambíguo se o dia final entrava inteiro.
+ *
+ * Os segundos (`:00` no início, `:59` no fim) espelham brt_datetime_range_to_utc():
+ * o rótulo descreve a janela REAL da consulta, não uma aproximação dela.
+ *
+ * @param string $dateFrom Dia inicial (BRT, 'Y-m-d')
+ * @param string $dateTo   Dia final (BRT, 'Y-m-d')
+ * @param string $timeFrom Hora inicial ('H:i'; vazio = 00:00)
+ * @param string $timeTo   Hora final ('H:i'; vazio = 23:59)
+ * @param string $timeMode 'continua' (janela única) | 'diaria' (faixa repetida a cada dia)
+ * @returns string Ex.: "Período: 01/08/2026 00:00:00 a 02/08/2026 23:59:59"
+ */
+function report_period_label(string $dateFrom, string $dateTo, string $timeFrom = '', string $timeTo = '', string $timeMode = 'continua'): string {
+    $dia = function (string $d): string {
+        $ts = strtotime($d);
+        return $ts ? date('d/m/Y', $ts) : $d;
+    };
+    $hi = preg_match('/^\d{2}:\d{2}$/', $timeFrom) ? $timeFrom : '00:00';
+    $hf = preg_match('/^\d{2}:\d{2}$/', $timeTo)   ? $timeTo   : '23:59';
+
+    $txt = 'Período: ' . $dia($dateFrom) . " $hi:00 a " . $dia($dateTo) . " $hf:59";
+
+    // No modo diário a faixa horária NÃO é uma janela contínua: ela se repete
+    // dentro de cada dia. Sem esta nota o mesmo texto descreveria duas
+    // consultas diferentes.
+    if ($timeMode === 'diaria' && ($timeFrom !== '' || $timeTo !== '')) {
+        $txt = 'Período: ' . $dia($dateFrom) . ' a ' . $dia($dateTo)
+             . " — faixa de $hi:00 a $hf:59 em cada dia";
+    }
+    return $txt;
+}
+
+/**
  * Paginação padrão das grades: rótulo "Página X de Y (N unidades)" + « + janela
  * deslizante de páginas + ».
  *

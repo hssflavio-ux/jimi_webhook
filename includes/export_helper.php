@@ -250,6 +250,14 @@ class XlsxWriter
  *
  * Limite de segurança: MAX_ROWS linhas; acima disso o relatório é truncado
  * com aviso na última linha (PDF não é o formato adequado para dumps grandes).
+ *
+ * Larguras de coluna e quebra de linha (v4.8.3). Até a v4.8.2 as colunas eram
+ * TODAS da mesma largura e a célula que não coubesse era cortada com "…". Numa
+ * grade de oito colunas isso dá ~96 pt por coluna, e o endereço geocodificado
+ * — o campo mais longo de todos os relatórios — saía sempre pela metade
+ * ("Avenida Presidente Juscelino Kub…"). Agora cada relatório declara PESOS de
+ * coluna (o endereço leva 3-4x o de uma coluna comum) e o texto que ainda não
+ * couber QUEBRA em até MAX_LINES linhas, em vez de ser cortado.
  */
 class PdfWriter
 {
@@ -258,8 +266,12 @@ class PdfWriter
     private const PAGE_W = 841.89;  // A4 paisagem (pt)
     private const PAGE_H = 595.28;
     private const MARGIN = 36.0;
-    private const ROW_H  = 13.0;
+    private const LINE_H = 9.0;     // altura de UMA linha de texto
+    private const ROW_PAD = 4.0;    // respiro vertical da célula
+    private const ROW_H  = 13.0;    // linha de conteúdo simples (LINE_H + ROW_PAD)
     private const FONT_SIZE = 7.5;
+    /** Teto de quebras por célula — acima disso a última linha recebe "…". */
+    private const MAX_LINES = 4;
 
     private string $filepath;
     private string $title;
@@ -343,21 +355,42 @@ class PdfWriter
     private float $y;
     private int $rowCount = 0;
     private bool $truncated = false;
-    private float $colW;
+    /** @var float[] Largura de cada coluna, em pt. */
+    private array $colW = [];
+    /** @var float[] Borda esquerda de cada coluna, em pt. */
+    private array $colX = [];
 
     /**
-     * @param string   $filepath Caminho final do .pdf
-     * @param string   $title    Título impresso no topo de cada página
-     * @param string[] $headers  Cabeçalhos da tabela
-     * @param string   $subtitle Linha de contexto (período, gerado em)
+     * @param string   $filepath   Caminho final do .pdf
+     * @param string   $title      Título impresso no topo de cada página
+     * @param string[] $headers    Cabeçalhos da tabela
+     * @param string   $subtitle   Linha de contexto (período, gerado em)
+     * @param float[]  $colWeights Peso relativo de cada coluna (vazio = todas iguais).
+     *                             Ex.: [1, 1, 1.4, 3.6, …] dá à 4ª coluna 3,6x a
+     *                             largura da 1ª. Colunas não declaradas valem 1.
      */
-    public function __construct(string $filepath, string $title, array $headers, string $subtitle = '')
+    public function __construct(string $filepath, string $title, array $headers, string $subtitle = '', array $colWeights = [])
     {
         $this->filepath = $filepath;
         $this->title    = $title;
         $this->subtitle = $subtitle;
         $this->headers  = array_values($headers);
-        $this->colW     = (self::PAGE_W - 2 * self::MARGIN) / max(1, count($this->headers));
+
+        $n      = max(1, count($this->headers));
+        $avail  = self::PAGE_W - 2 * self::MARGIN;
+        $pesos  = [];
+        for ($i = 0; $i < $n; $i++) {
+            $p = (float)($colWeights[$i] ?? 1.0);
+            $pesos[$i] = $p > 0 ? $p : 1.0;
+        }
+        $soma = array_sum($pesos);
+        $x = self::MARGIN;
+        foreach ($pesos as $i => $p) {
+            $this->colW[$i] = $avail * $p / $soma;
+            $this->colX[$i] = $x;
+            $x += $this->colW[$i];
+        }
+
         $this->startPage();
     }
 
@@ -377,14 +410,18 @@ class PdfWriter
         if ($this->truncated) return;
         if (++$this->rowCount > self::MAX_ROWS) {
             $this->truncated = true;
-            $this->rowText(['… relatório truncado em ' . number_format(self::MAX_ROWS, 0, ',', '.') . ' linhas. Exporte em CSV/Excel para o conjunto completo.'], false);
+            $this->rowText(['… relatório truncado em ' . number_format(self::MAX_ROWS, 0, ',', '.') . ' linhas. Exporte em CSV/Excel para o conjunto completo.'], false, true);
             return;
         }
-        if ($this->y < self::MARGIN + self::ROW_H) {
+        // A altura da linha agora VARIA (endereço pode ocupar 2-4 linhas), então
+        // a quebra de página precisa medir antes de decidir — o teste antigo
+        // contra a altura fixa deixaria a última linha vazar a margem.
+        $lay = $this->layout($cells, false, false);
+        if ($this->y - $lay['h'] < self::MARGIN) {
             $this->pages[] = $this->buf;
             $this->startPage();
         }
-        $this->rowText($cells, false);
+        $this->rowText($cells, false, false, $lay);
     }
 
     /**
@@ -501,71 +538,247 @@ class PdfWriter
     }
 
     /**
+     * Quebra as células de uma linha na largura de cada coluna e devolve o
+     * traçado pronto — as linhas de texto e a altura total.
+     *
+     * Separado de rowText() porque a quebra de página precisa da ALTURA antes
+     * de a linha ser desenhada, e refazer a quebra duas vezes por linha custa
+     * caro num relatório de 10 mil linhas.
+     *
+     * @param array $cells   Conteúdo das colunas
+     * @param bool  $header  true = fonte negrito (métrica um pouco mais larga)
+     * @param bool  $spanAll true = célula única ocupando a página inteira
+     * @returns array{lines: array<int, string[]>, h: float}
+     */
+    private function layout(array $cells, bool $header, bool $spanAll): array
+    {
+        $ultima = count($this->colW) - 1;
+        $lines = [];
+        $n = 1;
+        foreach (array_values($cells) as $i => $v) {
+            $txt  = self::toCp1252($v instanceof ExportLink ? $v->label : (string)($v ?? ''));
+            $larg = $spanAll
+                ? self::PAGE_W - 2 * self::MARGIN
+                : (float)($this->colW[$i] ?? $this->colW[$ultima] ?? self::PAGE_W);
+            $lines[$i] = self::wrapText($txt, $larg - 4.0, $header);
+            $n = max($n, count($lines[$i]));
+        }
+        return ['lines' => $lines, 'h' => $n * self::LINE_H + self::ROW_PAD];
+    }
+
+    /**
      * Desenha uma linha (cabeçalho ou dados) com fundo/linha divisória.
      *
-     * @param array $cells  Conteúdo das colunas
-     * @param bool  $header true = estilo cabeçalho (negrito sobre azul)
+     * @param array      $cells   Conteúdo das colunas
+     * @param bool       $header  true = estilo cabeçalho (negrito sobre azul)
+     * @param bool       $spanAll true = célula única ocupando a página inteira
+     * @param array|null $lay     Traçado já calculado por layout() (evita refazê-lo)
      */
-    private function rowText(array $cells, bool $header): void
+    private function rowText(array $cells, bool $header, bool $spanAll = false, ?array $lay = null): void
     {
+        $vals = array_values($cells);
+        $lay  = $lay ?? $this->layout($cells, $header, $spanAll);
+        $rowH = $lay['h'];
+
         $x0 = self::MARGIN;
         $yTop = $this->y;
-        $yText = $yTop - self::ROW_H + 3.5;
 
         if ($header) {
             // Fundo azul Coinbase
-            $this->buf .= "0 0.32 1 rg $x0 " . ($yTop - self::ROW_H) . ' '
-                        . (self::PAGE_W - 2 * self::MARGIN) . ' ' . self::ROW_H . " re f\n";
+            $this->buf .= "0 0.32 1 rg $x0 " . sprintf('%.2f', $yTop - $rowH) . ' '
+                        . (self::PAGE_W - 2 * self::MARGIN) . ' ' . sprintf('%.2f', $rowH) . " re f\n";
         }
 
         $font = $header ? '/F2' : '/F1';
         $color = $header ? '1 1 1' : '0.13 0.14 0.16';
-        $maxChars = (int)floor($this->colW / (self::FONT_SIZE * 0.52)) - 1;
 
-        foreach (array_values($cells) as $i => $v) {
-            $ehLink = $v instanceof ExportLink;
-            $txt = $ehLink ? $v->label : (string)($v ?? '');
-            if (mb_strlen($txt) > $maxChars) {
-                $txt = mb_substr($txt, 0, max(1, $maxChars - 1)) . '…';
-            }
-            $x = $x0 + $i * $this->colW + 2;
-
+        foreach ($lay['lines'] as $i => $linhas) {
+            $ehLink = ($vals[$i] ?? null) instanceof ExportLink;
             // Link: azul + sublinhado, e uma anotação /Link cobrindo a célula.
             // Sem a anotação o PDF teria um texto azul decorativo que não abre
             // nada — pior do que texto normal, porque promete clique.
             $cor = $ehLink ? '0 0.32 1' : $color;
-            $this->buf .= "BT $font " . self::FONT_SIZE . " Tf $cor rg "
-                        . sprintf('%.2f %.2f', $x, $yText) . ' Td (' . self::esc($txt) . ") Tj ET\n";
+            $x = ($spanAll ? self::MARGIN : (float)($this->colX[$i] ?? self::MARGIN)) + 2.0;
 
-            if ($ehLink) {
-                $larg = mb_strlen($txt) * self::FONT_SIZE * 0.52;
-                $this->buf .= sprintf("%s RG 0.4 w %.2f %.2f m %.2f %.2f l S\n",
-                    $cor, $x, $yText - 1.2, $x + $larg, $yText - 1.2);
-                // Guardada por PÁGINA: a anotação vive no objeto da página, e o
-                // buffer atual ainda não sabe em qual página vai parar.
-                $this->annots[] = [
-                    'page' => count($this->pages),   // índice da página em construção
-                    'rect' => [$x - 1, $yText - 2.5, $x + $larg + 1, $yText + self::FONT_SIZE],
-                    'uri'  => $v->url,
-                ];
+            foreach ($linhas as $k => $ln) {
+                if ($ln === '') continue;
+                $yText = $yTop - ($k + 1) * self::LINE_H - 1.0;
+                $this->buf .= "BT $font " . self::FONT_SIZE . " Tf $cor rg "
+                            . sprintf('%.2f %.2f', $x, $yText) . ' Td (' . self::escRaw($ln) . ") Tj ET\n";
+
+                if ($ehLink && $k === 0) {
+                    $larg = self::textWidth($ln, false);
+                    $this->buf .= sprintf("%s RG 0.4 w %.2f %.2f m %.2f %.2f l S\n",
+                        $cor, $x, $yText - 1.2, $x + $larg, $yText - 1.2);
+                    // Guardada por PÁGINA: a anotação vive no objeto da página, e o
+                    // buffer atual ainda não sabe em qual página vai parar.
+                    $this->annots[] = [
+                        'page' => count($this->pages),   // índice da página em construção
+                        'rect' => [$x - 1, $yText - 2.5, $x + $larg + 1, $yText + self::FONT_SIZE],
+                        'uri'  => $vals[$i]->url,
+                    ];
+                }
             }
         }
 
         // Linha divisória inferior (cinza-claro)
-        $this->buf .= "0.87 0.88 0.9 RG 0.5 w $x0 " . sprintf('%.2f', $yTop - self::ROW_H) . ' m '
-                    . sprintf('%.2f', self::PAGE_W - self::MARGIN) . ' ' . sprintf('%.2f', $yTop - self::ROW_H) . " l S\n";
+        $this->buf .= "0.87 0.88 0.9 RG 0.5 w $x0 " . sprintf('%.2f', $yTop - $rowH) . ' m '
+                    . sprintf('%.2f', self::PAGE_W - self::MARGIN) . ' ' . sprintf('%.2f', $yTop - $rowH) . " l S\n";
 
-        $this->y -= self::ROW_H;
+        $this->y -= $rowH;
     }
 
-    /** Converte UTF-8 → CP1252 e escapa caracteres reservados do PDF. */
-    private static function esc(string $s): string
+    /**
+     * Quebra um texto (já em CP1252) para caber numa largura, em até
+     * MAX_LINES linhas; o que passar disso vira "…" na última.
+     *
+     * @param string $cp    Texto em CP1252 (1 byte = 1 caractere)
+     * @param float  $maxW  Largura útil da célula, em pt
+     * @param bool   $bold  true = medir com a métrica do Helvetica-Bold
+     * @returns string[] Linhas (sempre ao menos uma)
+     */
+    private static function wrapText(string $cp, float $maxW, bool $bold): array
+    {
+        if ($cp === '' || $maxW <= 0) return [$cp];
+        if (self::textWidth($cp, $bold) <= $maxW) return [$cp];
+
+        $out = [];
+        $cur = '';
+        foreach (explode(' ', $cp) as $palavra) {
+            $tenta = $cur === '' ? $palavra : "$cur $palavra";
+            if (self::textWidth($tenta, $bold) <= $maxW) { $cur = $tenta; continue; }
+
+            if ($cur !== '') { $out[] = $cur; $cur = ''; }
+            // Palavra sozinha maior que a coluna (URL, log): parte no caractere
+            while ($palavra !== '' && self::textWidth($palavra, $bold) > $maxW) {
+                $corte = 1;
+                while ($corte < strlen($palavra)
+                       && self::textWidth(substr($palavra, 0, $corte + 1), $bold) <= $maxW) {
+                    $corte++;
+                }
+                $out[] = substr($palavra, 0, $corte);
+                $palavra = substr($palavra, $corte);
+            }
+            $cur = $palavra;
+        }
+        if ($cur !== '') $out[] = $cur;
+
+        if (count($out) > self::MAX_LINES) {
+            $out = array_slice($out, 0, self::MAX_LINES);
+            $out[self::MAX_LINES - 1] = self::ellipsize($out[self::MAX_LINES - 1], $maxW, $bold);
+        }
+        return $out ?: [''];
+    }
+
+    /**
+     * Encurta um texto CP1252 até caber com "…" no fim.
+     *
+     * @param string $cp   Texto em CP1252
+     * @param float  $maxW Largura útil, em pt
+     * @param bool   $bold Métrica negrito
+     * @returns string
+     */
+    private static function ellipsize(string $cp, float $maxW, bool $bold): string
+    {
+        $ell = self::toCp1252('…');
+        while ($cp !== '' && self::textWidth($cp . $ell, $bold) > $maxW) {
+            $cp = substr($cp, 0, -1);
+        }
+        return $cp . $ell;
+    }
+
+    /**
+     * Largura de um texto CP1252 na FONT_SIZE corrente, em pt.
+     *
+     * Usa as métricas reais do Helvetica (AFM, unidades de 1/1000 em). A conta
+     * antiga era "nº de caracteres × 0,52 em", que erra por mais de 20% em
+     * texto com muitos "i"/"l" (222) ou muitos "M"/"W" (833/944) — o bastante
+     * para o endereço vazar a coluna vizinha ou ser cortado cedo demais.
+     *
+     * @param string $cp   Texto em CP1252
+     * @param bool   $bold true = Helvetica-Bold (≈8% mais largo, na média)
+     * @returns float Largura em pt
+     */
+    private static function textWidth(string $cp, bool $bold): float
+    {
+        $w = self::widths();
+        $u = 0;
+        $len = strlen($cp);
+        for ($i = 0; $i < $len; $i++) {
+            $u += $w[ord($cp[$i])];
+        }
+        return $u / 1000.0 * self::FONT_SIZE * ($bold ? 1.08 : 1.0);
+    }
+
+    /** @var int[]|null Largura por byte CP1252, em 1/1000 em. */
+    private static ?array $wTable = null;
+
+    /**
+     * Tabela de larguras do Helvetica, indexada pelo byte CP1252.
+     *
+     * @returns int[] 256 posições (556 = largura média, usada no que não for mapeado)
+     */
+    private static function widths(): array
+    {
+        if (self::$wTable !== null) return self::$wTable;
+
+        $w = array_fill(0, 256, 556);
+        // ASCII imprimível, 32..127 (AFM do Helvetica)
+        $ascii = [
+            278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278, // 32..47   ! " # $ % & ' ( ) * + , - . /
+            556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556, // 48..63   0-9 : ; < = > ?
+            1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778, // 64..79  @ A-O
+            667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,  // 80..95  P-Z [ \ ] ^ _
+            333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,  // 96..111 ` a-o
+            556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,  // 112..127 p-z { | } ~
+        ];
+        foreach ($ascii as $i => $v) $w[32 + $i] = $v;
+
+        // WinAnsi: pontuação tipográfica que de fato aparece nos relatórios
+        $w[133] = 1000; $w[145] = 222; $w[146] = 222; $w[147] = 333;
+        $w[148] = 333;  $w[150] = 556; $w[151] = 1000; $w[160] = 278;
+
+        // Latin-1 acentuado — em Helvetica a letra acentuada tem a largura da base
+        foreach ([192,193,194,195,196,197] as $c) $w[$c] = 667;   // À Á Â Ã Ä Å
+        $w[198] = 1000; $w[199] = 722;                             // Æ Ç
+        foreach ([200,201,202,203] as $c) $w[$c] = 667;            // È É Ê Ë
+        foreach ([204,205,206,207] as $c) $w[$c] = 278;            // Ì Í Î Ï
+        $w[209] = 722; $w[221] = 667;                              // Ñ Ý
+        foreach ([210,211,212,213,214] as $c) $w[$c] = 778;        // Ò Ó Ô Õ Ö
+        foreach ([217,218,219,220] as $c) $w[$c] = 722;            // Ù Ú Û Ü
+        foreach ([224,225,226,227,228,229] as $c) $w[$c] = 556;    // à á â ã ä å
+        $w[230] = 889; $w[231] = 500;                              // æ ç
+        foreach ([232,233,234,235] as $c) $w[$c] = 556;            // è é ê ë
+        foreach ([236,237,238,239] as $c) $w[$c] = 278;            // ì í î ï
+        $w[241] = 556;                                             // ñ
+        foreach ([242,243,244,245,246] as $c) $w[$c] = 556;        // ò ó ô õ ö
+        foreach ([249,250,251,252] as $c) $w[$c] = 556;            // ù ú û ü
+        $w[253] = 500; $w[255] = 500;                              // ý ÿ
+        $w[170] = 370; $w[176] = 400; $w[186] = 365;               // ª ° º
+
+        return self::$wTable = $w;
+    }
+
+    /** Converte UTF-8 → CP1252 (a codificação das fontes core do PDF). */
+    private static function toCp1252(string $s): string
     {
         $conv = @iconv('UTF-8', 'CP1252//TRANSLIT//IGNORE', $s);
         if ($conv === false) {
             $conv = mb_convert_encoding($s, 'ISO-8859-1', 'UTF-8');
         }
-        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $conv);
+        return $conv;
+    }
+
+    /** Escapa os caracteres reservados de uma string literal do PDF. */
+    private static function escRaw(string $cp): string
+    {
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $cp);
+    }
+
+    /** Converte UTF-8 → CP1252 e escapa caracteres reservados do PDF. */
+    private static function esc(string $s): string
+    {
+        return self::escRaw(self::toCp1252($s));
     }
 }
 
@@ -596,14 +809,15 @@ function generate_xlsx(array $headers, iterable $rows, string $filepath): bool
  *
  * @param string[] $headers
  * @param iterable $rows
- * @param string   $filepath Caminho final do .pdf
- * @param string   $title    Título do relatório
- * @param string   $subtitle Contexto (período/gerado em)
+ * @param string   $filepath   Caminho final do .pdf
+ * @param string   $title      Título do relatório
+ * @param string   $subtitle   Contexto (período/gerado em)
+ * @param float[]  $colWeights Peso relativo das colunas (vazio = todas iguais)
  * @returns bool
  */
-function generate_pdf(array $headers, iterable $rows, string $filepath, string $title, string $subtitle = ''): bool
+function generate_pdf(array $headers, iterable $rows, string $filepath, string $title, string $subtitle = '', array $colWeights = []): bool
 {
-    $w = new PdfWriter($filepath, $title, $headers, $subtitle);
+    $w = new PdfWriter($filepath, $title, $headers, $subtitle, $colWeights);
     foreach ($rows as $row) {
         $w->writeRow($row);
         if ($w->isFull()) break;
@@ -642,11 +856,13 @@ const SYNC_EXPORT_MAX_ROWS = 10000;
  * @param string   $basename Nome-base do arquivo (sem extensão)
  * @param string[] $headers  Cabeçalhos das colunas
  * @param iterable $rows     Linhas (arrays de escalares, mesma ordem dos headers)
- * @param string   $title    Título (PDF)
- * @param string   $subtitle Subtítulo/contexto (PDF)
+ * @param string   $title      Título (PDF)
+ * @param string   $subtitle   Subtítulo/contexto (PDF)
+ * @param float[]  $colWeights Peso relativo das colunas no PDF (vazio = iguais).
+ *                             Só o PDF usa: XLSX e CSV têm largura própria.
  * @returns void  Nunca retorna — emite o arquivo e dá exit
  */
-function stream_export(string $format, string $basename, array $headers, iterable $rows, string $title = '', string $subtitle = ''): void
+function stream_export(string $format, string $basename, array $headers, iterable $rows, string $title = '', string $subtitle = '', array $colWeights = []): void
 {
     $format = in_array($format, ['xlsx', 'pdf', 'csv'], true) ? $format : 'csv';
     $safe   = preg_replace('/[^A-Za-z0-9_\-]/', '_', $basename) ?: 'relatorio';
@@ -677,7 +893,7 @@ function stream_export(string $format, string $basename, array $headers, iterabl
     $tmp = tempnam(sys_get_temp_dir(), 'exp_');
     $ok  = $format === 'xlsx'
         ? generate_xlsx($headers, $rows, $tmp)
-        : generate_pdf($headers, $rows, $tmp, $title ?: $safe, $subtitle);
+        : generate_pdf($headers, $rows, $tmp, $title ?: $safe, $subtitle, $colWeights);
 
     if (!$ok || !is_file($tmp) || filesize($tmp) === 0) {
         @unlink($tmp);

@@ -135,7 +135,10 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     stream_export($export, 'relatorio_alarmes',
         ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Endereço', 'Mapa'],
         $expRows, 'Relatório de Alarmes',
-        "$placaSel  |  Período (BRT): $dateFrom a $dateTo");
+        "$placaSel  |  " . report_period_label($dateFrom, $dateTo),
+        // Endereço e nome do alarme são as duas colunas longas; as demais são
+        // curtas e fixas (placa, data, status, velocidade, rótulo do mapa).
+        [1.0, 1.35, 2.4, 0.8, 0.9, 3.2, 0.6]);
 }
 
 // Count
@@ -171,7 +174,25 @@ $geoPagina = geocode_map_rows($rows);
 $custStmt = $db->query("SELECT id, name FROM customers WHERE is_active=1 ORDER BY name");
 $customers = $custStmt->fetchAll();
 
-$types = $db->query("SELECT DISTINCT alarm_name FROM alarms WHERE alarm_name IS NOT NULL ORDER BY alarm_name")->fetchAll();
+// Tipos de alarme oferecidos no filtro: SOMENTE DMS e ADAS (v4.8.3).
+//
+// Duas mudanças em uma. A lista vinha de `SELECT DISTINCT alarm_name FROM
+// alarms` — ou seja, do que por acaso já tinha acontecido —, então trazia
+// rótulos de infraestrutura ("Falha no Armazenamento", "Perda de Sinal de
+// Vídeo"), as variantes "Fim de Alarme: …" e os "Código NNNN (JTT)" dos
+// códigos ainda não cadastrados. Agora vem de `alarm_types`, que é o catálogo
+// canônico, restrita às categorias DMS e ADAS: o núcleo do produto é a
+// ocorrência de comportamento do motorista, e é isso que se filtra aqui.
+//
+// Consequência a conhecer: um tipo DMS/ADAS que nunca ocorreu também aparece
+// (a lista descreve o catálogo, não o histórico) — o que é o comportamento
+// desejado num filtro, senão só se pode filtrar o que já se sabe existir.
+$types = $db->query(
+    "SELECT DISTINCT alarm_name_pt AS alarm_name
+       FROM alarm_types
+      WHERE category IN ('DMS','ADAS')
+      ORDER BY alarm_name_pt"
+)->fetchAll();
 
 $branchList = [];
 try {

@@ -135,7 +135,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 
     stream_export($export, 'relatorio_ignicao',
         ['Data/Hora', 'Evento', 'Equipamento', 'IMEI', 'Cliente', 'Permanência no estado', 'Endereço'],
-        $expRows, 'Relatório de Ignição', "Período (BRT): $dateFrom a $dateTo");
+        $expRows, 'Relatório de Ignição', report_period_label($dateFrom, $dateTo));
 }
 
 // ── Grade + KPIs ───────────────────────────────────────────────

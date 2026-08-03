@@ -149,7 +149,7 @@ function render_segment_report(array $cfg): void
         } catch (Throwable $e) { /* tabela ausente → export vazio */ }
 
         stream_export($export, $cfg['slug'], $headers, $expRows,
-            $cfg['title'], "Período (BRT): $dateFrom a $dateTo");
+            $cfg['title'], report_period_label($dateFrom, $dateTo));
     }
 
     // ── Grade + KPIs ───────────────────────────────────────────

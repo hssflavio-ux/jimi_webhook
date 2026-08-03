@@ -104,10 +104,6 @@ if ($generated && $selImei) {
                     in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
                 ];
             }
-            $faixa = ($timeFrom || $timeTo)
-                ? ' — faixa horária: ' . ($timeFrom ?: '00:00') . ' a ' . ($timeTo ?: '23:59')
-                  . ($timeMode === 'diaria' ? ' (em cada dia do período)' : ' (contínua)')
-                : '';
             // Subtítulo com a PLACA, não o IMEI: é o identificador que o
             // usuário escolheu no filtro e o que ele reconhece no papel.
             $placaSel = $selImei;
@@ -117,7 +113,11 @@ if ($generated && $selImei) {
             stream_export($export, 'relatorio_posicoes',
                 ['Placa', 'Motorista', 'Data/Hora', 'Endereço', 'Mapa', 'Velocidade (km/h)', 'Ignição', 'Sinal GPS'],
                 $expRows, 'Relatório de Posições',
-                "Placa: $placaSel  |  Período (BRT): $dateFrom a $dateTo$faixa");
+                "Placa: $placaSel  |  " . report_period_label($dateFrom, $dateTo, $timeFrom, $timeTo, $timeMode),
+                // Pesos de coluna: o endereço leva ~3,6x uma coluna comum. Com
+                // larguras iguais (8 colunas ≈ 96 pt cada) ele saía cortado em
+                // metade da rua; o que sobrar agora quebra em linha.
+                [1.0, 1.3, 1.35, 3.6, 0.6, 0.9, 0.85, 0.8]);
         }
 
         $countStmt = $db->prepare("SELECT COUNT(*) FROM gps_data g $where");

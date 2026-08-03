@@ -119,7 +119,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         ['Início', 'Fim', 'Duração', 'Equipamento', 'IMEI', 'Cliente',
          'Vel. máxima (km/h)', 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)',
          'Endereço'],
-        $expRows, 'Relatório de Excesso de Velocidade', "Período (BRT): $dateFrom a $dateTo");
+        $expRows, 'Relatório de Excesso de Velocidade', report_period_label($dateFrom, $dateTo));
 }
 
 // ── Grade + KPIs ───────────────────────────────────────────────

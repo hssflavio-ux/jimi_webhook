@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-> **Nome do produto: `bycamera`** (v4.8.2). O frontend inteiro — login, sidebar, `<title>`, setup, wiki, marca d'água do vídeo — usa essa marca. São **três artes**, uma por superfície, e trocar uma pela outra quebra a legibilidade: `web/assets/logo-login.png` (lockup completo **com o descritor** "videomonitoramento inteligente", só no login, onde há largura para lê-lo), `web/assets/logo-dark.png` (texto claro sobre transparente — sidebar e qualquer fundo escuro; a arte clara **some** no near-black) e `web/assets/logo-report.png` (sem descritor, fundo branco — cabeçalho do PDF dos relatórios, via `REPORT_LOGO_PATH`). Os originais ficam em `docs/imagens/`. Os **ícones do PWA/favicon** (`assets/icons/icon-*.png`, referenciados por `manifest.json`) são só o **símbolo** — num quadrado de 192 px o lockup seria ilegível.
+> **Nome do produto: `bycamera`** (v4.8.3). O frontend inteiro — login, sidebar, `<title>`, setup, wiki, marca d'água do vídeo — usa essa marca. São **três artes**, uma por superfície, e trocar uma pela outra quebra a legibilidade: `web/assets/logo-login.png` (lockup completo **com o descritor** "videomonitoramento inteligente", só no login, onde há largura para lê-lo), `web/assets/logo-dark.png` (texto claro sobre transparente — sidebar e qualquer fundo escuro; a arte clara **some** no near-black) e `web/assets/logo-report.png` (sem descritor, fundo branco — cabeçalho do PDF dos relatórios, via `REPORT_LOGO_PATH`). Os originais ficam em `docs/imagens/`. Os **ícones do PWA/favicon** (`assets/icons/icon-*.png`, referenciados por `manifest.json`) são só o **símbolo** — num quadrado de 192 px o lockup seria ilegível.
 > **NÃO renomear**: o badge de protocolo `JIMI` (contra `JT/T 808`) é nome técnico real (`msgClass=0`), assim como `jimicloud.com`, o banco `jimi_tracker`, o cookie `jimi_token`, as chaves de `localStorage` e helpers como `get_jimi_user()`.
 
 PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from the Jimi IoT Hub (`jimicloud.com`), persists them to MySQL, and serves a multi-tenant dashboard for live tracking, video (MDVR), command dispatch, reports, and remote device configuration. Pure PHP — **no build step, no package manager for the app** (npm/Node are used *only* for the Playwright E2E suite in `tests/`; XLSX/PDF export is hand-rolled pure PHP in `includes/export_helper.php`).
@@ -39,6 +39,9 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.5.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.0.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.1.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.3.sql
 
 # Lint a single PHP file
 php -l handlers/pushgps.php

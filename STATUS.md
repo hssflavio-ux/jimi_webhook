@@ -1,6 +1,62 @@
-# STATUS.md — Jimi Webhook System v4.8.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.3 (YUV Parity)
 
-> ### ▶️ RETOMAR AQUI — v4.8.2, identidade visual fechada (02/08/2026, noite)
+> ### ▶️ RETOMAR AQUI — v4.8.3, relatórios em PDF e nomes de alarme (02/08/2026)
+>
+> #### O que esta sessão entregou (v4.8.3 — ainda NÃO publicada)
+>
+> **1. O endereço parava de sair pela metade no PDF.** O `PdfWriter` dava a todas as
+> colunas a mesma largura e cortava com "…" — em oito colunas são ~96 pt cada, e o
+> endereço geocodificado é o campo mais longo do sistema. Agora cada relatório declara
+> **pesos de coluna** (`stream_export(..., $colWeights)`; o endereço leva 3,2–3,6× uma
+> coluna comum, indo a 266 pt em Posições) e o que ainda não couber **quebra em até 4
+> linhas** em vez de ser cortado, medido com as **métricas AFM reais do Helvetica** — a
+> conta antiga ("nº de caracteres × 0,52 em") erra >20% conforme as letras. A quebra
+> vale para **todo** PDF do sistema: nenhum relatório trunca mais.
+>
+> **2. Cabeçalho de período** (`report_period_label()`, ponto único): sem `(BRT)`, data em
+> **DD/MM/AAAA** e **hora sempre escrita** — `00:00:00` a `23:59:59` quando o filtro de
+> faixa horária ficou vazio, que é a janela realmente consultada. Nos **9** relatórios
+> que exportam PDF, não só nos três reportados.
+>
+> **3. Nomes de alarme conferidos contra a doc oficial** (`migration_v4.8.3.sql`). A
+> v4.8.1 podou `alarm_types` mas não conferiu os NOMES, e havia **erro de mapeamento**:
+> `265-10` era "Comendo ou Bebendo" e é **Cinto Não Afivelado**; `265-13` era "Falha na
+> Autenticação ID" e é **Uso de Celular**; `265-6` era "Captura Automática" e é **Câmera
+> Obstruída** — sete subtipos DMS deslocados, ou seja, o relatório acusava o motorista da
+> coisa errada. JT/T `1040`/`1041` (os dois códigos com mais linhas gravadas) eram
+> "Ociosidade Excessiva"/"Ignição Não Autorizada" e são **Sleep/Working Mode Event**.
+> JIMI `147` era "Fadiga Extrema" na categoria DMS e é **colisão**. Mais 15 códigos
+> DMS/ADAS JIMI que faltavam, e a saída dos subtipos em faixa *User defined* e do grupo
+> `266` (BSD), que não existe na doc.
+>
+> **4. Filtro "Tipos de Alarme" só com DMS e ADAS** (33 opções, vindas de `alarm_types` e
+> não mais do `DISTINCT` sobre o histórico). Os alarmes de câmera JIMI ganharam o prefixo
+> `DMS:` que os JT/T já tinham — e, onde o evento é o mesmo nos dois protocolos, o nome é
+> **idêntico de propósito**, para um chip só pegar os dois.
+>
+> **5. Deslocamento**: 4ª coluna do fechamento diário vira **"Última Ignição"**; a coluna
+> Rota vira link rotulado `ROTA` (a URL crua ocuparia três linhas com a quebra nova).
+>
+> #### ⚠️ Estado dos bancos — APLICADO, mas o código ainda NÃO está publicado
+>
+> | Banco | `system_info.version` | Migração 4.8.3 |
+> |---|---|---|
+> | Homolog (`189.22.240.43`) | **4.8.3** | aplicada (testada antes num banco-cópia, rodada 2× para idempotência) |
+> | Dev local | **4.8.3** | aplicada |
+> | Produção | — | **pendente** |
+>
+> O `deploy.sh` já tem o bloco `run_migration "4.8.3"`. Como a entrega **altera o próprio
+> `deploy.sh`**, vale a regra conhecida: rodar `sudo ./scripts/deploy.sh && sudo
+> ./scripts/deploy.sh --force` numa só sessão.
+>
+> #### Dívidas fechadas nesta sessão
+>
+> `CLAUDE.md`/`AGENTS.md` **paravam em `migration_v4.7.0`** — agora listam a 4.8.0, a
+> 4.8.1 e a 4.8.3, então a instalação limpa monta banco completo.
+>
+> ---
+>
+> ### v4.8.2, identidade visual fechada (02/08/2026, noite)
 >
 > #### Estado do servidor, CONFERIDO no início da sessão (não presumido)
 >

@@ -145,7 +145,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             }
             stream_export($export, 'relatorio_geocercas_permanencia',
                 ['Geocerca', 'Equipamento', 'IMEI', 'Entrada', 'Saída', 'Permanência'],
-                $expRows, 'Relatório de Geocercas — Permanência', "Período (BRT): $dateFrom a $dateTo");
+                $expRows, 'Relatório de Geocercas — Permanência', report_period_label($dateFrom, $dateTo));
         } else {
             $stmt = $db->prepare("
                 SELECT e.imei, e.event_type, e.event_time, e.latitude, e.longitude, e.speed,
@@ -171,7 +171,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             }
             stream_export($export, 'relatorio_geocercas',
                 ['Data/Hora', 'Geocerca', 'Equipamento', 'IMEI', 'Evento', 'Velocidade (km/h)', 'Endereço'],
-                $expRows, 'Relatório de Geocercas', "Período (BRT): $dateFrom a $dateTo");
+                $expRows, 'Relatório de Geocercas', report_period_label($dateFrom, $dateTo));
         }
     } catch (Throwable $e) {
         http_response_code(500);

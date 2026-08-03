@@ -196,6 +196,9 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.4.1.sql   # credenciais SMTP 
 mysql -u root -p jimi_tracker < mysql/migration_v4.5.0.sql   # geocercas e POIs (cerca + vínculo + estado + eventos)
 mysql -u root -p jimi_tracker < mysql/migration_v4.6.0.sql   # relatórios operacionais (segmentos de estado + excesso de velocidade)
 mysql -u root -p jimi_tracker < mysql/migration_v4.7.0.sql   # relatórios agendados por e-mail + modelos de filtro
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.0.sql   # motorista na posição (gps_data)
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.1.sql   # alarm_types só com os alarmes da doc oficial
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.3.sql   # nomes DMS/ADAS conforme a doc + backfill de alarms
 
 # No build step needed — pure PHP
 ```
