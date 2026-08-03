@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.8.2
+
+### Changed
+- **A marca passa a ter TRÊS artes, uma por superfície** — o asset único da v4.8.0 não dava conta de três contextos com exigências opostas:
+  - `web/assets/logo-login.png` — lockup **completo, com o descritor "videomonitoramento inteligente"**, usado só na tela de login. Medido: o descritor ocupa **8,6% da altura da arte** (19 px de 221), então só se lê com largura — ocupa a **largura útil do card inteiro** (318 px → 78 px de altura), onde sai com **6,7 px**. Nos 38 px de altura da versão anterior ele teria 3,3 px: existia na imagem e era ilegível na tela.
+  - `web/assets/logo-dark.png` — arte oficial de **fundo escuro** (texto cinza-claro + símbolo azul), na sidebar e em qualquer superfície near-black. Substitui a variante que era **sintetizada** a partir da arte clara.
+  - `web/assets/logo-report.png` — arte **sem o descritor**, fundo branco sólido, no cabeçalho do PDF dos relatórios (a 26 pt, tamanho em que o descritor não se leria de qualquer modo).
+  - Os três nomes são explícitos de propósito: o `logo.png` genérico anterior não dizia em que fundo servia, e foi exatamente assim que a marca acabou invisível na sidebar. `logo.png` foi **removido** — nada mais o referencia.
+- **"Entrar no sistema" centralizado** no card de login, junto com o subtítulo e a marca.
+- **Ícones do PWA e nome do app instalado** — ponta do rebrand que tinha ficado para trás: `manifest.json` ainda dizia `"JIMI — Gestão de Frota e Ocorrências"` / `short_name: "JIMI"`, e os quatro ícones (08/07/2026) eram o **placeholder de pontinhos + texto "JIMI"** que o resto do frontend já tinha aposentado. É o que aparece na aba do navegador (favicon), na tela inicial do celular e no instalador do PWA. Agora são o **símbolo** da marca (o "b"-olho) centrado em preto — o lockup inteiro num quadrado de 192 px deixaria "bycamera" com 4 px de altura. Os `maskable` ocupam 46% da altura contra 62% dos normais, porque o SO recorta em círculo/squircle.
+  - A fonte dos ícones é a arte **original**, não o `logo-dark.png`: naquele a pupila do olho virou transparente pela chave de preto e, composta sobre o fundo, saía cinza. Como o fundo do ícone é o mesmo preto da arte, aqui basta recortar.
+  - Escapou da varredura anterior porque o verificador de marca olhava PHP; `manifest.json` é JSON e os ícones são binários.
+- **Mockups de login e setup da `/wiki`** atualizados para a arte nova. O mockup do login tinha uma linha de texto "Videomonitoramento inteligente" abaixo do logo — agora o descritor faz parte da arte, e repeti-lo descreveria uma tela que não existe.
+
+### Notas de implementação
+- **O `logo_pto_fundo transparente.png` não tem fundo transparente** — apesar do nome, o fundo é **preto opaco** (`#010001`, alfa 0 nos quatro cantos). Sobre a sidebar `#0a0b0d` isso sairia como um retângulo levemente mais escuro que o fundo, e a chave para transparência teve de ser feita aqui.
+- **A chave do preto é GLOBAL, não flood fill a partir da borda.** A primeira tentativa preencheu só a região conectada às bordas e as **contraformas das letras** (o buraco do "b", do "a", do "e") ficaram como caixinhas pretas opacas — invisíveis no near-black da sidebar, mas erradas em qualquer outro fundo escuro. Efeito colateral aceito da versão global: a **pupila do olho** também é preta e virou transparente. Sobre near-black lê igual, e uma pupila levemente fora é menos visível que oito caixas. As bordas anti-aliased ganharam rampa de alfa (luma 10→48) para não serrilhar.
+- **`REPORT_LOGO_PATH` virou o ponto único do caminho da arte dos relatórios**, e `export_helper.php` passou a `require_once` o `functions.php` em vez de repetir o caminho: os chamadores são ~12 handlers mais o worker, e o dia em que um deles não tiver `functions.php` carregado o erro é **fatal no meio da exportação**, não um logo faltando.
+- O achatamento sobre branco antes de virar JPEG ficou no lugar mesmo com a arte agora opaca — é guarda para o dia em que o asset for trocado por um com alfa, caso em que o fundo sairia **preto** no PDF e a falha só apareceria no documento gerado.
+- **Verificação**: `php -l` limpo nos 5 arquivos PHP tocados; `manifest.json` reparseado; login conferido por screenshot em 1280 px e em 390 px (descritor legível nos dois); sidebar conferida por screenshot autenticado (marca visível sobre `#0a0b0d`); PDF exportado pelo **caminho real do handler** (`/equipamentos?export=pdf`, HTTP 200) com o XObject extraído do arquivo e **conferido visualmente** — 360×94, `/DCTDecode`, um `/Im1 Do`; suíte Playwright completa: **81 passaram, 2 falharam, 6 puladas**.
+  - ⚠️ **As 2 falhas são anteriores a esta versão** — provado rodando os mesmos dois specs com as mudanças em `git stash`: falham igual. `geocercas.spec.js:116` espera o `h2` "Relatório de **Geocercas**" e a tela diz "Relatório de **Cercas**" desde a renomeação em `7a0a75f` — o teste não acompanhou, o que também mostra que a suíte não rodou naquele commit. `agendamentos.spec.js:155` não encontra no seletor o modelo que o próprio teste acabou de criar (aparece um de execução anterior); esse precisa de investigação, não é asserção velha.
+
 ## [Unreleased] — 4.8.0
 
 ### Added

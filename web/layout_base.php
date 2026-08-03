@@ -255,10 +255,11 @@ body {
 }
 
 /* Marca real no lugar do placeholder de pontinhos + texto "JIMI" (v4.8.0).
-   ⚠️ Usa `logo-dark.png`, NÃO o `logo.png`. Fundo transparente resolve o
-   FUNDO, não o LOGOTIPO: a palavra "bycamera" é quase preta e SOME no
-   near-black desta sidebar — só o símbolo azul sobrava. Confirmado por
-   screenshot. A variante clareia o texto e preserva o azul da marca. */
+   ⚠️ Usa `logo-dark.png`, que é a arte OFICIAL para fundo escuro (v4.8.2) —
+   não o lockup do login. Fundo transparente resolveria o FUNDO, não o
+   LOGOTIPO: na arte clara a palavra "bycamera" é quase preta e SOME no
+   near-black desta sidebar, sobrando só o símbolo azul. Nesta variante o
+   texto é cinza-claro e o azul da marca se mantém. */
 .sidebar-brand-logo { height: 26px; width: auto; max-width: 100%; display: block; }
 /* Sidebar recolhida: só o símbolo cabe, então a imagem sai de cena */
 .sidebar.collapsed .sidebar-brand-logo { display: none; }

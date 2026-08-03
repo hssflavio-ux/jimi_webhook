@@ -1,6 +1,40 @@
-# STATUS.md — Jimi Webhook System v4.7.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.2 (YUV Parity)
 
-> ### ▶️ RETOMAR AQUI — v4.7.3, passe de dívida técnica (01/08/2026, fim da tarde)
+> ### ▶️ RETOMAR AQUI — v4.8.2, identidade visual fechada (02/08/2026, noite)
+>
+> #### Estado do servidor, CONFERIDO no início da sessão (não presumido)
+>
+> Local, `origin` e homolog estavam os três em `ec52a7c`; `/ping` respondia **4.8.1**.
+> Ou seja: **tudo que a v4.8.0/4.8.1 entregou já está publicado** — geocode/endereço,
+> marca `bycamera`, placa no lugar do IMEI, motorista na posição, `alarm_types` oficial e
+> o link MAPA nos exports. O bloco da v4.7.3 abaixo continua válido como histórico.
+>
+> #### O que esta sessão entregou (v4.8.2 — ainda NÃO publicada)
+>
+> A marca passou a ter **três artes**, uma por superfície, porque um asset só não atende
+> contextos com exigências opostas: `logo-login.png` (lockup com o descritor, na largura
+> do card do login — medido, o descritor tem 8,6% da altura da arte e só se lê grande),
+> `logo-dark.png` (arte oficial de fundo escuro, sidebar) e `logo-report.png` (sem
+> descritor, no PDF). O `logo.png` genérico saiu — o nome não dizia em que fundo servia,
+> e foi assim que a marca ficou invisível na sidebar. "Entrar no sistema" centralizado.
+>
+> **Achado**: o `manifest.json` e os quatro ícones do PWA ainda eram **"JIMI"** — nome do
+> app instalado, favicon da aba e ícone da tela inicial. Escaparam da varredura de marca
+> porque ela olhava PHP, e isso é JSON mais binário. Agora são o símbolo da marca.
+>
+> #### ⚠️ Duas dívidas que esta sessão NÃO fechou — e uma descoberta
+>
+> | Item | Estado |
+> |---|---|
+> | **CHANGELOG atrasado 5 commits** | Ainda falta a entrada de `45cd0f4`, `7a0a75f`, `95e4a41`, `3b4f694` e `ec52a7c` (placa, motorista na posição, `alarm_types`, link MAPA). A seção da v4.8.2 foi escrita; a lacuna da 4.8.1 continua |
+> | **`CLAUDE.md`/`AGENTS.md` param em `migration_v4.7.0`** | `deploy.sh` já roda a 4.8.0 e a 4.8.1, mas quem seguir o comando de instalação limpa monta banco incompleto |
+> | 🔴 **2 testes falhando ANTES desta sessão** | Provado com `git stash`: falham no baseline. `geocercas.spec.js:116` espera "Relatório de **Geocercas**" e a tela diz "Relatório de **Cercas**" desde `7a0a75f` — asserção velha, e prova de que **a suíte não rodou naquele commit**. `agendamentos.spec.js:155` não acha no seletor o modelo que ele mesmo acabou de criar: esse **precisa de investigação**, pode ser bug real de gravação de modelo |
+>
+> Suíte completa nesta sessão: **81 passaram, 2 falharam (as de cima), 6 puladas**. As
+> puladas seguem incluindo `multitenant.spec.js`, que continua sem `TEST_EMAIL_B` —
+> a dívida 🔴 do bloco da v4.7.3, ainda aberta.
+
+> ### ▶️ v4.7.3, passe de dívida técnica (01/08/2026, fim da tarde)
 >
 > Feito a pedido de "trate as dívidas e depois os outros itens", começando pela auditoria dos
 > **critérios de aceite globais do `PROJETO_YUV.md` §11** — nunca verificados como conjunto.

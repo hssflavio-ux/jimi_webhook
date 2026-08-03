@@ -1,6 +1,6 @@
 {
-    "name": "JIMI — Gestão de Frota e Ocorrências",
-    "short_name": "JIMI",
+    "name": "bycamera — Videomonitoramento Inteligente",
+    "short_name": "bycamera",
     "description": "Rastreamento de frota, vídeo MDVR e gestão de ocorrências DMS/ADAS",
     "start_url": "/",
     "scope": "/",

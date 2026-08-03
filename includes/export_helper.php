@@ -13,6 +13,12 @@
  * PDF tabular simples com truncamento de células longas.
  */
 
+// REPORT_LOGO_PATH mora em functions.php, o ponto único da marca dos
+// relatórios. Requerido aqui e não deixado por conta de quem inclui: os
+// chamadores são ~12 handlers mais o worker, e o dia em que um deles não
+// tiver functions.php carregado o erro é FATAL no meio da exportação.
+require_once __DIR__ . '/functions.php';
+
 /**
  * Célula que é um LINK: rótulo visível + URL escondida atrás dele (v4.8.2).
  *
@@ -277,14 +283,16 @@ class PdfWriter
      * ainda tratar o canal alfa com `/SMask`, o que multiplicaria o tamanho
      * deste writer artesanal por ganho nenhum num logo de cabeçalho.
      *
-     * Achata sobre BRANCO antes — e isto **só é necessário porque o asset é a
-     * versão de fundo transparente**. JPEG não tem canal alfa; sem achatar, o
-     * fundo transparente sairia PRETO no PDF. (Houve um passo intermediário em
-     * que o asset era `logo_bycamera.png`, que já vem com fundo branco sólido:
-     * ali este achatamento era inócuo. Trocado para o transparente por servir
-     * em qualquer fundo do frontend, incluindo a sidebar escura.)
+     * O asset é o `logo-report.png` (arte sem o descritor, fundo branco
+     * sólido), separado do lockup do login: aqui a marca sai a 26 pt no canto
+     * do cabeçalho, tamanho em que o descritor não se leria de qualquer forma.
      *
-     * Redimensiona para 360 px porque o original tem ~1780 px e ocupa ~60 pt no
+     * Achata sobre BRANCO antes de codificar. Com este asset opaco o achatamento
+     * é inócuo — fica como guarda porque JPEG não tem canal alfa: no dia em que
+     * a arte for trocada por uma com transparência, sem isto o fundo sairia
+     * PRETO no PDF, e a falha só apareceria no documento gerado.
+     *
+     * Redimensiona para 360 px porque o original tem ~1780 px e ocupa ~100 pt no
      * PDF; embutir o arquivo cheio inflaria cada relatório em centenas de KB.
      *
      * Falha em silêncio se faltar GD ou o arquivo: perder o logo é aceitável,
@@ -297,7 +305,7 @@ class PdfWriter
         if (self::$logoTried) return;
         self::$logoTried = true;
 
-        $path = __DIR__ . '/../web/assets/logo.png';
+        $path = REPORT_LOGO_PATH;
         if (!is_file($path) || !function_exists('imagecreatefrompng')) return;
 
         try {

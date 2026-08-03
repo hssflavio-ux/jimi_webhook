@@ -337,10 +337,20 @@ function brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom = '', $timeTo =
 
 /* ── Marca nos relatórios ───────────────────────────────────────────────── */
 
+/*
+ * A marca tem TRÊS artes, uma por superfície (v4.8.2) — a diferença não é
+ * capricho, é o que cada contexto consegue exibir:
+ *   `logo-login.png`  lockup completo, com o descritor. Só no login, onde há
+ *                     largura para o descritor ser legível.
+ *   `logo-dark.png`   texto claro sobre transparente. Sidebar e qualquer
+ *                     superfície escura — a arte clara sumiria no near-black.
+ *   `logo-report.png` sem descritor, fundo branco sólido. Relatórios (PDF).
+ */
+
 /** Caminho do logo servido por HTTP (web/assets é servido como estático). */
-const REPORT_LOGO_URL  = '/web/assets/logo.png';
+const REPORT_LOGO_URL  = '/web/assets/logo-report.png';
 /** Caminho em disco, para embutir no PDF. */
-const REPORT_LOGO_PATH = __DIR__ . '/../web/assets/logo.png';
+const REPORT_LOGO_PATH = __DIR__ . '/../web/assets/logo-report.png';
 
 /**
  * Marca + separador, para abrir o cabeçalho de uma tela de relatório.

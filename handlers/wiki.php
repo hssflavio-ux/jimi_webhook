@@ -499,7 +499,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <div class="mockup-header">Tela de Setup — Primeiro Acesso</div>
 <div class="mockup-body">
     <div style="max-width:420px;margin:0 auto;text-align:center">
-        <img src="/web/assets/logo.png" alt="bycamera" style="height:30px;width:auto;margin-bottom:4px">
+        <img src="/web/assets/logo-login.png" alt="bycamera" style="width:240px;max-width:100%;height:auto;margin-bottom:10px">
         <div style="font-size:12px;color:var(--muted);margin-bottom:24px">Configuração Inicial</div>
         <div class="form-mock" style="text-align:left;display:flex;flex-direction:column;gap:12px">
             <div class="form-mock-field"><label>Nome Completo</label><div class="input-mock">Administrador</div></div>
@@ -519,8 +519,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <div class="mockup-header">Tela de Login</div>
 <div class="mockup-body">
     <div style="max-width:400px;margin:0 auto;text-align:center">
-        <img src="/web/assets/logo.png" alt="bycamera" style="height:34px;width:auto;margin-bottom:6px">
-        <div style="font-size:13px;color:var(--muted);margin-bottom:28px">Videomonitoramento inteligente</div>
+        <img src="/web/assets/logo-login.png" alt="bycamera" style="width:280px;max-width:100%;height:auto;margin-bottom:14px">
+        <?php /* O descritor já faz parte da arte do login (v4.8.2) — repeti-lo
+                 abaixo do logo faria o mockup descrever uma tela que não existe. */ ?>
+        <div style="font-size:20px;color:var(--ink);margin-bottom:24px">Entrar no sistema</div>
         <div style="display:flex;flex-direction:column;gap:12px;text-align:left">
             <div><label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase">E-mail</label><div class="input-mock" style="width:100%;margin-top:4px">usuario@exemplo.com</div></div>
             <div><label style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase">Senha</label><div class="input-mock dim" style="width:100%;margin-top:4px">••••••••</div></div>

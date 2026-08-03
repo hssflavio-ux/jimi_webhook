@@ -27,12 +27,16 @@
 body{font-family:'Inter',sans-serif;background:var(--surface-soft);color:var(--body);min-height:100vh;display:flex;align-items:center;justify-content:center}
 .login-card{background:var(--surface);border:1px solid var(--hairline);border-radius:24px;padding:40px;width:100%;max-width:400px}
 /* A marca substituiu o placeholder de pontinhos + texto "JIMI" (v4.8.0).
-   O asset é a versão de fundo TRANSPARENTE, então assenta tanto no card claro
-   do login quanto na sidebar escura, sem precisar de duas imagens. */
-.logo{display:flex;align-items:center;margin-bottom:28px}
-.logo img{height:38px;width:auto;max-width:100%;display:block}
-h1{font-size:28px;font-weight:400;color:var(--ink);margin-bottom:6px;letter-spacing:-.5px}
-.sub{font-size:14px;color:var(--muted);margin-bottom:28px}
+   Aqui é o único lugar que usa o lockup COMPLETO (`logo-login.png`, com o
+   descritor "videomonitoramento inteligente"): medido, o descritor ocupa
+   8,6% da altura da arte (19 px de 221), então só se lê em tamanho grande —
+   daí ocupar a largura útil do card inteiro (318 px → 78 px de altura), onde
+   ele sai com 6,7 px. Na sidebar, que reserva 84 px de largura para a marca,
+   o mesmo descritor teria 1,8 px: um borrão. */
+.logo{display:flex;justify-content:center;margin-bottom:24px}
+.logo img{width:100%;height:auto;display:block}
+h1{font-size:28px;font-weight:400;color:var(--ink);margin-bottom:6px;letter-spacing:-.5px;text-align:center}
+.sub{font-size:14px;color:var(--muted);margin-bottom:28px;text-align:center}
 .fg{margin-bottom:16px}
 label{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px;letter-spacing:.2px}
 input[type="email"],input[type="password"]{
@@ -62,7 +66,7 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
 <body>
 <div class="login-card">
     <div class="logo">
-        <img src="/web/assets/logo.png" alt="bycamera — videomonitoramento inteligente">
+        <img src="/web/assets/logo-login.png" alt="bycamera — videomonitoramento inteligente">
     </div>
     <h1>Entrar no sistema</h1>
     <p class="sub">Insira suas credenciais para acessar o painel.</p>

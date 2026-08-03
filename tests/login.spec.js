@@ -33,7 +33,10 @@ test.describe('Login', () => {
             // com a marca — só mudou a representação.
             const marca = page.locator('.sidebar-brand-logo');
             await expect(marca).toBeVisible();
-            await expect(marca).toHaveAttribute('src', /logo\.png$/);
+            // A sidebar usa a arte de fundo escuro, NÃO a do login: fixar o
+            // nome do arquivo é o que pega a troca silenciosa de asset que
+            // deixaria a marca invisível no near-black.
+            await expect(marca).toHaveAttribute('src', /logo-dark\.png$/);
             await expect(page.locator('.main-header')).toBeVisible();
         });
 
