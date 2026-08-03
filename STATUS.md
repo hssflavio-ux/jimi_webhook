@@ -1,8 +1,30 @@
 # STATUS.md — Jimi Webhook System v4.8.3 (YUV Parity)
 
-> ### ▶️ RETOMAR AQUI — v4.8.3, relatórios em PDF e nomes de alarme (02/08/2026)
+> ### ▶️ RETOMAR AQUI — v4.8.3 PUBLICADA no homolog (02/08/2026, 23h40)
 >
-> #### O que esta sessão entregou (v4.8.3 — ainda NÃO publicada)
+> #### Estado dos três ambientes, CONFERIDO no fim da sessão (não presumido)
+>
+> | | git HEAD | `/ping` | `system_info` | Migração 4.8.3 |
+> |---|---|---|---|---|
+> | Local | `671887c` | — | **4.8.3** | aplicada |
+> | `origin/main` | `671887c` | — | — | — |
+> | **Homolog** (`189.22.240.43`) | **`671887c`** | **4.8.3** | **4.8.3** | aplicada |
+> | **Produção** | — | — | — | **PENDENTE — nada tocado** |
+>
+> O deploy exigiu as **duas passadas** (`sudo ./scripts/deploy.sh && sudo ./scripts/deploy.sh
+> --force`), e desta vez ficou provado em vez de presumido: antes do deploy,
+> `grep -c 'migration_v4.8.3' scripts/deploy.sh` no servidor devolvia **0**. A regra do
+> `git pull` no meio do script continua valendo para toda entrega que mexe no `deploy.sh`.
+>
+> O banco do homolog **já estava em 4.8.3 antes do deploy** — a migração foi aplicada
+> direto durante o desenvolvimento (depois de testada num banco-cópia), então o log do
+> deploy diz "migração desnecessária". Isso é o esperado, não falha.
+>
+> ⚠️ **`sudo` no homolog pede senha** (`sudo -n true` → *a password is required*): deploy é
+> sempre pelo usuário, via `! ssh -t`. E o `.env` do servidor **não está mais legível** pelo
+> usuário `administrador` (*Permission denied*) — a nota antiga de que era `644` caducou.
+>
+> #### O que esta sessão entregou (v4.8.3)
 >
 > **1. O endereço parava de sair pela metade no PDF.** O `PdfWriter` dava a todas as
 > colunas a mesma largura e cortava com "…" — em oito colunas são ~96 pt cada, e o
@@ -37,22 +59,66 @@
 > **5. Deslocamento**: 4ª coluna do fechamento diário vira **"Última Ignição"**; a coluna
 > Rota vira link rotulado `ROTA` (a URL crua ocuparia três linhas com a quebra nova).
 >
-> #### ⚠️ Estado dos bancos — APLICADO, mas o código ainda NÃO está publicado
+> #### Verificação PÓS-DEPLOY, contra o homolog real
 >
-> | Banco | `system_info.version` | Migração 4.8.3 |
-> |---|---|---|
-> | Homolog (`189.22.240.43`) | **4.8.3** | aplicada (testada antes num banco-cópia, rodada 2× para idempotência) |
-> | Dev local | **4.8.3** | aplicada |
-> | Produção | — | **pendente** |
+> Os quatro PDFs foram exportados **pelo caminho real do handler**
+> (`http://189.22.240.43/relatorios/...?export=pdf`, sessão injetada em `sessions` e
+> removida no fim), e o content stream de cada um foi extraído e conferido posição a
+> posição contra as bordas de coluna calculadas dos pesos:
 >
-> O `deploy.sh` já tem o bloco `run_migration "4.8.3"`. Como a entrega **altera o próprio
-> `deploy.sh`**, vale a regra conhecida: rodar `sudo ./scripts/deploy.sh && sudo
-> ./scripts/deploy.sh --force` numa só sessão.
+> | Relatório | Páginas | Textos | Vazando a coluna | Truncados ("…") | Folga mínima |
+> |---|---|---|---|---|---|
+> | Posições | 7 | 1.903 | **0** | **0** | 21,16 pt |
+> | Alarmes | 82 | 20.000 | **0** | **0** | 4,06 pt |
+> | Deslocamento (viagens) | 4 | 1.197 | **0** | **0** | 33,90 pt |
+> | Deslocamento (diário) | 1 | — | **0** | **0** | — |
+>
+> Cabeçalho conferido nos quatro: `Período: 23/07/2026 00:00:00 a 23/07/2026 23:59:59`.
+> Nomes corrigidos aparecendo em dado real: `Evento de Modo Trabalho` onde antes saía
+> "Ignição Não Autorizada". Filtro de alarmes: **33 chips, 100% deles `DMS:`/`ADAS:`**,
+> zero erro de PHP na página. Fechamento diário com `… | Primeira Ignição | Última
+> Ignição | …`; coluna Rota como link `ROTA`.
+>
+> ⚠️ **O que essa verificação NÃO cobre.** A **quebra de linha do endereço não foi
+> exercitada** pelos dados do homolog: o endereço mais longo do `geocode_cache` de lá tem
+> **72 caracteres** ("Avenida Presidente Juscelino Kubitschek de Oliveira, Sorocaba, São
+> Paulo") e cabe folgado nos 266 pt da coluna — daí as 0 reticências serem também 0
+> quebras. O que o homolog prova é que **as larguras novas valem e nada trunca nem vaza**.
+> A quebra em si está provada pelo teste sintético (120 linhas, endereços de ~120
+> caracteres, as 4 ruas remontáveis a partir das linhas quebradas). Se produção tiver
+> endereços mais longos, o caminho está coberto pelos dois testes somados — **não** pelos
+> dados reais de homologação.
+>
+> #### Suíte Playwright: 81 passaram, 2 falharam, 6 puladas, 2 não rodaram
+>
+> As **2 falhas são anteriores a esta entrega** e já constavam do CHANGELOG da v4.8.2 —
+> aqui foram reconfirmadas pelo git, não por suposição:
+> `geocercas.spec.js:116` espera o `h2` "Relatório de **Geocercas**" e a tela diz
+> "Relatório de **Cercas**" desde `7a0a75f`; `agendamentos.spec.js:169` procura
+> `input[name="imei"]` em `/relatorios/alarmes`, onde o campo virou `<select name="imei">`
+> no **mesmo** commit. O diff da v4.8.3 **não toca uma linha com `imei`** em
+> `rel_alarmes.php` (`git diff | grep -c imei` → 0). As 2 que "não rodaram" são as do
+> mesmo `describe` serial da que falhou. **São specs velhas, não regressão — e continuam
+> abertas.**
+>
+> As **6 puladas** seguem puladas por falta de `TEST_EMAIL_B`/`TEST_PASSWORD_B` (multi-tenant)
+> e `TEST_IMEI`/`WEBHOOK_TOKEN` (webhook→ocorrência). Spec que pula não é cobertura — o
+> vazamento cross-tenant que já apareceu uma vez esteve escondido exatamente aí.
 >
 > #### Dívidas fechadas nesta sessão
 >
 > `CLAUDE.md`/`AGENTS.md` **paravam em `migration_v4.7.0`** — agora listam a 4.8.0, a
 > 4.8.1 e a 4.8.3, então a instalação limpa monta banco completo.
+>
+> #### Pendências que esta sessão deixa
+>
+> | Item | Estado |
+> |---|---|
+> | **Deploy em PRODUÇÃO** | Não feito. Código e banco de produção intocados. Exige as duas passadas do `deploy.sh` e, como a migração **reescreve `alarms.alarm_name`**, um `mysqldump alarm_types alarms` antes |
+> | **2 specs velhas** | `geocercas.spec.js:116` e `agendamentos.spec.js:169` — decidir se a tela ou o teste é que está errado (o `h2` "Relatório de Cercas" pode ser o nome pretendido) |
+> | **6 specs puladas** | Faltam `TEST_EMAIL_B`, `TEST_IMEI` no ambiente. O 2º cliente para multi-tenant continua sendo a pendência antiga |
+> | **Quebra de linha sem dado real** | Ver a ressalva acima. Confirmar num PDF de produção, onde os endereços tendem a ser mais longos |
+> | **Ambiguidades da doc oficial** | `131`, `132`, `80`/`81` aparecem duas vezes na Alarm Reference com significados diferentes. **Não foram tocados** — não há como decidir pela doc |
 >
 > ---
 >
