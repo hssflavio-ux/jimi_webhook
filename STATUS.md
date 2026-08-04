@@ -1,5 +1,21 @@
-# STATUS.md — Jimi Webhook System v4.8.6 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.7 (YUV Parity)
 
+> ### ✅ v4.8.7 PUBLICADA E VERIFICADA no homolog (03/08/2026, 22h00)
+>
+> | | git HEAD | `/ping` | `system_info` | Motor de ocorrências |
+> |---|---|---|---|---|
+> | `origin/main` | `64548f5` | — | 4.8.7 | 37 de 38 (o órfão a mais é só do dev) |
+> | **Homolog** | **`64548f5`** | **4.8.7** | **4.8.7** | **34 de 34 · 0 sem alvo** |
+>
+> Conferido no banco publicado: os quatro parâmetros com `generates_occurrence = 1`
+> (`ADAS: Colisão Frontal`, `DMS: Distração do Motorista`, `DMS: Motorista ao Telefone`,
+> `DMS: Falha de Autenticação do Motorista`) e a família DLT no catálogo — `3085` em `DMS`,
+> `3083`/`3084` em `Device`, fora do filtro.
+>
+> **Trajetória do motor nesta sessão**: 20 de 41 → 33 de 38 (v4.8.6) → **34 de 34** (v4.8.7).
+>
+> ---
+>
 > ### ✅ v4.8.6 PUBLICADA E VERIFICADA no homolog (03/08/2026, 21h29)
 >
 > | | git HEAD | `/ping` | `system_info` | Motor de ocorrências |
