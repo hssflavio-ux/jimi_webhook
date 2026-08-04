@@ -1,6 +1,48 @@
 # STATUS.md — Jimi Webhook System v4.8.6 (YUV Parity)
 
-> ### 🔴 RETOMAR AQUI — v4.8.6: a v4.8.3 tinha PARADO o motor de ocorrências
+> ### ✅ v4.8.6 PUBLICADA E VERIFICADA no homolog (03/08/2026, 21h29)
+>
+> | | git HEAD | `/ping` | `system_info` | Motor de ocorrências |
+> |---|---|---|---|---|
+> | Local / `origin/main` | `dc71edb` | — | 4.8.6 | 36 de 42 resolvem |
+> | **Homolog** (`189.22.240.43`) | **`dc71edb`** | **4.8.6** | **4.8.6** | **33 de 38** (era **20 de 41**) |
+>
+> `/ping` saiu certo **já na primeira passada** desta vez — o `.env.example` foi bumpado
+> junto, que era a armadilha da v4.8.5.
+>
+> #### Verificação pós-deploy, com o código e o dado publicados
+>
+> Sonda **somente leitura** (`scp` → `php` → `rm`) chamando as funções reais do engine,
+> `get_occurrence_config_for_imei()` e `get_occurrence_param()`, para os códigos que a
+> v4.8.3 havia renomeado:
+>
+> | Código | Nome no catálogo | Parâmetro |
+> |---|---|---|
+> | 143 | DMS: Distração do Motorista | achado |
+> | 151 | DMS: Motorista ao Telefone | achado |
+> | 154 | DMS: Motorista Fumando | achado |
+> | 160 | DMS: Motorista Bocejando | achado |
+> | 161 | DMS: Câmera Obstruída | achado |
+> | 167 | DMS: Cinto Não Afivelado | achado |
+> | 71 | DMS: Fadiga ao Dirigir | achado |
+> | 204 | ADAS: Colisão Frontal (FCW) | achado |
+>
+> **8 de 8.** Antes da v4.8.6 esse número era **0** para todos os renomeados.
+>
+> Os 5 órfãos que sobram (`Capotamento`, `Olhar Lateral Prolongado`, `Comendo ou Bebendo ao
+> Volante` ×2, `DMS: Falha na Autenticação ID`) são nomes **sem alvo no catálogo** — a doc
+> oficial não os publica. Ficaram de propósito: são configuração visível do usuário, e
+> apagar ajuste alheio por conta própria é mais invasivo do que deixar um botão que não
+> dispara. A migração os lista no log do deploy.
+>
+> ⚠️ Alguns parâmetros resolvem mas estão com `generates_occurrence = 0` no homolog
+> (`DMS: Distração do Motorista`, `DMS: Motorista ao Telefone`, `ADAS: Colisão Frontal`).
+> **Isso é configuração, não defeito** — a migração preservou o valor que lá já estava. Se a
+> intenção for gerar ocorrência para esses, é um clique em `/config-ocorrencias`.
+>
+> ---
+>
+> ### 🔴 O que a v4.8.6 corrigiu — a v4.8.3 tinha PARADO o motor de ocorrências
 >
 > #### O achado
 >
