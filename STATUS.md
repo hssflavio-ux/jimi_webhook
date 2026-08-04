@@ -1,5 +1,31 @@
-# STATUS.md — Jimi Webhook System v4.8.7 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.8 (YUV Parity)
 
+> ### ▶️ v4.8.8 — mapa deixa de cobrir a lista de notificações
+>
+> Relatado pelo usuário. **Sem migração** — uma linha de CSS.
+>
+> A causa não é o valor do z-index, é **contexto de empilhamento**: o Leaflet dá z-index
+> alto aos próprios painéis (tiles 200, controles 1000) e **não cria contexto** no
+> container, então esses valores sobem para a raiz do documento; o header é
+> `sticky; z-index:50` e **cria** contexto, então o `z-index:1200` do painel vale 1200 só
+> dentro do header e **50** no documento. O painel tinha o maior número da folha de estilo
+> e perdia mesmo assim.
+>
+> `.leaflet-container { isolation: isolate; }` contém o mapa no próprio contexto.
+> **Não** dá para "aumentar o z-index do header": acima de 1000 ele cobriria os modais das
+> telas (999/1000) e o backdrop do menu off-canvas (99) deixaria de escurecê-lo.
+>
+> ⚠️ **A primeira sonda deu falso negativo.** `document.elementFromPoint()` disse "painel no
+> topo" em 6 rotas e quase encerrou o diagnóstico como "não reproduz": ele responde
+> **hit-testing**, não **pintura**. Quem fechou o caso foi screenshot antes/depois.
+> **Para bug de sobreposição, a prova é a imagem.**
+>
+> Verificado nas 3 telas com mapa: contenção aplicada, zoom do Leaflet ainda no topo dentro
+> do mapa, tiles carregando. Teste de regressão novo afirma a **invariante** (o container
+> cria contexto), não o pixel — e o comentário do teste diz por quê.
+>
+> ---
+>
 > ### ✅ v4.8.7 PUBLICADA E VERIFICADA no homolog (03/08/2026, 22h00)
 >
 > | | git HEAD | `/ping` | `system_info` | Motor de ocorrências |

@@ -123,6 +123,50 @@ test.describe('Notificações — sino no layout', () => {
     });
 });
 
+test.describe('Notificações — empilhamento sobre o mapa', () => {
+    /**
+     * Regressão da v4.8.8: o mapa pintava por cima da lista de notificações em
+     * toda tela com mapa.
+     *
+     * Causa: o Leaflet dá z-index alto aos próprios painéis (tiles 200,
+     * marcadores 600, popup 700, controles 1000) e NÃO cria contexto de
+     * empilhamento no container. Esses valores subiam para a raiz do documento.
+     * O header, por ser `position:sticky; z-index:50`, CRIA contexto — então o
+     * `z-index:1200` do painel valia 1200 só dentro do header e 50 no
+     * documento. 200 > 50, e o mapa cobria a lista.
+     *
+     * O que se afirma aqui é a INVARIANTE que corrige isso — o mapa contido no
+     * próprio contexto —, não o pixel. Comparação visual é frágil como teste
+     * automático; a prova de pintura foi feita por screenshot antes/depois, e
+     * está registrada no CHANGELOG. Se alguém remover o `isolation`, este teste
+     * cai e diz exatamente por quê.
+     */
+    test('o mapa não vaza z-index para a raiz do documento', async ({ authedPage }) => {
+        await abrirComSino(authedPage, '/rastreamento');
+        const mapa = authedPage.locator('.leaflet-container').first();
+        await expect(mapa).toBeVisible({ timeout: 20000 });
+
+        const contido = await mapa.evaluate((el) => {
+            const cs = getComputedStyle(el);
+            // Qualquer uma destas propriedades cria contexto de empilhamento.
+            return cs.isolation === 'isolate'
+                || (cs.position !== 'static' && cs.zIndex !== 'auto')
+                || cs.transform !== 'none'
+                || cs.filter !== 'none'
+                || cs.contain === 'paint' || cs.contain === 'strict' || cs.contain === 'content';
+        });
+        expect(contido,
+            'o .leaflet-container precisa criar contexto de empilhamento (isolation: isolate), '
+            + 'senão os z-index internos do Leaflet (até 1000) sobem para a raiz e cobrem '
+            + 'o painel de notificações, que fica preso no contexto do header (z-index 50)')
+            .toBe(true);
+
+        // E o painel continua abrindo por cima na tela com mapa
+        await authedPage.locator('#notif-btn').click();
+        await expect(authedPage.locator('#notif-panel')).toBeVisible();
+    });
+});
+
 test.describe.serial('Notificações — com dado real', () => {
     test.skip(!LOCAL, `BASE_URL=${BASE_URL} não é local: o seeder escreveria em outro banco que o app sob teste`);
 

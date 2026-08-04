@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.8.8
+
+### Fixed
+- **O mapa pintava por cima da lista de notificações** em toda tela com mapa (`/rastreamento`, `/resumo`, `/geocercas`, `/ativo/{imei}`, posições e rota). Uma linha de CSS resolve, mas a causa merece registro porque não é o valor do z-index — é **contexto de empilhamento**:
+  - O Leaflet dá z-index alto aos próprios painéis (tiles **200**, marcadores 600, popup 700, **controles 1000**) e **não cria contexto** no container: `.leaflet-container` é `position:relative; z-index:auto`. Sem contexto, esses valores sobem para a **raiz do documento**.
+  - O header é `position:sticky; z-index:50` e, por isso, **cria** contexto. O `z-index:1200` do painel de notificações vale 1200 **dentro do header** e **50** no documento.
+  - Resultado: 200 do mapa > 50 do header. O painel tinha o maior número da folha de estilo e perdia mesmo assim.
+  - Correção: `.leaflet-container { isolation: isolate; }` — cria o contexto sem mexer em layout nem posição, e os 200/600/700/1000 do Leaflet passam a se resolver dentro do mapa, que é onde fazem sentido.
+  - **Por que não foi "aumentar o z-index do header"**: acima de 1000 ele passaria a cobrir os modais das telas (999/1000 em `comandos.php`, `equipamentos.php` e outros) e o backdrop do menu off-canvas (99) deixaria de escurecê-lo. A correção tem de conter o mapa, não escalar o header.
+
+### Notas de implementação
+- ⚠️ **A primeira sonda deu falso negativo e por pouco não enterrou o diagnóstico.** Um teste com `document.elementFromPoint()` no centro do painel reportou "painel no topo" em 6 rotas, sugerindo que não havia bug. `elementFromPoint` responde **hit-testing**, não **pintura** — e o defeito relatado era visual. O que fechou o caso foi screenshot antes/depois: no "antes", a lista aparece cortada e o mapa pinta sobre ela; no "depois", a lista sai inteira por cima. **Lição registrada: para bug de sobreposição, a prova é a imagem.**
+- O diagnóstico só apareceu depois de ler a **cadeia de ancestrais** de mapa e painel (posição, z-index e o que cria contexto em cada nível), em vez de deduzir da folha de estilo.
+- **Verificação**: nas 3 telas com mapa, `isolation: isolate` aplicado, **controle de zoom do Leaflet continua no topo dentro do mapa** e os tiles seguem carregando (16/15/8 tiles) — a contenção não quebrou o mapa. Novo teste de regressão em `tests/notificacoes.spec.js` afirma a **invariante** (o container cria contexto de empilhamento), não o pixel: comparação visual é frágil como teste automático, e o teste diz isso no comentário. Suíte: **98 passaram, 2 puladas, 0 falharam**.
+
 ## [Unreleased] — 4.8.7
 
 ### Changed

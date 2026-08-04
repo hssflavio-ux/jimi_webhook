@@ -916,6 +916,27 @@ body.sidebar-locked { overflow: hidden; }
 }
 @media (max-width: 768px) { .hamburger { display: inline-flex; width: 44px; height: 44px; } }
 
+/* ── Mapas (Leaflet) — contenção de empilhamento (v4.8.8) ──
+   O Leaflet dá z-index alto aos próprios painéis (tiles 200, marcadores 600,
+   popup 700, CONTROLES 1000) e NÃO cria contexto de empilhamento no container:
+   `.leaflet-container` é `position:relative; z-index:auto`. Sem contexto, esses
+   valores sobem para a raiz do documento e competem com a interface inteira.
+
+   O header é `position:sticky; z-index:50` e, por isso, CRIA um contexto — de
+   modo que o `z-index:1200` do painel de notificações vale 1200 apenas DENTRO
+   do header, e 50 no documento. Resultado: 200 do mapa > 50 do header, e o
+   mapa pintava por cima da lista de notificações em toda tela com mapa
+   (/rastreamento, /resumo, /geocercas, /ativo/{imei}, posições, rota).
+
+   `isolation: isolate` cria o contexto sem mexer em layout nem em posição: os
+   200/600/700/1000 do Leaflet passam a se resolver DENTRO do mapa, que é onde
+   fazem sentido, e o mapa inteiro volta a ser uma camada só no documento.
+
+   Não é para trocar por "aumentar o z-index do header": acima de 1000 ele
+   passaria a cobrir os modais das telas (999/1000 em vários handlers), e o
+   backdrop do menu off-canvas (99) deixaria de escurecê-lo. */
+.leaflet-container { isolation: isolate; }
+
 /* ── Notificações (v4.4.0) ───────────────────────────── */
 .notif-wrap { position: relative; }
 .notif-btn {
