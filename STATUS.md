@@ -1,6 +1,16 @@
 # STATUS.md — Jimi Webhook System v4.8.8 (YUV Parity)
 
-> ### ▶️ v4.8.8 — mapa deixa de cobrir a lista de notificações
+> ### ✅ v4.8.8 PUBLICADA E VERIFICADA no homolog (03/08/2026, 22h37)
+>
+> | | git HEAD | `/ping` |
+> |---|---|---|
+> | `origin/main` | `a15f8df` | — |
+> | **Homolog** | **`a15f8df`** | **4.8.8** |
+>
+> **Verificação pós-deploy no servidor real**: sessão injetada, `/rastreamento` e `/resumo`
+> abertos com o painel de notificações aberto — **mapa isolado em 1 de 1 nas duas telas**,
+> tiles carregando (12 e 10), e o **screenshot mostra a lista pintando inteira por cima do
+> mapa**, com as notificações reais da base do homolog. Sessão de teste removida.
 >
 > Relatado pelo usuário. **Sem migração** — uma linha de CSS.
 >
