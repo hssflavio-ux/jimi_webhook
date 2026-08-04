@@ -28,9 +28,33 @@ async function imeisVisiveis(browser, creds) {
     return imeis;
 }
 
+/**
+ * Guarda de não-vacuidade, e ela não é decorativa.
+ *
+ * `imeisVisiveis()` identifica IMEI por REGEX DE DÍGITOS. Enquanto o cliente B
+ * teve só devices de IMEI alfanumérico, o conjunto dele voltava VAZIO — e
+ * "A e B não compartilham devices" passava sozinho, porque dois conjuntos
+ * vazios nunca se intersectam. O spec dizia "verde" sem ter testado nada.
+ *
+ * `tests/helpers/seed_tenants.php` garante um IMEI de 15 dígitos em cada
+ * cliente; esta função garante que alguém percebeu se isso deixar de valer.
+ *
+ * @param {Set<string>} imeis
+ * @param {string} quem
+ */
+function exigeDevices(imeis, quem) {
+    expect(imeis.size,
+        `${quem} não enxerga NENHUM IMEI de 15 dígitos — rode "php tests/helpers/seed_tenants.php aplicar". `
+        + 'Sem isso as asserções de isolamento passam por vacuidade.')
+        .toBeGreaterThan(0);
+}
+
 test('cliente A e cliente B não compartilham devices', async ({ browser }) => {
     const imeisA = await imeisVisiveis(browser, CREDS);
     const imeisB = await imeisVisiveis(browser, CREDS_B);
+
+    exigeDevices(imeisA, 'cliente A');
+    exigeDevices(imeisB, 'cliente B');
 
     const vazamento = [...imeisA].filter((imei) => imeisB.has(imei));
     expect(vazamento, `IMEIs visíveis para ambos os clientes: ${vazamento.join(', ')}`).toHaveLength(0);
@@ -56,7 +80,15 @@ test('sem autenticação, /camerasdata não expõe dados', async ({ request }) =
  * Provisionar esse usuário vale mais do que qualquer teste novo escrito aqui.
  */
 test('?customer_id na URL não dá acesso a outro cliente', async ({ browser }) => {
+    // 4 telas × 3 ids = 12 relatórios completos, sequenciais (a suíte roda com
+    // 1 worker porque o servidor embutido do PHP é single-thread). Não cabe no
+    // timeout global de 45 s, e estourá-lo é pior do que parece: o teste termina
+    // em "Test ended" no meio do laço, que se lê como falha de aplicação quando
+    // é só orçamento de tempo — e, pior, deixaria de exercitar as telas do fim.
+    test.setTimeout(180000);
+
     const imeisB = await imeisVisiveis(browser, CREDS_B);
+    exigeDevices(imeisB, 'cliente B');
 
     const context = await browser.newContext({ baseURL: BASE_URL });
     const page = await context.newPage();

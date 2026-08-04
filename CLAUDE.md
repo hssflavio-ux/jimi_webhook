@@ -44,6 +44,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.8.1.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.3.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.4.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.5.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.6.sql
 
 # Lint a single PHP file
 php -l handlers/pushgps.php
@@ -96,6 +97,8 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 - **Authentication is cookie-token based, NOT PHP session files.** `includes/auth.php` reads a 64-char hex `jimi_token` cookie and looks it up in the `sessions` table (joined to `user_id` + `customer_id`). Despite the cookie mechanism, helpers populate `$_SESSION` for the rest of the request. Every dashboard page must call `require_login()`; admin-only pages call `require_admin()`. First run: visit `/setup` to create the admin (only works while the `users` table is empty).
 
 - **Multi-tenant context.** Most data is scoped by `customer_id`, resolved from the session via `get_customer_id()`. The customer dropdown / `/customer_switch` changes `set_customer_context()`. New device/data queries must filter by customer.
+
+- **Renomear alarme em `alarm_types` quebra o motor de ocorrências se você parar aí.** `occurrence_config_params.alarm_type` guarda o **nome** do alarme, não o código, e `get_occurrence_param()` (`includes/occurrence_engine.php`) resolve o parâmetro por `JOIN alarm_types ON at.alarm_name_pt = ocp.alarm_type`. Nome renomeado = JOIN não casa = **nenhuma ocorrência é gerada**, em silêncio: o alarme é gravado, aparece nos relatórios, e a ocorrência simplesmente não nasce — sem erro no log nem na tela. Foi o que a v4.8.3 fez com 21 dos 41 parâmetros do homolog, e só apareceu quando `webhook_occurrence.spec.js` saiu do estado "pulado". **Toda migração que mexer em `alarm_name_pt` tem de remapear `occurrence_config_params` junto** (ver `migration_v4.8.6.sql`) e conferir com `SELECT` de órfãos.
 
 - **JIMI vs JT/T 808 protocol isolation is strict** (see `docs/adr/ADR-001.md`). `msgClass=0` is JIMI, `msgClass=1` is JT/T 808 — never mix them. Command presets and config flows are protocol-sensitive.
 

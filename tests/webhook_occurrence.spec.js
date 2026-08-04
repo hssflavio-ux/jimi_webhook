@@ -53,7 +53,14 @@ test('pushalarm 143 cria ocorrência "Distração do Motorista"', async ({ authe
         intervals: [2000, 3000, 5000],
     }).toBe('encontrada');
 
-    // E também na tela do dashboard
+    // E também na tela do dashboard.
+    //
+    // A grade é montada NO CLIENTE: o HTML servido não contém ocorrência
+    // nenhuma — `#occurrence-tbody` chega vazio e é preenchido pelo JS a partir
+    // de /ocorrenciasdata. Asserção sobre `body` com o timeout padrão de 5 s
+    // corria com o fetch e falhava com "unexpected value" vazio, o que se lê
+    // como "a ocorrência não existe" quando ela já estava no endpoint.
     await authedPage.goto('/ocorrencias/dashboard');
-    await expect(authedPage.locator('body')).toContainText('Distração do Motorista');
+    await expect(authedPage.locator('#occurrence-tbody'))
+        .toContainText('Distração do Motorista', { timeout: 20000 });
 });

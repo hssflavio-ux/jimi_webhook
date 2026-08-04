@@ -1,5 +1,75 @@
-# STATUS.md — Jimi Webhook System v4.8.5 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.6 (YUV Parity)
 
+> ### 🔴 RETOMAR AQUI — v4.8.6: a v4.8.3 tinha PARADO o motor de ocorrências
+>
+> #### O achado
+>
+> `occurrence_config_params.alarm_type` guarda o **nome** do alarme, não o código.
+> `get_occurrence_param()` resolve por `JOIN alarm_types ON at.alarm_name_pt = ocp.alarm_type`.
+> A v4.8.3 renomeou dezenas de alarmes DMS/ADAS e **não remapeou essa tabela** — JOIN não
+> casa, nenhum parâmetro é achado, e **o alarme é gravado sem gerar ocorrência**.
+>
+> **Falha silenciosa**: nada no log, nada na tela. O alarme entra, aparece nos relatórios,
+> e a ocorrência só não nasce. No homolog matou **21 dos 41** parâmetros. Ocorrência de
+> comportamento do motorista é o **núcleo do produto**, não configuração acessória.
+>
+> **Como apareceu**: provisionando `TEST_IMEI`/`WEBHOOK_TOKEN` para tirar
+> `webhook_occurrence.spec.js` do estado "pulado". O spec existe desde a Fase M.4 e **nunca
+> havia rodado**. Na primeira execução real, falhou. Não é dedução: o **mesmo IMEI com o
+> mesmo alarme 143 gerava ocorrência até 09/07/2026** (`occurrences` 1–5) e parou.
+>
+> Isto é a lição de "spec que pula não é cobertura" cobrando pela terceira vez — e a
+> justificativa de ter feito o item 2 **antes** do deploy de produção.
+>
+> #### ⚠️ "Deploy em PRODUÇÃO" sai do backlog — não era dívida
+>
+> **Definido pelo usuário em 03/08/2026**: só se trabalha com o **servidor de homologação e
+> testes**. Produção **só será provisionada quando o sistema estiver pronto para o
+> lançamento**. Não existe host, credencial nem banco de produção — o
+> `docs/PLANO_INFRAESTRUTURA.md` tem "Contratar servidor" como primeiro item, não marcado.
+>
+> Os blocos antigos deste arquivo listavam "Deploy em PRODUÇÃO — pendente" como **dívida no
+> topo do backlog** desde a v4.8.3. **Era leitura errada**: é fase futura, não atraso.
+> Daqui em diante, **"publicar" sem qualificação significa homolog**, e o acúmulo de versões
+> não publicadas em produção não é risco a resolver.
+>
+> Quando o lançamento chegar, o roteiro é o `§14` do plano de infraestrutura; valem então o
+> `DROP VIEW` das duas VIEWs órfãs antes da primeira migração e o `mysqldump` de
+> `alarm_types`/`alarms`.
+>
+> **Nota que o acaso trouxe**: se produção existisse e tivesse recebido a v4.8.3, estaria com
+> o motor de ocorrências parado em silêncio desde ontem.
+>
+> #### Item 2 — provisionamento dos clientes de teste: FEITO
+>
+> `tests/helpers/seed_tenants.php`, idempotente e versionado. As **6 specs puladas rodaram
+> pela primeira vez**.
+>
+> ⚠️ **E quase passaram por vacuidade.** O spec identifica IMEI por regex de **dígitos**
+> (`\d{15}`); o cliente B só tinha device de IMEI alfanumérico, então o conjunto dele voltava
+> **vazio** e "A e B não compartilham devices" passava sozinho — dois conjuntos vazios não se
+> intersectam. Corrigido com IMEI de 15 dígitos nos dois clientes e a guarda `exigeDevices()`.
+>
+> **O spec tem dentes, provado por mutação**: promovendo o usuário B a `role='admin'`, o teste
+> de escalada **falha** e nomeia os IMEIs vazados do cliente A; revertido, passa.
+>
+> #### Suíte: 98 passaram, 2 puladas, 0 falharam (eram 94/6)
+>
+> As 4 que entraram são as 3 de `multitenant.spec.js` e a de `webhook_occurrence.spec.js`.
+> As **2 que continuam puladas são skip deliberado**, não lacuna: `login.spec.js:67`
+> (rate limiting) só roda com `RATE_LIMIT_TEST=1` porque **bloqueia o IP por 15 minutos**, e
+> `relatorios-operacionais.spec.js:136` tem skip condicional por ausência de dado.
+>
+> Para rodar a suíte completa daqui em diante:
+>
+> ```
+> php tests/helpers/seed_tenants.php aplicar     # imprime as variáveis a exportar
+> TEST_EMAIL_B=operador.b@teste.local TEST_PASSWORD_B=E2e-Playwright-2026 \
+> TEST_IMEI=868120246598152 WEBHOOK_TOKEN=<do .env> npx playwright test
+> ```
+>
+> ---
+>
 > ### ✅ v4.8.5 PUBLICADA E VERIFICADA no homolog (03/08/2026, 10h32)
 >
 > | | git HEAD | `/ping` | `system_info` |
@@ -289,7 +359,7 @@
 >
 > | Item | Estado |
 > |---|---|
-> | **Deploy em PRODUÇÃO** | Não feito. Código e banco de produção intocados. Exige as duas passadas do `deploy.sh` e, como a migração **reescreve `alarms.alarm_name`**, um `mysqldump alarm_types alarms` antes |
+> | ~~**Deploy em PRODUÇÃO**~~ | ❌ **NÃO É DÍVIDA** — definido em 03/08/2026: produção só será provisionada no lançamento. Ver o bloco no topo. O cuidado com `mysqldump alarm_types alarms` antes da migração continua valendo **para quando** esse dia chegar |
 > | ~~**2 specs velhas**~~ | ✅ **FECHADO na v4.8.5** — a tela estava certa nos dois casos; os testes é que ficaram para trás |
 > | **6 specs puladas** | Faltam `TEST_EMAIL_B`, `TEST_IMEI` no ambiente. O 2º cliente para multi-tenant continua sendo a pendência antiga |
 > | **Quebra de linha sem dado real** | Ver a ressalva acima. Confirmar num PDF de produção, onde os endereços tendem a ser mais longos |

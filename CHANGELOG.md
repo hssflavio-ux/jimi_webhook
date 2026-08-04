@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.8.6
+
+### Fixed
+- 🔴 **A v4.8.3 tinha parado o motor de ocorrências, e isso já estava publicado no homolog.** `occurrence_config_params.alarm_type` guarda o **nome** do alarme, não o código, e `get_occurrence_param()` resolve o parâmetro por `JOIN alarm_types ON at.alarm_name_pt = ocp.alarm_type`. A v4.8.3 renomeou dezenas de alarmes DMS/ADAS (o prefixo `DMS:` da §7b, os sete subtipos deslocados, o "Nível" que saiu do nome da fadiga) e **não remapeou essa tabela**: sem o nome antigo no catálogo, o JOIN não casa, nenhum parâmetro é achado e **o alarme é gravado sem gerar ocorrência**.
+  - **Falha silenciosa da pior espécie**: nada no log, nada na tela. O alarme entra, aparece nos relatórios, e a ocorrência só não nasce. No homolog matou **21 dos 41** parâmetros — e ocorrência de comportamento do motorista é o **núcleo do produto**, não configuração acessória.
+  - **Como apareceu**: provisionando `TEST_IMEI`/`WEBHOOK_TOKEN` para tirar `webhook_occurrence.spec.js` do estado "pulado". O spec existe desde a Fase M.4 e **nunca havia rodado**. Na primeira execução real, falhou. Não foi dedução: o **mesmo IMEI com o mesmo alarme 143 gerava ocorrência até 09/07/2026** (`occurrences` 1–5) e parou de gerar — regressão, não configuração ausente.
+  - `migration_v4.8.6.sql` remapeia 16 nomes aposentados para os atuais, conferidos contra o catálogo. Vários apontam para o mesmo alvo (a v4.8.3 fundiu "Nível 1"/"Nível 2" numa fadiga só) e há `UNIQUE (config_id, alarm_type)`, então a fusão fica com `MAX(generates_occurrence)` e o maior `risk` do grupo — **decisão consciente**: esses parâmetros estavam mortos, nenhum comportamento recente dependia deles, e num produto de segurança errar para "gera a ocorrência" mostra o evento em vez de escondê-lo. Desligar segue disponível em `/config-ocorrencias`.
+  - **Não apaga** os órfãos sem alvo no catálogo (`Capotamento`, `Olhar Lateral Prolongado`, `Comendo ou Bebendo ao Volante`…, nomes que a v4.8.1/v4.8.3 mostraram serem inventados): são configuração visível do usuário, e apagar ajuste alheio por conta própria é mais invasivo do que deixar um botão que não dispara. A migração os **lista** no log do deploy para decisão.
+  - Limpa as linhas com **mojibake** (`Distra├º├úo do Motorista`) — duplicatas corrompidas de importação antiga que nunca casaram com nada. Existem só em base de desenvolvimento; no homolog são zero.
+  - Medido em cópia do homolog: **20 de 41 → 33 de 38** parâmetros resolvendo (o total cai porque as fusões colapsam linhas), idempotente em duas passadas.
+
+### Added
+- **`tests/helpers/seed_tenants.php`** — provisiona os dois clientes de teste de forma **idempotente e versionada**. `multitenant.spec.js` está no repositório desde a Fase M.4 e **nunca rodou uma vez**, porque pula sem `TEST_EMAIL_B` e o segundo usuário nunca foi criado; foi nesse ponto cego que o vazamento cross-tenant da v4.7.3 sobreviveu. Deixar o provisionamento como passo manual é o que fez a lacuna durar meses.
+  - ⚠️ **A armadilha que o script existe para evitar**: o spec identifica IMEI por **regex de dígitos** (`\d{15}`). Enquanto o cliente B tinha só device de IMEI alfanumérico (`IMEIBBB000000002`), o conjunto dele voltava **vazio** e "A e B não compartilham devices" passava por **vacuidade** — dois conjuntos vazios não se intersectam. Os dois clientes recebem agora, obrigatoriamente, IMEI de 15 dígitos, e o spec ganhou guarda `exigeDevices()` que falha com instrução em vez de passar em silêncio.
+
+### Changed
+- **`multitenant.spec.js` rodou pela primeira vez — e tem dentes, provado por mutação.** Com o usuário B promovido a `role='admin'`, o teste de escalada **falha** e nomeia os IMEIs vazados do cliente A (`865478070003241, 865478070011327, 864993060182939, 353376110010771`); revertido para `operator`, passa. Sem essa mutação, "passou" não distinguiria isolamento correto de asserção inócua.
+  - O teste de escalada ganhou `test.setTimeout(180000)`: são 4 telas × 3 ids = 12 relatórios completos em sequência (a suíte roda com 1 worker porque o servidor embutido do PHP é single-thread), e o timeout global de 45 s estourava no meio do laço com "Test ended" — que se lê como falha de aplicação sendo só orçamento de tempo, e ainda deixava as últimas telas sem exercitar.
+- **A suíte saiu de 94 passando / 6 puladas para 98 passando / 2 puladas, 0 falhas.** As 4 que entraram são as 3 de `multitenant.spec.js` e a de `webhook_occurrence.spec.js` — todas rodando pela primeira vez. As 2 que continuam puladas são **skip deliberado**, não lacuna: `login.spec.js:67` (rate limiting) só roda com `RATE_LIMIT_TEST=1` porque **bloqueia o IP por 15 minutos**, e `relatorios-operacionais.spec.js:136` tem skip condicional por ausência de dado.
+- **`webhook_occurrence.spec.js`**: a asserção final olhava `body` com o timeout padrão de 5 s, mas a grade do dashboard é montada **no cliente** — o HTML servido chega com `#occurrence-tbody` vazio, preenchido depois por JS a partir de `/ocorrenciasdata`. A asserção corria com o fetch e falhava com "unexpected value" vazio, que se lê como "a ocorrência não existe" quando ela já estava no endpoint. Agora aponta para o `#occurrence-tbody` com timeout compatível.
+
 ## [Unreleased] — 4.8.5
 
 ### Security
