@@ -5,6 +5,23 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.8.7
+
+### Changed
+- **Os três parâmetros que resolviam desligados passam a gerar ocorrência** — `DMS: Distração do Motorista`, `DMS: Motorista ao Telefone` e `ADAS: Colisão Frontal (FCW)`. A v4.8.6 os deixou em `generates_occurrence = 0` porque **preservou o valor que já estava no banco**, o que era o comportamento correto para uma migração de reparo; ligá-los é decisão de produto, tomada em 03/08/2026.
+- **Quatro parâmetros sem alvo no catálogo foram removidos**: `Capotamento`, `Olhar Lateral Prolongado`, `Comendo ou Bebendo ao Volante` e `DMS: Comendo ou Bebendo ao Volante`. São nomes que a doc oficial não publica — a v4.8.1/v4.8.3 mostraram que eram invenção. A v4.8.6 os manteve de propósito (apagar configuração alheia por conta própria é invasivo); agora há decisão explícita.
+
+### Added
+- **A família de cartão do motorista (DLT) entra no catálogo**, para o quinto órfão deixar de apontar para o vazio. O parâmetro `DMS: Falha na Autenticação ID` não tinha alarme por trás: a v4.8.3 provou que `265-13` é *Phone use*, e o nome antigo era invenção. A doc oficial tem a família em **2.7 Other Alarms**:
+  - `3085` *DLT non-registered card alarm* → **`DMS: Falha de Autenticação do Motorista`** — literalmente "cartão não cadastrado", que é a falha de autenticação. O parâmetro foi renomeado para casar **exatamente** com este nome (`get_occurrence_param()` casa por `at.alarm_name_pt = ocp.alarm_type`; parecido não serve).
+  - `3083` *DLT card login* e `3084` *DLT card logout* → cadastrados como `Device`/info, fora do filtro. São login/logout, não infração; entram só para não caírem no rótulo genérico `"Código 3083 (JTT)"`, mesma razão da v4.8.3 §6.
+  - Nenhum dos três estava em `alarm_types` e **nenhum alarme desses jamais chegou** (0 linhas em `alarms`), então o cadastro não reescreve histórico.
+  - ⚠️ **Ressalva taxonômica registrada de propósito**: DMS ao pé da letra é o sistema de câmera/IA, e cartão DLT é RFID — não é evento de câmera. `3085` entra como `DMS` mesmo assim porque o filtro de alarmes lista **só DMS/ADAS** desde a v4.8.3, e é a única superfície onde evento de motorista aparece; fora dela o alarme existiria e seria infiltrável.
+
+### Notas de implementação
+- **Verificação**: migração testada em **banco-cópia do homolog** e rodada **duas vezes** com saída idêntica — **34 de 34** parâmetros resolvendo e **0 sem alvo**, contra 33 de 38 antes. Os três ligados conferidos um a um na saída da migração.
+- ⚠️ No **dev local** sobra 1 órfão (`Bateria Fraca`, já com `generates_occurrence = 0`) que **não existe no homolog** e não fazia parte da decisão. Por isso a conferência da migração diz "esperado: 0" e o dev responde 1: é resíduo de base de desenvolvimento, não pendência do produto.
+
 ## [Unreleased] — 4.8.6
 
 ### Fixed

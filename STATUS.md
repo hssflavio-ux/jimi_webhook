@@ -35,10 +35,17 @@
 > apagar ajuste alheio por conta própria é mais invasivo do que deixar um botão que não
 > dispara. A migração os lista no log do deploy.
 >
-> ⚠️ Alguns parâmetros resolvem mas estão com `generates_occurrence = 0` no homolog
-> (`DMS: Distração do Motorista`, `DMS: Motorista ao Telefone`, `ADAS: Colisão Frontal`).
-> **Isso é configuração, não defeito** — a migração preservou o valor que lá já estava. Se a
-> intenção for gerar ocorrência para esses, é um clique em `/config-ocorrencias`.
+> ✅ **As duas perguntas que a v4.8.6 deixou em aberto foram respondidas** (03/08/2026) e
+> viraram a **v4.8.7**:
+>
+> - Os três que resolviam desligados (`DMS: Distração do Motorista`,
+>   `DMS: Motorista ao Telefone`, `ADAS: Colisão Frontal`) **passam a gerar ocorrência**.
+> - Dos cinco órfãos, **quatro foram removidos**; fica só a **falha de autenticação**, que
+>   ganhou alarme real por trás: `3085` *DLT non-registered card alarm* (2.7 da doc), ou
+>   seja, cartão de motorista não cadastrado. `3083`/`3084` (login/logout do cartão) entram
+>   como `Device`, fora do filtro, só para não caírem no rótulo genérico.
+>
+> Resultado no banco-cópia do homolog: **34 de 34 parâmetros resolvem, 0 sem alvo.**
 >
 > ---
 >

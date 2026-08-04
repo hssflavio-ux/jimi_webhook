@@ -344,6 +344,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.8.4" "mysql/migration_v4.8.4.sql" "decisão sobre os códigos JIMI ambíguos"
     run_migration "4.8.5" "mysql/migration_v4.8.5.sql" "Ajuda liberada a grupo restrito"
     run_migration "4.8.6" "mysql/migration_v4.8.6.sql" "religa o motor de ocorrências (nomes da v4.8.3)"
+    run_migration "4.8.7" "mysql/migration_v4.8.7.sql" "decisões de produto no motor de ocorrências"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
