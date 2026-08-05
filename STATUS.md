@@ -1,14 +1,59 @@
 # STATUS.md — Jimi Webhook System v4.8.9 (YUV Parity)
 
-> ### ▶️ v4.8.9 PRONTA — NÃO publicada no homolog (04/08/2026)
+> ### ✅ v4.8.9 PUBLICADA E VERIFICADA no homolog (04/08/2026, 23h02)
 >
-> | | git HEAD | `/ping` | Migração 4.8.9 |
-> |---|---|---|---|
-> | Local / `origin/main` | v4.8.9 | — | testada só em **banco-cópia** + dev |
-> | **Homolog** (`189.22.240.43`) | `a15f8df` | 4.8.8 | **não aplicada** |
+> | | git HEAD | `/ping` | `system_info` | `commands.request_id` |
+> |---|---|---|---|---|
+> | Local / `origin/main` | `1de071e` | — | 4.8.9 | — |
+> | **Homolog** (`189.22.240.43`) | **`1de071e`** | **4.8.9** | **4.8.9** | **presente** |
 >
 > Sessão pedida como "execute 1, 2, 3 e 4" sobre o backlog levantado no início dela.
-> **Falta o deploy** — nada foi tocado no homolog nesta sessão.
+>
+> #### O reconhecimento antes do deploy mudou o risco para perto de zero
+>
+> Sonda somente-leitura no homolog **antes** de publicar, e ela respondeu as duas
+> perguntas que decidiam se as correções trancariam alguém para fora:
+>
+> | Pergunta | Resposta no homolog |
+> |---|---|
+> | Quantos usuários **sem vínculo** em `customer_users`? | **0** — o fix de escopo não muda nada para quem existe |
+> | Quantos usuários **com grupo de permissão** atribuído? | **0** — o gate de `/config-notificacoes` não tranca ninguém ("Operador Padrão" existe e está vazio) |
+> | Comandos presos em `sent`/`pending`? | **17**, com **12** respostas recebidas — a pegada do bug do JSON em dado real |
+>
+> ⚠️ O STATUS dizia que o homolog estava em `a15f8df`; estava em **`d851bdf`** — os dois
+> commits de documentação já haviam sido puxados. Conferir em vez de presumir, de novo.
+>
+> #### O deploy exercitou a armadilha do `git pull` no meio do script — desta vez a favor
+>
+> `grep -c 'migration_v4.8.9' scripts/deploy.sh` **antes** do deploy devolvia **0**, então
+> a expectativa era precisar das duas passadas. A migração entrou **já na primeira**: o
+> bash lê o script incrementalmente, e o `git pull` da FASE 2 trocou o arquivo debaixo
+> dele. A segunda passada (`--force`) rodou mesmo assim e confirmou idempotência.
+> **A regra das duas passadas continua valendo** — o comportamento depende de onde o
+> `git pull` cai em relação ao byte que o bash está lendo, o que não é garantia.
+>
+> #### Verificação PÓS-DEPLOY, contra o servidor real
+>
+> | Sonda | Resultado |
+> |---|---|
+> | `POST /customer_switch` como operador **sem vínculo** | **HTTP 400**, sessão sem contexto, nome do cliente **não** aparece no HTML |
+> | `/config-notificacoes`, `/config-smtp`, `/config-ocorrencias` **sem** a tela no grupo | **403, 403, 403** |
+> | as mesmas três **com** a tela concedida (mesmo usuário) | **200, 200, 200**, sem erro de PHP |
+> | Callback offline com 2 comandos pendentes, respondendo ao **mais antigo** | `VERSION#` → **`executed`** com payload JSON válido; `STATUS#` → segue `sent` |
+> | 35 rotas do dashboard, sessão de admin injetada | **35 de 35**, **0 erro de PHP** |
+> | `[ERROR]`/`[CRITICAL]` no log do dia | **0** |
+> | Usuários, grupo, comandos e sessões de teste | **removidos (0 restantes)** |
+>
+> #### ⚠️ O que esta verificação NÃO cobre, e o que ficou pendente de decisão
+>
+> - **16 comandos do histórico continuam presos** em `sent`/`pending` **apesar de já
+>   terem recebido resposta** — são as vítimas do bug do JSON, contadas no banco real.
+>   A correção vale para os próximos; **não reescreve o passado**. Reparar exigiria
+>   correlacionar respostas antigas a comandos antigos com a heurística fraca, em dado
+>   real — é decisão do usuário, não minha, e não foi feita.
+> - O fix de escopo foi provado **com usuários de teste**, porque o homolog tem **um só
+>   cliente** e **zero usuários sem vínculo**: não há para onde vazar lá. O vazamento real
+>   está medido no dev, com baseline por reversão do código.
 >
 > #### 🔴 Três achados, dois deles piores do que o backlog descrevia
 >
