@@ -629,15 +629,28 @@ Ordenado por valor × dependências. Cada fase termina com deploy + verificaçã
 
 ## 11. Critérios de aceite globais
 
-- [ ] Todas as 22 rotas de [§4](#4-mapa-de-rotas-alvo) resolvem e renderizam no layout com o design Coinbase (azul + sidebar dark + header On/Off).
-- [ ] Sidebar com grupos-sanfona (Vídeos/Relatórios/Cadastros) abrindo/fechando, estado persistido.
-- [ ] Alarme de câmera → ocorrência conforme regra do cliente; tratativa com transições auditadas.
-- [ ] Dashboards com "Atualização automática" (polling) sem reload.
-- [ ] Cada Cadastro com CRUD + Pesquisar + Exportar; cada Relatório com filtros "Gerar" + Export.
-- [ ] Vídeo: Ao Vivo toca; Playback lista timeline; Downloads reflete `pushfileupload`.
-- [ ] Multi-tenancy: nenhum dado cross-tenant; impersonação audita; CSRF em todos os POST.
-- [ ] Todas as queries com prepared statements e índices de [§6.3].
-- [ ] Documentação atualizada (este doc + DESIGN/CLAUDE/AGENTS/STATUS/CHANGELOG/README).
+> **Conferidos em 04/08/2026 (v4.8.9)** — nunca haviam sido marcados. Cada linha
+> abaixo traz **como** foi verificada; onde a resposta é parcial, o que falta está
+> escrito em vez de a caixa ser marcada por otimismo.
+
+- [x] **Todas as 22 rotas de [§4](#4-mapa-de-rotas-alvo) resolvem e renderizam** no layout com o design Coinbase (azul + sidebar dark).
+  `tests/navigation.spec.js` percorre **33 rotas** (as 22 mais `/ativos/novo`, `/checklist`, `/perfil` e as 5 operacionais) exigindo HTTP < 500, ausência de `Fatal error` e **`.sidebar` visível** — esta última é o que faz um 404 reprovar, já que a página de 404 não tem shell. Design: `#0052ff` e `#0a0b0d` presentes em `web/layout_base.php`.
+- [x] **Sidebar com grupos-sanfona, estado persistido.**
+  `localStorage` `jimi_accordion` (abre/fecha por grupo) e `jimi_sidebar_collapsed`, em `web/layout_base.php`.
+- [ ] ⚠️ **Alarme de câmera → ocorrência conforme regra do cliente; tratativa com transições auditadas** — **metade cumprida**.
+  O alarme→ocorrência está provado ponta a ponta por `tests/webhook_occurrence.spec.js` (alarme 143 → ocorrência no polling), e o motor resolve **34 de 34** parâmetros desde a v4.8.7. **O que falta é a auditoria**: a transição grava `treated_by`/`treated_at` **na própria linha de `occurrences`**, ou seja, guarda apenas o autor do **último** estado. Não existe tabela de histórico — `occurrence_events` liga ocorrência↔alarme, não transição↔autor. Reabrir e re-resolver uma ocorrência **apaga** quem a tratou antes. Para um produto de segurança cuja tratativa é o núcleo, isto é dívida real.
+- [x] **Dashboards com "Atualização automática" (polling) sem reload.**
+  `setInterval` em `resumo.php`, `rastreamento.php`, `ocorrencias_dashboard.php` e `exportar.php`.
+- [ ] ⚠️ **Cada Cadastro com CRUD + Pesquisar + Exportar** — **6 de 8**.
+  `ativos`, `chips`, `clientes`, `equipamentos`, `motoristas` e `usuarios` têm os três. `grupos-permissao` e `config-ocorrencias` não têm pesquisa nem exportação — são **matrizes de configuração**, não grades de cadastro, então provavelmente o critério é que está largo demais; fica registrado em vez de marcado.
+- [ ] ❓ **Vídeo: Ao Vivo toca; Playback lista timeline; Downloads reflete `pushfileupload`.**
+  **Não verificável sem câmera real** — as três telas resolvem e renderizam (coberto pelo primeiro critério), mas "toca" e "lista timeline" dependem de device com câmera transmitindo. Mesma classe do OTA (M.2.5).
+- [x] **Multi-tenancy: nenhum dado cross-tenant; impersonação audita; CSRF em todos os POST.**
+  `tests/multitenant.spec.js` roda desde a v4.8.6 e **tem dentes provados por mutação**; impersonação grava em `impersonation_log` (`clientes.php` + `customer_switch.php`); CSRF auditado em 21 de 22 handlers com POST (v4.7.3), sendo `login`/`setup` exceções legítimas. **A v4.8.9 fechou mais dois furos desta linha**: o fallback de `get_available_customers()` (usuário sem vínculo recebia cliente de outro tenant) e o `view` sem gate de `/config-notificacoes`.
+- [x] **Todas as queries com prepared statements.**
+  Auditoria da v4.7.3: duas interpolações no projeto inteiro, ambas benignas; `ORDER BY` dinâmico protegido por whitelist em `report_sort_params()`.
+  ⚠️ A segunda metade do critério original ("e índices de §6.3") **não é conferível como escrito** — a §6.3 não nomeia índices, então não há lista contra a qual verificar.
+- [x] **Documentação atualizada** (este doc + DESIGN/CLAUDE/AGENTS/STATUS/CHANGELOG/README).
 
 ---
 

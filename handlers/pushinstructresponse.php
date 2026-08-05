@@ -68,7 +68,7 @@ class PushInstructResponseHandler extends WebhookHandler {
             ]);
 
             // 2. Atualizar tabela commands se existir comando pendente
-            $this->updatePendingCommand($imei, $status, $response);
+            $this->updatePendingCommand($imei, $status, $response, $content);
 
             Logger::info('InstructResponse registrado', [
                 'source' => $this->handlerName, 'imei' => $imei,
@@ -86,33 +86,112 @@ class PushInstructResponseHandler extends WebhookHandler {
     }
 
     /**
-     * Atualiza o comando pendente correspondente na tabela commands
+     * Atualiza o comando pendente correspondente na tabela commands.
+     *
+     * CORRELAÇÃO (v4.8.9) — por que não é por `requestId`, que o backlog pedia.
+     * A doc oficial é explícita e desmente os dois lados da suposição antiga:
+     *   - `requestId` serve para "troubleshooting and log tracing" e **não volta
+     *     no callback** — a estrutura de resposta (1.16) é `{code, msg, data:{
+     *     _code, _imei, _content, _msg, _serverFlagId}}`, sem ele. Correlacionar
+     *     por `requestId` é impossível, não difícil.
+     *   - quem a doc define como chave é `serverFlagId`: "the unique
+     *     identification field for the current request which is used for
+     *     correspondence between request and response", e o `_serverFlagId` da
+     *     resposta corresponde a ele.
+     *
+     * ⚠️ Só que aqui `serverFlagId` **não é único por comando**: `sendcommand.php`
+     * o usa como seletor de gateway (0 = JT/T, 1 = JIMI), decisão empírica
+     * registrada como "BUG #3" naquele arquivo. Então ele chega valendo 0 ou 1 e
+     * não distingue dois comandos para o mesmo device. Torná-lo único é mexer no
+     * despacho para veículo real e **só se verifica com device real** (M.2.5,
+     * bloqueado) — trocar o valor às cegas arrisca parar o envio de comandos.
+     *
+     * O que dá para fazer sem esse risco, e é o que esta versão faz: usar o
+     * `_content` que o callback devolve — o próprio conteúdo do comando — para
+     * casar com `commands.command_content`. Discrimina muito melhor que "o mais
+     * recente do IMEI" e degrada para o comportamento antigo quando o callback
+     * vem sem `_content`.
+     *
+     * @param string      $imei    IMEI do device que respondeu
+     * @param string      $status  'success' | 'failed'
+     * @param mixed       $response Conteúdo da resposta
+     * @param string|null $content Comando ecoado pelo callback (`_content`)
      */
-    private function updatePendingCommand($imei, $status, $response) {
+    private function updatePendingCommand($imei, $status, $response, $content = null) {
         try {
+            $pendentes = "status IN ('pending', 'sent', 'queued')";
+            if ($content !== null && $content !== '') {
+                // Casa o comando exato; entre iguais, o mais antigo pendente é o
+                // que está esperando resposta há mais tempo.
+                $stmt = $this->db->prepare("
+                    SELECT id FROM commands
+                    WHERE imei = :imei AND {$pendentes} AND command_content = :cmd
+                    ORDER BY created_at ASC LIMIT 1
+                ");
+                $stmt->execute([':imei' => $imei, ':cmd' => $content]);
+                $existing = $stmt->fetch();
+                if ($existing) {
+                    return $this->applyCommandUpdate($existing['id'], $status, $response);
+                }
+                Logger::info('InstructResponse: _content não casou com comando pendente — caindo no mais recente', [
+                    'source' => $this->handlerName, 'imei' => $imei,
+                    'content' => substr((string)$content, 0, 80),
+                ]);
+            }
+
             $stmt = $this->db->prepare("
-                SELECT id FROM commands 
-                WHERE imei = :imei AND status IN ('pending', 'sent', 'queued') 
+                SELECT id FROM commands
+                WHERE imei = :imei AND {$pendentes}
                 ORDER BY created_at DESC LIMIT 1
             ");
             $stmt->execute([':imei' => $imei]);
             $existing = $stmt->fetch();
 
             if ($existing) {
-                $cmdStatus = ($status === 'success') ? 'executed' : 'failed';
-                $stmt = $this->db->prepare("
-                    UPDATE commands SET status = :status, response_time = NOW(), 
-                    response_payload = :payload, updated_at = NOW() WHERE id = :id
-                ");
-                $stmt->execute([
-                    ':status' => $cmdStatus,
-                    ':payload' => is_array($response) ? json_encode($response) : (string)$response,
-                    ':id' => $existing['id']
-                ]);
+                $this->applyCommandUpdate($existing['id'], $status, $response);
             }
         } catch (Exception $e) {
-            // Silencioso - a resposta já foi salva em command_responses
+            // Não relança: a resposta já está salva em command_responses, e
+            // derrubar o webhook por causa do espelho em `commands` seria pior.
+            // Mas NÃO é mais silencioso — foi este catch que escondeu por meses
+            // o "Invalid JSON text" que impedia toda atualização de comando.
+            Logger::error('InstructResponse: falha ao correlacionar com commands', [
+                'source' => $this->handlerName,
+                'imei'   => $imei,
+                'erro'   => $e->getMessage(),
+            ]);
         }
+    }
+
+    /**
+     * Grava o desfecho da resposta na linha de `commands` já escolhida.
+     *
+     * @param int   $commandId Linha correlacionada
+     * @param string $status   'success' | 'failed'
+     * @param mixed  $response Conteúdo da resposta
+     * @returns void
+     */
+    private function applyCommandUpdate($commandId, $status, $response) {
+        $cmdStatus = ($status === 'success') ? 'executed' : 'failed';
+        $stmt = $this->db->prepare("
+            UPDATE commands SET status = :status, response_time = NOW(),
+            response_payload = :payload, updated_at = NOW() WHERE id = :id
+        ");
+        $stmt->execute([
+            ':status' => $cmdStatus,
+            // 🔴 v4.8.9 — `commands.response_payload` é coluna **JSON**. O código
+            // antigo (`is_array(...) ? json_encode(...) : (string)$response`)
+            // mandava a resposta de texto do device crua, e o MySQL recusava com
+            // "3140 Invalid JSON text" em TODA resposta de texto — que é o caso
+            // normal ("ext Battery:12.1V; GPRS:Link Up"). O catch de
+            // updatePendingCommand engolia a exceção, então **nenhum** callback
+            // offline jamais atualizou `commands`: o comando ficava 'sent' para
+            // sempre e o dashboard expirava em "Comando em fila offline".
+            // Discutia-se qual heurística de correlação usar; a correlação não
+            // chegava a acontecer. json_encode() sempre — string vira string JSON.
+            ':payload' => json_encode($response, JSON_UNESCAPED_UNICODE),
+            ':id'      => $commandId,
+        ]);
     }
 }
 

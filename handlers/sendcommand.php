@@ -286,16 +286,23 @@ try {
     $stmt = $db->prepare("
         INSERT INTO commands
             (imei, command_content, command_type, status, operator,
-             api_type, response_payload, response_time, created_at, updated_at)
+             api_type, request_id, server_flag_id, response_payload, response_time,
+             created_at, updated_at)
         VALUES
             (:imei, :cmd, 'request', :status, 'dashboard',
-             :api_type, :resp, :rtime, NOW(), NOW())
+             :api_type, :rid, :sfid, :resp, :rtime, NOW(), NOW())
     ");
     $stmt->execute([
         ':imei'     => $imei,
         ':cmd'      => $cmdContent,
         ':status'   => $dbStatus,
         ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
+        // v4.8.9: os dois identificadores mandados ao IoTHub passam a ser
+        // gravados. Sem isso não havia como ligar esta linha ao rastro que o
+        // IoTHub tem do mesmo envio — a doc oficial dá ao requestId exatamente
+        // essa função ("troubleshooting and log tracing").
+        ':rid'      => $requestId,
+        ':sfid'     => (string)$serverFlagId,
         ':resp'     => $rawResp ?: null,   // Guarda rawResp completo para auditoria
         ':rtime'    => ($dbStatus === 'executed') ? date('Y-m-d H:i:s') : null,
     ]);

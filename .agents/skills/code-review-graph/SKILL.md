@@ -90,7 +90,7 @@ Python, TypeScript, JavaScript, Go, Rust, Java, C#, Ruby, Kotlin, Swift, PHP, C/
 pipx install code-review-graph
 
 # Alternative: fastest, no permanent install
-
+uvx code-review-graph install
 
 # Alternative: global pip
 pip install code-review-graph
@@ -222,7 +222,7 @@ The graph finds nodes with **no incoming edges** — no callers, no importers, n
 ```bash
 code-review-graph rename preview --from OldClassName --to NewClassName
 ```
-uvx code-review-graph install
+
 Shows every file affected by a rename, and flags edge cases (dynamic string references that static analysis can't catch).
 
 ### 5. Architecture Visualization

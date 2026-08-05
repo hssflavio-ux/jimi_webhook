@@ -267,21 +267,83 @@ function set_customer_context($customer_id) {
     } catch (Exception $e) {}
 }
 
+/**
+ * Clientes que o usuário pode assumir como contexto de sessão.
+ *
+ * NÃO é só a lista do seletor do cabeçalho: `customer_switch.php` usa o
+ * retorno desta função como **autorização** para trocar de cliente, e
+ * `login_user()` usa o primeiro item como contexto inicial. O que sair daqui
+ * é, na prática, o que o usuário pode abrir.
+ *
+ * ⚠️ POR QUE O FALLBACK ANTIGO ERA UMA FALHA (v4.8.9). Quando o usuário não
+ * tinha vínculo em `customer_users`, a função devolvia o **primeiro cliente
+ * ativo da base** (`ORDER BY name LIMIT 1`) com role 'viewer'. Para um
+ * revendedor ou operador sem vínculo isso entregava o cliente de **outro
+ * tenant** — e não só o nome: o `customer_switch` aceitava a troca, porque a
+ * checagem de autorização dele é a presença do id nesta lista.
+ *
+ * A regra agora espelha `reseller_scope_ids()` (`includes/functions.php`),
+ * que é o ponto único de escopo multi-tenant do sistema — deliberadamente a
+ * MESMA semântica, para não existirem duas respostas para "que clientes são
+ * dele":
+ *   - vínculo explícito em `customer_users` manda, para qualquer perfil;
+ *   - sem vínculo, só o **admin de plataforma** (`role = 'admin'`) enxerga
+ *     cliente — e, se enxerga, enxerga todos, como no seletor dos relatórios;
+ *   - **revendedor** sem vínculo cai nos clientes que ele mesmo criou
+ *     (`customers.reseller_id`), o outro termo da união de `reseller_scope_ids()`.
+ *     Sem este termo, revendedor de base existente (onde `reseller_id` é NULL)
+ *     ficaria sem cliente algum — trocar vazamento por apagão;
+ *   - qualquer outro perfil sem vínculo recebe lista **vazia**: falha fechada.
+ *
+ * @param int $user_id Usuário cujo escopo se quer (não necessariamente o da sessão)
+ * @returns array<array{id:int,name:string,role:string}>
+ */
 function get_available_customers($user_id) {
     try {
         $db = Database::getInstance()->getConnection();
         $stmt = $db->prepare("SELECT c.id, c.name, cu.role FROM customers c JOIN customer_users cu ON c.id = cu.customer_id WHERE cu.user_id = ? AND c.is_active = 1 ORDER BY c.name");
         $stmt->execute(array($user_id));
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (!empty($rows)) return $rows;
 
-        if (empty($rows)) {
-            $stmt = $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name LIMIT 1");
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($row) {
-                $rows = array(array('id' => $row['id'], 'name' => $row['name'], 'role' => 'viewer'));
+        // Sem vínculo explícito: o perfil decide, não a ordem alfabética da base.
+        $stmt = $db->prepare("SELECT role, user_type FROM users WHERE id = ? AND is_active = 1");
+        $stmt->execute(array($user_id));
+        $u = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$u) return array();
+
+        // role='admin' é admin de plataforma — mesmo teste, e na mesma ordem,
+        // que reseller_scope_ids() faz antes de olhar user_type.
+        if (($u['role'] ?? '') === 'admin') {
+            $stmt = $db->query("SELECT id, name FROM customers WHERE is_active = 1 ORDER BY name");
+            $out = array();
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $out[] = array('id' => $row['id'], 'name' => $row['name'], 'role' => 'admin');
             }
+            return $out;
         }
-        return $rows;
+
+        if (($u['user_type'] ?? '') === 'revendedor') {
+            $stmt = $db->prepare("SELECT id, name FROM customers WHERE reseller_id = ? AND is_active = 1 ORDER BY name");
+            $stmt->execute(array($user_id));
+            $out = array();
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $out[] = array('id' => $row['id'], 'name' => $row['name'], 'role' => 'viewer');
+            }
+            // Revendedor sem vínculo E sem cliente próprio também fica sem nada:
+            // cai no log abaixo em vez de devolver vazio calado.
+            if ($out) return $out;
+        }
+
+        // Fecha fechado, mas NÃO em silêncio: sem cliente o painel abre vazio e
+        // sem explicação, e diagnosticar isso pelo sintoma custa caro (é a lição
+        // da v4.8.6). Uma linha no log nomeia a causa: falta o vínculo.
+        Logger::warning('Usuário sem cliente disponível — falta vínculo em customer_users', [
+            'user_id'   => (int)$user_id,
+            'role'      => $u['role'] ?? null,
+            'user_type' => $u['user_type'] ?? null,
+        ]);
+        return array();
     } catch (Exception $e) {
         return array();
     }

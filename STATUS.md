@@ -1,5 +1,103 @@
-# STATUS.md — Jimi Webhook System v4.8.8 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.8.9 (YUV Parity)
 
+> ### ▶️ v4.8.9 PRONTA — NÃO publicada no homolog (04/08/2026)
+>
+> | | git HEAD | `/ping` | Migração 4.8.9 |
+> |---|---|---|---|
+> | Local / `origin/main` | v4.8.9 | — | testada só em **banco-cópia** + dev |
+> | **Homolog** (`189.22.240.43`) | `a15f8df` | 4.8.8 | **não aplicada** |
+>
+> Sessão pedida como "execute 1, 2, 3 e 4" sobre o backlog levantado no início dela.
+> **Falta o deploy** — nada foi tocado no homolog nesta sessão.
+>
+> #### 🔴 Três achados, dois deles piores do que o backlog descrevia
+>
+> **1. Usuário sem vínculo recebia o cliente de outro tenant** (o "residual consciente"
+> que a v4.8.5 adiou). O fallback de `get_available_customers()` devolvia o **primeiro
+> cliente ativo da base**. O que a nota da v4.8.5 não dizia: **`customer_switch.php` usa
+> essa lista como autorização** — o cliente vazado era *assumível*, não só visível.
+> Medido com usuários reais dos cinco perfis, baseline por **reversão do código**:
+>
+> | Perfil, sem vínculo | Antes | Depois |
+> |---|---|---|
+> | Operador | **Cliente B TESTE** (de outro tenant) | vazio |
+> | Viewer | **Cliente B TESTE** | vazio |
+> | Revendedor sem cliente próprio | **Cliente B TESTE** | vazio |
+> | Revendedor **com** cliente próprio | Cliente B TESTE (por acaso o dele) | **só o dele**, via `reseller_id` |
+> | Admin de plataforma | **1 cliente** (o 1º alfabético) | **todos** |
+>
+> A última linha era **bug funcional**, não vazamento: o admin via um cliente só.
+> `POST /customer_switch` como operador sem vínculo agora responde **400** e a sessão
+> fica sem contexto.
+>
+> **2. Nenhum callback de comando offline jamais atualizou `commands`.**
+> `commands.response_payload` é coluna **JSON**; o handler gravava a resposta de texto
+> do device crua, e o MySQL recusava com **`3140 Invalid JSON text`** em toda resposta
+> de texto — o caso normal. O `catch` do método **engolia a exceção**.
+> Discutia-se desde a v4.1.1 *qual heurística de correlação* usar; **a correlação não
+> chegava a acontecer**. Sintoma para o usuário: comando eternamente "em fila offline"
+> mesmo com o device tendo respondido — e a resposta *aparecia* em `command_responses`
+> (coluna TEXT), o que fazia o problema parecer menor do que era.
+>
+> **3. `/config-notificacoes` abria para quem a matriz de permissões negava.**
+> Estava em `$screens` e **fora** do `$screenByHandler`; o handler só tinha
+> `require_login()`. `create`/`edit`/`delete` davam 403 e o **`view` não era conferido
+> em lugar nenhum**. Mesmo par de erros da v4.8.5 (`checklist`/`wiki`), terceira e
+> quarta ocorrência. Provado nos dois sentidos: **403** sem a tela concedida, **200**
+> com ela, mesmo usuário.
+>
+> #### O que a doc oficial disse sobre o item do backlog (e o inverteu)
+>
+> O backlog pedia **correlação por `requestId`**. A doc desmente os dois lados:
+> `requestId` é *"used for troubleshooting and log tracing"* e **não volta no callback**
+> — correlacionar por ele é **impossível**, não difícil. A chave que a doc define é
+> **`serverFlagId`** (*"correspondence between request and response"*) — mas aqui ele é
+> usado como **seletor de gateway** (0=JT/T, 1=JIMI), então não é único por comando.
+> Torná-lo único mexe no despacho para veículo real e **só se verifica com device real**
+> (M.2.5, bloqueado). Ficou registrado, com as colunas já criadas no banco.
+> A correlação passou a usar o **`_content`** que o callback devolve — exercitado com
+> dois comandos pendentes no mesmo device, respondendo ao primeiro.
+>
+> #### ⚠️ Um item do backlog foi RETIRADO em vez de executado
+>
+> "Limpar o device de teste `868120246598152` do homolog" **deixou de ser resíduo**:
+> desde a v4.8.6 ele é `TEST_IMEI`, e `webhook_occurrence.spec.js` **pula sem ele**.
+> Apagá-lo re-silencia a spec que nunca havia rodado e que, na primeira execução real,
+> **pegou o motor de ocorrências parado**. Seria "spec que pula não é cobertura" pela
+> quarta vez — desta vez provocada de propósito.
+>
+> #### Critérios de aceite do `PROJETO_YUV.md` §11 — conferidos pela 1ª vez
+>
+> **6 de 9 sustentam.** Os 3 que não viraram texto no próprio §11 em vez de caixa marcada:
+> a **auditoria da tratativa** guarda só o autor do *último* estado (reabrir uma
+> ocorrência apaga quem a tratou antes — dívida real, o núcleo do produto);
+> **Cadastros** são 6 de 8 (os outros 2 são matrizes de config, não grades — o critério
+> é que está largo); **Vídeo** não é verificável sem câmera real.
+>
+> #### Verificação
+>
+> `php -l` limpo em `handlers/ config/ core/ includes/`; migração idempotente rodada
+> **duas vezes em banco-cópia**; os três achados com **baseline medido por reversão do
+> código**, não por leitura dele, e controle positivo em todos.
+> **Suíte: 99 passaram, 2 puladas, 0 falharam.**
+>
+> 📝 O bloco da v4.8.8 abaixo dizia "98 passaram"; o commit `a15f8df` registra **99**.
+> Erro de transcrição na prosa, corrigido.
+>
+> 📝 **A mensagem do commit `d851bdf` não descreve o que ele contém.** Diz "brand
+> identity refresh with specialized logos, PWA icons, and updated login interface" —
+> isso foi o `69df863`, oito commits antes. O que `d851bdf` faz é: versionar
+> `docs/PLANO_INFRAESTRUTURA.md` (959 linhas, até então fora do git), enxugar o bloco
+> de instalação do banco no `CLAUDE.md` apontando para a skill `db-setup`, e uma
+> **edição corrompida** em `.agents/skills/code-review-graph/SKILL.md` (a linha
+> `uvx code-review-graph install` saiu do bloco de instalação e foi parar solta no meio
+> da seção de *rename preview*). A corrupção **foi revertida** na v4.8.9 — o arquivo
+> voltou byte a byte ao estado anterior. A **mensagem ficou como está**: reescrevê-la
+> exige `push --force` sobre commit já publicado, e o ganho é cosmético. Fica o registro
+> aqui, que é onde se procura histórico de deploy.
+>
+> ---
+>
 > ### ✅ v4.8.8 PUBLICADA E VERIFICADA no homolog (03/08/2026, 22h37)
 >
 > | | git HEAD | `/ping` |

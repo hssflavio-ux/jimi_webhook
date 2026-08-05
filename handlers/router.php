@@ -225,6 +225,16 @@ $screenByHandler = [
     'grupos_permissao.php'      => 'grupos-permissao',
     'motoristas.php'            => 'motoristas',
     'config_ocorrencias.php'    => 'config-ocorrencias',
+    // v4.8.9: as duas telas de config de notificação estavam na matriz de
+    // grupos_permissao.php e FORA daqui. `config_smtp.php` se protegia sozinho
+    // (require_permission no topo do handler), mas `config_notificacoes.php` só
+    // chamava require_login(): create/edit/delete davam 403 e o **view não era
+    // verificado em lugar nenhum** — negar a tela na matriz não impedia abri-la
+    // e ler todas as regras do cliente. É o mesmo par de erros da v4.8.5
+    // (`checklist` no router e fora da matriz; `wiki` o inverso). A regra vale
+    // nos dois sentidos: toda tela entra nos DOIS lugares.
+    'config_notificacoes.php'   => 'config-notificacoes',
+    'config_smtp.php'           => 'config-smtp',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
 ];
