@@ -91,6 +91,34 @@ class PushFtpFileUploadHandler extends WebhookHandler {
                 }
             }
 
+            // ── O callback NÃO diz qual arquivo é (v4.9.2) ───────────────────
+            //
+            // Medido com a câmera real: o corpo do /pushftpfileupload traz só
+            // `imei`, `result`, `gateTime` e `instructionID`. Sem o nome, o
+            // fallback lá em cima gravava o próprio instructionID como
+            // `file_name`/`file_url` — e /midia respondia 404, porque no disco
+            // o arquivo é `CH1_20260805_234207_W0300_000030.ts`.
+            //
+            // O nome que a câmera escolhe CODIFICA a janela que pedimos:
+            // `CH{canal}_{AAAAMMDD}_{HHMMSS}_…`, com o mesmo carimbo GMT-0 do
+            // `beginTime`. E essa janela está guardada no `event_time` do
+            // pedido pendente. Daí a resolução por padrão de nome — determinística,
+            // sem depender de varrer o diretório por data de modificação.
+            if ($pendingId > 0 && empty($item['fileName']) && empty($item['file'])) {
+                $achado = $this->resolverArquivoPeloPedido($pendingId);
+                if ($achado !== null) {
+                    $fileName = $achado['nome'];
+                    $fileUrl  = $achado['nome'];
+                    $fileType = detect_media_type($fileName);
+                    if (!$fileSize) $fileSize = $achado['tamanho'];
+                } else {
+                    Logger::warning('FTP Upload sem nome de arquivo e sem correspondência no disco', [
+                        'source' => $this->handlerName, 'imei' => $imei,
+                        'instruction_id' => $instructionID, 'media_id' => $pendingId,
+                    ]);
+                }
+            }
+
             if ($pendingId > 0) {
                 $this->db->prepare("
                     UPDATE media_files
@@ -146,6 +174,41 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             ]);
             return false;
         }
+    }
+
+    /**
+     * Descobre no disco o arquivo que a câmera acabou de subir para um pedido.
+     *
+     * A câmera nomeia a gravação com o canal e o INÍCIO da janela pedida
+     * (`CH1_20260805_234207_W0300_000030.ts`), no mesmo carimbo GMT-0 que o
+     * comando 37382 mandou — e esse instante está no `event_time` do pedido.
+     * O sufixo depois do horário varia com o firmware (as gravações de maio não
+     * têm o `W0300`), por isso o casamento é por PREFIXO.
+     *
+     * @param int $pendingId id da linha `solicitado` em media_files
+     * @returns array{nome:string,tamanho:int}|null
+     */
+    private function resolverArquivoPeloPedido(int $pendingId): ?array
+    {
+        $dir = rtrim((string)(getenv('VIDEO_MEDIA_DIR') ?: '/iothub/dvr-upload/uploadFile'), '/');
+        if (!is_dir($dir)) return null;
+
+        $st = $this->db->prepare("SELECT channel, event_time FROM media_files WHERE id = :id");
+        $st->execute([':id' => $pendingId]);
+        $row = $st->fetch();
+        if (!$row || empty($row['event_time'])) return null;
+
+        $ts = strtotime((string)$row['event_time']);
+        if ($ts === false) return null;
+
+        $prefixo = sprintf('CH%d_%s_', (int)$row['channel'], gmdate('Ymd_His', $ts));
+        $achados = glob($dir . '/' . $prefixo . '*') ?: [];
+        if (!$achados) return null;
+
+        // Mais de um casamento só acontece se a mesma janela foi pedida duas
+        // vezes; o mais recente é o desta rodada.
+        usort($achados, fn($a, $b) => filemtime($b) <=> filemtime($a));
+        return ['nome' => basename($achados[0]), 'tamanho' => (int)filesize($achados[0])];
     }
 }
 
