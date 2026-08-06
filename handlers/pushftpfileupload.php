@@ -120,11 +120,20 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             }
 
             if ($pendingId > 0) {
+                // ⚠️ `event_time` do pedido é PRESERVADO de propósito (v4.9.2).
+                //
+                // Ele guarda o início da GRAVAÇÃO (a janela que se pediu); o
+                // `gateTime` do callback é a hora em que o UPLOAD terminou —
+                // hoje, não a data do vídeo. Sobrescrever fazia o arquivo
+                // extraído sumir da linha do tempo do dia filtrado, que é
+                // exatamente onde o usuário está olhando: /video/playback casa
+                // `media_files.event_time` com o período da tela. A hora do
+                // upload continua registrada em `raw_data.gateTime`.
                 $this->db->prepare("
                     UPDATE media_files
                        SET file_name = :fname, file_type = :ftype, file_size = :fsize,
                            file_url = :url, source_type = 'pushftpfileupload',
-                           event_time = COALESCE(:etime, event_time),
+                           event_time = COALESCE(event_time, :etime),
                            channel = COALESCE(:ch, channel),
                            download_status = :ds, raw_data = :raw
                      WHERE id = :id
