@@ -1,15 +1,39 @@
 # STATUS.md — Jimi Webhook System v4.9.0 (YUV Parity)
 
-> ### 🟡 v4.9.0 IMPLEMENTADA E VERIFICADA LOCALMENTE — **não publicada** (05/08/2026)
+> ### ✅ v4.9.0 PUBLICADA E VERIFICADA no homolog (06/08/2026, 08h20)
 >
-> | | git HEAD | `system_info` | Suíte |
-> |---|---|---|---|
-> | Local | (working tree) | 4.9.0 | **110 passaram, 2 puladas, 0 falharam** |
-> | **Homolog** (`189.22.240.43`) | `1de071e` | **4.8.9** | — |
+> | | git HEAD | `/ping` | `system_info` | Suíte |
+> |---|---|---|---|---|
+> | Local / `origin/main` | `a89eaac` | — | 4.9.0 | **110 passaram, 2 puladas, 0 falharam** |
+> | **Homolog** (`189.22.240.43`) | **`a89eaac`** | **4.9.0** | **4.9.0** | — |
 >
-> Sessão de padronização dos relatórios pedida em lista: 17 itens, todos entregues.
-> **Falta rodar `./scripts/deploy.sh` no homolog** — a senha do `sudo` não estava
-> disponível nesta sessão. A migração `v4.9.0` já está no `deploy.sh`.
+> Sessão de padronização dos relatórios pedida em lista: 17 itens, todos entregues,
+> mais o alinhamento dos relatórios agendados pedido em seguida.
+>
+> #### Verificação PÓS-DEPLOY, contra o servidor real
+>
+> | Sonda | Resultado |
+> |---|---|
+> | XLSX de Alarmes, células de link | **1422 de 1422** com o `<v>` em cache — o defeito relatado, resolvido em dado real |
+> | `<select>` de placa nos 8 filtros | **8/8**, nenhuma caixa de texto de IMEI sobrando |
+> | Cabeçalho dos 10 exports | todos com **Placa** na posição certa e **Mapa** onde foi pedido |
+> | `occurrence_config_params` órfãos | **0** (22 parâmetros) |
+> | 28 alertTypes JT/T novos | **28/28 presentes** |
+> | Tour de boas-vindas no `/resumo` | **ausente** (overlay, botão e chave de localStorage) |
+> | Worker: 3 jobs reais (csv/xlsx/pdf) | CSV com a URL crua, XLSX com `<v>MAPA</v>`, PDF com 5 anotações `/Link` |
+> | `logs/webhook_2026-08-06.log` | sem `fatal`, `uncaught` ou `SQLSTATE` |
+>
+> A migração entrou **já na primeira passada** — o `git pull` da FASE 2 trocou o
+> `deploy.sh` debaixo do bash, como na v4.8.9. A segunda passada (`--force`)
+> confirmou idempotência: "Banco em 4.9.0 — migração v4.9.0 desnecessária".
+> Backup de `occurrence_config_params` + `alarm_types` feito **antes**, em
+> `/tmp/backup_v490_20260806_081920.sql`.
+>
+> ⚠️ **`Código 1047 (JTT)` continua aparecendo, e isso é o comportamento correto**:
+> 6 linhas no homolog, único código não resolvido, e ele **não existe na doc
+> oficial** (a tabela pula de 1046 *Collision* para 3073). Quando o fornecedor
+> confirmar o significado, basta uma linha em `alarm_types` — a resolução na
+> leitura corrige o histórico sozinha, sem tocar em código.
 >
 > #### Os dois defeitos que a lista descrevia por fora e eram outra coisa por dentro
 >
