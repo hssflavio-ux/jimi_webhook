@@ -19,28 +19,63 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 $vsc = video_stream_config();
 $streamUrl = $vsc['flv_base'];
 
-// Devices with model info and streaming config
+require_once __DIR__ . '/../includes/fleet_state.php';   // OFFLINE_GAP_SECONDS
+
+// ── Última comunicação: o MAIOR entre os sinais que o device emite ───────────
+//
+// `devices.last_communication` sozinho engana. Ele só é escrito por
+// `pushalarm.php` e `pushlbs.php` — **não** por GPS nem por heartbeat (não há
+// trigger no banco; conferido). Um equipamento que reporta posição e batimento
+// mas não manda LBS ficaria "sem comunicar" para sempre, mesmo transmitindo.
+//
+// Por isso a coluna vira o maior entre `last_communication`, `last_gps_time`,
+// `last_heartbeat_time` e `last_event_time`: qualquer um deles é prova de que
+// o equipamento falou com o servidor.
+//
+// O limiar de online é o mesmo do resto do produto (OFFLINE_GAP_SECONDS, 30 min,
+// usado em Status da Frota e em resolve_current_state()). Antes eram 5 minutos
+// cravados aqui — duas respostas diferentes para "está online?" no mesmo sistema.
+//
+// ⚠️ `UTC_TIMESTAMP()` e não `NOW()`: a conexão do app força `time_zone='+00:00'`,
+// mas dizê-lo por extenso evita que a conta dependa dessa configuração.
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
            d.streaming_rotation, d.streaming_watermark,
-           DATE_FORMAT(d.last_communication, '%d/%m/%Y %H:%i') as last_com,
-           CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+           GREATEST(
+               COALESCE(d.last_communication,  '1970-01-01'),
+               COALESCE(ds.last_gps_time,      '1970-01-01'),
+               COALESCE(ds.last_heartbeat_time,'1970-01-01'),
+               COALESCE(ds.last_event_time,    '1970-01-01')
+           ) AS last_seen_utc
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
+    LEFT JOIN device_statistics ds ON ds.imei = d.imei
     WHERE d.customer_id = :cid
     ORDER BY d.is_active DESC, d.device_name ASC
 ");
 $devices->execute([':cid' => $customerId]);
 $devices = $devices->fetchAll();
 
-$selectedImei = $_GET['imei'] ?? ($devices[0]['imei'] ?? '');
-
-// Find selected device info
-$selDevice = null;
-foreach ($devices as $d) {
-    if ($d['imei'] === $selectedImei) { $selDevice = $d; break; }
+// Formatação em PHP, não em SQL: `DATE_FORMAT()` imprimia o UTC cru como se
+// fosse hora local e a tela mostrava a última comunicação **3 h no futuro**.
+// `fmt_brt()` é o ponto único de conversão do projeto (ver CLAUDE.md).
+$agoraUtc = time();
+foreach ($devices as &$d) {
+    $ts = ($d['last_seen_utc'] && $d['last_seen_utc'] > '1971-01-01')
+        ? strtotime($d['last_seen_utc'] . ' UTC') : null;
+    $d['last_com']  = $ts ? fmt_brt($d['last_seen_utc'], 'd/m/Y H:i') : 'Nunca';
+    $d['is_online'] = $ts !== null && ($agoraUtc - $ts) <= OFFLINE_GAP_SECONDS;
 }
+unset($d);
+
+// O `?imei=` da URL só vale se pertencer ao cliente da sessão (multi-tenant):
+// `$devices` já vem filtrado por customer_id, então checar contra ele basta.
+$selectedImei = '';
+foreach ($devices as $d) {
+    if ($d['imei'] === ($_GET['imei'] ?? '')) { $selectedImei = $d['imei']; break; }
+}
+if ($selectedImei === '') $selectedImei = $devices[0]['imei'] ?? '';
 
 $page_title = 'Vídeo ao Vivo';
 $current_route = 'video_aovivo';
@@ -81,13 +116,17 @@ require_once __DIR__ . '/../web/layout_base.php';
         <div style="margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
             <select id="dev-sel" onchange="onDeviceChange()" style="padding:8px 12px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:200px;">
                 <?php foreach ($devices as $d): ?>
+                <?php // Os data-* alimentam o painel lateral pelo JS: ele precisa
+                      // acompanhar a troca de equipamento, e antes não acompanhava. ?>
                 <option value="<?= $d['imei'] ?>"
-                        data-cam="<?= $d['camera_count'] ?? 1 ?>"
+                        data-cam="<?= (int)($d['camera_count'] ?? 1) ?>"
                         data-rotation="<?= (int)($d['streaming_rotation'] ?? 0) ?>"
                         data-watermark="<?= (int)($d['streaming_watermark'] ?? 0) ?>"
+                        data-placa="<?= htmlspecialchars($d['device_name'] ?: $d['imei'], ENT_QUOTES) ?>"
+                        data-last="<?= htmlspecialchars($d['last_com'], ENT_QUOTES) ?>"
+                        data-online="<?= $d['is_online'] ? 1 : 0 ?>"
                         <?= $selectedImei === $d['imei'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> —
-                    <?= htmlspecialchars($d['model_name'] ?? '?') ?>
+                    <?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?>
                     (<?= $d['is_online'] ? 'Online' : 'Offline' ?>)
                 </option>
                 <?php endforeach; ?>
@@ -105,19 +144,11 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div>
         <div class="card" style="margin-bottom:12px;">
             <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;">Informações do Dispositivo</h4>
-            <div id="device-info" style="font-size:13px;color:var(--body);line-height:1.8;">
-                <div>IMEI: <span class="text-mono"><?= htmlspecialchars($selectedImei) ?></span></div>
-                <div>Modelo: <?= htmlspecialchars($selDevice['model_name'] ?? '—') ?></div>
-                <div>Canais: <?= (int)($selDevice['camera_count'] ?? 1) ?></div>
-                <div>Última comunicação: <?= htmlspecialchars($selDevice['last_com'] ?? '—') ?></div>
-                <div>Status:
-                    <?php if ($selDevice['is_online'] ?? false): ?>
-                    <span class="badge badge-success">Online</span>
-                    <?php else: ?>
-                    <span class="badge badge-error">Offline</span>
-                    <?php endif; ?>
-                </div>
-            </div>
+            <?php // O conteúdo é reescrito por atualizarInfoDispositivo() a cada
+                  // troca no seletor. Antes era HTML fixo do PRIMEIRO equipamento:
+                  // trocar de câmera no dropdown não mexia neste painel, e ele
+                  // seguia mostrando canais, data e status de outro aparelho. ?>
+            <div id="device-info" style="font-size:13px;color:var(--body);line-height:1.8;"></div>
         </div>
 
         <div class="card">
@@ -161,7 +192,30 @@ function onDeviceChange() {
     rotation = parseInt(opt.dataset.rotation) || 0;
     watermark = parseInt(opt.dataset.watermark) || 0;
     renderChannels();
+    atualizarInfoDispositivo();
     stopPlayer();
+}
+
+/** Escreve o painel lateral com os dados do equipamento ESCOLHIDO agora. */
+function atualizarInfoDispositivo() {
+    var sel = document.getElementById('dev-sel');
+    var box = document.getElementById('device-info');
+    if (!box) return;
+    if (!sel || sel.selectedIndex < 0) { box.innerHTML = '<div>Nenhum equipamento.</div>'; return; }
+
+    var o = sel.options[sel.selectedIndex];
+    var online = o.dataset.online === '1';
+    var esc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+        });
+    };
+    box.innerHTML =
+        '<div>Placa: <span class="text-mono">' + esc(o.dataset.placa) + '</span></div>' +
+        '<div>Canais: ' + (parseInt(o.dataset.cam) || 1) + '</div>' +
+        '<div>Última comunicação: <span class="text-mono">' + esc(o.dataset.last) + '</span></div>' +
+        '<div>Status: <span class="badge ' + (online ? 'badge-success">Online' : 'badge-error">Offline') +
+        '</span></div>';
 }
 
 function renderChannels() {
@@ -334,6 +388,7 @@ function connectAttempt(mySession, attempt) {
         watermark = parseInt(sel.options[sel.selectedIndex].dataset.watermark) || 0;
     }
     renderChannels();
+    atualizarInfoDispositivo();
 })();
 </script>
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>
