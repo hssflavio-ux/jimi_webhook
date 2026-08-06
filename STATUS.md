@@ -1,4 +1,57 @@
-# STATUS.md — Jimi Webhook System v4.9.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.1 (YUV Parity)
+
+> ### ✅ v4.9.1 PUBLICADA — extração de vídeo: **nunca funcionou**, e agora funciona (06/08/2026)
+>
+> Relato: "a lista chega, mas não toca nem baixa". Eram **quatro** defeitos em
+> série, e o primeiro sozinho já impedia qualquer arquivo de existir.
+>
+> | # | Defeito | Evidência |
+> |---|---|---|
+> | 1 | **Comando errado.** [Extrair] mandava `34818` = *"Multimedia data retrieval"* — uma CONSULTA, da família de fotos do JT/T 808. O certo é **`37382`** = *"FTP file upload command"* | Em 3 dias, `/pushfileupload` e `/pushftpfileupload` **nunca** foram chamados; `media_files` só tinha 3 linhas sintéticas de julho |
+> | 2 | **Sem destino FTP.** O 37382 leva `serverAddress/ftpPort/userName/password` no payload, e não havia nada configurado | `.env` sem qualquer chave de FTP |
+> | 3 | **`.ts` não toca em browser nenhum.** As gravações são MPEG-TS; Chrome/Firefox/Safari só decodificam MP4/WebM | `file` → *MPEG transport stream data*, byte de sync `0x47` |
+> | 4 | **O servidor de arquivos não serve streaming.** Sem CORS (o mpegts.js precisa de `fetch`), sem `Accept-Ranges`, e `Content-Disposition: attachment` | Medido: `Range: bytes=0-1000` → **HTTP 200 com 21 MB**; no Chrome, `NetworkError: Failed to fetch` |
+>
+> #### A infra existia e estava ociosa
+>
+> vsftpd na **2121**, usuário `dvrupload` chrootado em `/iothub/dvr-upload/uploadFile`
+> — o mesmo diretório que o container `dvr-upload` publica na 23010. Dois `.ts` de
+> 21 MB estavam lá desde 07/05, e o log do vsftpd registra a câmera fazendo
+> `OK LOGIN` e `OK UPLOAD` a 3 MB/s. O caminho funcionava; o app é que nunca o
+> acionava. **A senha do `dvrupload` havia se perdido sem registro** — foi
+> redefinida em 06/08/2026 e agora vive no `.env` do servidor (nunca no git).
+>
+> #### Decisões que valem registro
+>
+> - **A senha do FTP é injetada no servidor**, em `sendcommand.php`, e o que o
+>   cliente mandar nesses cinco campos é **descartado**. Montar o payload no
+>   navegador exporia a credencial no código-fonte; aceitar os campos do cliente
+>   deixaria forjar o POST para despejar vídeo num FTP de terceiro. Ela também
+>   **não** é gravada em `commands.command_content` (vai como `***`).
+> - **Nova rota `/midia`** serve o arquivo pela nossa origem, com Range/206 em
+>   blocos de 512 KB e `Content-Type: video/mp2t`. Ganho de segurança junto: a
+>   porta 23010 está aberta **sem autenticação alguma** — quem souber o nome do
+>   arquivo baixa o vídeo. `/midia` exige sessão e confere o escopo do cliente.
+>
+> #### Verificação
+>
+> | Sonda | Resultado |
+> |---|---|
+> | 37382 real disparado para gravação de 05/08 | payload correto no banco, com FTP e `password:"***"` |
+> | Login e escrita no FTP com a senha nova | `226` nos dois; arquivo aparece no diretório |
+> | Callback `/pushftpfileupload` | **fecha** a linha `solicitado` em vez de duplicar |
+> | `/midia` sem Range / com Range | **200** / **206 `bytes 0-999/21495808`** |
+> | `/midia` sem sessão / travessia `../../etc/passwd` | **302** / **400** |
+> | Player no Chrome | **`readyState 4`, 720×480**, 216 s em buffer, seek para 33 s funcionando |
+>
+> ⚠️ **O que NÃO foi verificado ponta a ponta**: o upload FTP disparado pela
+> própria câmera. A 371_3241 está **offline desde 05/08 20h16** (16 h sem
+> posição), e o IoTHub converteu o 37382 em comando offline (`commands.id 87`,
+> `sent`) — ele será entregue na reconexão. O teste do player usou o `.ts` real
+> de 21 MB que já estava no servidor, e o callback foi exercitado com um POST
+> em `/pushftpfileupload` idêntico ao que o IoTHub manda. **Quando a câmera
+> voltar, o comando enfileirado deve produzir o arquivo sozinho — vale conferir.**
+
 
 > ### ✅ v4.9.0 PUBLICADA E VERIFICADA no homolog (06/08/2026, 08h20)
 >
