@@ -1,5 +1,53 @@
 # STATUS.md — Jimi Webhook System v4.9.2 (YUV Parity)
 
+> ### ✅ EXTRAÇÃO DE VÍDEO FUNCIONANDO PONTA A PONTA (06/08/2026, 09h53)
+>
+> Com as portas certas (**21222** controle, **31100–31200** passivas) o ciclo
+> fechou com a câmera real:
+>
+> ```
+> [Extrair] → 37382 → câmera: "ok" → FTP 191.38.202.11 → OK UPLOAD 4,4 MB a 1,4 MB/s
+>          → /pushftpfileupload (result 0) → media_files "disponivel"
+>          → /midia (206) → player 720x480, seek OK
+> ```
+>
+> | Sonda | Resultado |
+> |---|---|
+> | `OK UPLOAD` no log do vsftpd, vindo da câmera | `CH1_20260805_235208_W0300_000030.ts`, **4.400.150 bytes** |
+> | Linha em `media_files` | **uma só**, `disponivel`, nome/tipo/tamanho reais |
+> | `event_time` | **05/08 23:52:08** — o da gravação, não o do upload |
+> | `/midia` sem Range / com Range | **200** / **206 `bytes 0-999/4400150`** |
+> | Player no Chrome | **`readyState 4`, 720×480**, seek para 63 s, 249 s em buffer |
+>
+> #### Mais três defeitos que só o teste com câmera real revelou
+>
+> 1. **`condition` e `instructionID` são obrigatórios no 37382** (aparecem só no
+>    exemplo da doc, não na tabela de campos). Sem eles a câmera **não confirma**
+>    o comando: `600 request timeout`, e depois `302 Device busy`. Comparação
+>    controlada com o device comprovadamente online: 2 envios sem → timeout;
+>    2 com → `ok`.
+> 2. **O callback não diz qual arquivo é.** Traz só `imei`, `result`, `gateTime`
+>    e `instructionID`. Gravava-se o instructionID como nome, e `/midia` dava
+>    404. Resolvido pelo padrão do nome, que codifica a janela pedida
+>    (`CH{canal}_{AAAAMMDD}_{HHMMSS}_…`) — e essa janela está no pedido.
+> 3. **O `event_time` era sobrescrito pelo `gateTime`** (hora do upload), então o
+>    vídeo extraído sumia do dia filtrado: pedia-se 05/08 e o item nascia
+>    carimbado em 06/08.
+>
+> #### Configuração de infraestrutura aplicada (fora do git)
+>
+> - `/etc/vsftpd.conf`: `listen_port` 2121 → **21222**, `pasv_min/max_port`
+>   23100-23200 → **31100–31200** (backup em `/etc/vsftpd.conf.bak_20260806`).
+> - `.env`: `VIDEO_FTP_PORT=21222`, `VIDEO_FTP_CONDITION=7`, `VIDEO_MEDIA_DIR`.
+> - Senha do `dvrupload` redefinida (a antiga havia se perdido sem registro).
+>
+> ⚠️ **Lição de método**: o teste do dia anterior foi feito de dentro do servidor
+> (`127.0.0.1`) e passou — sem provar nada sobre o acesso externo, que é o
+> caminho da câmera. A sonda válida é `curl --ftp-pasv` **de outra máquina**.
+>
+> ⚠️ Continua pendente, fora deste escopo: **a 3306 (MySQL) está exposta à internet**.
+
+
 > ### 🟠 v4.9.2 — teste com a câmera REAL achou mais dois defeitos; falta abrir portas no roteador (06/08/2026)
 >
 > A 371_3241 voltou a ficar online e o teste ponta a ponta pôde ser feito. Ele
