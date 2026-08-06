@@ -1,4 +1,63 @@
-# STATUS.md — Jimi Webhook System v4.9.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.2 (YUV Parity)
+
+> ### 🟠 v4.9.2 — teste com a câmera REAL achou mais dois defeitos; falta abrir portas no roteador (06/08/2026)
+>
+> A 371_3241 voltou a ficar online e o teste ponta a ponta pôde ser feito. Ele
+> derrubou uma suposição do dia anterior — "o device está offline" — e achou
+> **dois defeitos a mais**, além de um bloqueio de infraestrutura.
+>
+> #### 🔴 O 37382 exige `condition` e `instructionID`, e sem eles a câmera não confirma
+>
+> Os dois campos aparecem **só no exemplo** da doc, não na tabela de campos
+> logo acima dele. Comparação controlada, com o device comprovadamente online:
+>
+> | Cmd | proNo | com os 2 campos? | Resposta |
+> |---|---|---|---|
+> | 87 | 37382 | não | `600 request timeout` |
+> | 88 | 37381 | — | **`ok`, 13 recursos** ← device online |
+> | 89 | 37382 | não | `600 request timeout` |
+> | 90 | 37381 | — | `302 Device busy` |
+> | 91 | 37382 | **sim** | **`ok`** |
+> | 92 | 37382 | **sim** (injetado pelo servidor) | **`ok`** |
+>
+> `condition` é a máscara de rede autorizada para o download (bit0 WiFi, bit1
+> LAN, bit2 3G/4G). Num rastreador veicular só existe 4G — deixá-la de fora faz
+> a câmera **aceitar e nunca baixar**. Default 7, via `VIDEO_FTP_CONDITION`.
+>
+> ⚠️ E a mensagem do IoTHub engana: ela diz *"The device is offline or timed
+> out"*, mas o `_msg` de dentro é **`request timeout`**. Foi o que fez parecer,
+> na v4.9.1, que a câmera estava fora do ar. Ela estava online e respondendo.
+>
+> #### 🔴 A correlação do callback por "pedido mais antigo" errou em campo
+>
+> Um pedido que falhara por timeout foi fechado com o resultado de **outro**,
+> enviado depois. Agora casa por `instructionID` — que é exatamente o que a doc
+> diz que ele serve. A regra antiga fica como fallback e **loga** quando é usada.
+>
+> #### 🚧 BLOQUEIO ABERTO: o FTP não é alcançável da internet
+>
+> Com os campos certos a câmera aceita, tenta, e devolve **`result: 1`** (falha)
+> no `/pushftpfileupload` — **sem nunca aparecer no log do vsftpd**. A causa foi
+> medida de fora, e o teste da v4.9.1 a mascarou porque foi feito de dentro do
+> servidor (`127.0.0.1`), o que não prova nada sobre acesso externo:
+>
+> | Porta | De fora |
+> |---|---|
+> | 80, 3306, 8881, 10002, 21100, 21122, 23010 | **abertas** |
+> | **2121** (controle do FTP) | **não encaminhada** |
+> | **23100–23200** (dados passivos do vsftpd) | **não encaminhadas** |
+>
+> A câmera conecta no FTP **pela internet** — não adianta o vsftpd responder no
+> localhost. Em 07/05/2026 funcionou (o log registra `OK UPLOAD` a 3 MB/s de
+> `191.38.239.88`), então o encaminhamento existia e se perdeu.
+>
+> **Ação necessária, fora do servidor**: encaminhar no roteador `2121/tcp` e a
+> faixa `23100-23200/tcp` para `189.22.240.43`. Feito isso, o fluxo fecha
+> sozinho — o resto do caminho está verificado.
+>
+> ⚠️ Achado colateral: **a 3306 (MySQL) está exposta à internet**. Não faz parte
+> deste trabalho, mas convém fechar.
+
 
 > ### ✅ v4.9.1 PUBLICADA — extração de vídeo: **nunca funcionou**, e agora funciona (06/08/2026)
 >
