@@ -1,4 +1,53 @@
-# STATUS.md — Jimi Webhook System v4.9.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.3 (YUV Parity)
+
+> ### 📍 ESTADO EM 06/08/2026, 10h10 — tudo publicado e verificado no homolog
+>
+> | | git HEAD | `/ping` | `system_info` |
+> |---|---|---|---|
+> | Local / `origin/main` | `4954124` | — | — |
+> | **Homolog** (`189.22.240.43`) | **`4954124`** | 4.9.0 → **4.9.3** no próximo deploy | **4.9.0** |
+>
+> ⚠️ **`/ping` vinha anunciando 4.9.0 enquanto o código já era 4.9.3.** Os commits
+> de v4.9.1 a v4.9.3 não bumparam o `SYSTEM_VERSION` do `.env.example`, que é de
+> onde o `deploy.sh` propaga a versão para o `.env` do servidor e de onde o
+> `/ping` a lê. Corrigido agora para **4.9.3**.
+>
+> `system_info` permanece em **4.9.0** de propósito: ela é a versão do **esquema**,
+> escrita pelas migrações, e nenhuma migração rodou depois da v4.9.0 — as três
+> entregas seguintes foram só código. É a distinção que o `deploy.sh` usa para
+> decidir quais migrações aplicar.
+>
+> #### O que entrou desde a v4.9.0
+>
+> | Versão | Entrega | Estado |
+> |---|---|---|
+> | **4.9.0** | Padronização dos relatórios por placa (17 itens) + relatórios agendados do worker | ✅ verificado |
+> | **4.9.1** | Extração de vídeo: comando errado (34818→37382), destino FTP, player de MPEG-TS, rota `/midia` | ✅ verificado |
+> | **4.9.2** | `condition`/`instructionID` no 37382, correlação por instructionID, nome do arquivo, `event_time` | ✅ **ciclo completo com câmera real** |
+> | **4.9.3** | Painel do Vídeo ao Vivo: placa, canais, data em BRT, status | ✅ verificado nos 7 equipamentos |
+>
+> #### Estado das duas funções de vídeo
+>
+> - **Playback/extração**: funcionando ponta a ponta. Última prova: `CH1_20260805_235208_W0300_000030.ts`, 4.400.150 bytes, subido pela câmera a 1,4 MB/s, tocando a 720×480 no Chrome com seek.
+> - **Ao vivo**: o painel de informações está correto. **O streaming em si não foi
+>   exercitado nesta sessão** — exige a câmera publicando RTP no media server, e o
+>   que se verificou foi a tela, não o vídeo ao vivo.
+>
+> #### Pendências conhecidas
+>
+> - **`Código 1047 (JTT)`** — 6 linhas no homolog, único código não resolvido; não
+>   consta da doc oficial. Depende do fornecedor. Quando ele entrar em
+>   `alarm_types`, a resolução na leitura corrige o histórico sozinha.
+> - **`devices.last_communication` continua incompleta no banco**: só é escrita por
+>   `pushalarm.php` e `pushlbs.php`, não por GPS nem heartbeat. A v4.9.3 corrigiu a
+>   **leitura** na tela de vídeo ao vivo (usa o maior entre quatro sinais); qualquer
+>   outra tela que leia a coluna crua mostra o problema.
+> - **Cercas**: a coluna Mapa existe na tela e não no PDF/XLS — ficou fora porque a
+>   lista de pedidos da v4.9.0 trazia só dois itens para esse relatório.
+> - ~~3306 exposta~~ — **não é problema**: o firewall só a libera para o IP do
+>   escritório (informado em 06/08/2026).
+>
+> ---
 
 > ### ✅ EXTRAÇÃO DE VÍDEO FUNCIONANDO PONTA A PONTA (06/08/2026, 09h53)
 >
@@ -45,7 +94,9 @@
 > (`127.0.0.1`) e passou — sem provar nada sobre o acesso externo, que é o
 > caminho da câmera. A sonda válida é `curl --ftp-pasv` **de outra máquina**.
 >
-> ⚠️ Continua pendente, fora deste escopo: **a 3306 (MySQL) está exposta à internet**.
+> ⚠️ ~~A 3306 (MySQL) está exposta à internet~~ — **falso alarme**: o firewall só a
+> libera para o IP do escritório. Confirmado pelo usuário em 06/08/2026. O que a
+> minha sonda mediu foi "alcançável **do meu IP**", que é justamente o liberado.
 
 
 > ### 🟠 v4.9.2 — teste com a câmera REAL achou mais dois defeitos; falta abrir portas no roteador (06/08/2026)
@@ -103,8 +154,10 @@
 > faixa `23100-23200/tcp` para `189.22.240.43`. Feito isso, o fluxo fecha
 > sozinho — o resto do caminho está verificado.
 >
-> ⚠️ Achado colateral: **a 3306 (MySQL) está exposta à internet**. Não faz parte
-> deste trabalho, mas convém fechar.
+> ⚠️ ~~Achado colateral: a 3306 (MySQL) está exposta à internet~~ — **retratado**:
+> o firewall a libera só para o IP do escritório (confirmado em 06/08/2026). A
+> sonda mediu "alcançável do MEU IP" e eu li como "aberta ao mundo"; para afirmar
+> exposição seria preciso testar de um IP de fora da lista.
 
 
 > ### ✅ v4.9.1 PUBLICADA — extração de vídeo: **nunca funcionou**, e agora funciona (06/08/2026)
