@@ -78,9 +78,13 @@ if (empty($segments)) {
     // 'download' (v4.7.3) NÃO exige login de propósito: a autorização é a
     // assinatura HMAC com prazo na própria URL, porque é este o link que vai
     // no e-mail do relatório grande. Ver includes/download_token.php.
+    // 'midia' (v4.9.1) serve o vídeo extraído do cartão pela NOSSA origem —
+    // exige login e checa o escopo do cliente dentro do handler. Não é tela:
+    // fica fora de $screenByHandler, como 'download'.
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','config','ping','customer_switch','usuarios','perfil',
-                     'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download'];
+                     'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
+                     'midia'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',

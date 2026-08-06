@@ -14,7 +14,10 @@ require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
-$fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
+
+// Mídia servida por /midia (nossa origem, com login e escopo de cliente) em
+// vez do FILE_STORAGE_URL público da porta 23010 — ver handlers/midia.php.
+$fileStorageUrl = '/midia?f=';
 
 $selStatus = $_GET['status'] ?? '';
 $page = max(1, (int)($_GET['page'] ?? 1));

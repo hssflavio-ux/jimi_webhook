@@ -29,7 +29,13 @@ require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
-$fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
+
+// Mídia servida por /midia, na NOSSA origem — não mais direto pelo
+// FILE_STORAGE_URL (porta 23010). Aquele endpoint não manda CORS (e o player
+// de MPEG-TS precisa buscar os bytes por `fetch`), não aceita Range (sem o
+// qual não há como arrastar a barra) e ainda responde
+// `Content-Disposition: attachment`. Ver o cabeçalho de handlers/midia.php.
+$fileStorageUrl = '/midia?f=';
 
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
