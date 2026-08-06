@@ -50,20 +50,46 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             // a fila de /video/downloads ficaria com um "aguardando" eterno ao
             // lado do arquivo pronto — pior do que não ter fila nenhuma.
             //
-            // Casa pelo pedido `solicitado` mais ANTIGO do mesmo IMEI e canal:
-            // a câmera sobe na ordem em que recebe, e o nome do arquivo é
-            // decidido por ela (CH1_<data>_<hora>_<id>.ts), então não há chave
-            // comum entre pedido e arquivo além dessa ordem.
+            // Casa pelo `instructionID`, que a doc define como a chave de
+            // correspondência entre comando e resposta — `sendcommand.php` o
+            // gera e o guarda entre colchetes no `file_name` do pedido.
+            //
+            // O fallback ("pendente mais antigo do mesmo IMEI e canal") só vale
+            // para firmware que não devolva o instructionID. Ele ERRA quando há
+            // mais de um pedido em voo, e errou no teste em campo: um pedido que
+            // tinha falhado por timeout foi fechado com o resultado de outro,
+            // enviado depois. Por isso ele é o segundo caminho, não o primeiro.
             $mediaId = 0;
-            $pend = $this->db->prepare("
-                SELECT id FROM media_files
-                WHERE imei = :imei AND download_status = 'solicitado'
-                  AND source_type = 'extracao_37382'
-                  AND (:ch IS NULL OR channel IS NULL OR channel = :ch2)
-                ORDER BY id ASC LIMIT 1
-            ");
-            $pend->execute([':imei' => $imei, ':ch' => $channel, ':ch2' => $channel]);
-            $pendingId = (int)($pend->fetchColumn() ?: 0);
+            $pendingId = 0;
+
+            if ($instructionID) {
+                $q = $this->db->prepare("
+                    SELECT id FROM media_files
+                     WHERE imei = :imei AND download_status = 'solicitado'
+                       AND source_type = 'extracao_37382'
+                       AND file_name LIKE :marca
+                     ORDER BY id ASC LIMIT 1");
+                $q->execute([':imei' => $imei, ':marca' => '%[' . $instructionID . ']%']);
+                $pendingId = (int)($q->fetchColumn() ?: 0);
+            }
+
+            if ($pendingId === 0) {
+                $pend = $this->db->prepare("
+                    SELECT id FROM media_files
+                    WHERE imei = :imei AND download_status = 'solicitado'
+                      AND source_type = 'extracao_37382'
+                      AND (:ch IS NULL OR channel IS NULL OR channel = :ch2)
+                    ORDER BY id ASC LIMIT 1
+                ");
+                $pend->execute([':imei' => $imei, ':ch' => $channel, ':ch2' => $channel]);
+                $pendingId = (int)($pend->fetchColumn() ?: 0);
+                if ($pendingId > 0 && $instructionID) {
+                    Logger::warning('FTP Upload casado por ordem, não por instructionID', [
+                        'source' => $this->handlerName, 'imei' => $imei,
+                        'instruction_id' => $instructionID, 'media_id' => $pendingId,
+                    ]);
+                }
+            }
 
             if ($pendingId > 0) {
                 $this->db->prepare("

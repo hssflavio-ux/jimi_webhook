@@ -200,6 +200,30 @@ if ($proNo === 37382) {
     }
 
     $conteudo = json_decode($cmdContent, true) ?: [];
+
+    // ── `condition` e `instructionID` NÃO são opcionais (medido em campo) ────
+    //
+    // Sem os dois, a câmera **não confirma o comando**: o gateway devolve
+    // `_code 600 / "request timeout"` e passa a responder `302 Device busy` aos
+    // comandos seguintes. Com eles, a mesma câmera respondeu `ok` na hora.
+    // Foi assim que este bloco nasceu — não por leitura da doc, mas porque o
+    // 37382 "aceito" nunca produzia arquivo.
+    //
+    //   condition  → máscara de rede autorizada para o download:
+    //                bit0 WiFi, bit1 LAN, bit2 3G/4G. O default 7 libera as
+    //                três. Num rastreador veicular a única que existe é a 4G,
+    //                e deixá-la de fora faz a câmera aceitar e nunca baixar.
+    //                ⚠️ Vídeo por 4G consome franquia do SIM — quem quiser
+    //                restringir a WiFi usa VIDEO_FTP_CONDITION=1.
+    //   instructionID → a doc o define como a chave de correspondência entre o
+    //                comando e a resposta, e é ele que volta no
+    //                /pushftpfileupload. É o que liga o arquivo ao pedido.
+    $conteudo['condition'] = (int)(getenv('VIDEO_FTP_CONDITION') ?: 7);
+    if (empty($conteudo['instructionID'])) {
+        $conteudo['instructionID'] = 'ext' . date('YmdHis') . substr(bin2hex(random_bytes(4)), 0, 6);
+    }
+    $instructionId37382 = (string)$conteudo['instructionID'];
+
     $cmdContent = json_encode(array_merge($conteudo, $ftp),
                               JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
@@ -394,9 +418,14 @@ try {
     // não tinha como saber se o pedido tinha saído. O enum `download_status`
     // já previa esse estado; ninguém o escrevia.
     //
+    // `file_name` guarda o `instructionID` entre colchetes: é a chave que a doc
+    // define para casar comando e resposta, e é ela que volta no
+    // /pushftpfileupload. Sem isso a correlação era "o pedido pendente mais
+    // antigo do mesmo IMEI e canal" — e ela ERRA: no teste em campo, um pedido
+    // que falhou por timeout fechou com o resultado de outro, enviado depois.
+    //
     // `event_time` recebe o INÍCIO da janela pedida (BCD yyMMddHHmmss em GMT-0,
-    // como o device fala) — é o que /pushftpfileupload usa depois para casar o
-    // arquivo que chegou com o pedido que o originou.
+    // como o device fala).
     if ($proNo === 37382 && $dbStatus !== 'failed') {
         try {
             $c   = json_decode($cmdContent, true) ?: [];
@@ -412,7 +441,8 @@ try {
                         :etime, :ch, 'solicitado', :raw)
             ")->execute([
                 ':imei'  => $imei,
-                ':fname' => 'Extração CH' . (int)($c['channel'] ?? 0) . ' — aguardando a câmera',
+                ':fname' => 'Extração CH' . (int)($c['channel'] ?? 0)
+                          . ' — aguardando a câmera [' . ($instructionId37382 ?? '') . ']',
                 ':etime' => $ts ? $ts->format('Y-m-d H:i:s') : null,
                 ':ch'    => (int)($c['channel'] ?? 0) ?: null,
                 ':raw'   => $cmdParaGravar,   // sem a senha, como em `commands`
