@@ -48,8 +48,11 @@ $filterEvent = in_array($_GET['event'] ?? '', ['ligada', 'desligada'], true) ? $
 $page        = max(1, (int)($_GET['page'] ?? 1));
 $perPage     = 25;
 
+// A chave 'imei' continua na URL (links e modelos salvos a carregam), mas
+// ordena pela PLACA, que é o que a coluna exibe.
 $validSorts = ['started_at', 'imei'];
 [$sort, $order] = report_sort_params($validSorts, 'started_at', 'ASC');
+$orderBy = $sort === 'imei' ? "device_label $order" : "x.$sort $order";
 
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo);
 
@@ -72,23 +75,25 @@ if ($scopeCust !== null) {
     $innerWhere .= ' AND s.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
+// Igualdade, não LIKE: a placa virou seleção (v4.9.0)
 if ($filterImei !== '') {
-    $innerWhere .= ' AND s.imei LIKE :imei';
-    $params[':imei'] = "%$filterImei%";
+    $innerWhere .= ' AND s.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
 
 // Uma transição é o INÍCIO do segmento cujo estado de motor difere do anterior.
 // `state = 'parado'` é o predicado "motor desligado"; comparar os dois lados com
 // <> equivale a um XOR e ignora movimento↔ocioso.
+// Sem JOIN em `customers`: a coluna Cliente saiu da grade e dos exports
+// (v4.9.0) — a tela já roda dentro de um cliente (o seletor do topo e o filtro
+// deste formulário), e repetir o mesmo nome em toda linha só gastava largura.
 $sqlInner = "
     SELECT s.imei, s.customer_id, s.state, s.started_at, s.ended_at, s.duration_s,
            s.start_lat, s.start_lng, s.distance_km, s.max_speed,
            COALESCE(d.device_name, s.imei) AS device_label,
-           COALESCE(c.name, '—') AS customer_name,
            LAG(s.state) OVER w AS prev_state
     FROM device_state_segments s
     LEFT JOIN devices d ON d.imei = s.imei
-    LEFT JOIN customers c ON c.id = s.customer_id
     $innerWhere
     WINDOW w AS (PARTITION BY s.imei ORDER BY s.started_at)";
 
@@ -115,27 +120,29 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 
     $expRows = [];
     try {
-        $stmt = $db->prepare("SELECT * FROM ($sqlTrans) x ORDER BY x.$sort $order LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $stmt = $db->prepare("SELECT * FROM ($sqlTrans) x ORDER BY $orderBy LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $stmt->execute($params);
         // fetchAll antes do laço: endereço resolvido em UM lote paralelo
         $src = $stmt->fetchAll();
         $geoExp = geocode_map_rows($src, 'start_lat', 'start_lng', 2000);
         foreach ($src as $r) {
             $expRows[] = [
+                $r['device_label'],
                 fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                 $r['event_type'] === 'ligada' ? 'Ignição ligada' : 'Ignição desligada',
-                $r['device_label'],
-                $r['imei'],
-                $r['customer_name'],
                 fmt_duration((int)$r['dur_s']),
                 geocode_cell($geoExp, $r['start_lat'], $r['start_lng']),
+                export_map_link($r['start_lat'], $r['start_lng']),
             ];
         }
     } catch (Throwable $e) { /* tabela ausente → export vazio */ }
 
+    // Mesma ordem da grade: a PLACA é a primeira coluna — é por ela que o
+    // leitor procura a linha. IMEI e Cliente saíram (v4.9.0).
     stream_export($export, 'relatorio_ignicao',
-        ['Data/Hora', 'Evento', 'Equipamento', 'IMEI', 'Cliente', 'Permanência no estado', 'Endereço'],
-        $expRows, 'Relatório de Ignição', report_period_label($dateFrom, $dateTo));
+        ['Placa', 'Data/Hora', 'Evento', 'Permanência no estado', 'Endereço', 'Mapa'],
+        $expRows, 'Relatório de Ignição', report_period_label($dateFrom, $dateTo),
+        [1.0, 1.35, 1.2, 1.2, 3.4, 0.6]);
 }
 
 // ── Grade + KPIs ───────────────────────────────────────────────
@@ -152,7 +159,7 @@ try {
     $totalPages = max(1, (int)ceil($totalRows / $perPage));
     $offset     = ($page - 1) * $perPage;
 
-    $dataStmt = $db->prepare("SELECT * FROM ($sqlTrans) x ORDER BY x.$sort $order LIMIT $perPage OFFSET $offset");
+    $dataStmt = $db->prepare("SELECT * FROM ($sqlTrans) x ORDER BY $orderBy LIMIT $perPage OFFSET $offset");
     $dataStmt->execute($params);
     $rows = $dataStmt->fetchAll();
 
@@ -203,8 +210,10 @@ try {
 }
 
 $customers = [];
+$devices   = [];
 try {
     $customers = report_customer_options($db);
+    $devices   = report_device_options($db, $scopeCust);
 } catch (Throwable $e) {}
 
 require_once __DIR__ . '/../web/layout_base.php';
@@ -245,9 +254,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="Buscar..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <?= report_device_select($devices, $filterImei) ?>
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Evento</label>
@@ -297,22 +305,22 @@ require_once __DIR__ . '/../web/layout_base.php';
     <table>
         <thead>
             <tr>
+                <th><?= report_sort_link('imei', 'Placa', $sort, $order) ?></th>
                 <th><?= report_sort_link('started_at', 'Data/Hora', $sort, $order) ?></th>
                 <th>Evento</th>
-                <th><?= report_sort_link('imei', 'Equipamento', $sort, $order) ?></th>
-                <th>Cliente</th>
                 <th>Permanência no estado</th>
                 <th>Mapa</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted);">Nenhum acionamento de ignição no período</td></tr>
+            <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);">Nenhum acionamento de ignição no período</td></tr>
             <?php else: foreach ($rows as $r):
                 $hasCoords = $r['start_lat'] && $r['start_lng']
                           && is_valid_coordinate($r['start_lat'], $r['start_lng']);
             ?>
             <tr>
+                <td class="text-mono"><?= htmlspecialchars($r['device_label']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['started_at'], 'd/m/Y H:i:s') ?></td>
                 <td>
                     <?php if ($r['event_type'] === 'ligada'): ?>
@@ -321,11 +329,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <span class="badge">Ignição desligada</span>
                     <?php endif; ?>
                 </td>
-                <td>
-                    <?= htmlspecialchars($r['device_label']) ?>
-                    <div class="text-mono text-muted" style="font-size:11px;"><?= htmlspecialchars($r['imei']) ?></div>
-                </td>
-                <td><?= htmlspecialchars($r['customer_name']) ?></td>
                 <td class="text-mono">
                     <?= htmlspecialchars(fmt_duration((int)$r['dur_s'])) ?>
                     <?php if ($r['ended_at'] === null): ?>

@@ -44,18 +44,17 @@ function seeder(...args) {
 /**
  * Abre uma página do dashboard com o sino utilizável.
  *
- * `/resumo` mostra o tour de boas-vindas na primeira visita (handlers/resumo.php),
- * e o `#tour-overlay` cobre a tela inteira com z-index 10000 — todo clique no
- * sino é interceptado por ele. O tour se dá por visto pela chave
- * `jimi_tour_seen_v4` no localStorage, então é ela que o teste planta: fugir
- * para outra rota esconderia que a primeira visita tem esse estado.
+ * Até a v4.8.x `/resumo` abria o tour de boas-vindas na primeira visita, e o
+ * `#tour-overlay` cobria a tela inteira com z-index 10000 — todo clique no sino
+ * era interceptado por ele; o teste plantava `jimi_tour_seen_v4` no
+ * localStorage para escapar. O tour foi removido na v4.9.0 (a documentação do
+ * produto é a wiki), e a asserção mudou de "está escondido" para "não existe":
+ * `toBeHidden()` passa por vacuidade num seletor que não casa nada, e seria
+ * exatamente o que aconteceria se o overlay voltasse a ser renderizado visível.
  */
 async function abrirComSino(page, rota = '/resumo') {
-    await page.addInitScript(() => {
-        try { localStorage.setItem('jimi_tour_seen_v4', '1'); } catch (e) { /* storage bloqueado */ }
-    });
     await page.goto(rota);
-    await expect(page.locator('#tour-overlay')).toBeHidden();
+    await expect(page.locator('#tour-overlay')).toHaveCount(0);
 }
 
 /** GET /notificacoesdata pela sessão da página. */

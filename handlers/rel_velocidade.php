@@ -58,9 +58,10 @@ if ($scopeCust !== null) {
     $where .= ' AND e.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
+// Igualdade, não LIKE: a placa virou seleção (v4.9.0)
 if ($filterImei !== '') {
-    $where .= ' AND e.imei LIKE :imei';
-    $params[':imei'] = "%$filterImei%";
+    $where .= ' AND e.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
 if ($minOver > 0) {
     $where .= ' AND (e.max_speed - e.limit_kmh) >= :minover';
@@ -69,10 +70,12 @@ if ($minOver > 0) {
 
 $durExpr = 'COALESCE(e.duration_s, TIMESTAMPDIFF(SECOND, e.started_at, UTC_TIMESTAMP()))';
 
+// Sem JOIN em `customers`: a coluna Cliente saiu da grade e dos exports
+// (v4.9.0) — a tela já roda dentro de um cliente (o seletor do topo e o filtro
+// deste formulário), e repetir o mesmo nome em toda linha só gastava largura.
 $from = "
     FROM speeding_events e
     LEFT JOIN devices d ON d.imei = e.imei
-    LEFT JOIN customers c ON c.id = e.customer_id
     $where";
 
 $selectCols = "
@@ -80,10 +83,15 @@ $selectCols = "
            e.max_speed, e.avg_speed, e.limit_kmh, e.point_count,
            (e.max_speed - e.limit_kmh) AS over_by,
            e.start_lat, e.start_lng, e.max_lat, e.max_lng,
-           COALESCE(d.device_name, e.imei) AS device_label,
-           COALESCE(c.name, '—') AS customer_name";
+           COALESCE(d.device_name, e.imei) AS device_label";
 
-$orderBy = $sort === 'duration_s' ? "$durExpr $order" : "e.$sort $order";
+// A chave 'imei' continua na URL (links e modelos salvos a carregam), mas
+// ordena pela PLACA, que é o que a coluna exibe.
+$orderBy = match ($sort) {
+    'duration_s' => "$durExpr $order",
+    'imei'       => "device_label $order",
+    default      => "e.$sort $order",
+};
 
 // ── Export síncrono ────────────────────────────────────────────
 $export = $_GET['export'] ?? '';
@@ -100,26 +108,30 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         $geoExp = geocode_map_rows($src, 'max_lat', 'max_lng', 2000);
         foreach ($src as $r) {
             $expRows[] = [
+                $r['device_label'],
                 fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                 $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
                 fmt_duration((int)$r['dur_s']),
-                $r['device_label'],
-                $r['imei'],
-                $r['customer_name'],
                 number_format((float)$r['max_speed'], 1, ',', ''),
                 number_format((float)($r['avg_speed'] ?? 0), 1, ',', ''),
                 (int)$r['limit_kmh'],
                 number_format((float)$r['over_by'], 1, ',', ''),
                 geocode_cell($geoExp, $r['max_lat'], $r['max_lng']),
+                // O ponto é onde a velocidade MÁXIMA foi registrada, como na
+                // grade — não o início do evento.
+                export_map_link($r['max_lat'] ?: $r['start_lat'], $r['max_lng'] ?: $r['start_lng']),
             ];
         }
     } catch (Throwable $e) { /* tabela ausente → export vazio */ }
 
+    // Mesma ordem da grade: a PLACA é a primeira coluna — é por ela que o
+    // leitor procura a linha. IMEI e Cliente saíram (v4.9.0).
     stream_export($export, 'relatorio_velocidade',
-        ['Início', 'Fim', 'Duração', 'Equipamento', 'IMEI', 'Cliente',
+        ['Placa', 'Início', 'Fim', 'Duração',
          'Vel. máxima (km/h)', 'Vel. média (km/h)', 'Limite (km/h)', 'Excedente (km/h)',
-         'Endereço'],
-        $expRows, 'Relatório de Excesso de Velocidade', report_period_label($dateFrom, $dateTo));
+         'Endereço', 'Mapa'],
+        $expRows, 'Relatório de Excesso de Velocidade', report_period_label($dateFrom, $dateTo),
+        [1.0, 1.35, 1.35, 0.9, 1.0, 1.0, 0.9, 1.0, 3.2, 0.6]);
 }
 
 // ── Grade + KPIs ───────────────────────────────────────────────
@@ -161,8 +173,10 @@ try {
 }
 
 $customers = [];
+$devices   = [];
 try {
     $customers = report_customer_options($db);
+    $devices   = report_device_options($db, $scopeCust);
 } catch (Throwable $e) {}
 
 require_once __DIR__ . '/../web/layout_base.php';
@@ -203,9 +217,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="Buscar..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <?= report_device_select($devices, $filterImei) ?>
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Excedente mínimo</label>
@@ -255,10 +268,9 @@ require_once __DIR__ . '/../web/layout_base.php';
     <table>
         <thead>
             <tr>
+                <th><?= report_sort_link('imei', 'Placa', $sort, $order) ?></th>
                 <th><?= report_sort_link('started_at', 'Início', $sort, $order) ?></th>
                 <th><?= report_sort_link('duration_s', 'Duração', $sort, $order) ?></th>
-                <th><?= report_sort_link('imei', 'Equipamento', $sort, $order) ?></th>
-                <th>Cliente</th>
                 <th><?= report_sort_link('max_speed', 'Vel. máxima', $sort, $order) ?></th>
                 <th>Limite</th>
                 <th>Excedente</th>
@@ -267,7 +279,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Nenhum excesso de velocidade no período</td></tr>
+            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum excesso de velocidade no período</td></tr>
             <?php else: foreach ($rows as $r):
                 $lat = $r['max_lat'] ?: $r['start_lat'];
                 $lng = $r['max_lng'] ?: $r['start_lng'];
@@ -278,6 +290,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 $overBadge = $over >= 20 ? 'badge-error' : ($over >= 10 ? 'badge-warning' : 'badge');
             ?>
             <tr>
+                <td class="text-mono"><?= htmlspecialchars($r['device_label']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['started_at'], 'd/m/Y H:i:s') ?></td>
                 <td class="text-mono">
                     <?= htmlspecialchars(fmt_duration((int)$r['dur_s'])) ?>
@@ -285,11 +298,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <span class="badge badge-info">em curso</span>
                     <?php endif; ?>
                 </td>
-                <td>
-                    <?= htmlspecialchars($r['device_label']) ?>
-                    <div class="text-mono text-muted" style="font-size:11px;"><?= htmlspecialchars($r['imei']) ?></div>
-                </td>
-                <td><?= htmlspecialchars($r['customer_name']) ?></td>
                 <td class="text-mono"><?= number_format((float)$r['max_speed'], 1, ',', '.') ?> km/h</td>
                 <td class="text-mono"><?= (int)$r['limit_kmh'] ?> km/h</td>
                 <td><span class="badge <?= $overBadge ?> text-mono">+<?= number_format($over, 1, ',', '.') ?></span></td>

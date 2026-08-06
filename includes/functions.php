@@ -472,6 +472,119 @@ function report_customer_options(PDO $db): array {
 }
 
 /**
+ * SQL que resolve o NOME do alarme na leitura — joins + expressão.
+ *
+ * `pushalarm.php` resolve o nome UMA vez, quando o webhook chega, e grava o
+ * resultado em `alarms.alarm_name`. Código ausente de `alarm_types` naquele
+ * instante vira o rótulo `Código NNNN (JTT)` e fica gravado assim **para
+ * sempre**, mesmo depois de o código entrar no catálogo.
+ *
+ * A resolução é DELIBERADAMENTE um remendo, não uma substituição: o nome
+ * gravado continua vencendo sempre que for um nome de verdade. Preferir o
+ * catálogo cegamente apagaria o prefixo `Fim de Alarme: ` (evento de FIM de
+ * alarme) e o bitmask decodificado do JT/T 256 ("Excesso de Velocidade +
+ * Fadiga…"), que o catálogo não sabe reproduzir. Só o rótulo genérico é
+ * trocado.
+ *
+ * Mora aqui, e não no handler, porque a MESMA resolução é usada pelo Relatório
+ * de Alarmes na tela e pelo relatório agendado do `scripts/worker.php`. Foram
+ * cópias divergentes por tempo demais: o worker imprimia `alarm_type` cru — o
+ * código numérico, sem nem o rótulo genérico.
+ *
+ * ⚠️ O alias da tabela de alarmes é fixo em `a`; as duas consultas que usam
+ * isto já o adotam.
+ *
+ * @returns array{joins:string, expr:string}
+ */
+function alarm_label_sql(): array {
+    return [
+        'joins' => "
+            LEFT JOIN alarm_types atc ON a.msg_class = 1 AND a.alarm_subtype IS NOT NULL
+                                     AND atc.protocol = 'JTT'
+                                     AND atc.alarm_code = CONCAT(a.alarm_type, '-', a.alarm_subtype)
+            LEFT JOIN alarm_types atb ON atb.protocol = IF(a.msg_class = 1, 'JTT', 'JIMI')
+                                     AND atb.alarm_code = a.alarm_type",
+        'expr' => "
+            CASE WHEN COALESCE(atc.alarm_name_pt, atb.alarm_name_pt) IS NULL
+                      THEN COALESCE(NULLIF(a.alarm_name, ''), a.alarm_type)
+                 WHEN a.alarm_name LIKE 'Fim de Alarme: Código %'
+                      THEN CONCAT('Fim de Alarme: ', COALESCE(atc.alarm_name_pt, atb.alarm_name_pt))
+                 WHEN a.alarm_name IS NULL OR a.alarm_name = '' OR a.alarm_name LIKE 'Código %'
+                      THEN COALESCE(atc.alarm_name_pt, atb.alarm_name_pt)
+                 ELSE a.alarm_name
+            END",
+    ];
+}
+
+/**
+ * Placas do escopo corrente, para o `<select>` de PLACA dos relatórios.
+ *
+ * Companheira de `report_customer_scope()`, pelo mesmo motivo de
+ * `report_customer_options()`: o filtro tem de listar só o que o usuário pode
+ * consultar. `$scopeCust` é o valor que aquela função devolveu — `null` só
+ * acontece para admin de plataforma ("todos os clientes"), e aí a lista segue o
+ * escopo de revendedor, se houver.
+ *
+ * Não filtra por `is_active`: relatório é histórico, e um equipamento
+ * desativado ontem continua tendo posições, alarmes e paradas de anteontem.
+ * Escondê-lo do filtro tornaria esses dados inalcançáveis pela tela.
+ *
+ * @param PDO      $db        Conexão ativa
+ * @param int|null $scopeCust Cliente do escopo (null = todos os permitidos)
+ * @param int      $limit     Teto de linhas (um `<select>` maior que isto é inusável)
+ * @returns array<array{imei:string,device_name:?string}>
+ */
+function report_device_options(PDO $db, ?int $scopeCust = null, int $limit = 2000): array {
+    $limit = max(1, $limit);
+    try {
+        if ($scopeCust !== null) {
+            $stmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid
+                                  ORDER BY device_name, imei LIMIT $limit");
+            $stmt->execute([':cid' => $scopeCust]);
+            return $stmt->fetchAll();
+        }
+        $allowed = reseller_scope_ids();
+        if ($allowed === null) {
+            return $db->query("SELECT imei, device_name FROM devices ORDER BY device_name, imei LIMIT $limit")->fetchAll();
+        }
+        if (!$allowed) return [];
+        // Ids já passaram por (int) em reseller_scope_ids() — ver report_customer_options()
+        $in = implode(',', array_map('intval', $allowed));
+        return $db->query("SELECT imei, device_name FROM devices WHERE customer_id IN ($in)
+                           ORDER BY device_name, imei LIMIT $limit")->fetchAll();
+    } catch (Throwable $e) {
+        return [];   // falha fechada: o seletor fica vazio, não completo
+    }
+}
+
+/**
+ * `<select>` de placa dos filtros de relatório.
+ *
+ * O parâmetro continua se chamando `imei` na URL por retrocompatibilidade —
+ * links antigos, modelos salvos em `report_templates` e o e-mail dos
+ * agendamentos carregam essa chave. O que muda é só o que o usuário vê e
+ * escolhe: a PLACA.
+ *
+ * @param array  $devices  Saída de report_device_options()
+ * @param string $selected IMEI atualmente escolhido ('' = nenhum)
+ * @param string $allLabel Rótulo da opção vazia
+ * @param string $name     Nome do campo
+ * @returns string HTML do <select>
+ */
+function report_device_select(array $devices, string $selected = '', string $allLabel = 'Todas', string $name = 'imei'): string {
+    $html = '<select name="' . htmlspecialchars($name, ENT_QUOTES) . '"'
+          . ' style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">'
+          . '<option value="">' . htmlspecialchars($allLabel) . '</option>';
+    foreach ($devices as $d) {
+        $imei = (string)($d['imei'] ?? '');
+        $html .= '<option value="' . htmlspecialchars($imei, ENT_QUOTES) . '"'
+               . ($selected === $imei ? ' selected' : '') . '>'
+               . htmlspecialchars(($d['device_name'] ?? '') ?: $imei) . '</option>';
+    }
+    return $html . '</select>';
+}
+
+/**
  * Clientes que o usuário logado pode enxergar QUANDO ele é revendedor.
  *
  * Devolve `null` — "não se aplica, não restrinja" — para admin de plataforma

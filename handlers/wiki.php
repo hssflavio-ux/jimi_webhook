@@ -608,10 +608,6 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Gráficos (Alarmes/Ocorrências)</td><td>Volume hora a hora do dia</td><td>Automática (30s)</td></tr>
 </table>
 
-<div class="callout info">
-<strong>Tour de boas-vindas:</strong> Na primeira visita, um tour de 5 passos destaca as principais áreas da tela. Ele não aparece novamente após ser concluído (a preferência fica guardada no seu navegador).
-</div>
-
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <h2 id="rastreamento">Rastreamento</h2>
 <!-- ═══════════════════════════════════════════════════════════════ -->

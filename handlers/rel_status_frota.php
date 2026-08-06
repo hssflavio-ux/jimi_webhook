@@ -54,11 +54,15 @@ if ($scopeCust !== null) {
     $where .= ' AND d.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
+// Igualdade, não LIKE: a placa virou seleção (era caixa de busca por IMEI ou
+// nome), e o valor escolhido é sempre um IMEI exato da lista.
 if ($filterImei !== '') {
-    $where .= ' AND (d.imei LIKE :imei OR d.device_name LIKE :imei2)';
-    $params[':imei']  = "%$filterImei%";
-    $params[':imei2'] = "%$filterImei%";
+    $where .= ' AND d.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
+
+// Placas do escopo, para o filtro
+$devices = report_device_options($db, $scopeCust);
 
 /**
  * Monta a consulta da frota, com ou sem a tabela de segmentos.
@@ -168,8 +172,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $geoExp = geocode_map_rows($srcExp, 'last_latitude', 'last_longitude', 2000);
     foreach ($srcExp as $r) {
         $expRows[] = [
-            $r['device_name'] ?? $r['imei'],
-            $r['imei'],
+            $r['device_name'] ?: $r['imei'],
             $r['customer_name'],
             fleet_state_label($r['current_state']),
             fmt_duration($r['in_state_s']),
@@ -177,14 +180,19 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['last_speed'] !== null ? number_format((float)$r['last_speed'], 1, ',', '') : '—',
             (int)$r['limit_kmh'],
             geocode_cell($geoExp, $r['last_latitude'], $r['last_longitude']),
+            export_map_link($r['last_latitude'], $r['last_longitude']),
         ];
     }
+    // Placa no lugar de "Equipamento", sem IMEI e com o link do mapa (v4.9.0),
+    // no mesmo padrão dos demais relatórios exportados.
     stream_export($export, 'status_frota',
-        ['Equipamento', 'IMEI', 'Cliente', 'Estado', 'Tempo no estado', 'Última posição',
-         'Velocidade (km/h)', 'Limite (km/h)', 'Endereço'],
+        ['Placa', 'Cliente', 'Estado', 'Tempo no estado', 'Última posição',
+         'Velocidade (km/h)', 'Limite (km/h)', 'Endereço', 'Mapa'],
         $expRows, 'Status da Frota',
         'Foto de ' . fmt_brt($nowUtc, 'd/m/Y H:i:s') . ' (BRT)'
-        . ($filterState !== '' ? ' — ' . fleet_state_label($filterState) : ''));
+        . ($filterState !== '' ? ' — ' . fleet_state_label($filterState) : ''),
+        // O endereço é a coluna longa; o resto é curto e de largura previsível.
+        [1.0, 1.4, 1.0, 1.0, 1.35, 0.95, 0.85, 3.4, 0.6]);
 }
 
 $customers = [];
@@ -240,8 +248,7 @@ $cardBase = http_build_query($cardQ);
         <?php endif; ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="IMEI ou nome..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:170px;">
+            <?= report_device_select($devices, $filterImei) ?>
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Estado</label>

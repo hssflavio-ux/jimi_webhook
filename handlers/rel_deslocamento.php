@@ -10,7 +10,9 @@
  *
  * Filtro: Ativos + Período (teto global de 31 dias) + faixa horária opcional
  * + [Gerar] + Export. Cada linha tem link "Ver rota" para o mapa do percurso
- * (/relatorios/deslocamento/rota).
+ * (/relatorios/deslocamento/rota) — que exige login, por isso o PDF e o XLSX
+ * levam no lugar dois links de OSM (partida e chegada), que abrem para quem
+ * recebeu o arquivo sem ter conta no sistema.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -51,21 +53,6 @@ $totalPages = 1;
 $devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
 $devices->execute([':cid' => $customerId]);
 $devices = $devices->fetchAll();
-
-/**
- * URL absoluta da rota de uma viagem, para a coluna "Rota" do export.
- *
- * Em CSV/XLSX a célula vira um endereço clicável; no PDF é texto, mas ainda
- * permite copiar. Sem APP_URL devolve o caminho relativo — melhor do que vazio.
- *
- * @param int $tripId
- * @returns string
- */
-function rota_url(int $tripId): string
-{
-    $base = rtrim((string)(getenv('APP_URL') ?: ''), '/');
-    return $base . '/relatorios/deslocamento/rota?trip_id=' . $tripId;
-}
 
 /**
  * Subtítulo do export: o FILTRO aplicado, não só o período.
@@ -179,7 +166,7 @@ if ($generated) {
                 $expStmt->execute($params);
                 while ($r = $expStmt->fetch()) {
                     // Mesma ordem da tela: placa, motorista, início, fim,
-                    // duração, vel. máx, distância, alarmes, rota.
+                    // duração, vel. máx, distância, alarmes, mapa.
                     $expRows[] = [
                         $r['device_name'],
                         $r['driver_name'],
@@ -189,17 +176,25 @@ if ($generated) {
                         $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
                         $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
                         (int)($r['alarm_count'] ?? 0),
-                        // Célula de LINK, como a coluna Mapa dos outros
-                        // relatórios (v4.8.2): a URL crua ocupava a coluna
-                        // inteira e, no PDF, ainda quebraria em três linhas.
-                        new ExportLink(rota_url((int)$r['id']), 'ROTA'),
+                        // Dois PONTOS no OSM no lugar da antiga coluna "Rota"
+                        // (v4.9.0). Aquela apontava para /relatorios/deslocamento/rota,
+                        // tela nossa e atrás de login: quem recebia o arquivo por
+                        // e-mail sem conta no sistema caía na tela de login. E o
+                        // OSM público não sabe desenhar um percurso a partir de
+                        // uma URL — só aceita marcador (?mlat/?mlon) ou uma rota
+                        // RECALCULADA pelo motor de rotas, que não é o caminho
+                        // que o veículo fez. Partida e chegada abrem para
+                        // qualquer um; o traçado real continua na tela, para
+                        // quem tem login.
+                        export_map_link($r['start_lat'], $r['start_lng'], 'PARTIDA'),
+                        export_map_link($r['end_lat'], $r['end_lng'], 'CHEGADA'),
                     ];
                 }
                 stream_export($export, 'relatorio_deslocamento',
-                    ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes', 'Rota'],
+                    ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes', 'Mapa (partida)', 'Mapa (chegada)'],
                     $expRows, 'Relatório de Deslocamento',
                     desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
-                    [1.0, 1.5, 1.3, 1.3, 0.85, 1.05, 1.0, 0.8, 0.7]);
+                    [1.0, 1.5, 1.3, 1.3, 0.85, 1.05, 1.0, 0.8, 0.8, 0.85]);
             }
         } catch (Exception $e) { /* tabela trips ausente → export vazio */ }
     }

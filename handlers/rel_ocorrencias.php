@@ -4,10 +4,10 @@
  * Rota: /relatorios/ocorrencias
  *
  * Versão histórica/auditável do dashboard DMS.
- * Filtros: Clientes, Filiais, Ativos, Tipo de Alarme, Motoristas,
- *          Falso positivo, Status, Período.
- * Grid: Cliente, Identificador, Motorista, IMEI, Último alarme em,
- *       Alarme, Falso positivo, Situação.
+ * Filtros: Clientes, Filiais, Placa, Tipo de Alarme, Motoristas,
+ *          Falso positivo, Risco, Status, Período.
+ * Grade: Cliente, Placa, Motorista, Tipo de Alarme, Último alarme em,
+ *        Qtd, Risco, Falso positivo, Situação.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -38,8 +38,11 @@ $filterDriver = $_GET['driver_id'] ?? null;   // B4: filtro de Motorista (YUV)
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
 
-// Ordenação: whitelist de colunas + default crescente por data/hora
+// Ordenação: whitelist de colunas + default crescente por data/hora.
+// A chave 'imei' continua na URL (links e modelos salvos a carregam), mas o
+// ORDER BY é pela PLACA — que é o que a coluna passou a exibir.
 [$sort, $order] = report_sort_params(['last_alarm_at', 'imei', 'alarm_count'], 'last_alarm_at', 'ASC');
+$orderBy = $sort === 'imei' ? "device_label $order" : "o.$sort $order";
 
 $where = 'WHERE o.last_alarm_at BETWEEN :df AND :dt';
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo); // dias BRT → janela UTC
@@ -51,9 +54,17 @@ if ($scopeCust !== null) {
     $where .= ' AND o.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
+
+// Placas do MESMO escopo, para o filtro (era caixa de texto de IMEI): listar
+// mais do que o filtro consulta é o vazamento que report_customer_options()
+// existe para não repetir.
+$devices = report_device_options($db, $scopeCust);
+// Igualdade, não LIKE: o valor agora vem de um <select> de placas, não de uma
+// caixa de busca. Com LIKE, escolher a placa cujo IMEI é sufixo do IMEI de
+// outra traria as duas.
 if ($filterImei) {
-    $where .= ' AND o.imei LIKE :imei';
-    $params[':imei'] = "%$filterImei%";
+    $where .= ' AND o.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
 if ($filterType) {
     $where .= ' AND o.alarm_type = :atype';
@@ -89,20 +100,22 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $expRows = [];
     try {
         $expStmt = $db->prepare("
-            SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name
+            SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name,
+                   COALESCE(dv.device_name, o.imei) AS device_label
             FROM occurrences o
             LEFT JOIN customers c ON c.id = o.customer_id
             LEFT JOIN drivers dr ON dr.id = o.driver_id
             LEFT JOIN branches b ON b.id = o.branch_id
+            LEFT JOIN devices dv ON dv.imei = o.imei
             $where
-            ORDER BY o.$sort $order
+            ORDER BY $orderBy
             LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $expStmt->execute($params);
         while ($r = $expStmt->fetch()) {
             $expRows[] = [
                 $r['customer_name'],
                 $r['branch_name'] ?? '—',
-                $r['imei'],
+                $r['device_label'],
                 $r['driver_name'],
                 $r['alarm_type'],
                 fmt_brt($r['last_alarm_at']),
@@ -114,7 +127,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         }
     } catch (Exception $e) { /* tabela v4 ausente → export vazio */ }
     stream_export($export, 'relatorio_ocorrencias',
-        ['Cliente', 'Filial', 'IMEI', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
+        ['Cliente', 'Filial', 'Placa', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
         $expRows, 'Relatório de Ocorrências', report_period_label($dateFrom, $dateTo));
 }
 
@@ -128,13 +141,15 @@ try {
 
     // Data
     $dataStmt = $db->prepare("
-        SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name
+        SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name,
+               COALESCE(dv.device_name, o.imei) AS device_label
         FROM occurrences o
         LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN drivers dr ON dr.id = o.driver_id
         LEFT JOIN branches b ON b.id = o.branch_id
+        LEFT JOIN devices dv ON dv.imei = o.imei
         $where
-        ORDER BY o.$sort $order
+        ORDER BY $orderBy
         LIMIT $perPage OFFSET $offset
     ");
     $dataStmt->execute($params);
@@ -194,9 +209,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei ?? '') ?>" placeholder="Buscar IMEI..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <?= report_device_select($devices, (string)($filterImei ?? '')) ?>
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo</label>
@@ -278,7 +292,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>Cliente</th>
-                <th><?= report_sort_link('imei', 'IMEI', $sort, $order) ?></th>
+                <th><?= report_sort_link('imei', 'Placa', $sort, $order) ?></th>
                 <th>Motorista</th>
                 <th>Tipo de Alarme</th>
                 <th><?= report_sort_link('last_alarm_at', 'Último Alarme', $sort, $order) ?></th>
@@ -301,7 +315,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             ?>
             <tr>
                 <td><?= htmlspecialchars($r['customer_name']) ?></td>
-                <td><span class="text-mono"><?= htmlspecialchars($r['imei']) ?></span></td>
+                <td><span class="text-mono"><?= htmlspecialchars($r['device_label']) ?></span></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td><?= htmlspecialchars($r['alarm_type']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['last_alarm_at']) ?></td>

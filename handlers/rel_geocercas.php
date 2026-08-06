@@ -61,9 +61,10 @@ if ($filterFence) {
     $where .= ' AND e.geofence_id = :gid';
     $params[':gid'] = $filterFence;
 }
+// Igualdade, não LIKE: o valor vem de um <select> de placas (v4.9.0)
 if ($filterImei !== '') {
-    $where .= ' AND e.imei LIKE :imei';
-    $params[':imei'] = "%$filterImei%";
+    $where .= ' AND e.imei = :imei';
+    $params[':imei'] = $filterImei;
 }
 // O filtro de tipo só faz sentido na lista de eventos; na permanência a
 // linha É sempre uma entrada.
@@ -137,14 +138,16 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                 $expRows[] = [
                     $r['fence_name'],
                     $r['device_label'],
-                    $r['imei'],
                     fmt_brt($r['event_time'], 'd/m/Y H:i:s'),
                     $exit ? fmt_brt($exit, 'd/m/Y H:i:s') : 'Em permanência',
                     fmt_dwell($dwell),
                 ];
             }
+            // Sem a coluna IMEI (v4.9.0): quem lê o relatório identifica o
+            // veículo pela placa, e o número de série do rastreador só ocupava
+            // largura numa página A4 já disputada.
             stream_export($export, 'relatorio_geocercas_permanencia',
-                ['Geocerca', 'Equipamento', 'IMEI', 'Entrada', 'Saída', 'Permanência'],
+                ['Geocerca', 'Placa', 'Entrada', 'Saída', 'Permanência'],
                 $expRows, 'Relatório de Geocercas — Permanência', report_period_label($dateFrom, $dateTo));
         } else {
             $stmt = $db->prepare("
@@ -163,15 +166,17 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                     fmt_brt($r['event_time'], 'd/m/Y H:i:s'),
                     $r['fence_name'],
                     $r['device_label'],
-                    $r['imei'],
                     $r['event_type'] === 'entrada' ? 'Entrada' : 'Saída',
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
                     geocode_cell($geoExp, $r['latitude'], $r['longitude']),
                 ];
             }
+            // Sem a coluna IMEI (v4.9.0) — ver a nota no export de permanência
             stream_export($export, 'relatorio_geocercas',
-                ['Data/Hora', 'Geocerca', 'Equipamento', 'IMEI', 'Evento', 'Velocidade (km/h)', 'Endereço'],
-                $expRows, 'Relatório de Geocercas', report_period_label($dateFrom, $dateTo));
+                ['Data/Hora', 'Geocerca', 'Placa', 'Evento', 'Velocidade (km/h)', 'Endereço'],
+                $expRows, 'Relatório de Geocercas', report_period_label($dateFrom, $dateTo),
+                // O endereço é a coluna longa; as demais são curtas e fixas.
+                [1.35, 1.6, 1.0, 0.8, 0.95, 3.4]);
         }
     } catch (Throwable $e) {
         http_response_code(500);
@@ -229,7 +234,14 @@ try {
     $tableMissing = true;
 }
 
-// ── Dropdown de cercas ─────────────────────────────────────────
+// ── Dropdowns de cerca e de placa ──────────────────────────────
+// A placa virou seleção (era caixa de texto de busca): o usuário não decora o
+// IMEI, e digitar parte dele trazia mais de um veículo sem avisar.
+// `$customerId ?:` e não `!== null`: o resto deste arquivo trata 0 e '' como
+// "sem cliente" (ver o `if ($customerId)` da lista de cercas, logo abaixo), e
+// `(int)''` viraria `customer_id = 0` — uma lista vazia sem motivo.
+$devices = report_device_options($db, $customerId ? (int)$customerId : null);
+
 $fenceList = [];
 try {
     if ($customerId) {
@@ -286,8 +298,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
-            <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="Buscar..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+            <?= report_device_select($devices, $filterImei) ?>
         </div>
         <?php if ($view === 'eventos'): ?>
         <div>

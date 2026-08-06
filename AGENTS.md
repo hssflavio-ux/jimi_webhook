@@ -180,6 +180,12 @@ Webhook handlers return HTTP 200 immediately, then continue processing. Requires
 ### Timezone handling
 All DB times are UTC. Dashboard converts to BRT (America/Sao_Paulo) for display.
 
+### XLSX formula cells need a cached `<v>` (v4.9.0)
+`XlsxWriter` writes the map link as `=HYPERLINK(url;"MAPA")`. A formula without a **cached value** only renders after the app recalculates the sheet — viewers that don't recalculate (Google Sheets preview, Numbers, Windows preview) show the cell **empty**. "The link shows in the PDF but not in Excel" is the signature of this bug. Always emit `<f>…</f><v>label</v>`.
+
+### Alarm names are resolved once, at ingestion (v4.9.0)
+`pushalarm.php` looks the code up in `alarm_types` when the webhook arrives and stores the result in `alarms.alarm_name`. A code missing from the catalogue at that moment is stored as `Código NNNN (JTT)` **forever**, even after the code is catalogued later. `rel_alarmes.php` therefore re-resolves at read time — but replaces **only** the generic label: the stored name wins whenever it is a real name, otherwise the `Fim de Alarme: ` prefix (alarm END event) and the decoded JT/T 256 bitmask would be wiped out by the catalogue name. New codes go in via migration, and only those the **official doc publishes** — `1047` arrives from devices and is absent from the doc; naming it by guess would break name-based joins (see `alarm_types` above).
+
 ## Commands
 
 ```bash

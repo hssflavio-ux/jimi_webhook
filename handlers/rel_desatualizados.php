@@ -5,7 +5,8 @@
  *
  * Filtro: Cliente.
  * Resumo em faixas: <24h, >1d, >7d, >30d, Nunca posicionados.
- * Cada faixa com Detalhes + Export.
+ * Grade da frota completa (com mapa embutido e export) + cada faixa com
+ * Detalhes e Export próprios.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -65,6 +66,57 @@ try {
     }
 } catch (Exception $e) {
     $bucketCounts = array_fill_keys(array_keys($buckets), 0);
+}
+
+// ── Export síncrono da FROTA COMPLETA (v4.9.0) ──────────────────
+// A tela só sabia exportar a faixa aberta no drill-down; a grade principal —
+// a frota inteira ordenada por tempo sem transmitir, que é a resposta que se
+// leva para a reunião — não tinha PDF nem planilha. O `!$detailBucket` separa
+// os dois: com uma faixa aberta, quem manda é o export da faixa, logo abaixo.
+$export = $_GET['export'] ?? '';
+if (!$detailBucket && in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('relatorios', 'export');
+    require_once __DIR__ . '/../includes/geocode.php';
+    require_once __DIR__ . '/../includes/export_helper.php';
+
+    $expRows = [];
+    try {
+        $expStmt = $db->prepare("
+            SELECT d.imei, d.device_name, ds.last_gps_time, ds.last_latitude, ds.last_longitude,
+                   ds.last_acc_status,
+                   TIMESTAMPDIFF(MINUTE, ds.last_gps_time, UTC_TIMESTAMP()) AS mins_since
+            FROM devices d
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            " . ($where ?: '') . "
+            ORDER BY ds.last_gps_time IS NULL " . ($order === 'ASC' ? 'ASC' : 'DESC') . ",
+                     ds.last_gps_time " . ($order === 'ASC' ? 'DESC' : 'ASC') . "
+            LIMIT " . SYNC_EXPORT_MAX_ROWS);
+        $expStmt->execute($params);
+        // fetchAll antes do laço: endereço resolvido em UM lote paralelo
+        $src = $expStmt->fetchAll();
+        $geoExp = geocode_map_rows($src, 'last_latitude', 'last_longitude', 2000);
+        foreach ($src as $r) {
+            $mins = $r['last_gps_time'] === null ? null : (int)$r['mins_since'];
+            $expRows[] = [
+                $r['device_name'] ?: $r['imei'],
+                tempo_sem_transmitir($mins),
+                $r['last_gps_time'] ? fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s') : '—',
+                geocode_cell($geoExp, $r['last_latitude'], $r['last_longitude']),
+                export_map_link($r['last_latitude'], $r['last_longitude']),
+                $r['last_acc_status'] === null ? '—' : ((int)$r['last_acc_status'] === 1 ? 'Ligada' : 'Desligada'),
+                // Mesmo critério da grade: sem posição há mais de 30 min o GPS
+                // não é "válido", é silêncio.
+                ($mins !== null && $mins <= 30) ? 'Válido' : 'Sem sinal',
+            ];
+        }
+    } catch (Throwable $e) { /* tabelas ausentes → export vazio */ }
+
+    stream_export($export, 'relatorio_desatualizados',
+        ['Placa', 'Sem transmitir há', 'Data/Hora', 'Endereço', 'Mapa', 'Ignição', 'Status do GPS'],
+        $expRows, 'Relatório de Desatualizados — Frota completa',
+        'Foto de ' . fmt_brt(gmdate('Y-m-d H:i:s'), 'd/m/Y H:i:s') . ' (BRT)',
+        // Endereço é a coluna longa; o resto é curto e de largura previsível.
+        [1.0, 1.2, 1.35, 3.6, 0.6, 0.8, 0.9]);
 }
 
 // ── Grade TOTAL (v4.8.0) ────────────────────────────────────────
@@ -175,13 +227,44 @@ if ($detailBucket && isset($buckets[$detailBucket]) && in_array($export, ['xlsx'
 
 $customers = report_customer_options($db);
 
+// Pontos do mapa embutido: só quem tem coordenada. O balão leva a PLACA e a
+// data/hora da última posição — aqui cada marcador é um veículo diferente, ao
+// contrário do relatório de Posições, onde a placa é sempre a mesma.
+$mapPoints = [];
+foreach ($totalRows as $r) {
+    if (!empty($r['last_latitude']) && (float)$r['last_latitude'] != 0.0
+        && !empty($r['last_longitude']) && (float)$r['last_longitude'] != 0.0) {
+        $mapPoints[] = [
+            'lat'   => (float)$r['last_latitude'],
+            'lng'   => (float)$r['last_longitude'],
+            'placa' => $r['device_name'] ?: $r['imei'],
+            'when'  => $r['last_gps_time'] ? fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s') : '—',
+        ];
+    }
+}
+
 $page_title = 'Relatório de Desatualizados';
 $current_route = 'rel_desatualizados';
+$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
+<?php
+// O export do topo é sempre o da FROTA COMPLETA: o `bucket` sai da query de
+// propósito, senão o botão mudaria de significado assim que uma faixa fosse
+// aberta (a faixa tem os botões dela, mais abaixo).
+$expQ = $_GET;
+unset($expQ['export'], $expQ['bucket']);
+$expBaseFrota = http_build_query($expQ);
+?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Desatualizados</h2>
+    <div style="display:flex;gap:8px;">
+        <a href="?<?= $expBaseFrota ?><?= $expBaseFrota ? '&' : '' ?>export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+        <a href="?<?= $expBaseFrota ?><?= $expBaseFrota ? '&' : '' ?>export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+    </div>
 </div>
 
 <?php render_template_bar('rel_desatualizados', '/relatorios/desatualizados'); ?>
@@ -239,7 +322,15 @@ require_once __DIR__ . '/../web/layout_base.php';
         Frota completa
         <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= count($totalRows) ?>)</span>
     </h3>
+    <?php if ($mapPoints): ?>
+    <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()">Ver no Mapa</button>
+    <?php endif; ?>
 </div>
+
+<?php if ($mapPoints): ?>
+<div id="map-container"></div>
+<?php endif; ?>
+
 <div class="table-wrap mb-24">
     <table>
         <thead>
@@ -318,6 +409,31 @@ require_once __DIR__ . '/../web/layout_base.php';
         </tbody>
     </table>
 </div>
+<?php endif; ?>
+
+<?php if ($mapPoints): ?>
+<script>
+var mapData = <?= json_encode($mapPoints, JSON_UNESCAPED_UNICODE) ?>;
+var mapInstance = null;
+function toggleMap() {
+    var container = document.getElementById('map-container');
+    if (container.style.display === 'block') { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    if (!mapInstance) {
+        mapInstance = L.map('map-container');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(mapInstance);
+        var bounds = [];
+        mapData.forEach(function(p) {
+            bounds.push([p.lat, p.lng]);
+            L.marker([p.lat, p.lng]).addTo(mapInstance)
+                .bindPopup('<b>' + p.placa + '</b><br>' + p.when);
+        });
+        if (bounds.length > 0) mapInstance.fitBounds(bounds);
+        else mapInstance.setView([-15.78, -47.93], 5);
+    }
+    setTimeout(function(){ mapInstance.invalidateSize(); }, 100);
+}
+</script>
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

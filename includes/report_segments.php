@@ -86,30 +86,40 @@ function render_segment_report(array $cfg): void
         $where .= ' AND s.customer_id = :cid';
         $params[':cid'] = $scopeCust;
     }
+    // Igualdade, não LIKE: a placa virou seleção (v4.9.0). Com LIKE, escolher a
+    // placa cujo IMEI é sufixo do de outra traria as duas.
     if ($filterImei !== '') {
-        $where .= ' AND s.imei LIKE :imei';
-        $params[':imei'] = "%$filterImei%";
+        $where .= ' AND s.imei = :imei';
+        $params[':imei'] = $filterImei;
     }
     if ($minMinutes > 0) {
         $where .= " AND $durExpr >= :minsecs";
         $params[':minsecs'] = $minMinutes * 60;
     }
 
+    // Sem JOIN em `customers`: a coluna Cliente saiu da grade e dos exports
+    // (v4.9.0). A tela já roda dentro de um cliente — o seletor do topo e o
+    // filtro deste formulário —, então repetir o mesmo nome em toda linha só
+    // gastava largura. Quem precisa comparar clientes usa o filtro.
     $from = "
         FROM device_state_segments s
         LEFT JOIN devices d ON d.imei = s.imei
-        LEFT JOIN customers c ON c.id = s.customer_id
         $where";
 
     $selectCols = "
         SELECT s.id, s.imei, s.started_at, s.ended_at, $durExpr AS dur_s,
                s.start_lat, s.start_lng, s.distance_km, s.max_speed, s.point_count,
-               COALESCE(d.device_name, s.imei) AS device_label,
-               COALESCE(c.name, '—') AS customer_name";
+               COALESCE(d.device_name, s.imei) AS device_label";
 
     // ORDER BY por duração precisa usar a expressão, não a coluna: ordenar por
     // duration_s jogaria todo segmento em curso para o fim (NULL).
-    $orderBy = $sort === 'duration_s' ? "$durExpr $order" : "s.$sort $order";
+    // A chave 'imei' continua na URL (links e modelos salvos a carregam), mas
+    // ordena pela PLACA, que é o que a coluna exibe.
+    $orderBy = match ($sort) {
+        'duration_s' => "$durExpr $order",
+        'imei'       => "device_label $order",
+        default      => "s.$sort $order",
+    };
 
     // ── Export síncrono ────────────────────────────────────────
     $export = $_GET['export'] ?? '';
@@ -118,11 +128,18 @@ function render_segment_report(array $cfg): void
         require_once __DIR__ . '/geocode.php';   // endereço no lugar de lat/lng
         require_once __DIR__ . '/export_helper.php';
 
-        $headers = ['Início', 'Fim', 'Duração', 'Equipamento', 'IMEI', 'Cliente'];
+        // Mesma ordem da grade: a PLACA é a primeira coluna — é por ela que o
+        // leitor procura a linha. IMEI e Cliente saíram (v4.9.0).
+        $headers  = ['Placa', 'Início', 'Fim', 'Duração'];
+        $pesos    = [1.0, 1.35, 1.35, 0.9];
         if ($showDist) {
             $headers[] = 'Distância (km)';
+            $pesos[]   = 1.0;
         }
         $headers[] = 'Endereço';
+        $pesos[]   = 3.4;
+        $headers[] = 'Mapa';
+        $pesos[]   = 0.6;
 
         $expRows = [];
         try {
@@ -133,23 +150,22 @@ function render_segment_report(array $cfg): void
             $geoExp = geocode_map_rows($src, 'start_lat', 'start_lng', 2000);
             foreach ($src as $r) {
                 $row = [
+                    $r['device_label'],
                     fmt_brt($r['started_at'], 'd/m/Y H:i:s'),
                     $r['ended_at'] ? fmt_brt($r['ended_at'], 'd/m/Y H:i:s') : 'Em curso',
                     fmt_duration((int)$r['dur_s']),
-                    $r['device_label'],
-                    $r['imei'],
-                    $r['customer_name'],
                 ];
                 if ($showDist) {
                     $row[] = number_format((float)($r['distance_km'] ?? 0), 3, ',', '');
                 }
                 $row[] = geocode_cell($geoExp, $r['start_lat'], $r['start_lng']);
+                $row[] = export_map_link($r['start_lat'], $r['start_lng']);
                 $expRows[] = $row;
             }
         } catch (Throwable $e) { /* tabela ausente → export vazio */ }
 
         stream_export($export, $cfg['slug'], $headers, $expRows,
-            $cfg['title'], report_period_label($dateFrom, $dateTo));
+            $cfg['title'], report_period_label($dateFrom, $dateTo), $pesos);
     }
 
     // ── Grade + KPIs ───────────────────────────────────────────
@@ -190,8 +206,10 @@ function render_segment_report(array $cfg): void
     }
 
     $customers = [];
+    $devices   = [];
     try {
         $customers = report_customer_options($db);
+        $devices   = report_device_options($db, $scopeCust);
     } catch (Throwable $e) {}
 
     // ── Renderização ───────────────────────────────────────────
@@ -238,9 +256,8 @@ function render_segment_report(array $cfg): void
             </div>
             <?php endif; ?>
             <div>
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">IMEI</label>
-                <input type="text" name="imei" value="<?= htmlspecialchars($filterImei) ?>" placeholder="Buscar..."
-                       style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:140px;">
+                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+                <?= report_device_select($devices, $filterImei) ?>
             </div>
             <div>
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Duração mínima</label>
@@ -290,23 +307,23 @@ function render_segment_report(array $cfg): void
         <table>
             <thead>
                 <tr>
+                    <th><?= report_sort_link('imei', 'Placa', $sort, $order) ?></th>
                     <th><?= report_sort_link('started_at', 'Início', $sort, $order) ?></th>
                     <th>Fim</th>
                     <th><?= report_sort_link('duration_s', 'Duração', $sort, $order) ?></th>
-                    <th><?= report_sort_link('imei', 'Equipamento', $sort, $order) ?></th>
-                    <th>Cliente</th>
                     <?php if ($showDist): ?><th>Distância</th><?php endif; ?>
                     <th>Mapa</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($rows)): ?>
-                <tr><td colspan="<?= $showDist ? 7 : 6 ?>" style="text-align:center;padding:32px;color:var(--muted);"><?= htmlspecialchars($cfg['emptyText']) ?></td></tr>
+                <tr><td colspan="<?= $showDist ? 6 : 5 ?>" style="text-align:center;padding:32px;color:var(--muted);"><?= htmlspecialchars($cfg['emptyText']) ?></td></tr>
                 <?php else: foreach ($rows as $r):
                     $hasCoords = $r['start_lat'] && $r['start_lng']
                               && is_valid_coordinate($r['start_lat'], $r['start_lng']);
                 ?>
                 <tr>
+                    <td class="text-mono"><?= htmlspecialchars($r['device_label']) ?></td>
                     <td class="text-mono"><?= fmt_brt($r['started_at'], 'd/m/Y H:i:s') ?></td>
                     <td class="text-mono">
                         <?php if ($r['ended_at']): ?>
@@ -316,11 +333,6 @@ function render_segment_report(array $cfg): void
                         <?php endif; ?>
                     </td>
                     <td class="text-mono"><?= htmlspecialchars(fmt_duration((int)$r['dur_s'])) ?></td>
-                    <td>
-                        <?= htmlspecialchars($r['device_label']) ?>
-                        <div class="text-mono text-muted" style="font-size:11px;"><?= htmlspecialchars($r['imei']) ?></div>
-                    </td>
-                    <td><?= htmlspecialchars($r['customer_name']) ?></td>
                     <?php if ($showDist): ?>
                     <td class="text-mono"><?= number_format((float)($r['distance_km'] ?? 0), 2, ',', '.') ?> km</td>
                     <?php endif; ?>

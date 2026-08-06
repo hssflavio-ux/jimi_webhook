@@ -95,10 +95,7 @@ if ($generated && $selImei) {
                     $r['driver_name'],
                     fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
                     geocode_cell($geoExp, $r['latitude'], $r['longitude']),
-                    (float)$r['latitude'] != 0.0
-                        ? new ExportLink(sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16',
-                                                 $r['latitude'], $r['longitude']))
-                        : '—',
+                    export_map_link($r['latitude'], $r['longitude']),
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
                     $r['ignition'] ? 'Ligada' : 'Desligada',
                     in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
@@ -154,7 +151,16 @@ if ($generated && $selImei) {
 
         foreach ($rows as $r) {
             if ($r['latitude'] && $r['longitude'] && $r['latitude'] != 0) {
-                $hasCoords[] = ['lat' => (float)$r['latitude'], 'lng' => (float)$r['longitude'], 'imei' => $r['imei'], 'name' => $r['device_name']];
+                // `when` é o que o balão mostra: a placa é a MESMA em todos os
+                // pontos (o relatório é de um equipamento só), então repeti-la
+                // em cada marcador não distinguia um ponto do outro. O que o
+                // usuário precisa saber ao clicar num ponto do trajeto é
+                // QUANDO o veículo esteve ali.
+                $hasCoords[] = [
+                    'lat'  => (float)$r['latitude'],
+                    'lng'  => (float)$r['longitude'],
+                    'when' => fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
+                ];
             }
         }
 
@@ -296,8 +302,9 @@ function toggleMap() {
         var bounds = [];
         mapData.forEach(function(p) {
             bounds.push([p.lat, p.lng]);
-            // Placa, não IMEI (ver rastreamento.php)
-            L.marker([p.lat, p.lng]).addTo(mapInstance).bindPopup('<b>Placa: ' + (p.name || p.imei) + '</b>');
+            // Data/hora da posição — a placa está no filtro e é a mesma em
+            // todos os pontos (ver a montagem de $hasCoords no PHP).
+            L.marker([p.lat, p.lng]).addTo(mapInstance).bindPopup('<b>' + p.when + '</b>');
         });
         if (bounds.length > 0) mapInstance.fitBounds(bounds);
         else mapInstance.setView([-15.78, -47.93], 5);

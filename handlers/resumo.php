@@ -4,12 +4,15 @@
  * Rota: /
  *
  * Visão 360° executiva. Blocos:
- *   1. KPIs via metrics_snapshots (5-min cache) + welcome tour
+ *   1. KPIs via metrics_snapshots (5-min cache)
  *   2. Mapa de Calor (GPS recentes, on-the-fly)
  *   3. Velocidade da Frota + Desatualizados
  *   4. Visão por Clientes (revendedor)
  *   5. Séries temporais (alarmes/ocorrências hora-a-hora)
- * Auto-refresh 30s. Tour de boas-vindas com localStorage.
+ * Auto-refresh 30s.
+ *
+ * O tour de boas-vindas saiu na v4.9.0: a documentação do produto é a **wiki**
+ * (/wiki), e manter dois canais fazia o overlay dizer uma coisa e a wiki outra.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -313,14 +316,6 @@ $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist
 .announce-banner.warning{background:#fff8e1;border:1px solid #ffe082;color:#f4b000;}
 .announce-banner.success{background:#e8f5e9;border:1px solid #a5d6a7;color:#05b169;}
 .announce-banner .announce-close{cursor:pointer;opacity:.6;font-size:16px;line-height:1;padding:0 4px;}
-.tour-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center;}
-.tour-card{background:#fff;border-radius:var(--radius-lg);padding:24px 28px;max-width:420px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.15);}
-.tour-card h3{font-size:18px;font-weight:600;color:var(--ink);margin-bottom:8px;}
-.tour-card p{font-size:14px;color:var(--body);margin-bottom:20px;line-height:1.5;}
-.tour-card .tour-dots{display:flex;gap:6px;margin-bottom:20px;}
-.tour-card .tour-dot{width:8px;height:8px;border-radius:50%;background:var(--hairline);}
-.tour-card .tour-dot.active{background:var(--primary);}
-.tour-card .tour-actions{display:flex;justify-content:flex-end;gap:8px;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -334,7 +329,6 @@ require_once __DIR__ . '/../web/layout_base.php';
 <!-- ═══════ KPIs (auto-refresh 30s via ?ajax=kpis) ═══════ -->
 <div class="flex-between mb-8">
     <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Tempo real</span>
-    <button class="btn btn-outline btn-sm" onclick="localStorage.removeItem('jimi_tour_seen_v4');location.reload();">Ver tutorial</button>
 </div>
 <div class="kpi-grid">
     <div class="kpi-item">
@@ -538,65 +532,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
-<!-- ═══════ Tour Overlay ═══════ -->
-<div id="tour-overlay" class="tour-overlay">
-    <div class="tour-card">
-        <h3 id="tour-title"></h3>
-        <p id="tour-body"></p>
-        <div class="tour-dots" id="tour-dots"></div>
-        <div class="tour-actions">
-            <button class="btn btn-outline btn-sm" id="tour-skip">Pular</button>
-            <button class="btn btn-primary btn-sm" id="tour-next">Próximo</button>
-        </div>
-    </div>
-</div>
-
 <script>
-// ── Welcome Tour ─────────────────────────────────────────────
-(function() {
-    var TOUR_KEY = 'jimi_tour_seen_v4';
-    var steps = [
-        { title: 'Bem-vindo à bycamera', body: 'Esta é sua central de rastreamento. Acompanhe equipamentos, alarmes e ocorrências em tempo real.' },
-        { title: 'KPIs em Tempo Real', body: 'No topo você vê o resumo da sua frota: equipamentos ativos, conectividade, ocorrências pendentes e dispositivos desatualizados.' },
-        { title: 'Mapa de Posições', body: 'O mapa mostra a última posição conhecida de cada equipamento. Clique nos pontos para ver detalhes.' },
-        { title: 'Gráficos de Atividade', body: 'Acompanhe a evolução de alarmes e ocorrências ao longo do dia nos gráficos abaixo.' },
-        { title: 'Navegação Lateral', body: 'Use a barra lateral para acessar rastreamento, vídeos, relatórios e cadastros. O menu tem grupos expansíveis.' }
-    ];
-    var currentStep = 0;
-
-    function showTour() {
-        if (localStorage.getItem(TOUR_KEY)) return;
-        var overlay = document.getElementById('tour-overlay');
-        overlay.style.display = 'flex';
-        renderStep();
-    }
-
-    function renderStep() {
-        var s = steps[currentStep];
-        document.getElementById('tour-title').textContent = s.title;
-        document.getElementById('tour-body').textContent = s.body;
-        var dots = '';
-        for (var i = 0; i < steps.length; i++) {
-            dots += '<div class="tour-dot' + (i === currentStep ? ' active' : '') + '"></div>';
-        }
-        document.getElementById('tour-dots').innerHTML = dots;
-        document.getElementById('tour-next').textContent = currentStep === steps.length - 1 ? 'Concluir' : 'Próximo';
-    }
-
-    document.getElementById('tour-next').onclick = function() {
-        if (currentStep < steps.length - 1) { currentStep++; renderStep(); }
-        else { closeTour(); }
-    };
-    document.getElementById('tour-skip').onclick = closeTour;
-
-    function closeTour() {
-        document.getElementById('tour-overlay').style.display = 'none';
-        localStorage.setItem(TOUR_KEY, '1');
-    }
-
-    showTour();
-})();
-
 // ── Announce Banner ──────────────────────────────────────────
 (function() {
     var BANNER_KEY = 'jimi_banner_dismissed';

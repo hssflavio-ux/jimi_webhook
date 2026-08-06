@@ -51,6 +51,29 @@ final class ExportLink
 }
 
 /**
+ * Célula "Mapa" de um export: link do OpenStreetMap no ponto, ou '—'.
+ *
+ * O OSM público foi escolhido de propósito para os arquivos exportados: o PDF
+ * e a planilha circulam por e-mail e chegam a quem não tem conta no sistema.
+ * Um link para uma tela nossa exigiria login e morreria na caixa de entrada.
+ *
+ * @param mixed  $lat   Latitude (0/null/inválida → '—')
+ * @param mixed  $lng   Longitude
+ * @param string $label Rótulo visível na célula
+ * @returns ExportLink|string
+ */
+function export_map_link($lat, $lng, string $label = 'MAPA')
+{
+    if ($lat === null || $lng === null || (float)$lat == 0.0 || (float)$lng == 0.0) {
+        return '—';
+    }
+    return new ExportLink(
+        sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $lat, $lng),
+        $label
+    );
+}
+
+/**
  * Writer XLSX incremental (memória constante — linhas vão para arquivo temporário).
  */
 class XlsxWriter
@@ -115,13 +138,21 @@ class XlsxWriter
             // Excel mostra como o rótulo e abre ao clique. Antes a URL crua ia
             // como texto — poluía a coluna e não era clicável, que é o que o
             // usuário via como "o link não funciona".
+            //
+            // O <v> ao lado da fórmula é o VALOR EM CACHE, e não é opcional
+            // (v4.9.0). A fórmula sozinha só vira texto depois que o programa
+            // recalcula a planilha; até lá o leitor mostra a célula **vazia** —
+            // era exatamente essa a coluna "Mapa" em branco no Excel, enquanto
+            // no PDF (que não depende de recálculo) o link aparecia. Quem abre
+            // em visualizador que não recalcula nada — Google Sheets no
+            // preview, Numbers, o painel do Windows — via a coluna sumir de vez.
             if ($v instanceof ExportLink) {
                 // Aspas duplas dobram dentro de string de fórmula do Excel
                 $u = str_replace('"', '""', $v->url);
                 $t = str_replace('"', '""', $v->label);
                 $out .= '<c r="' . $ref . '" t="str"><f>'
                       . self::xml('HYPERLINK("' . $u . '","' . $t . '")')
-                      . '</f></c>';
+                      . '</f><v>' . self::xml($v->label) . '</v></c>';
                 continue;
             }
 

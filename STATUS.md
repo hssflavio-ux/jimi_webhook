@@ -1,4 +1,68 @@
-# STATUS.md — Jimi Webhook System v4.8.9 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.0 (YUV Parity)
+
+> ### 🟡 v4.9.0 IMPLEMENTADA E VERIFICADA LOCALMENTE — **não publicada** (05/08/2026)
+>
+> | | git HEAD | `system_info` | Suíte |
+> |---|---|---|---|
+> | Local | (working tree) | 4.9.0 | **110 passaram, 2 puladas, 0 falharam** |
+> | **Homolog** (`189.22.240.43`) | `1de071e` | **4.8.9** | — |
+>
+> Sessão de padronização dos relatórios pedida em lista: 17 itens, todos entregues.
+> **Falta rodar `./scripts/deploy.sh` no homolog** — a senha do `sudo` não estava
+> disponível nesta sessão. A migração `v4.9.0` já está no `deploy.sh`.
+>
+> #### Os dois defeitos que a lista descrevia por fora e eram outra coisa por dentro
+>
+> | O que se via | O que era |
+> |---|---|
+> | "a coluna do mapa no XLS aparece vazia" (Alarmes) e "falta a coluna do mapa no XLS" (Posições) | **O mesmo defeito, em todos os onze relatórios**: a célula `=HYPERLINK(…)` era escrita **sem `<v>`** (valor em cache). Fórmula sem cache só ganha conteúdo depois que o programa **recalcula** — em visualizador que não recalcula, a coluna some. Por isso "no PDF tem, no Excel não". Um ponto de correção em `XlsxWriter::writeRow()` resolveu os onze. |
+> | "ainda temos códigos e não o nome do alarme" | O nome é resolvido **uma vez**, na chegada do webhook, e o rótulo `Código NNNN (JTT)` fica gravado **para sempre**. A v4.8.1 abriu a lista branca da poda para a faixa JT/T 1024–3097 e **inseriu só 11** dos 39 códigos. Corrigido nos dois lados: catálogo completo (migração) **e** resolução na leitura, para o histórico já gravado. |
+>
+> #### 🔴 Achado de brinde: mais um parâmetro de ocorrência órfão
+>
+> A conferência de órfãos que a própria migração roda encontrou
+> **`occurrence_config_params` = "Bateria Fraca"** sem alarme correspondente — sobra
+> da v4.8.3 que a v4.8.6 não pegou. Desde então o alarme chegava, era gravado,
+> aparecia no relatório, e **ocorrência nenhuma nascia**, em silêncio. É a terceira
+> vez que esse modo de falha aparece. Remapeado; a conferência agora devolve zero.
+>
+> #### Os relatórios agendados foram alinhados junto (2ª parte da sessão)
+>
+> Os dez tipos do `scripts/worker.php` seguiam com cabeçalhos próprios. Além da
+> padronização (placa primeiro, sem IMEI, sem Cliente, com link do mapa e com os
+> pesos de coluna do PDF), dois defeitos próprios apareceram: o de **Alarmes
+> imprimia `alarm_type` CRU** — o código, sem nem o rótulo genérico da tela — e o
+> **CSV perdia a URL do mapa** (chama `fputcsv()` direto, e o `__toString()` do
+> `ExportLink` devolve só "MAPA"). A resolução do nome virou ponto único
+> (`alarm_label_sql()`), compartilhada com a tela: duas cópias de uma regra dessas
+> divergem, e foi exatamente o que tinha acontecido.
+>
+> Verificado **executando o worker de verdade**: os 10 tipos enfileirados como job
+> real, arquivos gerados e inspecionados — CSV com a URL crua, XLSX com
+> `<f>HYPERLINK(…)</f><v>MAPA</v>`, PDF com assinatura `%PDF-` e 2 e 8 anotações
+> `/Link`. `Código 1046 (JTT)` saiu como `Colisão do Veículo` no arquivo agendado.
+>
+> #### ⚠️ O que ficou de fora, de propósito
+>
+> - **`1047` continua mostrando o número.** A doc oficial pula de 1046 (*Collision*)
+>   para 3073; o código aparece em 6 linhas do homolog e **não existe na doc**.
+>   Batizá-lo por palpite quebraria junção por nome — a lição da v4.8.3/v4.8.6.
+>   Depende de confirmação do fornecedor.
+> - **A rota do deslocamento não virou link público.** O OSM não desenha percurso a
+>   partir de URL; o PDF/XLS passaram a levar **partida e chegada** como pontos, que
+>   abrem sem login. O traçado real segue na tela, para quem tem login.
+>
+> #### Verificação
+>
+> - `php -l` limpo em `handlers/ config/ core/ includes/`.
+> - Os **11 relatórios** abertos contra MySQL local: nenhum `Fatal error`, `PHP Warning` ou `SQLSTATE`.
+> - Cabeçalho de **todos** os exports conferido em CSV; **9 PDFs** com assinatura `%PDF-` e anotações `/Link`.
+> - Resolução de nome provada com **três linhas plantadas**: `Código 1046 (JTT)` → `Colisão do Veículo`; `Fim de Alarme: Código 3094 (JTT)` → `Fim de Alarme: Cartão SD Corrompido` (**prefixo preservado**); `Código 9999 (JTT)` (fora do catálogo) → **inalterado**.
+> - Migração rodada **duas vezes** em banco real, saída idêntica, zero órfãos.
+> - **Suíte completa, execução única contra o código final: 110 passaram, 2 puladas, 0 falharam** (17,5 min). São os 99 do baseline da v4.8.9 mais os 11 testes novos; as 2 puladas seguem sendo os skips deliberados (`RATE_LIMIT_TEST` e o condicional por ausência de dado de segmentação).
+> - ⚠️ **A primeira tentativa de fechar essa execução travou por 45 min, e a causa vale registro**: esta máquina **não alcança o Nominatim** (`NOMINATIM_URL` default = `10.1.0.15:8080`, LAN do homolog), então **cada página de relatório paga 8 s de timeout de cURL** e a suíte inteira arrasta. Subir o servidor de teste com `NOMINATIM_URL=http://127.0.0.1:9` (porta fechada → recusa imediata) devolve a suíte aos ~17 min e não muda o que se testa, porque a coluna Endereço já vinha vazia pelos timeouts. Vale para qualquer execução local da suíte, não só esta sessão.
+> - **Testes novos com controle positivo**: o teste do `<v>` do XLSX **falha** quando a correção é revertida. E a primeira versão dele **pulava em silêncio** (dependia do `unzip` no PATH, que o Playwright no Windows não tem) — trocado por inflate nativo do Node, sem como pular. Outra armadilha "spec que pula não é cobertura" evitada.
+> - Um dos testes novos pegou uma **asserção vácua na primeira escrita**: `innerText` de `th` devolve o texto já em MAIÚSCULAS (CSS `text-transform`), então `not.toMatch(/Cliente/)` nunca encontraria nada — nem com a coluna de volta.
 
 > ### ✅ v4.8.9 PUBLICADA E VERIFICADA no homolog (04/08/2026, 23h02)
 >

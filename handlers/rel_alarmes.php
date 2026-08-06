@@ -3,8 +3,9 @@
  * JIMI Webhook System — Relatório de Alarmes v4.0.0
  * Rota: /relatorios/alarmes
  *
- * Filtros: Clientes, Equipamentos (IMEI), Tipo de Alarme, Período.
- * Grid: Cliente, IMEI, Tipo de Alarme, Nome, Data, Protocolo, Status.
+ * Filtros: Cliente, Placa, Filial, Tipo de Alarme, Status, Período.
+ * Grade: Placa, Data/Hora, Nome do Alarme, Status, Velocidade, Endereço, Mapa
+ * — com mapa embutido opcional (marcador por linha da página).
  * Paginação server-side, volume alto (~448 alarmes/dia).
  */
 
@@ -36,12 +37,21 @@ $filterStatus = $_GET['alarm_status'] ?? null;
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
 
+// Nome do alarme resolvido na LEITURA (v4.9.0) — a razão de existir e as
+// armadilhas estão em alarm_label_sql() (includes/functions.php), que é o
+// ponto único compartilhado com o relatório agendado do scripts/worker.php.
+['joins' => $alarmNameJoins, 'expr' => $alarmNameExpr] = alarm_label_sql();
+
 // Ordenação: whitelist de colunas + default crescente por data/hora
-// `device_name` é coluna de devices, por isso o ORDER BY usa prefixo próprio
-// mais abaixo — os demais são de alarms.
+// `device_name` é coluna de devices e `alarm_name` agora é expressão, por isso
+// os dois têm forma própria no ORDER BY — os demais são colunas de alarms.
 $validSorts = ['alarm_time', 'alarm_name', 'device_name'];
 [$sort, $order] = report_sort_params($validSorts, 'alarm_time', 'ASC');
-$orderBy = $sort === 'device_name' ? "d.device_name $order" : "a.$sort $order";
+$orderBy = match ($sort) {
+    'device_name' => "d.device_name $order",
+    'alarm_name'  => "alarm_label $order",
+    default       => "a.$sort $order",
+};
 
 // Placas do cliente — o filtro virou seleção de placa (era caixa de texto de
 // IMEI). Carregado antes do export porque este roda antes da grade.
@@ -69,15 +79,19 @@ if ($filterImei) {
     $where .= ' AND a.imei = :imei';
     $params[':imei'] = $filterImei;
 }
+// O filtro casa contra o nome RESOLVIDO, não contra a coluna crua: senão o
+// alarme que a tela mostra como "Colisão do Veículo" (resolvido do catálogo)
+// sumiria ao marcar esse chip, porque em `alarms.alarm_name` ele ainda está
+// gravado como "Código 1046 (JTT)".
 if ($filterTypes) {
     $ph = [];
     foreach ($filterTypes as $i => $t) {
         $ph[] = ":at$i";
         $params[":at$i"] = $t;
     }
-    $where .= ' AND a.alarm_name IN (' . implode(',', $ph) . ')';
+    $where .= " AND ($alarmNameExpr) IN (" . implode(',', $ph) . ')';
 } elseif ($filterType) {
-    $where .= ' AND (a.alarm_type = :atype OR a.alarm_name LIKE :aname)';
+    $where .= " AND (a.alarm_type = :atype OR ($alarmNameExpr) LIKE :aname)";
     $params[':atype'] = $filterType;
     $params[':aname'] = "%$filterType%";
 }
@@ -96,11 +110,12 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     require_permission('relatorios', 'export');
     require_once __DIR__ . '/../includes/export_helper.php';
     $expStmt = $db->prepare("
-        SELECT a.imei, a.alarm_name, a.alarm_time, a.status,
+        SELECT a.imei, $alarmNameExpr AS alarm_label, a.alarm_time, a.status,
                a.speed, a.latitude, a.longitude,
                COALESCE(d.device_name, a.imei) AS device_name
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
+        $alarmNameJoins
         $where
         ORDER BY $orderBy
         LIMIT " . SYNC_EXPORT_MAX_ROWS);
@@ -115,14 +130,11 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         $expRows[] = [
             $r['device_name'],
             fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'),
-            $r['alarm_name'] ?: '—',
+            $r['alarm_label'] ?: '—',
             $statusLabels[$r['status']] ?? $r['status'],
             $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
             geocode_cell($geo, $r['latitude'], $r['longitude']),
-            (float)$r['latitude'] != 0.0
-                ? new ExportLink(sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16',
-                                         $r['latitude'], $r['longitude']))
-                : '—',
+            export_map_link($r['latitude'], $r['longitude']),
         ];
     }
     // Placa no subtítulo, como no de Posições: o PDF circula fora da tela
@@ -145,6 +157,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 $countStmt = $db->prepare("
     SELECT COUNT(*) FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
+    $alarmNameJoins
     $where
 ");
 $countStmt->execute($params);
@@ -154,17 +167,34 @@ $offset = ($page - 1) * $perPage;
 
 // Data
 $dataStmt = $db->prepare("
-    SELECT a.id, a.imei, a.alarm_name, a.alarm_time,
+    SELECT a.id, a.imei, $alarmNameExpr AS alarm_label, a.alarm_time,
            a.status, a.speed, a.latitude, a.longitude,
            COALESCE(d.device_name, a.imei) AS device_name
     FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
+    $alarmNameJoins
     $where
     ORDER BY $orderBy
     LIMIT $perPage OFFSET $offset
 ");
 $dataStmt->execute($params);
 $rows = $dataStmt->fetchAll();
+
+// Pontos do mapa embutido. O balão leva a PLACA e a data/hora do alarme: aqui
+// cada marcador pode ser de um veículo diferente, ao contrário do relatório de
+// Posições, onde a placa é a mesma em todos os pontos.
+$mapPoints = [];
+foreach ($rows as $r) {
+    if ($r['latitude'] && $r['longitude'] && (float)$r['latitude'] != 0.0 && (float)$r['longitude'] != 0.0) {
+        $mapPoints[] = [
+            'lat'   => (float)$r['latitude'],
+            'lng'   => (float)$r['longitude'],
+            'placa' => $r['device_name'],
+            'when'  => fmt_brt($r['alarm_time'], 'd/m/Y H:i:s'),
+            'nome'  => $r['alarm_label'] ?: '—',
+        ];
+    }
+}
 
 // Endereços da página, em um lote (v4.8.0). Com o cache quente pelo
 // geocode_worker isto é uma consulta ao banco — 25 linhas em ~1,2 ms.
@@ -198,6 +228,9 @@ try {
     $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
 } catch (Exception $e) {}
 
+$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
@@ -273,8 +306,15 @@ require_once __DIR__ . '/../web/layout_base.php';
             </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
+        <?php if ($mapPoints): ?>
+        <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()">Ver no Mapa</button>
+        <?php endif; ?>
     </form>
 </div>
+
+<?php if ($mapPoints): ?>
+<div id="map-container"></div>
+<?php endif; ?>
 
 <?php if ($rangeClamped): ?>
 <div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
@@ -305,7 +345,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['alarm_time'], 'd/m/Y H:i:s') ?></td>
-                <td><?= htmlspecialchars($r['alarm_name'] ?: '—') ?></td>
+                <td><?= htmlspecialchars($r['alarm_label'] ?: '—') ?></td>
                 <td>
                     <?php if ($r['status'] === 'active'): ?>
                     <span class="badge badge-warning">Ativo</span>
@@ -330,5 +370,31 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?= report_pagination($page, $totalPages, $totalRows, 'alarmes') ?>
+
+<?php if ($mapPoints): ?>
+<script>
+// Marcadores da PÁGINA corrente — o mapa mostra o mesmo recorte que a grade
+var mapData = <?= json_encode($mapPoints, JSON_UNESCAPED_UNICODE) ?>;
+var mapInstance = null;
+function toggleMap() {
+    var container = document.getElementById('map-container');
+    if (container.style.display === 'block') { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    if (!mapInstance) {
+        mapInstance = L.map('map-container');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(mapInstance);
+        var bounds = [];
+        mapData.forEach(function(p) {
+            bounds.push([p.lat, p.lng]);
+            L.marker([p.lat, p.lng]).addTo(mapInstance)
+                .bindPopup('<b>' + p.placa + '</b><br>' + p.when + '<br>' + p.nome);
+        });
+        if (bounds.length > 0) mapInstance.fitBounds(bounds);
+        else mapInstance.setView([-15.78, -47.93], 5);
+    }
+    setTimeout(function(){ mapInstance.invalidateSize(); }, 100);
+}
+</script>
+<?php endif; ?>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>
