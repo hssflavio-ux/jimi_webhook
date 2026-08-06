@@ -9,10 +9,16 @@
  *      cruzar o dia — o período é fatiado em segmentos por dia UTC.
  *      A câmera responde de forma assíncrona via /pushresourcelist → resource_lists.
  *   2. Timeline = resource_lists ("no cartão") ∪ media_files ("disponível").
- *      Item "no cartão" → [Extrair] dispara proNo 34818 (0x8802, upload de mídia
- *      armazenada) com a janela exata da gravação; o arquivo chega via
- *      /pushfileupload → media_files e o item vira reproduzível.
+ *      Item "no cartão" → [Extrair] dispara proNo 37382 ("FTP file upload
+ *      command") com a janela exata da gravação; a CÂMERA sobe o arquivo por
+ *      FTP para o destino configurado em VIDEO_FTP_* e o IoTHub avisa por
+ *      /pushftpfileupload → media_files, e o item vira reproduzível.
  *   3. Item "disponível" → play inline / download.
+ *
+ * ⚠️ Até a v4.9.0 o passo 2 mandava **34818**, que a doc chama de "Multimedia
+ * data retrieval" — uma CONSULTA da família de fotos do JT/T 808. O IoTHub
+ * aceitava, marcava `executed`, e arquivo nenhum aparecia: em três dias de
+ * homologação, /pushfileupload e /pushftpfileupload não foram chamados uma vez.
  *
  * Modelos de protocolo JIMI (JC400D/AD) não suportam 0x9205 — mantém o envio
  * direto de 34818 na janela do filtro (comportamento legado).
@@ -147,7 +153,14 @@ if ($requested && $selImei) {
 $page_title = 'Vídeo Playback';
 $current_route = 'video_playback';
 
-$extra_head = '<style>
+// mpegts.js: as gravações do cartão são MPEG-TS (.ts), e NENHUM browser toca
+// isso no <video> nativo — Chrome, Firefox e Safari só decodificam MP4/WebM.
+// Sem esta biblioteca o player recebia a URL, não reclamava e ficava preto.
+// Ela remuxa TS→fMP4 em JavaScript e entrega por Media Source Extensions.
+// Vem de CDN como o Leaflet e o Chart.js do resto do sistema (o projeto não
+// tem build step — ver CLAUDE.md).
+$extra_head = '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>
+<style>
 .vid-bg{background:#0a0b0d;border-radius:var(--radius-lg);overflow:hidden;min-height:360px;display:flex;align-items:center;justify-content:center;}
 .vid-bg video{width:100%;display:block;max-height:460px;}
 .timeline-item{cursor:pointer;padding:10px 14px;border-bottom:1px solid var(--hairline-soft);display:flex;align-items:center;gap:12px;transition:background .1s;}
@@ -173,6 +186,13 @@ require_once __DIR__ . '/../web/layout_base.php';
                 Selecione equipamento, canal e período e clique em Requisitar
             </div>
             <video id="vid-player" controls playsinline style="display:none;width:100%;max-height:460px;"></video>
+        </div>
+        <div style="margin-top:10px;display:flex;justify-content:flex-end;">
+            <!-- A tela não tinha como baixar: só o player, que nem toca .ts.
+                 Quem precisa da prova em vídeo precisa do arquivo na mão. -->
+            <a id="pb-download" class="btn btn-outline btn-sm" style="display:none;" target="_blank" download>
+                &#8681; Baixar arquivo
+            </a>
         </div>
     </div>
 
@@ -303,6 +323,16 @@ function pbRebuildChannels() {
     chSel.innerHTML = html;
 }
 
+var pbPlayer = null;   // instância mpegts.js ativa (precisa ser destruída)
+
+/** Encerra o player de TS, se houver. Sem isto cada clique vaza uma instância. */
+function pbDestroyPlayer() {
+    if (!pbPlayer) return;
+    try { pbPlayer.pause(); pbPlayer.unload(); pbPlayer.detachMediaElement(); pbPlayer.destroy(); }
+    catch (e) { /* já desmontado */ }
+    pbPlayer = null;
+}
+
 function selectRecording(el, rec) {
     // Interação do usuário cancela o auto-refresh (não interromper o play)
     if (window.__pbPoll) { clearTimeout(window.__pbPoll); window.__pbPoll = null; }
@@ -311,19 +341,48 @@ function selectRecording(el, rec) {
 
     var v = document.getElementById('vid-player');
     var ph = document.getElementById('vid-placeholder');
+    var dl = document.getElementById('pb-download');
+    var url = fileStorageUrl + rec.file_url;
+    var ehTs = /\.ts(\?|$)/i.test(rec.file_url || '');
 
-    if (rec.file_type === 'video' || rec.file_type === 'mp4' || rec.file_type === 'flv') {
-        var url = fileStorageUrl + rec.file_url;
+    pbDestroyPlayer();
+    v.removeAttribute('src');
+    v.removeAttribute('poster');
+
+    // Baixar sempre que houver arquivo — inclusive quando o navegador não
+    // souber tocar o formato, que é o caso comum aqui (.ts).
+    if (dl) {
+        dl.href = url;
+        dl.style.display = rec.file_url ? '' : 'none';
+        dl.setAttribute('download', rec.file_name || '');
+    }
+
+    var ehVideo = ehTs || rec.file_type === 'video' || rec.file_type === 'mp4' || rec.file_type === 'flv';
+
+    if (ehVideo && ehTs && window.mpegts && mpegts.isSupported()) {
+        // MPEG-TS remuxado para fMP4 em JS (o <video> não decodifica TS)
+        ph.style.display = 'none';
+        v.style.display = 'block';
+        pbPlayer = mpegts.createPlayer({ type: 'mpegts', isLive: false, url: url });
+        pbPlayer.attachMediaElement(v);
+        pbPlayer.load();
+        pbPlayer.play().catch(function() {});
+        pbPlayer.on(mpegts.Events.ERROR, function(tipo, detalhe) {
+            ph.innerHTML = '<div style="text-align:center;color:var(--muted-soft);padding:16px;">'
+                + 'Não foi possível reproduzir aqui (' + tipo + ').<br>'
+                + '<span style="font-size:12px;">Use o botão Baixar — o arquivo está íntegro no servidor.</span></div>';
+            ph.style.display = '';
+            v.style.display = 'none';
+        });
+    } else if (ehVideo) {
         ph.style.display = 'none';
         v.style.display = 'block';
         v.src = url;
         v.play().catch(function() {});
     } else if (rec.file_type === 'image' || rec.file_type === 'jpg' || rec.file_type === 'png') {
-        var url = fileStorageUrl + rec.file_url;
         ph.style.display = 'none';
         v.style.display = 'block';
         v.poster = url;
-        v.removeAttribute('src');
     } else {
         ph.innerHTML = '<div style="text-align:center;color:var(--muted-soft);"><i style="font-size:36px;display:block;margin-bottom:8px;opacity:.2;">&#128196;</i>' + (rec.file_name || 'Arquivo') + '</div>';
         ph.style.display = '';
@@ -331,9 +390,11 @@ function selectRecording(el, rec) {
     }
 }
 
-// Dispara um comando ao device via /sendcommand (fire-and-forget; keepalive
-// para sobreviver à navegação do form)
-function pbSendCmd(imei, proNo, contentObj) {
+// Dispara um comando ao device via /sendcommand. O `cb` é opcional: a consulta
+// 37381 é fire-and-forget (a resposta vem pelo /pushresourcelist), mas a
+// extração 37382 precisa saber se o servidor recusou — sem destino FTP
+// configurado ele devolve 503, e o usuário tem de ver isso.
+function pbSendCmd(imei, proNo, contentObj, cb) {
     var serverFlagId = (selProtoOf(imei) === 'JIMI') ? 1 : 0;
     fetch('/sendcommand', {
         method: 'POST',
@@ -345,7 +406,14 @@ function pbSendCmd(imei, proNo, contentObj) {
             serverFlagId: serverFlagId,
             content: JSON.stringify(contentObj)
         })
-    }).catch(function(){});
+    }).then(function (r) {
+        if (!cb) return;
+        return r.json().catch(function () { return {}; }).then(function (j) {
+            cb(r.ok && (j.code === 0 || j.code === undefined), j.msg);
+        });
+    }).catch(function (e) {
+        if (cb) cb(false, 'Falha de rede ao falar com o servidor.');
+    });
 }
 
 // Protocolo do device escolhido no select (data-proto); fallback: o da página
@@ -416,16 +484,41 @@ function onSubmitRequest(e) {
     return true;
 }
 
-// [Extrair]: proNo 34818 (0x8802) com a janela exata da gravação escolhida —
-// o arquivo chega depois via /pushfileupload e o item vira "Disponível"
+// [Extrair]: proNo 37382 — "FTP file upload command" (v4.9.1).
+//
+// Era 34818, que a doc oficial chama de "Multimedia data retrieval": uma
+// CONSULTA, e da família de fotos do JT/T 808. Ela era aceita pelo IoTHub,
+// marcada `executed`, e não produzia arquivo nenhum — nem callback. O comando
+// que faz a câmera SUBIR o vídeo é o 37382, e a doc é explícita quanto à
+// sequência: 37381 primeiro, para obter beginTime/endTime, depois 37382.
+//
+// Os campos de FTP (serverAddress/ftpPort/userName/password/fileUploadPath)
+// NÃO vão daqui: `sendcommand.php` os injeta no servidor. Mandar a senha do
+// FTP pelo JavaScript a exporia no código-fonte da página.
 function requestExtract(ev, btn, channel, beginC, endC) {
     ev.stopPropagation();
-    pbSendCmd(selImei, 34818, {
-        mediaType: 2, channel: channel, channelId: channel, eventCode: 0,
-        beginTime: beginC, endTime: endC
-    });
     btn.disabled = true;
-    btn.innerHTML = '&#10003; Solicitado';
+    btn.innerHTML = '&#8230; Enviando';
+
+    pbSendCmd(selImei, 37382, {
+        channel: channel, channelId: channel,
+        beginTime: beginC, endTime: endC,
+        alarmFlag: 0,
+        resourceType: 2,   // 2 = vídeo
+        codeType: 0,       // 0 = fluxo principal ou secundário
+        storageType: 0     // 0 = principal ou de backup
+    }, function (ok, msg) {
+        // Ao contrário do resto da tela, este retorno é ESPERADO: sem destino
+        // FTP configurado o servidor devolve 503, e o usuário precisa ver isso
+        // em vez de ficar esperando um arquivo que nunca vem.
+        if (ok) {
+            btn.innerHTML = '&#10003; Solicitado';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '&#8681; Extrair';
+            alert(msg || 'Não foi possível solicitar a extração.');
+        }
+    });
 }
 
 <?php if ($requested): ?>

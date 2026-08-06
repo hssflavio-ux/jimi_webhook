@@ -157,6 +157,53 @@ if ($proNo !== 128) {
     $cmdContent = $canonical;
 }
 
+// ── proNo 37382: credenciais de FTP entram AQUI, no servidor (v4.9.1) ─────────
+//
+// 37382 é o "FTP file upload command": ele manda a CÂMERA abrir uma conexão FTP
+// e subir a gravação. O payload leva serverAddress/ftpPort/userName/password —
+// e é por isso que ele não pode ser montado no navegador: a senha do FTP
+// apareceria no código-fonte da página para qualquer usuário logado.
+//
+// O cliente manda só canal e janela de tempo; o que vier dele nestes cinco
+// campos é DESCARTADO, não completado — senão bastaria forjar o POST para
+// mandar a câmera despejar vídeo num FTP de terceiro.
+//
+// Sem configuração o comando é RECUSADO com mensagem explícita. Disparar 37382
+// com credencial vazia é o pior dos mundos: o IoTHub aceita, marca `executed`,
+// a câmera falha no login e ninguém fica sabendo — que é exatamente como o
+// fluxo antigo (com o proNo errado) se comportava.
+if ($proNo === 37382) {
+    $ftp = [
+        'serverAddress' => trim((string)(getenv('VIDEO_FTP_HOST') ?: '')),
+        'ftpPort'       => (int)(getenv('VIDEO_FTP_PORT') ?: 0),
+        'userName'      => trim((string)(getenv('VIDEO_FTP_USER') ?: '')),
+        'password'      => (string)(getenv('VIDEO_FTP_PASS') ?: ''),
+        'fileUploadPath'=> trim((string)(getenv('VIDEO_FTP_PATH') ?: '/')),
+    ];
+    if ($ftp['serverAddress'] === '' || $ftp['userName'] === '' || $ftp['password'] === '' || $ftp['ftpPort'] <= 0) {
+        http_response_code(503);
+        Logger::error('sendcommand: 37382 sem destino FTP configurado', [
+            'imei' => $imei,
+            'faltando' => array_keys(array_filter([
+                'VIDEO_FTP_HOST' => $ftp['serverAddress'] === '',
+                'VIDEO_FTP_PORT' => $ftp['ftpPort'] <= 0,
+                'VIDEO_FTP_USER' => $ftp['userName'] === '',
+                'VIDEO_FTP_PASS' => $ftp['password'] === '',
+            ])),
+        ]);
+        echo json_encode([
+            'code' => 503,
+            'msg'  => 'Extração de vídeo indisponível: destino FTP não configurado no servidor '
+                    . '(VIDEO_FTP_HOST/PORT/USER/PASS no .env).',
+        ]);
+        exit;
+    }
+
+    $conteudo = json_decode($cmdContent, true) ?: [];
+    $cmdContent = json_encode(array_merge($conteudo, $ftp),
+                              JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+
 // ── Configuração do endpoint de comando do IoTHub ─────────────────────────────
 //
 // BUG #2 CORRIGIDO:
@@ -280,6 +327,21 @@ if ($curlError || $httpCode === 0) {
 }
 
 // ── Persistência na tabela `commands` ────────────────────────────────────────
+//
+// A senha do FTP do 37382 NÃO é gravada (v4.9.1). `commands.command_content`
+// aparece inteiro na tela de Comandos e nos exports; guardar a credencial ali
+// seria trocar o vazamento pelo JavaScript por um vazamento pelo histórico —
+// que ainda por cima é permanente. O resto do payload fica, porque é o que
+// permite auditar qual janela foi pedida.
+$cmdParaGravar = $cmdContent;
+if ($proNo === 37382) {
+    $tmp = json_decode($cmdContent, true);
+    if (is_array($tmp) && isset($tmp['password'])) {
+        $tmp['password'] = '***';
+        $cmdParaGravar = json_encode($tmp, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+}
+
 $insertedId = null;
 try {
     $db   = Database::getInstance()->getConnection();
@@ -294,7 +356,7 @@ try {
     ");
     $stmt->execute([
         ':imei'     => $imei,
-        ':cmd'      => $cmdContent,
+        ':cmd'      => $cmdParaGravar,
         ':status'   => $dbStatus,
         ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
         // v4.8.9: os dois identificadores mandados ao IoTHub passam a ser
@@ -323,6 +385,46 @@ try {
         'curl_error'   => $curlError ?: null,
         'request_id'   => $requestId,
     ]);
+
+    // ── Fila visível da extração de vídeo (v4.9.1) ───────────────────────────
+    //
+    // O pedido de extração vira uma linha `solicitado` em `media_files`. Sem
+    // ela, /video/downloads — que lista `media_files` — ficava VAZIA entre o
+    // clique em [Extrair] e a chegada do arquivo, que leva minutos: o usuário
+    // não tinha como saber se o pedido tinha saído. O enum `download_status`
+    // já previa esse estado; ninguém o escrevia.
+    //
+    // `event_time` recebe o INÍCIO da janela pedida (BCD yyMMddHHmmss em GMT-0,
+    // como o device fala) — é o que /pushftpfileupload usa depois para casar o
+    // arquivo que chegou com o pedido que o originou.
+    if ($proNo === 37382 && $dbStatus !== 'failed') {
+        try {
+            $c   = json_decode($cmdContent, true) ?: [];
+            $ini = (string)($c['beginTime'] ?? '');
+            $ts  = preg_match('/^\d{12}$/', $ini)
+                 ? DateTime::createFromFormat('ymdHis', $ini, new DateTimeZone('UTC'))
+                 : false;
+            $db->prepare("
+                INSERT INTO media_files
+                    (imei, file_name, file_type, file_size, file_url, source_type,
+                     event_time, channel, download_status, raw_data)
+                VALUES (:imei, :fname, 'video', 0, NULL, 'extracao_37382',
+                        :etime, :ch, 'solicitado', :raw)
+            ")->execute([
+                ':imei'  => $imei,
+                ':fname' => 'Extração CH' . (int)($c['channel'] ?? 0) . ' — aguardando a câmera',
+                ':etime' => $ts ? $ts->format('Y-m-d H:i:s') : null,
+                ':ch'    => (int)($c['channel'] ?? 0) ?: null,
+                ':raw'   => $cmdParaGravar,   // sem a senha, como em `commands`
+            ]);
+        } catch (Throwable $e) {
+            // A fila é conforto de tela: o comando já saiu, e falhar aqui não
+            // pode transformar uma extração bem-sucedida em erro para o usuário.
+            Logger::warning('sendcommand: extração 37382 sem linha na fila', [
+                'imei' => $imei, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
 
 } catch (Exception $e) {
     // Falha no banco não deve impedir a resposta ao dashboard

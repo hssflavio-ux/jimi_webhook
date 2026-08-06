@@ -43,24 +43,66 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             $isSuccess = ($result === 0 || strtoupper((string)$result) === 'SUCCESS');
             $downloadStatus = $isSuccess ? 'disponivel' : 'erro';
 
-            $stmt = $this->db->prepare("
-                INSERT INTO media_files 
-                (imei, file_name, file_type, file_size, file_url, source_type, event_time, channel, download_status, raw_data)
-                VALUES (:imei, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :ch, :ds, :raw)
+            // ── Fecha o pedido de extração, em vez de duplicá-lo (v4.9.1) ────
+            //
+            // `sendcommand.php` grava uma linha `solicitado` quando o 37382 sai.
+            // Sem este UPDATE, a chegada do arquivo criaria uma SEGUNDA linha e
+            // a fila de /video/downloads ficaria com um "aguardando" eterno ao
+            // lado do arquivo pronto — pior do que não ter fila nenhuma.
+            //
+            // Casa pelo pedido `solicitado` mais ANTIGO do mesmo IMEI e canal:
+            // a câmera sobe na ordem em que recebe, e o nome do arquivo é
+            // decidido por ela (CH1_<data>_<hora>_<id>.ts), então não há chave
+            // comum entre pedido e arquivo além dessa ordem.
+            $mediaId = 0;
+            $pend = $this->db->prepare("
+                SELECT id FROM media_files
+                WHERE imei = :imei AND download_status = 'solicitado'
+                  AND source_type = 'extracao_37382'
+                  AND (:ch IS NULL OR channel IS NULL OR channel = :ch2)
+                ORDER BY id ASC LIMIT 1
             ");
-            $stmt->execute([
-                ':imei'  => $imei,
-                ':fname' => $fileName,
-                ':ftype' => $fileType,
-                ':fsize' => $fileSize,
-                ':url'   => $fileUrl,
-                ':etime' => $eventTime,
-                ':ch'    => $channel,
-                ':ds'    => $downloadStatus,
-                ':raw'   => json_encode($item, JSON_UNESCAPED_UNICODE)
-            ]);
+            $pend->execute([':imei' => $imei, ':ch' => $channel, ':ch2' => $channel]);
+            $pendingId = (int)($pend->fetchColumn() ?: 0);
 
-            $mediaId = (int)$this->db->lastInsertId();
+            if ($pendingId > 0) {
+                $this->db->prepare("
+                    UPDATE media_files
+                       SET file_name = :fname, file_type = :ftype, file_size = :fsize,
+                           file_url = :url, source_type = 'pushftpfileupload',
+                           event_time = COALESCE(:etime, event_time),
+                           channel = COALESCE(:ch, channel),
+                           download_status = :ds, raw_data = :raw
+                     WHERE id = :id
+                ")->execute([
+                    ':fname' => $fileName, ':ftype' => $fileType, ':fsize' => $fileSize,
+                    ':url'   => $fileUrl,  ':etime' => $eventTime, ':ch' => $channel,
+                    ':ds'    => $downloadStatus,
+                    ':raw'   => json_encode($item, JSON_UNESCAPED_UNICODE),
+                    ':id'    => $pendingId,
+                ]);
+                $mediaId = $pendingId;
+            } else {
+                // Sem pedido pendente: upload que não nasceu desta tela (console
+                // do IoTHub, anexo de alarme). Continua entrando como linha nova.
+                $stmt = $this->db->prepare("
+                    INSERT INTO media_files
+                    (imei, file_name, file_type, file_size, file_url, source_type, event_time, channel, download_status, raw_data)
+                    VALUES (:imei, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :ch, :ds, :raw)
+                ");
+                $stmt->execute([
+                    ':imei'  => $imei,
+                    ':fname' => $fileName,
+                    ':ftype' => $fileType,
+                    ':fsize' => $fileSize,
+                    ':url'   => $fileUrl,
+                    ':etime' => $eventTime,
+                    ':ch'    => $channel,
+                    ':ds'    => $downloadStatus,
+                    ':raw'   => json_encode($item, JSON_UNESCAPED_UNICODE)
+                ]);
+                $mediaId = (int)$this->db->lastInsertId();
+            }
             if ($mediaId > 0 && $eventTime && $downloadStatus === 'disponivel') {
                 link_upload_to_occurrence($this->db, $imei, $eventTime, $mediaId);
             }
