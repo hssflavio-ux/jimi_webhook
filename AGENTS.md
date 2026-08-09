@@ -209,6 +209,9 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.8.4.sql   # decisão sobre os
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.5.sql   # Ajuda (wiki) liberada a grupo restrito
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.6.sql   # religa o motor de ocorrências (nomes da v4.8.3)
 mysql -u root -p jimi_tracker < mysql/migration_v4.8.7.sql   # decisões de produto no motor (3 ligados, 4 removidos, cartão DLT)
+mysql -u root -p jimi_tracker < mysql/migration_v4.8.9.sql   # telas config-notificacoes e config-smtp na matriz de permissão
+mysql -u root -p jimi_tracker < mysql/migration_v4.9.0.sql   # alarmes "Other Alarms" da doc JT/T que faltavam no catálogo
+mysql -u root -p jimi_tracker < mysql/migration_v4.9.4.sql   # remetente de e-mail: nome antigo do produto → bycamera
 
 # No build step needed — pure PHP
 ```

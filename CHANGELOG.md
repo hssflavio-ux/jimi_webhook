@@ -5,6 +5,36 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.4
+
+### Fixed
+- 🔴 **Os relatórios agendados chegavam assinados como "Jimi Tracker".** O produto se chama `bycamera` desde a v4.8.0, e aquela versão trocou "o remetente padrão de e-mail" — mas trocou **um** dos três lugares que decidem o nome, e não o que vencia. A precedência de `mail_config()` é **banco → `.env`**, então enquanto a linha de `smtp_settings` existisse com o nome antigo, nenhuma mudança em PHP apareceria na caixa de entrada. As três camadas:
+  - **`smtp_settings.from_name`** — a coluna foi criada na v4.4.1 com `DEFAULT 'Jimi Tracker'`. Todo `INSERT` que omitisse a coluna gravava o nome antigo **sozinho**, sem ninguém digitá-lo; foi assim que o homolog ficou com ele. Este era o caminho efetivo. `migration_v4.9.4.sql` troca o DEFAULT e atualiza as linhas.
+  - **`includes/mailer.php`** — os **dois** fallbacks (`?? 'Jimi Tracker'` no ramo do banco e `?: 'Jimi Tracker'` no ramo do `.env`). Corrigir só um deixaria o outro reintroduzindo o nome conforme o ambiente.
+  - **`.env.example`** — `SMTP_FROM_NAME` comentado com o valor antigo, que vira o nome de qualquer instalação nova que descomente a linha.
+  - **O `UPDATE` da migração é deliberadamente estreito**: casa a string exata `'Jimi Tracker'` e nada mais. Quem personalizou o remetente com o nome da própria transportadora **não é tocado** — sobrescrever isso seria trocar um nome errado por outro. Provado com duas linhas: a que tinha o valor do DEFAULT virou `bycamera`, a personalizada sobreviveu intacta.
+- **O rodapé dos e-mails dizia "JIMI Tracker" em dois templates** (`scripts/worker.php`): "Envio automático do JIMI Tracker" no relatório agendado e "Mensagem automática do JIMI Tracker" no alerta de notificação. É o texto que o destinatário lê no fim de toda mensagem que o sistema manda.
+- **Cabeçalho `X-Mailer: JIMI Webhook System`** e o boundary MIME `jimi_…` — aparecem no código-fonte da mensagem, que é o que se olha ao diagnosticar entrega.
+- **User-Agent do geocode** (`JimiWebhook/4.8`) — é como o sistema se identifica ao servidor de endereços. Passou a `bycamera/4.9`.
+
+### Changed
+- **Wiki (`/wiki`) atualizada para o estado atual**, com o que as v4.8.x/v4.9.x mudaram **para quem usa** — estava parada em 30/07/2026 (v4.7.1):
+  - **"O que vale para todos os relatórios"** ganhou três linhas que valem para todas as telas: o filtro de equipamento é **lista de placas** (não caixa de digitação), o local aparece como **endereço** em vez de latitude/longitude, e há uma **coluna Mapa** cujo link **funciona para quem recebe o arquivo**, sem conta no sistema.
+  - **Alarmes**: filtro e ordenação por **placa**; o mapa da consulta inteira; e um callout explicando o `Código 1047 (JTT)` — que o fabricante não documenta o código e que o sistema mostra o número **em vez de inventar um rótulo**, com o registro sendo válido mesmo assim. Sem isso, o usuário lê o número como defeito.
+  - **Ocorrências (relatório)**: filtro e coluna viraram **placa**. O **Dashboard** de Ocorrências e o drill-down de Desatualizados continuam mostrando IMEI — conferido no código, não presumido, e por isso a wiki continua dizendo IMEI nos dois.
+  - **Desatualizados**: a exportação é da **frota completa** mesmo com uma faixa aberta, com callout dizendo que isso é proposital.
+  - **Vídeo ao vivo**: o painel de informações (placa, canais, última comunicação em BRT, status) e a regra de que ele **acompanha a lista** — placa divergente é defeito, não defasagem.
+  - **Playback**: a extração descrita como o fluxo que funciona hoje, com barra de progresso e busca no vídeo; callout de que o arquivo extraído entra na linha do tempo **na data em que foi gravado**, não na data da extração (era a dúvida que a v4.9.2 corrigiu no código); e que extrair depende da câmera conectada.
+  - **Servidor de E-mail**: diz que o nome do remetente vem preenchido como `bycamera` e que **é esta tela** que decide como a mensagem chega — o lugar para onde mandar quem vir um nome errado no e-mail.
+- **`AGENTS.md` e a skill `db-setup` voltaram a listar todas as migrações** — as duas paravam na v4.8.7 e omitiam v4.8.9 e v4.9.0. Um fresh install seguindo a lista subiria sem a matriz de permissão de duas telas e sem 28 nomes de alarme.
+
+### Notas de implementação
+- **Verificação em banco real, não por leitura do código.** Instância MySQL limpa, `smtp_settings` recriada **a partir do DDL da própria v4.4.1** (portanto com o `DEFAULT 'Jimi Tracker'` original) e duas linhas: uma que recebeu o DEFAULT sem ninguém digitá-lo — o cenário do homolog — e outra personalizada (`Transportadora Silva`). Depois da migração: a primeira virou `bycamera`, a segunda **intacta**, o `COLUMN_DEFAULT` do `information_schema` é `bycamera` e `system_info` marca `4.9.4`. Rodada **duas vezes** com saída idêntica.
+- **A prova de que o bug acabou é o cabeçalho da mensagem, não o valor no banco.** Com o app apontado para a base migrada, `mail_build_message()` produziu `From: bycamera <a@x.com>` e `X-Mailer: bycamera`; `mail_config()` no escopo do cliente devolveu `Transportadora Silva`, confirmando que a precedência banco→`.env` continua funcionando e que a personalização sobrevive.
+- ⚠️ **Conferir o `.env` do servidor no deploy.** A migração e o código cobrem banco e fallback, mas um `SMTP_FROM_NAME=Jimi Tracker` escrito à mão no `.env` do homolog venceria o fallback do `.env.example`. O `.env` local não tem nenhuma linha SMTP; o do servidor não foi inspecionado daqui. A conferência da migração devolve as linhas com qualquer variação de "jimi" restante.
+- **HTML da wiki validado estruturalmente** (`DOMDocument` sobre a região de conteúdo, 102 KB): 0 erros. As **42** âncoras do índice resolvem para as 42 seções — nenhum item do menu lateral leva a lugar nenhum.
+- Nomes técnicos **não** foram tocados, pelo mesmo motivo da v4.8.0: o banco `jimi_tracker`, o badge de protocolo `JIMI` (`msgClass=0`), `jimicloud.com`, o cookie `jimi_token`, as chaves de `localStorage` e `jimi-tracker-upload-process` (nome real do serviço de FTP do fornecedor). Os ~100 docblocks `JIMI Webhook System —` ficaram como estão por decisão explícita: é o nome do repositório, não da marca, e renomeá-los tocaria quase todo o projeto sem mudar nada para o usuário.
+
 ## [Unreleased] — 4.9.0
 
 ### Fixed

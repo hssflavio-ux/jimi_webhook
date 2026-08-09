@@ -519,7 +519,7 @@ function buildScheduledReportEmailHtml(array $params, int $rowCount, bool $asLin
          . $anexo
          . '</td></tr>'
          . '<tr><td style="padding:16px 28px;border-top:1px solid #e6e8eb;font-size:12px;color:#8a919e;">'
-         . 'Envio automático do JIMI Tracker. Para alterar a frequência ou os destinatários, '
+         . 'Envio automático da bycamera. Para alterar a frequência ou os destinatários, '
          . 'acesse Relatórios &rsaquo; Agendamentos.'
          . '</td></tr></table></body></html>';
 }
@@ -922,7 +922,7 @@ function buildNotificationEmailHtml(array $p): string {
          . $link
          . '</td></tr>'
          . '<tr><td style="padding:16px 28px;border-top:1px solid #e6e8eb;font-size:12px;color:#8a919e;">'
-         . 'Mensagem automática do JIMI Tracker. Para deixar de receber, ajuste as regras em '
+         . 'Mensagem automática da bycamera. Para deixar de receber, ajuste as regras em '
          . 'Cadastros &rsaquo; Config. Notificações.'
          . '</td></tr></table></body></html>';
 }

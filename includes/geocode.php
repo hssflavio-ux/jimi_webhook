@@ -128,7 +128,7 @@ function geocode_fetch_one(float $lat, float $lng): ?string
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 8,
         CURLOPT_CONNECTTIMEOUT => 3,
-        CURLOPT_USERAGENT      => 'JimiWebhook/4.8',
+        CURLOPT_USERAGENT      => 'bycamera/4.9',
     ]);
     $body = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -179,7 +179,7 @@ function geocode_fetch_many(array $pontos): array
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT        => 8,
                 CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_USERAGENT      => 'JimiWebhook/4.8',
+                CURLOPT_USERAGENT      => 'bycamera/4.9',
             ]);
             curl_multi_add_handle($mh, $ch);
             $hs[] = ['ch' => $ch, 'lat' => $lat, 'lng' => $lng];

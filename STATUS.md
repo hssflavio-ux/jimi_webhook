@@ -1,4 +1,47 @@
-# STATUS.md — Jimi Webhook System v4.9.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.4 (YUV Parity)
+
+> ### 📍 v4.9.4 (09/08/2026) — nome antigo fora dos e-mails + wiki atualizada
+>
+> **Não publicado ainda: exige `migration_v4.9.4.sql` no deploy.**
+>
+> **O sintoma**: relatório agendado chegava assinado como "Jimi Tracker". A v4.8.0
+> disse ter trocado "o remetente padrão de e-mail" e trocou **um** dos três lugares
+> que decidem o nome — não o que vencia. A precedência de `mail_config()` é
+> **banco → `.env`**, e a linha de `smtp_settings` tinha o nome antigo, então
+> nenhuma mudança em PHP chegava à caixa de entrada.
+>
+> **Como o nome antigo entrou no banco sem ninguém digitá-lo**: a coluna
+> `smtp_settings.from_name` foi criada na v4.4.1 com `DEFAULT 'Jimi Tracker'`.
+> Qualquer `INSERT` que omitisse a coluna gravava o nome sozinho. É a mesma
+> família de defeito do `alarm_types`: o valor certo no código, o errado no banco,
+> e o banco vencendo em silêncio.
+>
+> | Camada | Estado |
+> |---|---|
+> | `smtp_settings.from_name` (DEFAULT + linhas) | ✅ `migration_v4.9.4.sql` — **falta rodar no homolog** |
+> | `includes/mailer.php` (2 fallbacks + `X-Mailer` + boundary) | ✅ corrigido |
+> | `scripts/worker.php` (rodapé dos 2 templates de e-mail) | ✅ corrigido |
+> | `.env.example` (`SMTP_FROM_NAME`) | ✅ corrigido |
+> | `includes/geocode.php` (User-Agent) | ✅ `bycamera/4.9` |
+> | Wiki `/wiki` | ✅ atualizada (estava em 30/07/2026) |
+>
+> **Verificado em banco real**: `smtp_settings` recriada a partir do DDL da própria
+> v4.4.1 (com o DEFAULT antigo), duas linhas — uma com o valor do DEFAULT, uma
+> personalizada. Depois da migração a primeira virou `bycamera` e a **segunda
+> sobreviveu intacta**; migração rodada duas vezes com saída idêntica. A prova
+> final é o cabeçalho da mensagem, não o valor no banco: `mail_build_message()`
+> devolveu **`From: bycamera <a@x.com>`**.
+>
+> ⚠️ **No deploy, conferir o `.env` do servidor**: um `SMTP_FROM_NAME=Jimi Tracker`
+> escrito à mão lá venceria o fallback corrigido. O `.env` local não tem linha
+> SMTP nenhuma; o do homolog não foi inspecionado daqui.
+>
+> **Não renomeado, de propósito**: banco `jimi_tracker`, badge de protocolo `JIMI`,
+> `jimicloud.com`, cookie `jimi_token`, chaves de `localStorage`,
+> `jimi-tracker-upload-process` (serviço real do fornecedor) e os ~100 docblocks
+> `JIMI Webhook System —` (nome do repositório, não da marca).
+>
+> ---
 
 > ### 📍 ESTADO EM 06/08/2026, 10h10 — tudo publicado e verificado no homolog
 >

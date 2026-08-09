@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.7.1
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.9.4
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
@@ -11,6 +11,12 @@
  * que as quatro fases entregaram: notificações (sino/pop-up/som/e-mail),
  * geocercas, os cinco relatórios operacionais, agendamento de relatório por
  * e-mail e modelos de filtro salvos.
+ *
+ * Atualizada na v4.9.4 com o que as v4.8.x/v4.9.x mudaram para quem USA:
+ * endereço no lugar de latitude/longitude, filtro de equipamento por PLACA,
+ * coluna Mapa nos exports, o painel de informações do vídeo ao vivo e a
+ * extração de gravação funcionando ponta a ponta. O remetente dos e-mails
+ * passou a ser `bycamera` — a wiki diz isso porque é o que o destinatário lê.
  *
  * Duas regras de negócio que o usuário PRECISA entender e que só existem aqui:
  * o sistema notifica por OCORRÊNCIA e não por alarme (12 alarmes em rajada =
@@ -861,6 +867,12 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <strong>Aguarde a imagem:</strong> Entre clicar em "Iniciar" e o vídeo aparecer, a câmera precisa ser ativada e começar a transmitir. Isso leva de 5 a 30 segundos — a tela mostra o progresso enquanto isso.
 </div>
 
+<p>Ao lado do player, um <strong>painel de informações</strong> descreve o equipamento selecionado: a <strong>placa</strong>, os <strong>canais de câmera</strong> que aquele modelo tem, a <strong>última comunicação</strong> (no horário de Brasília) e o <strong>status</strong> de conexão.</p>
+
+<div class="callout info">
+<strong>O painel acompanha a lista.</strong> Trocar o equipamento na lista troca também os dados do painel. Se a placa ou os canais exibidos não corresponderem ao veículo que você escolheu, o dado está errado — não é uma defasagem esperada.
+</div>
+
 <h3 id="video-playback">Playback</h3>
 <p><strong>Objetivo:</strong> Visualizar gravações históricas do cartão de memória do equipamento. Ao clicar em <strong>Requisitar Gravações</strong>, o sistema consulta o cartão e monta a lista do período escolhido. A lista mostra gravações "No cartão" (com opção Extrair) e "Disponível" (já baixadas, prontas para reproduzir).</p>
 
@@ -899,10 +911,18 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Requisitar Gravações</td><td>Consulta o equipamento e preenche a lista de gravações do período</td></tr>
-<tr><td>Extrair (gravação "No cartão")</td><td>Pede o envio da gravação escolhida. Quando o arquivo chega, o status muda para "Disponível"</td></tr>
-<tr><td>Reproduzir (gravação "Disponível")</td><td>Abre o player e reproduz a gravação na própria tela</td></tr>
+<tr><td>Extrair (gravação "No cartão")</td><td>Pede o envio da gravação escolhida. A câmera envia o arquivo e o status muda sozinho para "Disponível" — um trecho de 30 segundos costuma levar poucos segundos; trechos longos, proporcionalmente mais</td></tr>
+<tr><td>Reproduzir (gravação "Disponível")</td><td>Abre o player e reproduz a gravação na própria tela, com barra de progresso — dá para arrastar para um ponto específico do vídeo</td></tr>
 <tr><td>Auto-atualização</td><td>Após requisitar, a lista se atualiza sozinha por alguns instantes</td></tr>
 </table>
+
+<div class="callout info">
+<strong>O arquivo extraído aparece no dia que você filtrou.</strong> Uma gravação recém-extraída entra na linha do tempo na data e hora em que foi <em>gravada</em>, não na data em que você a extraiu. Se você filtrou o dia 05 e extraiu um trecho daquele dia, ele aparece ali mesmo — não é preciso trocar o filtro para encontrá-lo.
+</div>
+
+<div class="callout warn">
+<strong>Extrair depende da câmera estar conectada.</strong> O pedido vai até o equipamento e é ele quem envia o arquivo. Com a câmera fora do ar, a gravação continua marcada como "No cartão" — ela não se perde, mas só chega quando o equipamento voltar a se comunicar.
+</div>
 
 <h3 id="video-downloads">Downloads</h3>
 <p><strong>Objetivo:</strong> Grade com todos os arquivos de mídia disponíveis para download. Filtros por equipamento e status (disponível, solicitado, erro). Clique no nome do arquivo para baixar.</p>
@@ -928,10 +948,22 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 
 <h3 id="rel-comum">O que vale para todos os relatórios</h3>
-<p>Estes cinco comportamentos são iguais em todas as telas de relatório. O que muda de um para outro são os filtros e as colunas.</p>
+<p>Estes comportamentos são iguais em todas as telas de relatório. O que muda de um para outro são os filtros e as colunas.</p>
 
 <table class="tbl-mock">
 <tr><th>Recurso</th><th>Como funciona</th></tr>
+<tr>
+    <td><strong>Escolher o veículo</strong></td>
+    <td>O filtro de equipamento é uma <strong>lista de placas</strong>, não um campo de digitação. Abra a lista e escolha — só aparecem os veículos que você tem permissão de ver. A placa também é a <strong>primeira coluna</strong> da maioria dos relatórios, na tela e nos arquivos exportados.</td>
+</tr>
+<tr>
+    <td><strong>Endereço, não coordenada</strong></td>
+    <td>Onde antes apareciam números de latitude e longitude, hoje aparece o <strong>endereço</strong> no formato <em>rua, cidade, estado</em>. Em rodovia ou zona rural o endereço pode sair mais curto (às vezes só cidade e estado) — é o que existe de referência naquele ponto.</td>
+</tr>
+<tr>
+    <td><strong>Coluna Mapa</strong></td>
+    <td>Os relatórios com posição trazem uma coluna <strong>Mapa</strong>. Na tela, no Excel e no PDF ela é um link que abre aquele ponto no mapa, e <strong>funciona para quem recebe o arquivo</strong>, mesmo sem conta no sistema.</td>
+</tr>
 <tr>
     <td><strong>Ordem dos resultados</strong></td>
     <td>Todo relatório com data abre em <strong>ordem crescente</strong>: o registro mais antigo no topo e o mais recente no fim da página — a leitura acompanha a linha do tempo.</td>
@@ -1085,28 +1117,38 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Clicar em uma faixa</td><td>Abre a lista dos equipamentos daquela faixa: IMEI, nome, modelo, cliente, última posição e há quantas horas</td></tr>
 <tr><td>Ordenar por Última Posição</td><td>Setinha no cabeçalho. Em ordem crescente, os mais desatualizados vêm primeiro — os "nunca posicionados" encabeçam a lista</td></tr>
 <tr><td>← Voltar</td><td>Fecha a lista e devolve o resumo com as cinco faixas</td></tr>
-<tr><td>Exportar</td><td>Baixa Excel ou PDF com os equipamentos da faixa aberta</td></tr>
+<tr><td>Ver posições no mapa</td><td>Abre um mapa com os equipamentos da consulta; cada marcador traz a placa e a data/hora da última posição conhecida</td></tr>
+<tr><td>Exportar</td><td>Baixa Excel ou PDF da <strong>frota completa</strong> — a lista inteira ordenada por tempo sem transmitir, que é a que se leva para a reunião. A grade principal traz placa, há quanto tempo sem transmitir, data/hora, endereço, mapa, ignição e status do GPS</td></tr>
 </table>
 
+<div class="callout info">
+<strong>O arquivo exportado é sempre da frota inteira</strong>, mesmo que você tenha aberto uma faixa antes de clicar em Exportar. Isso é proposital: a faixa serve para investigar na tela, e o arquivo serve para levar o quadro completo.
+</div>
+
 <h3 id="rel-alarmes">Alarmes</h3>
-<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, IMEI, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa.</p>
+<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Filtrar + Gerar</td><td>Tabela atualiza com os filtros aplicados, do alarme mais antigo para o mais recente</td></tr>
-<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Data/Hora, IMEI, Código e Nome do Alarme</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Data/Hora, Placa, Código e Nome do Alarme</td></tr>
 <tr><td>Tipos de Alarme</td><td>Clique nos tipos para incluí-los na consulta — dá para selecionar vários de uma vez</td></tr>
-<tr><td>Ver Mapa</td><td>Abre o mapa em uma nova aba, no local exato do alarme</td></tr>
+<tr><td>Ver posições no mapa</td><td>Abre um mapa com todos os alarmes da consulta. Cada marcador traz a <strong>placa, a data/hora e o nome do alarme</strong> — aqui cada ponto é de um veículo diferente</td></tr>
+<tr><td>Ver Mapa (na linha)</td><td>Abre o mapa em uma nova aba, no local exato daquele alarme</td></tr>
 <tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados filtrados</td></tr>
 </table>
 
+<div class="callout info">
+<strong>Alarme sem nome, só com número.</strong> Alguns poucos alarmes aparecem como <span class="mono">Código 1047 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que o fabricante não documenta — o sistema mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos.
+</div>
+
 <h3 id="rel-ocorrencias">Ocorrências</h3>
-<p><strong>Objetivo:</strong> Histórico de ocorrências com filtros por cliente, IMEI, tipo de alarme, situação, risco, falso positivo, filial e motorista. Visão complementar ao Dashboard de Ocorrências, voltada a auditoria e análise histórica.</p>
+<p><strong>Objetivo:</strong> Histórico de ocorrências com filtros por cliente, placa, tipo de alarme, situação, risco, falso positivo, filial e motorista. Visão complementar ao Dashboard de Ocorrências, voltada a auditoria e análise histórica.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Aplicar filtros + Gerar</td><td>Tabela mostra as ocorrências que atendem a todos os critérios, da mais antiga para a mais recente</td></tr>
-<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Último Alarme, IMEI e Qtd (quantidade de alarmes agrupados)</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Último Alarme, Placa e Qtd (quantidade de alarmes agrupados)</td></tr>
 <tr><td>Abrir</td><td>Abre o detalhe da ocorrência no Dashboard de Ocorrências, com vídeo e histórico de tratativa</td></tr>
 <tr><td>Exportar</td><td>Baixa Excel ou PDF</td></tr>
 </table>
@@ -1581,7 +1623,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Servidor e porta</td><td>Endereço do provedor e a porta de envio</td></tr>
 <tr><td>Segurança</td><td><strong>STARTTLS</strong> (normalmente porta 587), <strong>SSL/TLS implícito</strong> (porta 465) ou sem criptografia</td></tr>
 <tr><td>Usuário e senha</td><td>Credenciais da conta de envio</td></tr>
-<tr><td>E-mail e nome do remetente</td><td>Como a mensagem aparece na caixa de quem recebe</td></tr>
+<tr><td>E-mail e nome do remetente</td><td>Como a mensagem aparece na caixa de quem recebe. O nome vem preenchido como <strong>bycamera</strong>; troque-o se quiser que os e-mails saiam com o nome da sua empresa</td></tr>
 <tr><td>Ativo</td><td>Desmarcado, a configuração é ignorada</td></tr>
 </table>
 
@@ -1598,6 +1640,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <div class="callout tip">
 <strong>Se os e-mails caírem na caixa de spam</strong>, o ajuste não é no sistema: é preciso que o domínio do remetente autorize o servidor de envio (registros SPF/DKIM no DNS). Fale com quem administra o domínio.
+</div>
+
+<div class="callout info">
+<strong>É este cadastro que decide o nome do remetente</strong> — inclusive nos relatórios agendados e nos alertas de notificação. Se os e-mails estiverem chegando com um nome antigo ou errado, é o campo <em>nome do remetente</em> desta tela que precisa ser corrigido, e a correção vale para os próximos envios.
 </div>
 
 <h3 id="usuarios">Usuários <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
@@ -1746,7 +1792,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
-bycamera — Central de Ajuda — Última atualização: 30/07/2026
+bycamera — Central de Ajuda — Última atualização: 09/08/2026
 </p>
 
     </div><!-- /.wiki-content -->

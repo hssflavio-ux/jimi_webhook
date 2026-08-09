@@ -347,6 +347,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.8.7" "mysql/migration_v4.8.7.sql" "decisões de produto no motor de ocorrências"
     run_migration "4.8.9" "mysql/migration_v4.8.9.sql" "rastreabilidade de comandos (request_id/server_flag_id)"
     run_migration "4.9.0" "mysql/migration_v4.9.0.sql" "alertTypes JT/T que faltavam no catálogo"
+    run_migration "4.9.4" "mysql/migration_v4.9.4.sql" "remetente de e-mail: nome antigo → bycamera"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

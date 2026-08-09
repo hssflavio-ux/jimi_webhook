@@ -116,7 +116,7 @@ function mail_config(?int $customerId = null): array
             'user'      => trim((string)($row['username'] ?? '')),
             'pass'      => app_decrypt($row['password_enc'] ?? null),
             'from'      => trim((string)$row['from_email']),
-            'from_name' => trim((string)($row['from_name'] ?? 'Jimi Tracker')),
+            'from_name' => trim((string)($row['from_name'] ?? 'bycamera')),
             'timeout'   => (int)($row['timeout_s'] ?: 20),
             'source'    => $row['customer_id'] === null ? 'banco:global' : 'banco:cliente',
         ];
@@ -133,7 +133,7 @@ function mail_config(?int $customerId = null): array
         'user'      => trim((string)getenv('SMTP_USER')),
         'pass'      => (string)getenv('SMTP_PASS'),
         'from'      => trim((string)(getenv('SMTP_FROM') ?: 'nao-responda@localhost')),
-        'from_name' => trim((string)(getenv('SMTP_FROM_NAME') ?: 'Jimi Tracker')),
+        'from_name' => trim((string)(getenv('SMTP_FROM_NAME') ?: 'bycamera')),
         'timeout'   => (int)(getenv('SMTP_TIMEOUT') ?: 20),
         'source'    => 'env',
     ];
@@ -195,7 +195,7 @@ function mail_valid_recipients(array $recipients): array
  */
 function mail_build_message(array $cfg, array $to, string $subject, string $htmlBody, array $attachments = []): string
 {
-    $boundary = 'jimi_' . bin2hex(random_bytes(12));
+    $boundary = 'bycamera_' . bin2hex(random_bytes(12));
     $fromName = mail_encode_header($cfg['from_name']);
 
     $headers = [
@@ -205,7 +205,7 @@ function mail_build_message(array $cfg, array $to, string $subject, string $html
         'Subject: ' . mail_encode_header($subject),
         'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . (parse_url('http://' . $cfg['host'], PHP_URL_HOST) ?: 'localhost') . '>',
         'MIME-Version: 1.0',
-        'X-Mailer: JIMI Webhook System',
+        'X-Mailer: bycamera',
     ];
 
     if (empty($attachments)) {
