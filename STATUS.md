@@ -2,7 +2,8 @@
 
 > ### 📍 v4.9.4 (09/08/2026) — nome antigo fora dos e-mails + wiki atualizada
 >
-> **Não publicado ainda: exige `migration_v4.9.4.sql` no deploy.**
+> **✅ PUBLICADO E VERIFICADO NO HOMOLOG** — commit `00103f7`, `/ping` em **4.9.4**,
+> `system_info` em **4.9.4**, backup `20260809_150522`.
 >
 > **O sintoma**: relatório agendado chegava assinado como "Jimi Tracker". A v4.8.0
 > disse ter trocado "o remetente padrão de e-mail" e trocou **um** dos três lugares
@@ -18,7 +19,7 @@
 >
 > | Camada | Estado |
 > |---|---|
-> | `smtp_settings.from_name` (DEFAULT + linhas) | ✅ `migration_v4.9.4.sql` — **falta rodar no homolog** |
+> | `smtp_settings.from_name` (DEFAULT + linhas) | ✅ `migration_v4.9.4.sql` aplicada no homolog |
 > | `includes/mailer.php` (2 fallbacks + `X-Mailer` + boundary) | ✅ corrigido |
 > | `scripts/worker.php` (rodapé dos 2 templates de e-mail) | ✅ corrigido |
 > | `.env.example` (`SMTP_FROM_NAME`) | ✅ corrigido |
@@ -32,9 +33,21 @@
 > final é o cabeçalho da mensagem, não o valor no banco: `mail_build_message()`
 > devolveu **`From: bycamera <a@x.com>`**.
 >
-> ⚠️ **No deploy, conferir o `.env` do servidor**: um `SMTP_FROM_NAME=Jimi Tracker`
-> escrito à mão lá venceria o fallback corrigido. O `.env` local não tem linha
-> SMTP nenhuma; o do homolog não foi inspecionado daqui.
+> **Confirmado no homolog, com baseline medido antes do deploy** (não deduzido):
+> a linha global de `smtp_settings` tinha mesmo `from_name = 'Jimi Tracker'` e o
+> `COLUMN_DEFAULT` da coluna também — exatamente o cenário previsto. Depois da
+> migração: linha e DEFAULT em `bycamera`, **zero** linhas com qualquer variação
+> de "jimi". Sonda no servidor com a config real (`source=banco:global`,
+> `smtp.task.com.br`) produziu **`From: bycamera <camera@telecomtrack.com.br>`**
+> e `X-Mailer: bycamera` — a sonda **monta** a mensagem e imprime o cabeçalho,
+> não envia e-mail para ninguém.
+>
+> ✅ **O `.env` do homolog não tem `SMTP_FROM_NAME` nenhum** — a ressalva que
+> estava aqui está fechada. E, com linha no banco, o `.env` nem é consultado
+> para este campo.
+>
+> `/wiki` responde **302 → /login** sem sessão (não 500), e os webhooks seguem
+> entrando normalmente (`pushhb` processado durante a verificação).
 >
 > **Não renomeado, de propósito**: banco `jimi_tracker`, badge de protocolo `JIMI`,
 > `jimicloud.com`, cookie `jimi_token`, chaves de `localStorage`,
