@@ -1,4 +1,48 @@
-# STATUS.md — Jimi Webhook System v4.9.4 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.5 (YUV Parity)
+
+> ### 📍 v4.9.5 (09/08/2026) — evento único por protocolo + categorias em pt-BR
+>
+> **Exige `migration_v4.9.5.sql`.**
+>
+> **O pedido**: no cadastro de ocorrências, o evento deve ser único independente
+> do protocolo — "Colisão com Pedestre" é JIMI 207 **e** JT/T 264-4, um evento só.
+>
+> **O que estava por trás.** Dois defeitos que se revelaram o mesmo:
+> 1. o dropdown listava uma opção por **linha de catálogo**, e o catálogo tem uma
+>    linha por protocolo (FCW tinha três: JIMI 204, JIMI 229, JT/T 264-1);
+> 2. `alarm_types.category` estava dividida por **idioma**: inglês nas linhas
+>    JIMI, português nas JT/T (`Driving`×`conducao`, `Security`×`seguranca`…),
+>    então o mesmo evento caía em dois `<optgroup>` diferentes.
+>
+> A prova de que são o mesmo defeito: os **únicos 6** nomes que cruzavam mais de
+> uma categoria cruzavam exatamente esses pares. Unificada a categoria, nenhum
+> nome cruza — e aí agrupar por nome vira operação inequívoca.
+>
+> | | Antes | Depois |
+> |---|---|---|
+> | Opções no dropdown | **83** | **67** |
+> | Eventos distintos por trás | 65 | 67 |
+> | Duplicatas visíveis | **18** | **0** |
+> | Categorias | 19 (mistas EN/PT) | 13 (pt-BR + siglas) |
+>
+> O "antes" foi **reconstruído** recarregando o dump original e rodando a consulta
+> antiga — não estimado. 65 + 2 eventos recuperados = 67, fecha exato.
+>
+> ⚠️ **O remap de `notification_rules` era obrigatório.** As 6 regras do homolog
+> casam **todas** por categoria, nenhuma por nome; renomear sem remapear teria
+> desligado as notificações em silêncio. Efeito desejado do conserto: as regras
+> deixaram de ser presas a um protocolo — `conducao` 8 → **15** alarmes cobertos,
+> `seguranca` 11 → **14**, `emergencia` 1 → **2**.
+>
+> **Inglês que chegava ao usuário**: badge de severidade (`critical`/`warning`),
+> filtros de severidade e categoria, e `JTT` onde o resto do sistema diz `JT/T`.
+> Traduzido **na exibição** (`alarm_category_label()`, `alarm_severity_label()`,
+> `protocol_label()`), nunca gravando o rótulo na coluna — `category` e
+> `severity` são chave de junção. `DMS`/`ADAS` ficam: são siglas, e
+> `rel_alarmes.php` filtra por elas.
+>
+> ---
+
 
 > ### 📍 v4.9.4 (09/08/2026) — nome antigo fora dos e-mails + wiki atualizada
 >

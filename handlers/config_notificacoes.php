@@ -214,10 +214,20 @@ try {
 $alarmTypes = [];
 $categories = [];
 try {
+    // Um evento por linha, como em /config-ocorrencias: o mesmo evento existe
+    // uma vez por protocolo (e às vezes duas no mesmo protocolo, em gerações
+    // diferentes de firmware). A regra é gravada pelo NOME e o motor casa por
+    // nome, então uma linha já cobre JIMI e JT/T — repetir o evento na lista só
+    // fazia o usuário escolher entre opções idênticas.
     $alarmTypes = $db->query(
-        "SELECT alarm_name_pt, alarm_code, category
+        "SELECT alarm_name_pt,
+                MIN(category) AS category,
+                GROUP_CONCAT(DISTINCT CONCAT(
+                    CASE WHEN protocol = 'JTT' THEN 'JT/T' ELSE protocol END, ' ', alarm_code
+                ) ORDER BY protocol DESC, alarm_code SEPARATOR ' · ') AS codigos
          FROM alarm_types
-         ORDER BY category, alarm_name_pt"
+         GROUP BY alarm_name_pt
+         ORDER BY MIN(category), alarm_name_pt"
     )->fetchAll();
     $categories = $db->query(
         "SELECT DISTINCT category FROM alarm_types WHERE category IS NOT NULL AND category <> '' ORDER BY category"
@@ -271,25 +281,25 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <optgroup label="Categorias inteiras">
                     <?php foreach ($categories as $cat): ?>
                     <option value="<?= htmlspecialchars($cat) ?>" <?= ($editRule['alarm_type'] ?? '') === $cat ? 'selected' : '' ?>>
-                        Todos de <?= htmlspecialchars($cat) ?>
+                        Todos de <?= htmlspecialchars(alarm_category_label($cat)) ?>
                     </option>
                     <?php endforeach; ?>
                 </optgroup>
                 <?php endif; ?>
                 <?php
-                $lastCat = '';
+                $lastCat = null;
                 foreach ($alarmTypes as $at):
                     if ($at['category'] !== $lastCat) {
-                        if ($lastCat !== '') echo '</optgroup>';
+                        if ($lastCat !== null) echo '</optgroup>';
                         $lastCat = (string)$at['category'];
-                        echo '<optgroup label="' . htmlspecialchars($lastCat ?: 'Outros') . '">';
+                        echo '<optgroup label="' . htmlspecialchars(alarm_category_label($lastCat)) . '">';
                     }
                 ?>
                 <option value="<?= htmlspecialchars($at['alarm_name_pt']) ?>"
                         <?= ($editRule['alarm_type'] ?? '') === $at['alarm_name_pt'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($at['alarm_name_pt']) ?> (<?= htmlspecialchars($at['alarm_code']) ?>)
+                    <?= htmlspecialchars($at['alarm_name_pt']) ?> — <?= htmlspecialchars($at['codigos']) ?>
                 </option>
-                <?php endforeach; if ($lastCat !== '') echo '</optgroup>'; ?>
+                <?php endforeach; if ($lastCat !== null) echo '</optgroup>'; ?>
             </select>
             <p class="text-muted" style="font-size:11px;margin-top:6px;">
                 Uma categoria cobre todos os alarmes dela — mais simples que cadastrar um por um.

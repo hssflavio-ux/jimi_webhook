@@ -5,6 +5,33 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.5
+
+### Fixed
+- 🔴 **O cadastro de ocorrências listava o MESMO evento uma vez por protocolo.** "ADAS: Colisão com Pedestre (PCW)" aparecia duas vezes — JIMI 207 e JT/T 264-4 — como se fossem dois eventos, e "ADAS: Colisão Frontal (FCW)" aparecia **três** (JIMI 204, JIMI 229, JT/T 264-1). O dropdown era montado com uma linha por linha de catálogo, e o catálogo tem uma linha por protocolo (às vezes duas no mesmo protocolo, para gerações diferentes de firmware).
+  - **A escolha entre as duplicatas sempre foi indiferente**, o que torna o ruído pior: o parâmetro é gravado pelo **nome** (`occurrence_config_params.alarm_type`) e `get_occurrence_param()` casa por nome, então **uma** linha já cobria todos os protocolos e códigos. O usuário escolhia entre opções idênticas sem ter como saber disso.
+  - Agora a consulta agrupa por `alarm_name_pt` e mostra os códigos agregados: `ADAS: Colisão com Pedestre (PCW) — JT/T 264-4 · JIMI 207`. Os códigos continuam visíveis porque são o que o instalador confere contra a doc do fabricante. **Medido: 83 opções → 67, com 18 duplicatas eliminadas e zero opções repetidas.**
+  - Mesma correção em `/config-notificacoes`, que tinha o dropdown idêntico com o mesmo defeito.
+- 🔴 **A categoria do alarme estava dividida por protocolo E por idioma.** As linhas JIMI usavam categoria em inglês e as JT/T em português, para o mesmo conceito: `Driving`×`conducao`, `Security`×`seguranca`, `Vehicle`×`veiculo`, `Device`×`dispositivo`, `Geofence`×`cerca`, `Emergency`×`emergencia`. Como o `<optgroup>` sai de `category`, o usuário via "Driving" e "Condução" como grupos separados, com o mesmo evento nos dois.
+  - As duas coisas eram **o mesmo defeito**: os únicos **6** nomes que cruzavam mais de uma categoria cruzavam exatamente esses pares. Depois da unificação, **nenhum** nome cruza categoria — é o que torna o agrupamento por nome inequívoco, e a migração verifica isso em vez de supor.
+  - ⚠️ **O remap de `notification_rules` não era opcional.** `notification_engine.php` casa a regra por `at.category = nr.alarm_type`, e as **6** regras do homolog casam **todas** por categoria, nenhuma por nome. Renomear a categoria sem remapear teria desligado as notificações em silêncio — o modo de falha que a v4.8.3 causou no motor de ocorrências. `UPDATE IGNORE` + limpeza por causa da `UNIQUE KEY (customer_key, alarm_type)`.
+  - **Efeito colateral desejado**: como as regras deixaram de estar presas ao protocolo, três delas passaram a cobrir mais alarmes — `conducao` 8 → **15**, `seguranca` 11 → **14**, `emergencia` 1 → **2**. Antes, um alarme de condução vindo de câmera JT/T não disparava a regra "Driving" do cliente.
+  - A cláusula de filtro da tela foi reescrita junto (`'Driving','Accident'…` → `'conducao','acidente'…`): mantida a antiga, a lista teria encolhido para DMS/ADAS mais o que a severidade pegasse. De quebra, **2 eventos que a lista nunca ofereceu** entraram (`Curva Brusca` e `Desaceleração Brusca`, JT/T puros, invisíveis porque a cláusula só citava o `Driving` inglês).
+- **Textos em inglês que chegavam ao usuário, traduzidos na exibição**: a badge de severidade do Detalhe do Ativo e do Relatório de Alarmes imprimia `critical` / `warning` crus; o filtro de severidade oferecia "Critical/Warning/Info"; o filtro de categoria mostrava o valor cru. Agora `Crítica`, `Atenção`, `Informativa`, `Condução`, `Segurança`…
+  - A tradução é **na exibição**, por `alarm_category_label()` / `alarm_severity_label()` / `protocol_label()` em `includes/functions.php`, nunca gravando o rótulo na coluna: `category` e `severity` são **chave de junção** e valor de comparação SQL. É a lição da v4.8.3 aplicada preventivamente.
+  - `DMS` e `ADAS` não são traduzidos — são siglas do setor, e `rel_alarmes.php` filtra por `category IN ('DMS','ADAS')`. Ganham só o significado expandido no rótulo ("DMS — Monitoramento do Motorista").
+  - `JTT` passa a ser exibido como **JT/T**, a grafia que o resto do sistema já usava. Duas grafias faziam parecer protocolos diferentes.
+
+### Added
+- **Guarda de evento único no salvamento do perfil.** Nada impedia adicionar duas linhas para o mesmo evento com regras conflitantes, e `get_occurrence_param()` fecha com `LIMIT 1` — o perfil passava a depender da ordem das linhas no banco. A primeira linha vence e o aviso diz quantas foram descartadas.
+
+### Notas de implementação
+- **Testado em cópia real do homolog, não em fixture inventado**: `mysqldump` de `alarm_types` (148), `notification_rules` (6), `occurrence_config_params` (22) e `occurrence_configs` para instância MySQL isolada. Migração rodada **duas vezes** com saída idêntica; as 4 conferências (regra órfã, parâmetro órfão, nome cruzando categoria, categoria em inglês) devolvem zero linhas.
+- **O "antes" foi reconstruído, não estimado**: o dump original foi recarregado num segundo banco e a consulta **antiga** rodada contra ele — 83 opções para 65 eventos distintos. A conta fecha exata com o depois: 65 + 2 recuperados = **67**.
+- ⚠️ **A conferência de categoria em inglês precisou de `BINARY`.** A primeira execução acusou `sensor` e `video` como "ainda em inglês": a collation `utf8mb4_unicode_ci` ignora caixa, então `IN ('Sensor','Video')` casava os valores já corrigidos. Sem o `BINARY` a migração denunciaria erro onde não há — e, pior, a conferência não distinguiria os dois estados.
+- **Cadeia de `require` conferida à mão**, não presumida: os 4 handlers que passaram a usar os helpers chegam a `functions.php` via `auth.php:3`. `php -l` não pega `require` faltando (lição da v4.8.x).
+- Helpers exercitados nos limites: categoria desconhecida volta capitalizada em vez de sumir (denuncia categoria nova sem tradução), `Video` de base antiga ainda resolve para `Vídeo` (busca sem diferenciar caixa), severidade nula vira `Informativa`.
+
 ## [Unreleased] — 4.9.4
 
 ### Fixed

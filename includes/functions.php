@@ -517,6 +517,92 @@ function alarm_label_sql(): array {
 }
 
 /**
+ * Rótulo em pt-BR da CATEGORIA do alarme.
+ *
+ * A coluna `alarm_types.category` guarda um identificador estável (`conducao`,
+ * `veiculo`, `seguranca`…), não um texto de tela. Ela é **chave de junção**:
+ * `notification_engine.php` casa a regra por `at.category = nr.alarm_type`, e
+ * as regras do homolog casam TODAS por categoria. Por isso a tradução é feita
+ * aqui, na exibição, e nunca gravando o texto traduzido na coluna — trocar o
+ * valor gravado faria a notificação parar de disparar em silêncio (v4.9.5
+ * normalizou os valores e precisou remapear as regras junto; ver CLAUDE.md).
+ *
+ * `DMS` e `ADAS` são siglas técnicas do setor, não palavras em inglês, e
+ * `rel_alarmes.php` filtra por `category IN ('DMS','ADAS')`. Ficam como estão,
+ * com o significado expandido só no rótulo.
+ *
+ * Categoria desconhecida volta capitalizada em vez de sumir: rótulo feio é
+ * melhor do que `<optgroup>` vazio, e denuncia a categoria nova que ninguém
+ * traduziu.
+ *
+ * @param string|null $cat Valor cru de `alarm_types.category`
+ * @returns string         Texto pronto para a tela
+ */
+function alarm_category_label(?string $cat): string {
+    $map = [
+        'DMS'         => 'DMS — Monitoramento do Motorista',
+        'ADAS'        => 'ADAS — Assistência à Condução',
+        'acidente'    => 'Acidente',
+        'cerca'       => 'Cerca Eletrônica',
+        'conducao'    => 'Condução',
+        'dispositivo' => 'Dispositivo',
+        'emergencia'  => 'Emergência',
+        'energia'     => 'Energia',
+        'pessoal'     => 'Pessoal',
+        'seguranca'   => 'Segurança',
+        'sensor'      => 'Sensor',
+        'veiculo'     => 'Veículo',
+        'video'       => 'Vídeo',
+    ];
+    $key = trim((string)$cat);
+    if ($key === '') return 'Sem categoria';
+    // Busca sem diferenciar caixa: a collation da coluna é `_ci` e bases
+    // antigas podem ter 'Video' onde a v4.9.5 gravou 'video'.
+    foreach ($map as $k => $label) {
+        if (strcasecmp($k, $key) === 0) return $label;
+    }
+    return mb_convert_case($key, MB_CASE_TITLE, 'UTF-8');
+}
+
+/**
+ * Rótulo em pt-BR da SEVERIDADE do alarme.
+ *
+ * O enum de `alarm_types.severity` é em inglês e é usado em comparação SQL
+ * (`relatorios.php` filtra por ele), então o VALOR não muda — só o texto que
+ * chega à tela. Antes disso, a badge do Detalhe do Ativo e o filtro do
+ * Relatório de Alarmes imprimiam `critical` / `warning` crus para o usuário.
+ *
+ * @param string|null $sev Valor cru de `alarm_types.severity`
+ * @returns string         Texto pronto para a tela
+ */
+function alarm_severity_label(?string $sev): string {
+    $map = [
+        'critical' => 'Crítica',
+        'high'     => 'Alta',
+        'warning'  => 'Atenção',
+        'medium'   => 'Média',
+        'low'      => 'Baixa',
+        'info'     => 'Informativa',
+    ];
+    $key = strtolower(trim((string)$sev));
+    return $map[$key] ?? ($key === '' ? 'Informativa' : mb_convert_case($key, MB_CASE_TITLE, 'UTF-8'));
+}
+
+/**
+ * Rótulo de protocolo para a tela.
+ *
+ * `alarm_types.protocol` guarda `JTT`, mas o usuário lê **JT/T** em todo o
+ * resto do sistema (badge do Detalhe do Ativo, Relatório de Alarmes). Duas
+ * grafias para a mesma coisa fazem parecer que são protocolos diferentes.
+ *
+ * @param string|null $proto `JIMI` ou `JTT`
+ * @returns string
+ */
+function protocol_label(?string $proto): string {
+    return strcasecmp(trim((string)$proto), 'JTT') === 0 ? 'JT/T' : strtoupper(trim((string)$proto));
+}
+
+/**
  * Placas do escopo corrente, para o `<select>` de PLACA dos relatórios.
  *
  * Companheira de `report_customer_scope()`, pelo mesmo motivo de

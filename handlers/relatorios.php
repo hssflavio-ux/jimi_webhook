@@ -169,7 +169,7 @@ include __DIR__ . '/../web/layout_base.php';
             <select name="severity" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface)">
                 <option value="">Todas</option>
                 <?php foreach ($alarmSeverities as $s): ?>
-                <option value="<?= $s ?>" <?= $alarmSev===$s?'selected':'' ?>><?= ucfirst($s) ?></option>
+                <option value="<?= $s ?>" <?= $alarmSev===$s?'selected':'' ?>><?= htmlspecialchars(alarm_severity_label($s)) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -178,7 +178,7 @@ include __DIR__ . '/../web/layout_base.php';
             <select name="category" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);max-width:160px">
                 <option value="">Todas</option>
                 <?php foreach ($alarmCategories as $cat): ?>
-                <option value="<?= htmlspecialchars($cat) ?>" <?= $alarmCat===$cat?'selected':'' ?>><?= htmlspecialchars($cat) ?></option>
+                <option value="<?= htmlspecialchars($cat) ?>" <?= $alarmCat===$cat?'selected':'' ?>><?= htmlspecialchars(alarm_category_label($cat)) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -209,7 +209,7 @@ include __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td><?= htmlspecialchars($r['alarm_name'] ?? 'Desconhecido') ?></td>
                 <td><span class="badge" style="background:<?= $r['msg_class']==1 ? '#eef4fa' : '#e8f5ef' ?>;color:<?= $r['msg_class']==1 ? '#5a7fa8' : 'var(--success)' ?>"><?= $r['msg_class']==1 ? 'JT/T' : 'JIMI' ?></span></td>
-                <td><span class="badge" style="background:<?= ($r['severity']==='critical'?'#cf2d56':($r['severity']==='warning'?'#c08532':'#9fbbe0')) ?>15;color:<?= ($r['severity']==='critical'?'#cf2d56':($r['severity']==='warning'?'#c08532':'#5a7fa8')) ?>"><?= $r['severity'] ?></span></td>
+                <td><span class="badge" style="background:<?= ($r['severity']==='critical'?'#cf2d56':($r['severity']==='warning'?'#c08532':'#9fbbe0')) ?>15;color:<?= ($r['severity']==='critical'?'#cf2d56':($r['severity']==='warning'?'#c08532':'#5a7fa8')) ?>"><?= htmlspecialchars(alarm_severity_label($r['severity'])) ?></span></td>
                 <td><?= round($r['speed'] ?? 0) ?> km/h</td>
                 <td>
                     <?php if (!empty($r['latitude']) && $r['latitude'] != 0): ?>

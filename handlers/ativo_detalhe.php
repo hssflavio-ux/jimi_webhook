@@ -289,7 +289,7 @@ case 'alertas':
                 <td><?= fmt_brt_dt($a['created_at']) ?></td>
                 <td style="font-weight:500;color:var(--ink)"><?= htmlspecialchars($a['alarm_name'] ?? 'Desconhecido') ?></td>
                 <td><span class="badge" style="background:<?= $a['msg_class'] == 1 ? '#eef4fa' : '#e8f5ef' ?>;color:<?= $a['msg_class'] == 1 ? '#5a7fa8' : 'var(--success)' ?>"><?= $a['msg_class'] == 1 ? 'JT/T' : 'JIMI' ?></span></td>
-                <td><span class="badge" style="background:<?= $sevBorder ?>15;color:<?= $sevBorder ?>;border:1px solid <?= $sevBorder ?>40"><?= htmlspecialchars($a['severity']) ?></span></td>
+                <td><span class="badge" style="background:<?= $sevBorder ?>15;color:<?= $sevBorder ?>;border:1px solid <?= $sevBorder ?>40"><?= htmlspecialchars(alarm_severity_label($a['severity'])) ?></span></td>
                 <td><?= round($a['speed'] ?? 0) ?> km/h</td>
                 <td><?php if ($hasAlarmGps): ?><a href="https://www.google.com/maps?q=<?= $a['latitude'] ?>,<?= $a['longitude'] ?>" target="_blank" class="btn btn-outline btn-sm">Mapa</a><?php endif; ?></td>
                 <td><?php if ($a['file_url']): ?><a href="<?= htmlspecialchars($fileStorageUrl . $a['file_url']) ?>" target="_blank" class="btn btn-outline btn-sm">Arquivo</a><?php endif; ?></td>

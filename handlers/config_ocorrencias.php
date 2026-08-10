@@ -70,9 +70,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
                  VALUES (:cid, :atype, :gen, :risk, :thr)"
             );
 
+            // Um evento, um parâmetro. O dropdown já lista cada evento uma vez
+            // só (independente de protocolo e de código), mas nada impedia
+            // adicionar duas LINHAS para o mesmo evento com regras diferentes —
+            // e aí `get_occurrence_param()`, que fecha com `LIMIT 1`, escolheria
+            // uma delas sem critério nem aviso. O perfil passaria a depender da
+            // ordem das linhas no banco. A primeira linha vence, que é a que o
+            // usuário vê no topo do formulário.
+            $seenTypes = [];
+            $ignoredDup = 0;
+
             foreach ($paramTypes as $i => $ptype) {
                 $ptype = trim($ptype);
                 if ($ptype === '') continue;
+
+                $key = mb_strtolower($ptype, 'UTF-8');
+                if (isset($seenTypes[$key])) { $ignoredDup++; continue; }
+                $seenTypes[$key] = true;
+
                 $ins->execute([
                     ':cid'   => $configId,
                     ':atype' => $ptype,
@@ -84,6 +99,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
 
             $db->commit();
             $message = $configId ? 'Perfil salvo com sucesso.' : 'Perfil criado com sucesso.';
+            if ($ignoredDup > 0) {
+                $message .= $ignoredDup === 1
+                    ? ' Uma linha repetia um evento já configurado e foi descartada.'
+                    : " {$ignoredDup} linhas repetiam eventos já configurados e foram descartadas.";
+            }
             $messageType = 'success';
         } catch (Exception $e) {
             $db->rollBack();
@@ -147,12 +167,34 @@ try {
 } catch (Exception $e) {}
 
 // ── Tipos de alarme para dropdown ──────────────────────────────
+// UM evento por linha, não um por linha de catálogo. O mesmo evento existe em
+// `alarm_types` uma vez por protocolo — e às vezes duas vezes no MESMO
+// protocolo, em gerações diferentes de firmware. "Colisão com Pedestre" é
+// JIMI 207 e JT/T 264-4; "Colisão Frontal (FCW)" chega a três (JIMI 204,
+// JIMI 229, JT/T 264-1). Sem o GROUP BY, o usuário via o mesmo evento repetido
+// e precisava adivinhar qual escolher — sendo que a escolha é indiferente: o
+// parâmetro é gravado pelo NOME (`occurrence_config_params.alarm_type`), e
+// `get_occurrence_param()` casa por nome, de modo que uma linha já cobre todos
+// os protocolos e códigos. A duplicata era só ruído de tela; pior, permitia
+// criar dois parâmetros para o mesmo evento, com regras conflitantes.
+//
+// Os códigos continuam visíveis, agregados, porque são o que o instalador usa
+// para conferir contra a documentação do fabricante.
+//
+// O filtro por categoria foi reescrito: a v4.9.5 unificou os valores em pt-BR,
+// então a lista antiga ('Driving','Accident','Security','Emergency') deixou de
+// casar. Ficar com ela devolveria só DMS/ADAS mais o que a severidade pegasse.
 $stmt = $db->query(
-    "SELECT alarm_name_pt, alarm_code, protocol, category
+    "SELECT alarm_name_pt,
+            MIN(category) AS category,
+            GROUP_CONCAT(DISTINCT CONCAT(
+                CASE WHEN protocol = 'JTT' THEN 'JT/T' ELSE protocol END, ' ', alarm_code
+            ) ORDER BY protocol DESC, alarm_code SEPARATOR ' · ') AS codigos
      FROM alarm_types
-     WHERE category IN ('DMS','ADAS','Driving','Accident','Security','Emergency')
+     WHERE category IN ('DMS','ADAS','conducao','acidente','seguranca','emergencia')
         OR severity IN ('high','critical')
-     ORDER BY category, alarm_name_pt"
+     GROUP BY alarm_name_pt
+     ORDER BY MIN(category), alarm_name_pt"
 );
 $alarmTypes = $stmt->fetchAll();
 
@@ -212,19 +254,19 @@ require_once __DIR__ . '/../web/layout_base.php';
                             onchange="this.style.color = this.value ? 'var(--ink)' : 'var(--muted)'">
                         <option value="">— Selecione o alarme —</option>
                         <?php
-                        $lastCat = '';
+                        $lastCat = null;
                         foreach ($alarmTypes as $at):
                             if ($at['category'] !== $lastCat):
-                                if ($lastCat !== '') echo '</optgroup>';
+                                if ($lastCat !== null) echo '</optgroup>';
                                 $lastCat = $at['category'];
-                                echo '<optgroup label="' . htmlspecialchars($at['category']) . '">';
+                                echo '<optgroup label="' . htmlspecialchars(alarm_category_label($lastCat)) . '">';
                             endif;
                             $selected = ($p['alarm_type'] === $at['alarm_name_pt']) ? 'selected' : '';
                         ?>
                         <option value="<?= htmlspecialchars($at['alarm_name_pt']) ?>" <?= $selected ?>>
-                            <?= htmlspecialchars($at['alarm_name_pt']) ?> (<?= $at['alarm_code'] ?>)
+                            <?= htmlspecialchars($at['alarm_name_pt']) ?> — <?= htmlspecialchars($at['codigos']) ?>
                         </option>
-                        <?php endforeach; if ($lastCat !== '') echo '</optgroup>'; ?>
+                        <?php endforeach; if ($lastCat !== null) echo '</optgroup>'; ?>
                     </select>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px;min-width:110px;padding-top:6px;">
