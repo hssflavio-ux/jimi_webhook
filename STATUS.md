@@ -4,8 +4,8 @@
 >
 > | | git HEAD | `/ping` | `system_info` |
 > |---|---|---|---|
-> | Local / `origin/main` | `b63c16f` | — | — |
-> | **Homolog** (`189.22.240.43`) | **`b63c16f`** | **4.9.8** | **4.9.8** |
+> | Local / `origin/main` | `a21010d` | — | — |
+> | **Homolog** (`189.22.240.43`) | **`a21010d`** | **4.9.8** | **4.9.8** |
 >
 > Os três em paridade. `system_info` subiu para 4.9.8 porque desta vez **houve
 > migração** de esquema/dados (`migration_v4.9.8.sql`).
@@ -15,12 +15,15 @@
 > | Entrega | Tipo | Estado |
 > |---|---|---|
 > | Coluna **Vídeo** no relatório de alarmes (modal com player) | feature | ✅ verificado no servidor |
-> | **Player com snapshot** no detalhe da ocorrência (quadro do meio) | feature | ✅ verificado (menos a decodificação — ver abaixo) |
+> | **Player com snapshot** no detalhe da ocorrência (quadro do meio) | feature | ✅ verificado no navegador (mp4 e `.ts`) |
 > | 🔴 "Sem vídeo vinculado" **com o vídeo no disco** | fix | ✅ migração aplicada, conferências em zero |
 > | 🔴 Busca do Dashboard de Ocorrências **nunca devolveu nada** | fix | ✅ provado antes e depois |
 > | `.ts` não era reconhecido como vídeo na chegada do alarme | fix | ✅ |
 > | `/midia` recusava o anexo de alarme | fix | ✅ HTTP 206 no servidor |
 > | Ocorrência identificada pela **placa**, não pelo IMEI | change | ✅ |
+| 🔴 Snapshot do `.ts` parava no início, vídeo tocava mudo sozinho | fix | ✅ achado e provado no navegador |
+| 🔴 As **9 abas** de `/ativos/{imei}` renderizavam vazias (defeito antigo) | fix | ✅ |
+| Sidebar do ativo empilhava sobre o conteúdo (CSS órfão) | fix | ✅ |
 >
 > #### O fio que liga a v4.9.8
 >
@@ -64,21 +67,48 @@
 >    `Unknown column 'dr.name'`; depois do fix, buscar pela placa devolve 2 de 2.
 > 5. **O JS do player, executado de verdade** —
 >    `tests/helpers/player_snapshot.test.js` roda o script **real** extraído de
->    `video_player_assets.php` sobre um DOM mínimo em Node: **49 asserções**,
+>    `video_player_assets.php` sobre um DOM mínimo em Node: **59 asserções**,
 >    incluindo a regra que define a entrega (10 s → 5 s, 20 s → 10 s, 15 s →
 >    7,5 s, 37,4 s → 18,7 s), o play voltando a agulha para 0, o `pause()` no
 >    mpegts após capturar o quadro e o `destroy()` ao fechar o modal.
 >
-> ⚠️ **O que NÃO foi verificado**: a **decodificação**. Um `<video>` de mentira
-> não desenha quadro nenhum, e a extensão do Chrome não estava conectada nesta
-> sessão. A máquina de estados está provada; que a miniatura *apareça* depende
-> do decodificador do navegador e **só se confirma abrindo a tela**. Vale
-> especialmente para o `.ts`, cujo caminho passa pelo remux do mpegts.js.
+> 6. **No navegador de verdade** (Chrome, contra o homolog), depois do primeiro
+>    deploy — e foi aqui que apareceram **três** defeitos que nenhuma das provas
+>    acima pegava:
+>    - mp4: `duration 10.272 → currentTime 5.136`, poster de 75 KB capturado,
+>      1280×720, `readyState 4`; play recomeça do zero (0 → 1.19) e, ao terminar,
+>      volta ao meio e reoferece o play.
+>    - `.ts`: `15.162 → 7.61`, poster de 33 KB, 640×360, pausado. **Só depois do
+>      fix** — ver abaixo.
+>    - Modal do relatório de alarmes: abre, fecha desmontando o player, reabre,
+>      Esc fecha; zero `<video>` no DOM antes do clique (25 linhas na página).
+>    - Grade de ocorrências: coluna **Placa**, busca `400AD` → 2 de 2, `ZZZZZZ` → 0.
+>    - Varredura de **36 rotas + 9 abas do ativo**: nenhum HTTP ≠ 200, nenhum
+>      erro de PHP. Console sem um único erro nas telas com player.
+>
+> #### 🔴 O que só o navegador pegou
+>
+> 1. **O snapshot do `.ts` parava no início e o vídeo tocava mudo sozinho.** Com
+>    MSE, `loadedmetadata` dispara ANTES de a duração existir; o código decidia
+>    ali, uma vez só. O harness em Node **passava** — ele entregava a duração
+>    junto com o evento, como um `<video>` nativo faz e a MSE não faz. A lição:
+>    um dublê fiel demais ao caso fácil esconde o caso real. O harness ganhou os
+>    dois casos que faltavam (duração que chega tarde, duração que nunca chega)
+>    e foi para **59 asserções**.
+> 2. **As 9 abas de `/ativos/{imei}` renderizavam vazias** — anterior a esta
+>    sessão, provado com render byte-idêntico na v4.9.7. `foreach ($tabs as $tab)`
+>    num include sobrescrevia o `$tab` do chamador, e `switch ($tab)` passou a
+>    comparar array com string.
+> 3. **A sidebar do ativo empilhava sobre o conteúdo**: regra de CSS apontando
+>    para `.main-content-inner`, elemento que não existe no projeto.
 >
 > #### Pendências da v4.9.8
 >
-> - 👀 **Abrir a ocorrência 8 (mp4) e a 7 (`.ts`) no navegador** e confirmar que
->   a miniatura do meio aparece — é o único elo não provado (item ⚠️ acima).
+> - 💡 **O `.ts` é baixado duas vezes** para montar o snapshot: o mpegts.js
+>   bufferiza o clipe inteiro e o seek reabre o stream (visível no console como
+>   um segundo `onSourceOpen`). Com anexos de 1–4 MB isso é ~3 MB e nenhum
+>   sintoma; se algum dia esse player abrir gravação de cartão (21 MB), vale
+>   revisitar. O mp4 não tem esse custo — usa `Range` nativo.
 > - ⚠️ **As placas do parque de teste não são placas.** `devices.device_name`
 >   está como `400AD` e `400AD_2` nos dois equipamentos das ocorrências novas,
 >   então o cabeçalho mostra "Placa: 400AD_2". A tela está certa; o **cadastro**
