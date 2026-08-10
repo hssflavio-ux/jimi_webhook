@@ -417,9 +417,17 @@ body {
 }
 
 /* ── When asset detail sidebar is shown ──────────────── */
-.with-asset-sidebar .main-content-inner {
+/* O seletor apontava para `.main-content-inner`, elemento que NÃO existe em
+   lugar nenhum do projeto (grep: esta linha era a única ocorrência). A regra
+   nunca casou, e por isso a sidebar do ativo e o conteúdo da aba empilhavam
+   um debaixo do outro em vez de ficarem lado a lado. Passou despercebido
+   porque o conteúdo das abas estava em branco por outro defeito — corrigido
+   junto, ver web/layout_ativo_sidebar.php. `padding: 0` porque quem espaça
+   passa a ser o `.asset-content`; senão a régua dobra. */
+.with-asset-sidebar .main-content {
     display: flex;
     gap: 0;
+    padding: 0;
 }
 
 /* secondary sidebar inside main content */
