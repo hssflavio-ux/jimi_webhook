@@ -2,7 +2,15 @@
 
 > ### 📍 v4.9.5 (09/08/2026) — evento único por protocolo + categorias em pt-BR
 >
-> **Exige `migration_v4.9.5.sql`.**
+> **✅ PUBLICADO E VERIFICADO NO HOMOLOG** — commit `3e4329e`, `/ping` e
+> `system_info` em **4.9.5**. Sonda com o código publicado devolveu **67 opções,
+> nenhuma repetida**, e os casos do pedido resolvidos:
+> `ADAS: Colisão com Pedestre (PCW) → JT/T 264-4 · JIMI 207`,
+> `ADAS: Colisão Frontal (FCW) → JT/T 264-1 · JIMI 204 · JIMI 229`.
+> Baseline medido antes: 67 linhas com categoria em inglês e 4 regras casando
+> por categoria inglesa; depois, **zero** em ambos e as 6 regras cobrindo
+> alarmes (2, 2, 30, 15, 14, 15). `/config-ocorrencias`,
+> `/config-notificacoes` e `/relatorios` respondem 302 → login (não 500).
 >
 > **O pedido**: no cadastro de ocorrências, o evento deve ser único independente
 > do protocolo — "Colisão com Pedestre" é JIMI 207 **e** JT/T 264-4, um evento só.
