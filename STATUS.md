@@ -1,8 +1,62 @@
 # STATUS.md — Jimi Webhook System v4.9.7 (YUV Parity)
 
+> ### 📍 ESTADO EM 09/08/2026, 23h00 — tudo publicado e verificado no homolog
+>
+> | | git HEAD | `/ping` | `system_info` |
+> |---|---|---|---|
+> | Local / `origin/main` | `ae80bcd` | — | — |
+> | **Homolog** (`189.22.240.43`) | **`ae80bcd`** | **4.9.7** | **4.9.5** |
+>
+> Árvore limpa, os três em paridade. `system_info` em 4.9.5 é correto: ela é a
+> versão do **esquema**, e as v4.9.6/4.9.7 foram só código.
+>
+> #### O que entrou nesta sessão
+>
+> | Versão | Entrega | Migração | Estado |
+> |---|---|---|---|
+> | **4.9.4** | Remetente do e-mail: nome antigo do produto → `bycamera` | sim | ✅ verificado |
+> | **4.9.5** | Evento único por protocolo no cadastro de ocorrências + categorias em pt-BR | sim | ✅ verificado |
+> | **4.9.6** | 🔴 Notificação de DMS/ADAS em JT/T nunca disparava | não | ✅ verificado |
+> | **4.9.7** | Tela de Comandos: catálogo por modelo, parâmetros, respostas legíveis | não | ✅ publicado |
+>
+> #### O fio que liga as quatro
+>
+> Todas nasceram do mesmo padrão: **um valor de identidade guardado em duas
+> camadas, e a de baixo vencendo em silêncio.** O nome do produto vivia no código
+> *e* na coluna `smtp_settings.from_name` (o banco vencia). A categoria do alarme
+> existia em inglês nas linhas JIMI e em português nas JT/T. O código do alarme
+> chega como base (`264`) mas o catálogo guarda o composto (`264-4`). Em todos os
+> casos o sintoma era ausência — e-mail com nome errado, ocorrência duplicada,
+> notificação que não dispara — sem erro em log nem na tela.
+>
+> #### Pendências desta sessão
+>
+> - ⚠️ **`tests/comandos.spec.js` escrito e NÃO executado.** A suíte precisa de
+>   servidor + banco locais, e o MySQL de desenvolvimento desta máquina **não tem
+>   mais data dir** (`C:\Users\flavi\mysql` só tem os binários). Isso bloqueia a
+>   suíte inteira, não só este spec — é a dívida mais concreta em aberto.
+> - ⚠️ **Nenhum comando foi disparado para veículo real** na v4.9.7. Trava de
+>   modelo, montagem da string e leitura das respostas estão provadas contra dados
+>   reais; o ciclo ponta a ponta com câmera depende de uso na tela.
+> - 👀 **Acompanhar o volume de notificação nos próximos dias.** A v4.9.5 fez as
+>   regras valerem para os dois protocolos (`conducao` 8→15 alarmes cobertos,
+>   `seguranca` 11→14, `emergencia` 1→2) e a v4.9.6 destravou DMS/ADAS de JT/T.
+>   As duas **aumentam** o que notifica, de propósito — mas é mudança real de volume.
+>
+> #### Pendências herdadas (seguem abertas)
+>
+> - **`Código 1047 (JTT)`** — não consta da doc oficial; depende do fornecedor.
+> - **`devices.last_communication` incompleta** — só `pushalarm` e `pushlbs` a escrevem.
+> - **Cercas**: coluna Mapa existe na tela e não no PDF/XLS.
+>
+> ---
+
 > ### 📍 v4.9.7 (09/08/2026) — Comandos: catálogo por modelo, parâmetros e respostas legíveis
 >
-> **Sem migração** — só código. `system_info` fica em **4.9.5**.
+> **✅ PUBLICADO** — commit `ae80bcd`, `/ping` em 4.9.7. Sonda no servidor
+> confirmou o catálogo publicado (119 comandos, 14 universais, zero sintaxes com
+> a senha de SMS) e a interpretação das três respostas reais do gateway.
+> Sem migração — só código. `system_info` fica em **4.9.5**.
 >
 > **Catálogo**: `includes/command_catalog.php`, **119 comandos** (87 com tabela de
 > parâmetros, 68 com exemplos), extraído das 10 páginas da wiki Foco na Via.
