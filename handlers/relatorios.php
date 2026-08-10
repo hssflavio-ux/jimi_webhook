@@ -71,6 +71,11 @@ if ($reportType === 'alarmes') {
             OR (a.msg_class=0 AND at.protocol='JIMI' AND at.alarm_code=a.alarm_type)
         )
         WHERE $where
+          -- Sem os eventos de diagnóstico (v4.9.9). O JOIN acima já resolve a
+          -- linha do catálogo com a mesma precedência (composto antes da base),
+          -- então basta ler o flag daqui. COALESCE porque código fora do
+          -- catálogo dá NULL e não pode sumir da tela.
+          AND COALESCE(at.is_diagnostic, 0) = 0
         ORDER BY a.created_at DESC LIMIT 200
     ");
     $stmt->execute($params);

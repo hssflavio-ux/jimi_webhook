@@ -109,6 +109,12 @@ if ($tab === 'alertas') {
             OR (a.msg_class=0 AND at.protocol='JIMI' AND at.alarm_code=a.alarm_type)
         )
         WHERE a.imei = ?
+          -- Sem os eventos de diagnóstico (v4.9.9): esta aba responde o que
+          -- aconteceu com o VEICULO, e as falhas de armazenamento deste
+          -- equipamento sozinhas enchiam as 100 linhas do LIMIT. Para conferir
+          -- os tecnicos existe o modo diagnostico do relatorio de alarmes,
+          -- restrito ao administrador.
+          AND COALESCE(at.is_diagnostic, 0) = 0
         ORDER BY a.created_at DESC LIMIT 100
     ");
     $alarmStmt->execute([$imei]);

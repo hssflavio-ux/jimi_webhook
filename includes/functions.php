@@ -496,6 +496,47 @@ function report_customer_options(PDO $db): array {
  *
  * @returns array{joins:string, expr:string}
  */
+/**
+ * O alarme é um evento de DIAGNÓSTICO (técnico, do equipamento para o sistema)?
+ *
+ * Versão em PHP do flag que `alarm_label_sql()['diag']` resolve em SQL, para
+ * quem decide UMA linha por vez — o motor de ocorrências. Mesma precedência do
+ * rótulo: código COMPOSTO primeiro (`256-2048`), código base depois (`256`).
+ *
+ * Falha para o lado de NÃO classificar, em dois casos:
+ *   - código fora do catálogo → não é diagnóstico (um alarme novo tem de
+ *     aparecer, nunca sumir em silêncio);
+ *   - coluna `is_diagnostic` ausente (migração v4.9.9 não aplicada) → o `catch`
+ *     devolve o comportamento anterior em vez de derrubar o webhook.
+ *
+ * @param PDO         $db            Conexão ativa
+ * @param string      $alarmType     Código base como chega do device ('259')
+ * @param string|null $compositeCode Código composto quando há subtipo ('256-2048')
+ * @param int         $msgClass      0 = JIMI, 1 = JT/T 808 (ADR-001)
+ * @returns bool
+ */
+function is_diagnostic_alarm(PDO $db, string $alarmType, ?string $compositeCode, int $msgClass): bool {
+    $protocol = $msgClass === 1 ? 'JTT' : 'JIMI';
+    try {
+        $stmt = $db->prepare(
+            "SELECT is_diagnostic FROM alarm_types
+              WHERE protocol = :p AND alarm_code = :code LIMIT 1"
+        );
+        if ($compositeCode !== null && $compositeCode !== '') {
+            $stmt->execute([':p' => $protocol, ':code' => $compositeCode]);
+            $achado = $stmt->fetchColumn();
+            if ($achado !== false) {
+                return (bool)$achado;
+            }
+        }
+        $stmt->execute([':p' => $protocol, ':code' => $alarmType]);
+        $achado = $stmt->fetchColumn();
+        return $achado === false ? false : (bool)$achado;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function alarm_label_sql(): array {
     return [
         'joins' => "
@@ -504,6 +545,23 @@ function alarm_label_sql(): array {
                                      AND atc.alarm_code = CONCAT(a.alarm_type, '-', a.alarm_subtype)
             LEFT JOIN alarm_types atb ON atb.protocol = IF(a.msg_class = 1, 'JTT', 'JIMI')
                                      AND atb.alarm_code = a.alarm_type",
+        // Evento de DIAGNÓSTICO (v4.9.9): o que o equipamento diz ao SISTEMA —
+        // handshake de upload, sono/despertar, defeito de hardware — e não o
+        // que o veículo diz ao operador. Some das telas de alarme e ocorrência;
+        // a linha continua inteira em `alarms`, visível ao administrador.
+        //
+        // Vem dos MESMOS joins do rótulo, e isso não é economia: é o que faz o
+        // filtro pegar as variantes `Fim de Alarme: …` sem conhecê-las. Elas
+        // carregam o mesmo código do alarme de abertura (259, 257) e são 845
+        // linhas no homolog; um filtro por nome precisaria enumerar cada uma.
+        //
+        // 🔴 `COALESCE(..., 0)` no fim é FALHA PARA O LADO DE MOSTRAR. Código
+        // que não está no catálogo — `Código 1047 (JTT)` é o caso real hoje —
+        // dá NULL nos dois joins. Sem o zero final, a comparação com NULL
+        // eliminaria a linha e um alarme novo desapareceria da tela em
+        // silêncio, que é o modo de falha que o CLAUDE.md documenta três vezes.
+        // Composto na frente da base, na mesma ordem do rótulo.
+        'diag'  => "COALESCE(atc.is_diagnostic, atb.is_diagnostic, 0)",
         'expr' => "
             CASE WHEN COALESCE(atc.alarm_name_pt, atb.alarm_name_pt) IS NULL
                       THEN COALESCE(NULLIF(a.alarm_name, ''), a.alarm_type)

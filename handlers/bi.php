@@ -59,12 +59,17 @@ if ($generated) {
     // Dias digitados são BRT; colunas do banco são UTC
     [$cParams[':df'], $cParams[':dt']] = brt_day_range_to_utc($dateFrom, $dateTo);
 
+    // Fora os eventos de DIAGNÓSTICO (v4.9.9): o BI descreve a operação. Com
+    // eles, o "top 10 de alarmes" era a lista de defeitos de equipamento.
+    ['joins' => $diagJoins, 'diag' => $diagExpr] = alarm_label_sql();
+
     // Alarms by type (top 10)
     $alarmsByType = $db->prepare("
         SELECT alarm_type, COUNT(*) as cnt
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
-        WHERE a.alarm_time BETWEEN :df AND :dt $cWhere
+        $diagJoins
+        WHERE a.alarm_time BETWEEN :df AND :dt AND ($diagExpr) = 0 $cWhere
         GROUP BY alarm_type ORDER BY cnt DESC LIMIT 10
     ");
     $alarmsByType->execute($cParams);
@@ -84,10 +89,11 @@ if ($generated) {
 
     // Alarms by day — dias em BRT (banco em UTC)
     $alarmsByDay = $db->prepare("
-        SELECT DATE(CONVERT_TZ(alarm_time, '+00:00', '-03:00')) as dt, COUNT(*) as cnt
+        SELECT DATE(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00')) as dt, COUNT(*) as cnt
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
-        WHERE a.alarm_time BETWEEN :df AND :dt $cWhere
+        $diagJoins
+        WHERE a.alarm_time BETWEEN :df AND :dt AND ($diagExpr) = 0 $cWhere
         GROUP BY dt ORDER BY dt
     ");
     $alarmsByDay->execute($cParams);
@@ -121,8 +127,13 @@ try {
     $drivers = $drivers->fetchAll();
 } catch (Exception $e) {}
 
-// All alarm types for multi-select
-$allAlarmTypes = $db->query("SELECT DISTINCT alarm_type FROM alarms ORDER BY alarm_type")->fetchAll(PDO::FETCH_COLUMN);
+// All alarm types for multi-select — sem os de diagnóstico (v4.9.9): oferecer
+// um filtro para algo que os gráficos não contam mais só produz consulta vazia.
+['joins' => $tipoJoins, 'diag' => $tipoDiag] = alarm_label_sql();
+$allAlarmTypes = $db->query(
+    "SELECT DISTINCT a.alarm_type FROM alarms a $tipoJoins
+      WHERE ($tipoDiag) = 0 ORDER BY a.alarm_type"
+)->fetchAll(PDO::FETCH_COLUMN);
 
 $page_title = 'BI';
 $current_route = 'bi';

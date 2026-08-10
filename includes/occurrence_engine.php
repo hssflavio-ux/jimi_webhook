@@ -57,6 +57,16 @@ function process_alarm_to_occurrence(array $alarm): ?int
         ? $alarmType . '-' . $subType
         : null;
 
+    // Evento de DIAGNÓSTICO nunca vira ocorrência (v4.9.9). Hoje nenhum tem
+    // parâmetro cadastrado, então esta guarda não muda comportamento nenhum —
+    // ela existe para que um cadastro futuro por engano ("Falha no
+    // Armazenamento" marcado como gerador) não abra ocorrência de tratativa
+    // para um defeito de equipamento. A tela de config lista o catálogo
+    // inteiro; o operador não tem como saber quais códigos são técnicos.
+    if (is_diagnostic_alarm($db, $alarmType, $compositeCode, (int)($alarm['msg_class'] ?? 1))) {
+        return null;
+    }
+
     $configId = get_occurrence_config_for_imei($db, $imei);
     if (!$configId) {
         return null;

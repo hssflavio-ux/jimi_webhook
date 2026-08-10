@@ -41,7 +41,21 @@ $perPage = 25;
 // Nome do alarme resolvido na LEITURA (v4.9.0) — a razão de existir e as
 // armadilhas estão em alarm_label_sql() (includes/functions.php), que é o
 // ponto único compartilhado com o relatório agendado do scripts/worker.php.
-['joins' => $alarmNameJoins, 'expr' => $alarmNameExpr] = alarm_label_sql();
+['joins' => $alarmNameJoins, 'expr' => $alarmNameExpr, 'diag' => $alarmDiagExpr] = alarm_label_sql();
+
+// ── Eventos de diagnóstico (v4.9.9) ─────────────────────────────────────────
+//
+// Por padrão a grade mostra só o que é ALARME: o que o veículo diz ao operador.
+// Handshake de upload, sono/despertar do equipamento e defeito de hardware
+// saem — eram 5.073 das 5.112 linhas do homolog, ou seja, o relatório era
+// 99,2% ruído de infraestrutura e 39 linhas de conteúdo.
+//
+// O modo diagnóstico é RESTRITO AO ADMINISTRADOR, por decisão de produto.
+// A checagem é `role === 'admin'` estrito e feita aqui, no servidor: o `$isAdmin`
+// das telas de relatório inclui `revendedor` (ele existe para escolher cliente,
+// não para ver infraestrutura), e um parâmetro de URL não é permissão.
+$podeVerDiagnostico = ($user['role'] ?? '') === 'admin';
+$verDiagnostico = $podeVerDiagnostico && !empty($_GET['diagnostico']);
 
 // Ordenação: whitelist de colunas + default crescente por data/hora
 // `device_name` é coluna de devices e `alarm_name` agora é expressão, por isso
@@ -104,6 +118,12 @@ if ($filterStatus) {
     $where .= ' AND a.status = :st';
     $params[':st'] = $filterStatus;
 }
+// Diagnóstico: fora por padrão; SÓ diagnóstico quando o admin liga o modo —
+// senão a lista continuaria dominada pelos 5.073 eventos técnicos e o modo
+// não serviria para conferir nada.
+$where .= $verDiagnostico
+    ? " AND ($alarmDiagExpr) = 1"
+    : " AND ($alarmDiagExpr) = 0";
 
 // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
 $export = $_GET['export'] ?? '';
@@ -324,6 +344,15 @@ require_once __DIR__ . '/../web/layout_base.php';
         <?php if ($mapPoints): ?>
         <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()">Ver no Mapa</button>
         <?php endif; ?>
+        <?php if ($podeVerDiagnostico): ?>
+        <?php // Só o administrador vê este controle — e o servidor confere de novo,
+              // porque esconder o botão não é autorização. ?>
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--muted);padding-bottom:2px;">
+            <input type="checkbox" name="diagnostico" value="1" style="width:auto;"
+                   <?= $verDiagnostico ? 'checked' : '' ?> onchange="this.form.submit()">
+            Eventos de diagnóstico
+        </label>
+        <?php endif; ?>
     </form>
 </div>
 
@@ -334,6 +363,15 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php if ($rangeClamped): ?>
 <div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
+</div>
+<?php endif; ?>
+
+<?php if ($verDiagnostico): ?>
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--primary);font-size:13px;color:var(--muted);">
+    <strong style="color:var(--ink);">Modo diagnóstico.</strong>
+    Esta lista mostra <strong>apenas</strong> eventos técnicos do equipamento — handshake de upload de vídeo,
+    entrada e saída de repouso, e defeitos de hardware (câmera, armazenamento, sinal de vídeo).
+    Eles não são comportamento do motorista e não geram ocorrência. Desmarque a caixa para voltar aos alarmes.
 </div>
 <?php endif; ?>
 

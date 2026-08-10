@@ -231,12 +231,19 @@ $labelIndex = array_flip($seriesLabels);
 $aVals = array_fill(0, count($seriesLabels), 0);
 $oVals = array_fill(0, count($seriesLabels), 0);
 
+// Fora os eventos de DIAGNÓSTICO (v4.9.9) nas duas consultas abaixo: estas
+// visões são do operador, e com eles a curva era a de falhas de armazenamento
+// do equipamento — 5.073 das 5.112 linhas do homolog —, não a de alarmes do
+// veículo. Resolvido FORA dos try/catch, para as duas enxergarem a variável.
+['joins' => $diagJoins, 'diag' => $diagExpr] = alarm_label_sql();
+
 try {
     $stmt = $db->prepare("
         SELECT " . sprintf($bucketFmt, 'a.alarm_time') . " as bk, COUNT(*) as cnt
         FROM alarms a
         JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
-        WHERE a.alarm_time >= :ts
+        $diagJoins
+        WHERE a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY bk
     ");
     $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
@@ -271,7 +278,8 @@ try {
         SELECT COALESCE(d.device_name, a.imei) as name, COUNT(*) as cnt
         FROM alarms a
         JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
-        WHERE a.alarm_time >= :ts
+        $diagJoins
+        WHERE a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY a.imei, name ORDER BY cnt DESC LIMIT 3
     ");
     $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);

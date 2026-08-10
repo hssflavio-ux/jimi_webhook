@@ -326,6 +326,11 @@ class PushAlarmHandler extends WebhookHandler {
                         // ADAS de JT/T — que é o núcleo do produto. Ver a nota
                         // em resolve_notification_rule().
                         'alarm_subtype' => $subType,
+                        // Protocolo (ADR-001): o catálogo guarda linhas
+                        // separadas por protocolo, e o mesmo número significa
+                        // coisas diferentes em JIMI e JT/T. Sem ele a guarda de
+                        // diagnóstico consultaria a linha errada.
+                        'msg_class'   => $msgClass,
                         'alarm_time'  => $alarmTime,
                         'alarm_name'  => $finalName,
                         'driver_id'   => $driverId,

@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.9
+
+### Changed
+- 🔴 **Evento de DIAGNÓSTICO deixou de ser tratado como alarme.** Diagnóstico é o que o equipamento diz ao **sistema** — handshake de upload de vídeo, entrada e saída de repouso, defeito de hardware — e não o que o veículo diz ao **operador**. Some das telas de alarme, ocorrência, Resumo e BI; a linha continua **inteira** em `alarms`, com `raw_data`.
+  - **A medida que motivou**: de **5.112** alarmes no homolog, **5.073 eram ruído de infraestrutura** e **16** eram DMS/ADAS — o núcleo do produto. O relatório de alarmes, o gráfico do Resumo e o "top 3 equipamentos" descreviam a saúde do equipamento, não a operação.
+  - **Classificado no CATÁLOGO, por CÓDIGO**: nova coluna `alarm_types.is_diagnostic`. Por código, não por nome, porque `alarms.alarm_name` é congelado na chegada e existe em variantes — os **845** `Fim de Alarme: …` carregam o mesmo código do alarme de abertura e são pegos de graça; por nome exigiria enumerar cada variante. E é a armadilha que o `CLAUDE.md` documenta três vezes: junção por nome morre em silêncio quando alguém renomeia.
+  - **Falha para o lado de MOSTRAR**: `COALESCE(atc.is_diagnostic, atb.is_diagnostic, 0)`. Código fora do catálogo — `Código 1047 (JTT)` é o caso real — dá NULL nos dois JOINs; sem o zero final, um alarme novo desapareceria da tela sem erro.
+  - **Visualização restrita ao administrador**, com checagem no servidor (`role === 'admin'` estrito, não o `$isAdmin` das telas de relatório, que inclui `revendedor`). O modo diagnóstico mostra **só** os técnicos — misturado com os 39 alarmes reais não serviria para conferir nada.
+  - **Classificados**: `JIMI 105` Upload de Vídeo Concluído · `JT/T 1040/1041` Modo Repouso/Trabalho · `JT/T 257` Perda de Sinal de Vídeo · `JT/T 259` Falha no Armazenamento · `JT/T 256-2048` Falha de Câmera.
+  - 🔴 **`Falha de Câmera` entrou como código COMPOSTO, e isso é uma trava de segurança.** Ela chega como o bitmask padrão JT/T (`256`) com subtipo `2048`. O mesmo código 256 carrega `Emergência / SOS` (bit 0) e `Excesso de Velocidade` (bit 1), e `decodeStandardAlarm()` **combina** os bits ativos num nome só — câmera + SOS chega como subtipo `2049`, código diferente, que **segue visível**. Marcar a base `256` teria escondido pedidos de socorro.
+  - `alarm_types` ganhou a linha `256-2048` que **não existia**: sem ela `alarm_label_sql()` não conseguia sequer re-resolver o nome dessas 188 linhas.
+
+### Fixed
+- **Diagnóstico nunca gera ocorrência nem notificação.** Guarda em `process_alarm_to_occurrence()`, antes da busca de configuração. Hoje nenhum evento técnico tem parâmetro cadastrado, então não muda comportamento — existe porque a tela de config lista o catálogo inteiro e o operador não tem como saber quais códigos são técnicos. Uma guarda só, no ponto de estrangulamento: `notify_from_occurrence()` é chamada **exclusivamente** a partir daí.
+- **`pushalarm.php` passa o `msg_class` adiante.** Sem o protocolo, a guarda consultaria a linha errada do catálogo — `105` é Upload de Vídeo em JIMI e outro alarme em JT/T (ADR-001).
+
+### Notas de implementação
+- `camerasdata.php` **não** foi filtrado, de propósito: ali `MAX(alarms.created_at)` é sinal de vida da API ("quando o gateway recebeu algo pela última vez"), e evento técnico é tráfego legítimo. Excluí-lo faria a API parecer offline.
+- `tests/helpers/diagnostico_guard.test.php` — **12 casos** contra banco real, com as bordas que importam: `256-2049` (câmera+SOS) e `256` base seguem visíveis, código fora do catálogo segue visível, `105` em JT/T não é diagnóstico. Aborta com mensagem própria se a migração não estiver aplicada, em vez de acusar erro de classificação.
+- ⚠️ **A primeira tentativa de testar a trava de permissão foi vácua**: o `UPDATE users SET role='operador'` falhou (a coluna é `ENUM('admin','operator','viewer')`) e o teste mediu o admin de novo, "provando" um vazamento que não existia. Refeito com `operator` e `viewer`, conferindo o valor gravado antes de medir.
+
 ## [Unreleased] — 4.9.8
 
 ### Fixed — achados NO NAVEGADOR, depois do primeiro deploy
