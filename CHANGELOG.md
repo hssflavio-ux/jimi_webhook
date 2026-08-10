@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.6
+
+### Fixed
+- 🔴 **Nenhuma regra de notificação disparava para DMS ou ADAS de JT/T** — o núcleo do produto. `pushalarm.php` entrega aos motores o código **base** (`alarm_type = '264'`), porque o subtipo mora em coluna separada (`alarms.alarm_subtype = 4`); mas `alarm_types.alarm_code` guarda o **composto** (`'264-4'`). Comparando só a base, o ramo `at.alarm_code = :atype` nunca casava para essas famílias.
+  - **Por que passou despercebido**: os alarmes JIMI têm código simples (207, 71, 132) e casavam normalmente, assim como os JT/T sem subtipo (`1027` = Excesso de Velocidade). O sintoma era "câmera JIMI notifica, câmera JT/T não" — sem erro em log nem na tela.
+  - **Por que só a notificação sofria**: regra/parâmetro gravado por **nome** casa pelo ramo `= :aname` e sempre escapou do defeito. Os 22 parâmetros de ocorrência são por nome; as **6** regras de notificação são por **categoria**, que só tem o ramo de código para casar. Medido: o motor de ocorrências resolvia certo nos dois protocolos enquanto o de notificação falhava em todo `264`/`265`.
+  - Corrigido nos **dois** motores (a estrutura de matching é a mesma e a divergência é só de dado): `alarm_subtype` viaja de `pushalarm.php` → `process_alarm_to_occurrence()` → `notify_from_occurrence()`, e as consultas passaram a casar também pelo código composto.
+  - **Verificado com regras e catálogo reais do homolog, antes e depois.** Antes: `264`→nenhuma, `265`→nenhuma, `207`→regra #4, `1027`→regra #6. Depois: `264-4`/`264-1`/`264-2`→regra #4 (ADAS), `265-1`/`265-10`/`265-3`→regra #3 (DMS), com JIMI e JT/T-sem-subtipo **inalterados** e código fora do catálogo continuando a não casar nada.
+  - **O elo que o teste SQL não cobria foi conferido à parte**: `$subType` é o mesmo valor que já era gravado em `alarms.alarm_subtype`, e há linhas reais no banco provando que ele chega populado (`265-1`, `265-4`, `265-5`, `265-10`), todas presentes no catálogo.
+- 🔴 **Regressão da v4.9.5 na lista de regras**: a coluna "Alarme" imprimia `alarm_type` cru, então depois da normalização de categorias ela passou a mostrar `conducao`, `seguranca`, `emergencia` — slugs sem acento. Antes mostrava `Driving`/`Security`: a v4.9.5 trocou inglês por slug feio nessa coluna. Agora a lista mostra o mesmo rótulo do formulário, com selo **Categoria** distinguindo regra de categoria inteira de regra de evento — dois alcances muito diferentes que a tela não separava.
+- **Regra morta agora é visível.** Uma regra cujo `alarm_type` não casa com nome, código nem categoria nunca dispara, e falha calada é o modo de falha caro deste sistema. A lista marca essas linhas com "⚠ não corresponde a nenhum alarme — esta regra nunca dispara", em vez de deixar o usuário descobrir pela ausência de aviso.
+- **"Medio" sem acento chegava ao usuário em quatro lugares**, um deles o **export** do Relatório de Ocorrências (PDF/Excel que vai ao cliente). O componente `status_pill.php` já acentuava certo; o resto usava `ucfirst()` no valor do enum. Unificado em `occurrence_risk_label()` — `config_notificacoes.php`, `rel_ocorrencias.php` (tela **e** export) e `bi.php` (rótulo do gráfico).
+
+### Notas de implementação
+- Mudança **só de código**, sem migração: `system_info` permanece em `4.9.5` e o `SYSTEM_VERSION` vai a `4.9.6`. É a distinção que o `deploy.sh` usa.
+- As sondas de verificação são cópias **literais** das consultas dos dois motores, rodadas contra o banco do homolog em modo leitura, com as entradas que `pushalarm.php` realmente passa (código base + nome resolvido) — não com entradas convenientes.
+- ⚠️ **Não é possível afirmar quantas notificações se perderam.** As 26 notificações no homolog são anteriores às regras atuais e há seeds de teste na base (`tests/helpers/seed_notification.php`), o que confunde qualquer contagem histórica. O que está provado é o comportamento do matching, antes e depois.
+
 ## [Unreleased] — 4.9.5
 
 ### Fixed

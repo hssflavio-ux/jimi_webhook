@@ -1,4 +1,55 @@
-# STATUS.md — Jimi Webhook System v4.9.5 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.6 (YUV Parity)
+
+> ### 📍 v4.9.6 (09/08/2026) — 🔴 notificação de DMS/ADAS em JT/T nunca disparava
+>
+> **Sem migração** — só código. `system_info` fica em **4.9.5**, `SYSTEM_VERSION` vai a **4.9.6**.
+>
+> Achado ao auditar `/config-notificacoes` a pedido. É o defeito mais grave desta
+> série, e é **funcional, não cosmético**.
+>
+> **A causa.** `pushalarm.php` entrega aos motores o código **base** (`264`),
+> porque o subtipo mora em coluna separada (`alarms.alarm_subtype = 4`); mas
+> `alarm_types.alarm_code` guarda o **composto** (`264-4`). Comparando só a base,
+> o ramo `at.alarm_code = :atype` nunca casava para DMS e ADAS de JT/T.
+>
+> **Por que ninguém viu.** JIMI tem código simples (207, 71, 132) e casava; JT/T
+> sem subtipo (`1027`) casava. O sintoma era *"câmera JIMI notifica, câmera JT/T
+> não"* — sem erro em log nem na tela.
+>
+> **Por que só a notificação sofria.** Regra gravada por **nome** casa pelo ramo
+> `= :aname` e sempre escapou. Os 22 parâmetros de ocorrência são por nome — por
+> isso o motor de ocorrências resolvia certo nos dois protocolos. As **6** regras
+> de notificação são por **categoria**, que só tem o ramo de código.
+>
+> | Entrada | Antes | Depois |
+> |---|---|---|
+> | JT/T `264-4` (PCW) | **nenhuma regra** | regra #4 (ADAS) |
+> | JT/T `265-1` (Fadiga) | **nenhuma regra** | regra #3 (DMS) |
+> | JT/T `265-10` (Cinto) | **nenhuma regra** | regra #3 (DMS) |
+> | JIMI `207`, `71` | regra #4 / #3 | inalterado |
+> | JT/T `1027` (sem subtipo) | regra #6 | inalterado |
+> | fora do catálogo `9999` | nenhuma | nenhuma |
+>
+> Corrigido nos **dois** motores (mesma estrutura de matching), com
+> `alarm_subtype` viajando de `pushalarm.php` até `notify_from_occurrence()`.
+> O elo que o teste SQL não cobre foi conferido à parte: `$subType` é o mesmo
+> valor já gravado em `alarms.alarm_subtype`, e há linhas reais no banco
+> (`265-1`, `265-4`, `265-5`, `265-10`) provando que chega populado.
+>
+> ⚠️ **Não dá para dizer quantas notificações se perderam**: as 26 do homolog são
+> anteriores às regras atuais e há seeds de teste na base. O que está provado é o
+> comportamento do matching, medido antes e depois.
+>
+> **Também nesta versão** (achados da mesma auditoria):
+> - **Regressão da v4.9.5**: a lista de regras imprimia `alarm_type` cru e passou
+>   a mostrar `conducao`/`seguranca` depois da normalização. Agora mostra o mesmo
+>   rótulo do formulário, com selo **Categoria** separando regra de categoria
+>   inteira de regra de evento.
+> - **Regra morta agora é visível** — "⚠ não corresponde a nenhum alarme".
+> - **"Medio" sem acento** em 4 lugares, um deles o **export** do Relatório de
+>   Ocorrências (PDF/Excel do cliente). Unificado em `occurrence_risk_label()`.
+>
+> ---
 
 > ### 📍 v4.9.5 (09/08/2026) — evento único por protocolo + categorias em pt-BR
 >

@@ -307,7 +307,7 @@ updateChipCount();
 
     // Risk Pie
     <?php $pLabels=[]; $pVals=[]; $colors=['baixo'=>'#0052ff','medio'=>'#f4b000','alto'=>'#cf202f'];
-    foreach ($chartData['occ_by_risk'] as $r) { $pLabels[]=ucfirst($r['risk']); $pVals[]=(int)$r['cnt']; } ?>
+    foreach ($chartData['occ_by_risk'] as $r) { $pLabels[]=occurrence_risk_label($r['risk']); $pVals[]=(int)$r['cnt']; } ?>
     new Chart(document.getElementById('chart-risk-pie'), {
         type: 'doughnut', data: {
             labels: <?= json_encode($pLabels) ?>,

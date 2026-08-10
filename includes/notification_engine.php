@@ -68,13 +68,25 @@ function notify_risk_weight(?string $risk): int
  * escrita como código do alarme, nome (PT ou EN) ou categoria. A regra do
  * cliente tem precedência sobre a global (customer_id NULL).
  *
- * @param PDO         $db         Conexão ativa
- * @param int|null    $customerId Cliente do device
- * @param string      $alarmType  Código do alarme
- * @param string      $alarmName  Nome do alarme
+ * ⚠️ **O CÓDIGO COMPOSTO NÃO É DETALHE.** Para JT/T, `alarms.alarm_type` guarda
+ * a base (`264`) e o subtipo em coluna separada, enquanto
+ * `alarm_types.alarm_code` guarda o composto (`264-4`). Enquanto esta função
+ * comparou só a base, **nenhuma regra por CATEGORIA disparava para DMS ou ADAS
+ * de JT/T** — que são o núcleo do produto. E como as regras reais são gravadas
+ * por categoria (as 6 do homolog eram, nenhuma por nome), o efeito prático era:
+ * câmera JIMI notificava, câmera JT/T não, sem erro em log nem na tela.
+ * Medido antes da correção: `264`/`265` não casavam nada; `1027` (JT/T sem
+ * subtipo) e todos os JIMI casavam normalmente.
+ *
+ * @param PDO         $db            Conexão ativa
+ * @param int|null    $customerId    Cliente do device
+ * @param string      $alarmType     Código BASE do alarme (`264`)
+ * @param string      $alarmName     Nome do alarme
+ * @param string|null $compositeCode Código do catálogo para JT/T com subtipo
+ *                                   (`264-4`); null quando não há subtipo
  * @returns array|null Regra encontrada, ou null
  */
-function resolve_notification_rule(PDO $db, ?int $customerId, string $alarmType, string $alarmName = ''): ?array
+function resolve_notification_rule(PDO $db, ?int $customerId, string $alarmType, string $alarmName = '', ?string $compositeCode = null): ?array
 {
     $stmt = $db->prepare(
         "SELECT nr.*
@@ -89,7 +101,9 @@ function resolve_notification_rule(PDO $db, ?int $customerId, string $alarmType,
            AND (
                nr.alarm_type = :atype
                OR nr.alarm_type = :aname
+               OR nr.alarm_type = :ccode1
                OR at.alarm_code = :atype2
+               OR at.alarm_code = :ccode2
            )
          ORDER BY (nr.customer_id IS NULL) ASC, nr.id ASC
          LIMIT 1"
@@ -99,6 +113,11 @@ function resolve_notification_rule(PDO $db, ?int $customerId, string $alarmType,
         ':atype'  => $alarmType,
         ':aname'  => $alarmName,
         ':atype2' => $alarmType,
+        // Sentinela em vez de NULL: com NULL a comparação vira UNKNOWN e o
+        // ramo não casa (comportamento correto), mas o sentinela deixa a
+        // intenção explícita para quem lê.
+        ':ccode1' => $compositeCode ?? "\0",
+        ':ccode2' => $compositeCode ?? "\0",
     ]);
     $row = $stmt->fetch();
     return $row ?: null;
@@ -277,7 +296,10 @@ function notify_from_occurrence(PDO $db, int $occurrenceId, array $alarm, string
         $alarmType = (string)($alarm['alarm_type'] ?? '');
         $alarmName = (string)($alarm['alarm_name'] ?? $alarmType);
 
-        $rule = resolve_notification_rule($db, $customerId, $alarmType, $alarmName);
+        $subType   = $alarm['alarm_subtype'] ?? null;
+        $composite = ($subType !== null && $subType !== '') ? $alarmType . '-' . $subType : null;
+
+        $rule = resolve_notification_rule($db, $customerId, $alarmType, $alarmName, $composite);
         if (!$rule) {
             return;
         }

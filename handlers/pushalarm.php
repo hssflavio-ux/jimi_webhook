@@ -313,6 +313,13 @@ class PushAlarmHandler extends WebhookHandler {
                         'id'          => $insertedAlarmId,
                         'imei'        => $imei,
                         'alarm_type'  => (string)$mainType,
+                        // O subtipo VIAJA JUNTO porque, para JT/T, o código do
+                        // catálogo é composto (`264-4`) enquanto `$mainType` é
+                        // só a base (`264`). Sem ele, toda regra/parâmetro que
+                        // case por CÓDIGO ou por CATEGORIA erra o alvo em DMS e
+                        // ADAS de JT/T — que é o núcleo do produto. Ver a nota
+                        // em resolve_notification_rule().
+                        'alarm_subtype' => $subType,
                         'alarm_time'  => $alarmTime,
                         'alarm_name'  => $finalName,
                         'driver_id'   => $driverId,

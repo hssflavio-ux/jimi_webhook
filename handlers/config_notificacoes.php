@@ -187,7 +187,13 @@ $rules = [];
 try {
     if ($isAdmin) {
         $stmt = $db->prepare(
-            "SELECT nr.*, c.name AS customer_name
+            "SELECT nr.*, c.name AS customer_name,
+                    EXISTS(SELECT 1 FROM alarm_types t
+                            WHERE t.category = nr.alarm_type) AS is_categoria,
+                    EXISTS(SELECT 1 FROM alarm_types t
+                            WHERE t.alarm_name_pt = nr.alarm_type
+                               OR t.alarm_name_en = nr.alarm_type
+                               OR t.alarm_code    = nr.alarm_type) AS is_evento
              FROM notification_rules nr
              LEFT JOIN customers c ON c.id = nr.customer_id
              WHERE nr.customer_id IS NULL OR nr.customer_id = :cid
@@ -196,7 +202,13 @@ try {
         $stmt->execute([':cid' => $customerId]);
     } else {
         $stmt = $db->prepare(
-            "SELECT nr.*, c.name AS customer_name
+            "SELECT nr.*, c.name AS customer_name,
+                    EXISTS(SELECT 1 FROM alarm_types t
+                            WHERE t.category = nr.alarm_type) AS is_categoria,
+                    EXISTS(SELECT 1 FROM alarm_types t
+                            WHERE t.alarm_name_pt = nr.alarm_type
+                               OR t.alarm_name_en = nr.alarm_type
+                               OR t.alarm_code    = nr.alarm_type) AS is_evento
              FROM notification_rules nr
              LEFT JOIN customers c ON c.id = nr.customer_id
              WHERE nr.customer_id = :cid
@@ -409,7 +421,31 @@ require_once __DIR__ . '/../web/layout_base.php';
                 if (!empty($r['notify_email'])) $chans[] = 'E-mail';
             ?>
             <tr>
-                <td style="font-weight:500;"><?= htmlspecialchars($r['alarm_type']) ?></td>
+                <td style="font-weight:500;">
+                    <?php
+                    // A coluna precisa dizer a MESMA coisa que o formulário. O
+                    // valor gravado é um identificador (`conducao`, `DMS`) ou um
+                    // nome de evento, e imprimi-lo cru mostrava "conducao" ao
+                    // usuário — e não distinguia "regra de uma categoria
+                    // inteira" de "regra de um evento", que têm alcances
+                    // completamente diferentes.
+                    if (!empty($r['is_categoria'])) {
+                        echo '<span class="badge badge-info" style="font-weight:600;margin-right:6px;">Categoria</span>';
+                        echo htmlspecialchars(alarm_category_label($r['alarm_type']));
+                    } else {
+                        echo htmlspecialchars($r['alarm_type']);
+                    }
+                    // Regra que não casa com nada nunca dispara, e falha calada
+                    // é o modo de falha caro deste sistema (ver CLAUDE.md). Se
+                    // um dia um nome de alarme for renomeado sem remapear as
+                    // regras, é aqui que aparece — em vez de "as notificações
+                    // pararam e ninguém sabe por quê".
+                    if (empty($r['is_categoria']) && empty($r['is_evento'])) {
+                        echo '<div style="font-size:11px;color:var(--error);margin-top:3px;">'
+                           . '⚠ não corresponde a nenhum alarme — esta regra nunca dispara</div>';
+                    }
+                    ?>
+                </td>
                 <td>
                     <?php if ($isGlobal): ?>
                         <span class="badge badge-info">Global</span>
@@ -417,7 +453,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <?= htmlspecialchars($r['customer_name'] ?? '—') ?>
                     <?php endif; ?>
                 </td>
-                <td><?= $r['min_risk'] ? htmlspecialchars(ucfirst($r['min_risk'])) : 'Qualquer' ?></td>
+                <td><?= $r['min_risk'] ? htmlspecialchars(occurrence_risk_label($r['min_risk'])) : 'Qualquer' ?></td>
                 <td style="font-size:12px;"><?= $chans ? htmlspecialchars(implode(' · ', $chans)) : '—' ?></td>
                 <td style="font-size:12px;color:var(--muted);"><?= $mails ? htmlspecialchars(implode(', ', $mails)) : '—' ?></td>
                 <td>

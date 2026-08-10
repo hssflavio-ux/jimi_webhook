@@ -120,7 +120,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                 $r['alarm_type'],
                 fmt_brt($r['last_alarm_at']),
                 (int)$r['alarm_count'],
-                ucfirst($r['risk']),
+                occurrence_risk_label($r['risk']),
                 $r['false_positive'] ? 'Sim' : 'Não',
                 $statusLabels[$r['status']] ?? $r['status'],
             ];
@@ -320,7 +320,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= htmlspecialchars($r['alarm_type']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['last_alarm_at']) ?></td>
                 <td><?= (int)$r['alarm_count'] ?></td>
-                <td><span class="badge <?= $riskBadges[$r['risk']] ?? 'badge' ?>"><?= ucfirst($r['risk']) ?></span></td>
+                <td><span class="badge <?= $riskBadges[$r['risk']] ?? 'badge' ?>"><?= htmlspecialchars(occurrence_risk_label($r['risk'])) ?></span></td>
                 <td><?= $r['false_positive'] ? '<span class="badge badge-warning">Sim</span>' : 'Não' ?></td>
                 <td><span class="badge <?= $statusBadges[$r['status']] ?? 'badge' ?>"><?= $statusLabels[$r['status']] ?? $r['status'] ?></span></td>
                 <td style="text-align:center;">

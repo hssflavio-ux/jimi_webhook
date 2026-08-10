@@ -589,6 +589,25 @@ function alarm_severity_label(?string $sev): string {
 }
 
 /**
+ * Rótulo em pt-BR do RISCO da ocorrência.
+ *
+ * O enum é `baixo|medio|alto` — sem acento, porque é valor de banco. Quatro
+ * telas imprimiam `ucfirst()` direto e mostravam **"Medio"** ao usuário, uma
+ * delas no EXPORT do Relatório de Ocorrências, ou seja, no PDF/Excel que chega
+ * ao cliente. O componente `web/components/status_pill.php` já acentuava certo;
+ * o resultado era a mesma informação escrita de dois jeitos no mesmo sistema.
+ *
+ * @param string|null $risk baixo|medio|alto
+ * @returns string
+ */
+function occurrence_risk_label(?string $risk): string {
+    $map = ['baixo' => 'Baixo', 'medio' => 'Médio', 'alto' => 'Alto'];
+    $key = strtolower(trim((string)$risk));
+    if ($key === '') return '—';
+    return $map[$key] ?? mb_convert_case($key, MB_CASE_TITLE, 'UTF-8');
+}
+
+/**
  * Rótulo de protocolo para a tela.
  *
  * `alarm_types.protocol` guarda `JTT`, mas o usuário lê **JT/T** em todo o

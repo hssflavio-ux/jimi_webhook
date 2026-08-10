@@ -47,12 +47,22 @@ function process_alarm_to_occurrence(array $alarm): ?int
     $alarmName = $alarm['alarm_name'] ?? $alarmType;
     $alarmTime = $alarm['alarm_time'] ?? date('Y-m-d H:i:s');
 
+    // Código composto do catálogo para JT/T com subtipo: `alarms.alarm_type`
+    // guarda a base (`264`) e o subtipo separado, mas `alarm_types.alarm_code`
+    // guarda `264-4`. Sem o composto, casar por CÓDIGO ou por CATEGORIA falha
+    // em todo DMS/ADAS de JT/T. Hoje os parâmetros são gravados por NOME e
+    // escapam disso; um parâmetro por categoria não escaparia.
+    $subType = $alarm['alarm_subtype'] ?? null;
+    $compositeCode = ($subType !== null && $subType !== '')
+        ? $alarmType . '-' . $subType
+        : null;
+
     $configId = get_occurrence_config_for_imei($db, $imei);
     if (!$configId) {
         return null;
     }
 
-    $param = get_occurrence_param($db, $configId, $alarmType, $alarmName);
+    $param = get_occurrence_param($db, $configId, $alarmType, $alarmName, $compositeCode);
     if (!$param || empty($param['generates_occurrence'])) {
         return null;
     }
@@ -85,10 +95,13 @@ function process_alarm_to_occurrence(array $alarm): ?int
     // envio SMTP é do worker, fora desta transação.
     if ($occId) {
         notify_from_occurrence($db, $occId, [
-            'imei'       => $imei,
-            'alarm_type' => $alarmType,
-            'alarm_name' => $alarmName,
-            'alarm_time' => $alarmTime,
+            'imei'          => $imei,
+            'alarm_type'    => $alarmType,
+            'alarm_name'    => $alarmName,
+            'alarm_time'    => $alarmTime,
+            // Sem isto, regra por CATEGORIA (que é como as regras reais são
+            // gravadas) nunca casa um DMS/ADAS de JT/T.
+            'alarm_subtype' => $subType,
         ], $risk, $customerId);
     }
 
@@ -118,7 +131,18 @@ function get_occurrence_config_for_imei(PDO $db, string $imei): ?int
     return $row ? (int)$row['config_id'] : null;
 }
 
-function get_occurrence_param(PDO $db, int $configId, string $alarmType, string $alarmName = ''): ?array
+/**
+ * Busca o parâmetro do perfil para um alarme.
+ *
+ * @param PDO         $db
+ * @param int         $configId
+ * @param string      $alarmType     Código BASE do alarme (`264`)
+ * @param string      $alarmName     Nome resolvido
+ * @param string|null $compositeCode Código do catálogo para JT/T com subtipo
+ *                                   (`264-4`); null quando não há subtipo
+ * @returns array|null
+ */
+function get_occurrence_param(PDO $db, int $configId, string $alarmType, string $alarmName = '', ?string $compositeCode = null): ?array
 {
     $stmt = $db->prepare(
         "SELECT ocp.generates_occurrence, ocp.risk, ocp.threshold
@@ -132,15 +156,23 @@ function get_occurrence_param(PDO $db, int $configId, string $alarmType, string 
            AND (
                ocp.alarm_type = :atype
                OR ocp.alarm_type = :aname
+               OR ocp.alarm_type = :ccode1
                OR at.alarm_code = :atype2
+               OR at.alarm_code = :ccode2
            )
          LIMIT 1"
     );
     $stmt->execute([
-        ':cid'   => $configId,
-        ':atype' => $alarmType,
-        ':aname' => $alarmName,
+        ':cid'    => $configId,
+        ':atype'  => $alarmType,
+        ':aname'  => $alarmName,
         ':atype2' => $alarmType,
+        // `:ccode` nunca é NULL: com NULL a comparação vira UNKNOWN e o ramo
+        // simplesmente não casa — o que é o comportamento desejado, mas um
+        // sentinela vazio deixa isso explícito e evita NULL em parâmetro
+        // nomeado repetido.
+        ':ccode1' => $compositeCode ?? "\0",
+        ':ccode2' => $compositeCode ?? "\0",
     ]);
     $row = $stmt->fetch();
     return $row ?: null;
