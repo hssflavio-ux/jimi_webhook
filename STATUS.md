@@ -4,8 +4,10 @@
 >
 > | | git HEAD | `/ping` | `system_info` |
 > |---|---|---|---|
-> | Local / `origin/main` | `a21010d` | — | — |
-> | **Homolog** (`189.22.240.43`) | **`a21010d`** | **4.9.8** | **4.9.8** |
+> | Local / `origin/main` | `ee455c3` (+ docs) | — | — |
+> | **Homolog** (`189.22.240.43`) | **`ee455c3`** | **4.9.8** | **4.9.8** |
+>
+> `ee455c3` é o último commit de **código**; o que veio depois é documentação.
 >
 > Os três em paridade. `system_info` subiu para 4.9.8 porque desta vez **houve
 > migração** de esquema/dados (`migration_v4.9.8.sql`).
