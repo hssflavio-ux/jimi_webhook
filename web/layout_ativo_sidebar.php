@@ -37,9 +37,21 @@ $tabs = [
         <?php endif; ?>
     </div>
     <nav class="asset-sidebar-nav">
-        <?php foreach ($tabs as $tab): ?>
-        <a href="<?= $asset_base_url ?>?tab=<?= $tab['id'] ?>" class="<?= $current_tab === $tab['id'] ? 'active' : '' ?>">
-            <?= $tab['label'] ?>
+        <?php
+        // 🔴 O nome da variável do laço NÃO é indiferente (v4.9.8).
+        //
+        // Enquanto era `$tab`, este `foreach` sobrescrevia a variável do
+        // CHAMADOR: `ativo_detalhe.php` guarda a aba pedida em `$tab`, inclui
+        // este arquivo e só então roda `switch ($tab)`. Depois do laço, `$tab`
+        // valia o ÚLTIMO item do array — `['id'=>'configuracoes',…]` —, e em
+        // PHP 8 array comparado com string é sempre falso: nenhum `case`
+        // casava e **as 9 abas do ativo apareciam em branco**, com a sidebar
+        // funcionando e destacando a aba certa (ela usa `$current_tab`).
+        // Um include parcial não pode escrever em nome genérico do chamador.
+        ?>
+        <?php foreach ($tabs as $abaItem): ?>
+        <a href="<?= $asset_base_url ?>?tab=<?= $abaItem['id'] ?>" class="<?= $current_tab === $abaItem['id'] ? 'active' : '' ?>">
+            <?= $abaItem['label'] ?>
         </a>
         <?php endforeach; ?>
     </nav>

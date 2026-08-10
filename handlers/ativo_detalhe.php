@@ -159,7 +159,10 @@ $current_tab = $tab;
 include __DIR__ . '/../web/layout_ativo_sidebar.php';
 
 // ── Renderizar aba ─────────────────────────────────────
-switch ($tab):
+// Despacha por `$current_tab`, não por `$tab`: a variável que atravessa um
+// include não pode ter nome genérico. Foi assim que a sidebar apagou as 9 abas
+// desta tela (ver a nota em web/layout_ativo_sidebar.php).
+switch ($current_tab):
 
 // ═══ VISÃO GERAL ═══════════════════════════════════════
 case 'visao-geral':
