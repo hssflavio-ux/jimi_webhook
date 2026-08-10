@@ -1,13 +1,95 @@
-# STATUS.md — Jimi Webhook System v4.9.8 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.9 (YUV Parity)
 
-> ### 📍 ESTADO EM 10/08/2026 — v4.9.8 publicada e verificada no homolog
+> ### 📍 ESTADO EM 10/08/2026 — v4.9.9 publicada e verificada no homolog
 >
 > | | git HEAD | `/ping` | `system_info` |
 > |---|---|---|---|
-> | Local / `origin/main` | `ee455c3` (+ docs) | — | — |
-> | **Homolog** (`189.22.240.43`) | **`ee455c3`** | **4.9.8** | **4.9.8** |
+> | Local / `origin/main` | `063354c` (+ docs) | — | — |
+> | **Homolog** (`189.22.240.43`) | **`063354c`** | **4.9.9** | **4.9.9** |
 >
-> `ee455c3` é o último commit de **código**; o que veio depois é documentação.
+> #### O que entrou: evento de diagnóstico deixou de ser alarme
+>
+> **Diagnóstico é o que o equipamento diz ao SISTEMA** — handshake de upload de
+> vídeo, entrada e saída de repouso, defeito de hardware — **e não o que o
+> veículo diz ao OPERADOR.** Some das telas de alarme, ocorrência, Resumo e BI;
+> a linha continua inteira em `alarms`, com `raw_data`.
+>
+> A medida que motivou, no homolog: de **5.112** alarmes, **5.073 eram ruído de
+> infraestrutura** e **16** eram DMS/ADAS — o núcleo do produto. O relatório de
+> alarmes e o "top 3 equipamentos" do Resumo descreviam a saúde do equipamento,
+> não a operação.
+>
+> | | antes | depois |
+> |---|---|---|
+> | Linhas na tela de alarmes | 5.112 | **39** |
+> | Aba Alertas de um device | 51 | **14** |
+> | Export XLSX (3 dias) | — | 2.682 B normal · 16.548 B em diagnóstico |
+>
+> #### As três decisões que sustentam isso
+>
+> 1. **Classificação no CATÁLOGO, por CÓDIGO** (`alarm_types.is_diagnostic`).
+>    Por código porque `alarms.alarm_name` é congelado na chegada e tem
+>    variantes: os **845** `Fim de Alarme: …` carregam o mesmo código do alarme
+>    de abertura e são pegos de graça. E porque junção por nome morre em
+>    silêncio quando alguém renomeia — a armadilha que o `CLAUDE.md` documenta
+>    três vezes.
+> 2. **Falha para o lado de MOSTRAR** — `COALESCE(atc.is_diagnostic,
+>    atb.is_diagnostic, 0)`. Código fora do catálogo (`Código 1047 (JTT)` é o
+>    caso real, 8 linhas) dá NULL nos dois JOINs; sem o zero final, um alarme
+>    novo desapareceria da tela sem erro nenhum.
+> 3. 🔴 **`Falha de Câmera` entrou como código COMPOSTO `256-2048`, e isso é
+>    trava de segurança.** O mesmo código 256 é o bitmask padrão do JT/T e
+>    carrega `Emergência / SOS` (bit 0) e `Excesso de Velocidade` (bit 1);
+>    `decodeStandardAlarm()` **combina** os bits ativos num nome só, então
+>    câmera + SOS chega como `256-2049` — código diferente, que segue visível.
+>    Marcar a base `256` teria escondido pedidos de socorro.
+>
+> #### Verificação
+>
+> - **Migração em cópia completa** (`alarm_types` + `alarms` + apoio) antes de
+>   tocar no banco real; as duas travas do arquivo (nenhum DMS/ADAS/SOS
+>   classificado, nenhum parâmetro de ocorrência apontando para técnico)
+>   voltaram **zero linhas**. O banco real reproduziu o mesmo: 5.073 / 39.
+> - **`tests/helpers/diagnostico_guard.test.php`** — 12 casos contra banco real,
+>   incluindo as bordas: `256-2049` e `256` base seguem visíveis, código fora do
+>   catálogo segue visível, `105` em JT/T não é diagnóstico (ADR-001). Aborta
+>   com mensagem própria se a migração não estiver aplicada.
+> - **No navegador, contra o homolog**: tela de alarmes sem técnicos, caixa
+>   "Eventos de diagnóstico" só para admin, modo diagnóstico com aviso;
+>   Resumo, BI, aba do ativo, relatórios e ocorrências sem vazamento.
+> - **A trava de permissão, com usuário `operator` de verdade** forçando
+>   `?diagnostico=1`: sem caixa, sem aviso, zero eventos técnicos — e o **export
+>   XLSX saiu byte a byte idêntico** ao do modo normal (2.682 B).
+>
+> ⚠️ **A primeira tentativa de testar a trava foi VÁCUA**: o `UPDATE users SET
+> role='operador'` falhou (a coluna é `ENUM('admin','operator','viewer')`) e o
+> teste mediu o admin de novo, "provando" um vazamento inexistente. Refeito com
+> `operator` e `viewer`, conferindo o valor gravado antes de medir. É o mesmo
+> padrão de [[vacuous-assertions]] e valeu para as duas versões desta sessão.
+>
+> #### Consequência assumida
+>
+> **Defeito de equipamento saiu da tela do operador.** `Falha no Armazenamento`,
+> `Perda de Sinal de Vídeo` e `Falha de Câmera` são `severity = critical` no
+> catálogo e alguém **precisa** consertá-los — foi decisão de produto (10/08)
+> tirá-los da operação. Eles seguem no modo diagnóstico, que é restrito ao
+> administrador. **Se ninguém com perfil admin olhar aquela tela, câmera
+> quebrada deixa de ser percebida.** O caminho natural, se isso incomodar, é uma
+> visão de manutenção com o mesmo flag invertido — não devolvê-los ao operador.
+>
+> #### Não filtrado, de propósito
+>
+> `camerasdata.php`: ali `MAX(alarms.created_at)` é **sinal de vida da API**
+> ("quando o gateway recebeu algo pela última vez"), e evento técnico é tráfego
+> legítimo. Excluí-lo faria a API parecer offline.
+
+---
+
+
+> ### 📍 v4.9.8 (10/08/2026) — vídeo da ocorrência e placa no lugar do IMEI
+>
+> Publicada e verificada; `ee455c3` foi o último commit de código dela.
+> A v4.9.9, acima, veio na mesma sessão e é o estado corrente.
 >
 > Os três em paridade. `system_info` subiu para 4.9.8 porque desta vez **houve
 > migração** de esquema/dados (`migration_v4.9.8.sql`).
