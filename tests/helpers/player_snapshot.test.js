@@ -33,6 +33,13 @@ function afirmar(cond, desc) {
     else { falhas++; console.log('  ✗ ' + desc); }
 }
 
+/**
+ * A captura do quadro é adiada para o frame seguinte ao `seeked` (em MSE o
+ * quadro raramente está pintado no instante do evento). Quem afirma depois de
+ * um `seeked` precisa deixar essa fila drenar.
+ */
+const assentar = () => new Promise(r => setTimeout(r, 250));
+
 // ── DOM mínimo ───────────────────────────────────────────────────────────────
 function criarElemento(tag) {
     const el = {
@@ -108,15 +115,23 @@ function carregar(mpegtsLib) {
         createElement: criarElemento,
     };
     const janela = { document: doc, mpegts: mpegtsLib };
-    const ctx = vm.createContext({ window: janela, document: doc, setTimeout, clearTimeout, console });
+    // `requestAnimationFrame` existe no navegador e é onde a captura do quadro
+    // acontece; sem ele aqui o teste exercitaria um caminho que a tela não usa.
+    janela.requestAnimationFrame = (fn) => setTimeout(fn, 0);
+    const ctx = vm.createContext({
+        window: janela, document: doc, setTimeout, clearTimeout, console,
+        requestAnimationFrame: janela.requestAnimationFrame,
+    });
     ctx.mpegts = mpegtsLib;
     vm.runInContext(codigo, ctx);
     return janela.bcPlayer;
 }
 
+(async function () {
+
 // ── 1. MP4: o seek para no MEIO ──────────────────────────────────────────────
 console.log('\nMP4 — snapshot no meio da duração');
-[[10, 5], [20, 10], [37.4, 18.7]].forEach(([dur, meio]) => {
+for (const [dur, meio] of [[10, 5], [20, 10], [37.4, 18.7]]) {
     const p = carregar(null);
     const { box, video, ov, msg } = montarBloco({ ts: false });
     p.init(box);
@@ -128,11 +143,12 @@ console.log('\nMP4 — snapshot no meio da duração');
     // o quadro decodificado chega
     video.videoWidth = 1280; video.videoHeight = 720;
     video.disparar('seeked');
+    await assentar();
     afirmar(ov.style.display === 'flex', `overlay de play aparece após o seek (${dur}s)`);
     afirmar(msg.style.display === 'none', `mensagem "Carregando" some após o seek (${dur}s)`);
     afirmar(video.attrs.poster === 'data:image/jpeg;base64,FAKE', `quadro vira poster (${dur}s)`);
     afirmar(video.controls === false, `controles ficam escondidos antes do play (${dur}s)`);
-});
+}
 
 // ── 2. O play volta ao início, não continua do meio ──────────────────────────
 console.log('\nMP4 — o play recomeça do zero');
@@ -142,6 +158,7 @@ console.log('\nMP4 — o play recomeça do zero');
     p.init(box);
     video.duration = 20; video.disparar('loadedmetadata');
     video.videoWidth = 640; video.videoHeight = 360; video.disparar('seeked');
+    await assentar();
     afirmar(video.currentTime === 10, 'antes do play a agulha está no meio (10s)');
     ov.ouvintes.click[0]();   // clique no overlay
     afirmar(video.currentTime === 0, 'o play devolve a agulha para 0 — não toca do meio');
@@ -154,18 +171,58 @@ console.log('\nMP4 — o play recomeça do zero');
     afirmar(ov.style.display === 'flex', 'ao terminar, o overlay reaparece');
 }
 
-// ── 3. Duração desconhecida não trava o play ─────────────────────────────────
-console.log('\nDuração desconhecida (stream sem índice)');
+// ── 3. 🔴 A duração que só chega DEPOIS do loadedmetadata ────────────────────
+//
+// Regressão do defeito que só o navegador revelou (10/08/2026): com fonte MSE
+// o `loadedmetadata` dispara ANTES de a duração existir. A versão anterior
+// decidia ali, uma vez só, desistia do snapshot e deixava o vídeo tocando MUDO
+// do começo com o botão de play por cima.
+console.log('\nDuração que chega tarde (MSE) — regressão da v4.9.8');
 {
-    const p = carregar(null);
-    const { box, video, ov } = montarBloco({ ts: false });
+    const mp = criarMpegts();
+    const p = carregar(mp.lib);
+    const { box, video, ov } = montarBloco({ ts: true });
     p.init(box);
-    video.duration = Infinity; video.disparar('loadedmetadata');
-    afirmar(video.currentTime === 0, 'sem duração finita não há seek');
-    afirmar(ov.style.display === 'flex', 'mesmo sem snapshot o play fica disponível');
+    video.duration = NaN;
+    video.disparar('loadedmetadata');            // ainda sem duração
+    afirmar(video.currentTime === 0, 'sem duração ainda, não busca nada');
+    afirmar(ov.style.display !== 'flex', 'e NÃO libera o play antes da hora');
+    video.duration = 15.162;
+    video.disparar('durationchange');            // agora a MSE publicou
+    afirmar(Math.abs(video.currentTime - 7.581) < 1e-6,
+        'ao saber a duração, busca o meio (15,162s → 7,581s)');
+    video.videoWidth = 640; video.videoHeight = 360;
+    video.disparar('seeked');
+    await assentar();
+    afirmar(mp.chamadas.pause === 1, 'pausa — não fica tocando mudo atrás do botão');
+    afirmar(video.muted === false, 'som devolvido');
+    afirmar(video.attrs.poster === 'data:image/jpeg;base64,FAKE', 'e o poster foi capturado');
+    // um segundo durationchange não pode disparar outro seek
+    const antes = video.currentTime;
+    video.disparar('durationchange');
+    afirmar(video.currentTime === antes, 'evento repetido não busca de novo');
 }
 
-// ── 4. MPEG-TS passa pelo mpegts.js ──────────────────────────────────────────
+// ── 4. Duração que nunca chega não deixa o vídeo rodando solto ───────────────
+console.log('\nDuração que nunca chega (stream sem índice)');
+{
+    const mp = criarMpegts();
+    const p = carregar(mp.lib);
+    const { box, video, ov } = montarBloco({ ts: true });
+    p.init(box);
+    video.duration = Infinity;
+    video.disparar('loadedmetadata');
+    video.disparar('durationchange');
+    afirmar(video.currentTime === 0, 'sem duração finita não há seek');
+    afirmar(video.muted === true, 'segue mudo enquanto tenta');
+    // o prazo de 12 s estoura
+    await new Promise(r => setTimeout(r, 12300));
+    afirmar(ov.style.display === 'flex', 'passado o prazo, o play fica disponível assim mesmo');
+    afirmar(mp.chamadas.pause === 1, 'e o vídeo é PAUSADO — não roda mudo indefinidamente');
+    afirmar(video.muted === false, 'com o som devolvido');
+}
+
+// ── 5. MPEG-TS passa pelo mpegts.js ──────────────────────────────────────────
 console.log('\nMPEG-TS — remux pelo mpegts.js');
 {
     const mp = criarMpegts();
@@ -181,6 +238,7 @@ console.log('\nMPEG-TS — remux pelo mpegts.js');
     video.duration = 15; video.disparar('loadedmetadata');
     afirmar(video.currentTime === 7.5, 'duração 15s → snapshot em 7,5s');
     video.videoWidth = 1280; video.videoHeight = 720; video.disparar('seeked');
+    await assentar();
     afirmar(mp.chamadas.pause === 1, 'pausa após capturar o quadro — não fica baixando');
     afirmar(video.muted === false, 'som devolvido depois do snapshot');
     afirmar(ov.style.display === 'flex', 'overlay de play aparece');
@@ -190,7 +248,7 @@ console.log('\nMPEG-TS — remux pelo mpegts.js');
     afirmar(box.dataset.bcReady === '', 'o bloco volta a poder ser inicializado');
 }
 
-// ── 5. Sem mpegts.js o TS avisa, em vez de ficar preto ───────────────────────
+// ── 6. Sem mpegts.js o TS avisa, em vez de ficar preto ───────────────────────
 console.log('\nMPEG-TS sem a biblioteca');
 {
     const p = carregar(null);
@@ -201,7 +259,7 @@ console.log('\nMPEG-TS sem a biblioteca');
     afirmar(video.style.display === 'none', 'esconde o <video> preto');
 }
 
-// ── 6. montar(): o caminho do modal ──────────────────────────────────────────
+// ── 7. montar(): o caminho do modal ──────────────────────────────────────────
 console.log('\nmontar() — player criado no clique (modal do relatório de alarmes)');
 {
     const p = carregar(null);
@@ -236,3 +294,5 @@ console.log('\nmontar() — player criado no clique (modal do relatório de alar
 
 console.log(`\n${ok} asserções ok, ${falhas} falha(s)\n`);
 process.exit(falhas ? 1 : 0);
+
+})();

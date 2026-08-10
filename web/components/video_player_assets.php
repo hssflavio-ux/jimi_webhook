@@ -36,7 +36,7 @@ window.bcPlayer = (function () {
         var v    = box.querySelector('video');
         var ov   = box.querySelector('.bc-ov');
         var msg  = box.querySelector('.bc-msg');
-        var eng = null, snapPronto = false, tocando = false, morto = false;
+        var eng = null, snapPronto = false, tocando = false, morto = false, buscou = false;
 
         function falhar(texto) {
             if (morto) return;
@@ -67,29 +67,61 @@ window.bcPlayer = (function () {
             } catch (e) { /* quadro ainda não decodificado — segue sem poster */ }
         }
 
-        v.addEventListener('loadedmetadata', function () {
-            if (snapPronto || tocando) return;
-            var d = v.duration;
-            // Duração desconhecida (stream sem índice): não há "meio" para buscar
-            if (!isFinite(d) || d <= 0) { snapPronto = true; pronto(); return; }
-            try { v.currentTime = d / 2; } catch (e) { snapPronto = true; pronto(); }
-        });
-
-        v.addEventListener('seeked', function () {
-            if (snapPronto || tocando) return;
+        /**
+         * Encerra a fase de snapshot: para o que estiver rodando, devolve o som
+         * e entrega o play ao usuário. Chamada com miniatura (pelo `seeked`) ou
+         * sem ela (pelo estouro do prazo) — em ambos os casos o vídeo NÃO pode
+         * ficar tocando mudo por trás do botão de play.
+         */
+        function liberar() {
+            if (snapPronto) return;
             snapPronto = true;
-            capturarPoster();
             if (eng) { try { eng.pause(); } catch (e) {} }
             try { v.pause(); } catch (e) {}
             v.muted = false;
             pronto();
+        }
+
+        /**
+         * 🔴 A duração NÃO está pronta no `loadedmetadata` quando a fonte é MSE.
+         *
+         * Medido no navegador contra o `.ts` real: no `loadedmetadata` o
+         * mpegts.js ainda não publicou a duração, então a versão anterior — que
+         * decidia ali, uma vez só — desistia do snapshot e deixava o vídeo
+         * rodando MUDO do começo, com o botão de play por cima. O sintoma era
+         * "o `.ts` abre no início em vez do meio, e se mexe sozinho".
+         *
+         * Por isso a tentativa se REPETE a cada evento que pode trazer a
+         * duração, e `buscou` garante um único seek.
+         */
+        function tentarSnapshot() {
+            if (snapPronto || tocando || buscou) return;
+            var d = v.duration;
+            if (!isFinite(d) || d <= 0) return;   // ainda não sabemos: espera o próximo evento
+            buscou = true;
+            try { v.currentTime = d / 2; } catch (e) { liberar(); }
+        }
+
+        ['loadedmetadata', 'durationchange', 'canplay', 'progress'].forEach(function (ev) {
+            v.addEventListener(ev, tentarSnapshot);
+        });
+
+        v.addEventListener('seeked', function () {
+            if (snapPronto || tocando) return;
+            // O quadro pode não estar PINTADO no instante do `seeked` — em MSE
+            // com frequência não está. Capturar no frame seguinte evita poster
+            // em branco (e, pior, um poster branco fixado por cima do vídeo).
+            var capturar = function () { capturarPoster(); liberar(); };
+            if (window.requestAnimationFrame) {
+                requestAnimationFrame(function () { setTimeout(capturar, 80); });
+            } else {
+                setTimeout(capturar, 120);
+            }
         });
 
         // O play não pode ficar refém do snapshot: passados 12 s sem o seek
-        // completar, libera assim mesmo — sem miniatura, mas tocável.
-        setTimeout(function () {
-            if (!snapPronto && !morto) { snapPronto = true; pronto(); }
-        }, 12000);
+        // completar, libera assim mesmo — sem miniatura, mas tocável e parado.
+        setTimeout(function () { if (!morto) liberar(); }, 12000);
 
         if (ehTs) {
             if (!(window.mpegts && window.mpegts.isSupported())) {
