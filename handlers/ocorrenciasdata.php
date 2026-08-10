@@ -45,10 +45,29 @@ try {
         $where .= ' AND o.risk = :risk';
         $params[':risk'] = $risk;
     }
+    // 🔴 Busca por PLACA — e por que o predicado é todo em EXISTS (v4.9.8).
+    //
+    // A caixa de busca desta tela NUNCA devolveu nada. O `$where` é montado uma
+    // vez e reaproveitado por TRÊS consultas, e só a última tem os JOINs: as de
+    // KPI e de contagem são `FROM occurrences o` puro. Com o termo preenchido, o
+    // `dr.name` que estava aqui virava "Unknown column 'dr.name' in 'where
+    // clause'" já no KPI — o catch lá embaixo devolve o payload zerado com
+    // `code: 0`, e a tela mostra grade vazia e KPIs em zero como se não houvesse
+    // ocorrência. Sem erro no log da aplicação, sem erro na tela.
+    //
+    // Subconsulta correlacionada não depende de JOIN nenhum, então o mesmo
+    // `$where` vale nas três. A placa (`devices.device_name`) entra junto porque
+    // é o que a grade passou a exibir: procurar pelo que está na tela tem de
+    // funcionar.
     if ($search) {
-        $where .= ' AND (o.imei LIKE :q OR dr.name LIKE :q2)';
+        $where .= ' AND (o.imei LIKE :q
+                         OR EXISTS (SELECT 1 FROM drivers drs
+                                     WHERE drs.id = o.driver_id AND drs.name LIKE :q2)
+                         OR EXISTS (SELECT 1 FROM devices dvs
+                                     WHERE dvs.imei = o.imei AND dvs.device_name LIKE :q3))';
         $params[':q'] = "%$search%";
         $params[':q2'] = "%$search%";
+        $params[':q3'] = "%$search%";
     }
     // Dias digitados são BRT; colunas do banco são UTC
     [$params[':df'], $params[':dt']] = brt_day_range_to_utc($dateFrom, $dateTo);
@@ -101,10 +120,12 @@ try {
                o.first_alarm_at, o.last_alarm_at, o.alarm_count,
                o.driver_id, o.media_file_id,
                COALESCE(c.name, '—') as customer_name,
-               COALESCE(dr.name, '—') as driver_name
+               COALESCE(dr.name, '—') as driver_name,
+               COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label
         FROM occurrences o
         LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN drivers dr ON dr.id = o.driver_id
+        LEFT JOIN devices dv ON dv.imei = o.imei
         $where $whereDates
         ORDER BY o.last_alarm_at DESC
         LIMIT $perPage OFFSET $offset
@@ -115,7 +136,10 @@ try {
     $data = [];
     foreach ($rows as $r) {
         $data[] = [
-            'id' => (int)$r['id'], 'imei' => $r['imei'], 'customer_name' => $r['customer_name'],
+            // `imei` continua no payload (multitenant.spec.js e integrações o
+            // usam); a GRADE passou a exibir `device_label`, que é a placa.
+            'id' => (int)$r['id'], 'imei' => $r['imei'],
+            'device_label' => $r['device_label'], 'customer_name' => $r['customer_name'],
             'driver_name' => $r['driver_name'], 'alarm_type' => $r['alarm_type'],
             'risk' => $r['risk'], 'status' => $r['status'],
             'false_positive' => (bool)$r['false_positive'], 'first_alarm_at' => $r['first_alarm_at'],

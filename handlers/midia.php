@@ -48,9 +48,20 @@ if ($arquivo === '' || $arquivo !== $pedido) {
     exit('Nome de arquivo inválido.');
 }
 
-// Escopo multi-tenant: o arquivo precisa estar em `media_files` e pertencer a
-// um equipamento DESTE cliente. Sem isto, bastaria adivinhar o nome para ler
-// o vídeo de outro tenant — que é o que a porta 23010 permite hoje.
+// Escopo multi-tenant: o arquivo precisa pertencer a um equipamento DESTE
+// cliente. Sem isto, bastaria adivinhar o nome para ler o vídeo de outro
+// tenant — que é o que a porta 23010 permite hoje.
+//
+// São DUAS origens, e conferir só a primeira era o motivo de o anexo de alarme
+// não tocar (v4.9.8):
+//   1. `media_files` — o que a fila de extração (37382) e os uploads do IoTHub
+//      registram;
+//   2. `alarms.file_url` — o vídeo do evento que a câmera JIMI sobe sozinha e
+//      ANUNCIA no próprio push do alarme (ADR-001). Esse arquivo existe no
+//      disco desde sempre e nunca teve linha em `media_files`.
+// A migração v4.9.8 passou a criar a linha de (1) também para (2), mas a
+// verificação continua aceitando as duas: os alarmes já gravados antes dela
+// não deixam de ser do cliente por isso.
 try {
     $stmt = $db->prepare("
         SELECT 1
@@ -60,7 +71,21 @@ try {
            AND (:cid IS NULL OR d.customer_id = :cid2)
          LIMIT 1");
     $stmt->execute([':f' => $arquivo, ':cid' => $cid, ':cid2' => $cid]);
-    if (!$stmt->fetchColumn()) {
+    $autorizado = (bool)$stmt->fetchColumn();
+
+    if (!$autorizado) {
+        $stmt = $db->prepare("
+            SELECT 1
+              FROM alarms a
+              JOIN devices d ON d.imei = a.imei
+             WHERE a.file_url = :f
+               AND (:cid IS NULL OR d.customer_id = :cid2)
+             LIMIT 1");
+        $stmt->execute([':f' => $arquivo, ':cid' => $cid, ':cid2' => $cid]);
+        $autorizado = (bool)$stmt->fetchColumn();
+    }
+
+    if (!$autorizado) {
         http_response_code(404);
         Logger::warning('midia: arquivo fora do escopo do cliente', [
             'arquivo' => $arquivo, 'customer_id' => $cid,

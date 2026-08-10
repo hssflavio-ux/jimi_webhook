@@ -212,6 +212,22 @@ function update_occurrence(PDO $db, int $occId, string $alarmTime, $alarmId, arr
         $stmt = $db->prepare("INSERT IGNORE INTO occurrence_events (occurrence_id, alarm_id) VALUES (:oid, :aid)");
         $stmt->execute([':oid' => $occId, ':aid' => $alarmId]);
     }
+
+    // Numa rajada, quem traz o anexo raramente é o PRIMEIRO alarme: o vídeo
+    // aparece no segundo ou terceiro push, que caem aqui, no ramo de
+    // agrupamento. Sem isto a ocorrência ficava sem vídeo mesmo tendo um
+    // anexo entre os alarmes agrupados (v4.9.8).
+    if (!empty($alarm['file_url']) && !empty($alarm['imei'])) {
+        $st = $db->prepare("SELECT media_file_id FROM occurrences WHERE id = :id");
+        $st->execute([':id' => $occId]);
+        if ($st->fetchColumn() === null) {
+            $mediaId = link_media_to_occurrence($db, (string)$alarm['imei'], $alarmTime, $alarm);
+            if ($mediaId) {
+                $db->prepare("UPDATE occurrences SET media_file_id = :mid WHERE id = :oid")
+                   ->execute([':mid' => $mediaId, ':oid' => $occId]);
+            }
+        }
+    }
 }
 
 function create_occurrence(PDO $db, ?int $customerId, ?int $branchId, string $imei, $driverId, string $alarmType, string $risk, string $alarmTime, $alarmId, $mediaFileId = null): ?int
@@ -246,13 +262,35 @@ function create_occurrence(PDO $db, ?int $customerId, ?int $branchId, string $im
 }
 
 /**
- * Tenta vincular um arquivo de mídia (upload de vídeo) a uma ocorrência
- * próxima no tempo (±3 min), para o mesmo IMEI.
+ * Resolve o anexo que o PRÓPRIO alarme anuncia (`msg.file`) até uma linha de
+ * `media_files`, criando-a quando ela não existe.
+ *
+ * 🔴 O `INSERT` é a correção da v4.9.8. Antes daqui a função só CONSULTAVA, e
+ * a consulta nunca casava: nenhum caminho do sistema insere `media_files` a
+ * partir do alarme. Em câmera JIMI o vídeo do evento sobe sozinho e o webhook
+ * do alarme já chega com o nome do arquivo (ADR-001) — ou seja, justamente o
+ * caso do núcleo do produto ficava com `occurrences.media_file_id` em NULL e a
+ * tela dizia "Sem vídeo vinculado" com o arquivo íntegro no disco. Medido no
+ * homolog: 4 alarmes com anexo, 0 linhas em `media_files`, 2 ocorrências sem
+ * mídia. Só o fluxo JT/T (extração 37382 → /pushftpfileupload) criava a linha,
+ * e é por isso que o defeito passou despercebido.
+ *
+ * `download_status` nasce 'disponivel' porque o alarme é a declaração do
+ * device de que o arquivo JÁ está no storage (nos casos reais o `mtime` do
+ * arquivo é anterior ao push). Marcar 'solicitado' deixaria a fila de
+ * /video/downloads com um "Aguardando" eterno — ninguém viraria esse status,
+ * já que não houve pedido de extração para o callback fechar.
+ *
+ * @param PDO    $db        Conexão ativa
+ * @param string $imei      IMEI do device
+ * @param string $alarmTime Instante do alarme (UTC)
+ * @param array  $alarm     Dados do alarme (usa `file_url` e `file_type`)
+ * @returns int|null id em media_files, ou null quando o alarme não traz anexo
  */
 function link_media_to_occurrence(PDO $db, string $imei, string $alarmTime, array $alarm): ?int
 {
-    $fileUrl = $alarm['file_url'] ?? null;
-    if (!$fileUrl) {
+    $fileUrl = trim((string)($alarm['file_url'] ?? ''));
+    if ($fileUrl === '') {
         return null;
     }
 
@@ -264,7 +302,40 @@ function link_media_to_occurrence(PDO $db, string $imei, string $alarmTime, arra
     );
     $stmt->execute([':imei' => $imei, ':url' => $fileUrl]);
     $row = $stmt->fetch();
-    return $row ? (int)$row['id'] : null;
+    if ($row) {
+        return (int)$row['id'];
+    }
+
+    // O tipo sai da EXTENSÃO, não de `alarms.file_type`: o regex de
+    // pushalarm.php não conhecia `.ts` e gravou NULL em metade dos anexos
+    // reais. `media_files.file_type` é ENUM e não aceita palpite.
+    try {
+        $stmt = $db->prepare(
+            "INSERT INTO media_files
+             (imei, file_name, file_type, file_size, file_url, source_type,
+              event_time, download_status)
+             VALUES (:imei, :fname, :ftype, 0, :url, 'pushalarm', :etime, 'disponivel')"
+        );
+        $stmt->execute([
+            ':imei'  => $imei,
+            ':fname' => basename($fileUrl),
+            ':ftype' => detect_media_type($fileUrl),
+            ':url'   => $fileUrl,
+            ':etime' => $alarmTime,
+        ]);
+        $mediaId = (int)$db->lastInsertId();
+        Logger::info('Anexo do alarme registrado em media_files', [
+            'imei' => $imei, 'media_id' => $mediaId, 'file' => $fileUrl,
+        ]);
+        return $mediaId ?: null;
+    } catch (Throwable $e) {
+        // Nunca derrubar a transação do webhook por causa da mídia: sem a
+        // linha a ocorrência ainda nasce, só sem vídeo vinculado.
+        Logger::error('Falha ao registrar anexo do alarme', [
+            'imei' => $imei, 'file' => $fileUrl, 'error' => $e->getMessage(),
+        ]);
+        return null;
+    }
 }
 
 function get_customer_id_for_imei(PDO $db, string $imei): ?int

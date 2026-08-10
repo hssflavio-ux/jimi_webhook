@@ -144,12 +144,18 @@ class PushAlarmHandler extends WebhookHandler {
         $speed = $msg['gpsSpeed'] ?? $msg['speed'] ?? 0;
 
         // Arquivo/Mídia
+        //
+        // O tipo sai de detect_media_type() — o mesmo catálogo de extensões que
+        // /pushfileupload e /pushftpfileupload usam. O regex que estava aqui não
+        // conhecia `.ts`, que é o formato dos anexos de evento das câmeras JT/T:
+        // metade dos anexos reais do homolog ficou com `file_type` NULL, e a
+        // tela decide o player por esse campo. Ver includes/media.php, que
+        // resolve pela extensão na LEITURA justamente por causa dessas linhas.
         $fileUrl  = $msg['file'] ?? $msg['fileUrl'] ?? $msg['mediaUrl'] ?? null;
         $fileType = null;
         if ($fileUrl) {
-            if (preg_match('/\.(mp4|avi|flv|mkv)/i', $fileUrl)) $fileType = 'video';
-            elseif (preg_match('/\.(jpg|jpeg|png|bmp)/i', $fileUrl)) $fileType = 'image';
-            elseif (preg_match('/\.(mp3|wav|aac)/i', $fileUrl)) $fileType = 'audio';
+            $detectado = detect_media_type($fileUrl);
+            $fileType = $detectado !== 'other' ? $detectado : null;
         }
 
         // =====================================================================

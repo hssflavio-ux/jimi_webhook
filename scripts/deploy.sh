@@ -349,6 +349,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.0" "mysql/migration_v4.9.0.sql" "alertTypes JT/T que faltavam no catálogo"
     run_migration "4.9.4" "mysql/migration_v4.9.4.sql" "remetente de e-mail: nome antigo → bycamera"
     run_migration "4.9.5" "mysql/migration_v4.9.5.sql" "categoria unificada em pt-BR + remap das regras"
+    run_migration "4.9.8" "mysql/migration_v4.9.8.sql" "anexo do alarme vira media_files (vídeo da ocorrência)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

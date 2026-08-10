@@ -727,10 +727,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
     </div>
     <!-- Grade -->
     <table class="tbl-mock">
-    <tr><th>Data/Hora</th><th>IMEI</th><th>Tipo</th><th>Risco</th><th>Status</th></tr>
-    <tr><td>18/07 14:32</td><td class="mono">860112070347838</td><td>Distração</td><td><span class="pill-mock red">Alto</span></td><td><span class="pill-mock red">Aguardando</span></td></tr>
-    <tr><td>18/07 14:28</td><td class="mono">869058070151343</td><td>Uso de Celular</td><td><span class="pill-mock yellow">Médio</span></td><td><span class="pill-mock yellow">Em Tratativa</span></td></tr>
-    <tr><td>18/07 14:15</td><td class="mono">865478070003241</td><td>Sem Cinto</td><td><span class="pill-mock green">Baixo</span></td><td><span class="pill-mock green">Resolvida</span></td></tr>
+    <tr><th>Data/Hora</th><th>Placa</th><th>Tipo</th><th>Risco</th><th>Status</th></tr>
+    <tr><td>18/07 14:32</td><td class="mono">FJR7B59</td><td>Distração</td><td><span class="pill-mock red">Alto</span></td><td><span class="pill-mock red">Aguardando</span></td></tr>
+    <tr><td>18/07 14:28</td><td class="mono">RQP2A41</td><td>Uso de Celular</td><td><span class="pill-mock yellow">Médio</span></td><td><span class="pill-mock yellow">Em Tratativa</span></td></tr>
+    <tr><td>18/07 14:15</td><td class="mono">GHT5C08</td><td>Sem Cinto</td><td><span class="pill-mock green">Baixo</span></td><td><span class="pill-mock green">Resolvida</span></td></tr>
     </table>
 </div>
 </div>
@@ -738,7 +738,8 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <h4 style="font-size:14px;font-weight:600;margin:20px 0 8px">Tela de Tratativa (Detalhe da Ocorrência)</h4>
 <p>Ao clicar em uma ocorrência, abre-se a tela de detalhe com:</p>
 <ul style="font-size:13px;line-height:1.8;color:var(--body)">
-    <li><strong>Player de vídeo</strong> do momento do evento (com opção de baixar o arquivo)</li>
+    <li><strong>Player de vídeo</strong> do momento do evento, aberto num quadro do <em>meio</em>
+        do vídeo (o snapshot). O play roda na própria tela — baixar é opcional</li>
     <li><strong>Alarmes agrupados</strong> (todos os alarmes que compõem a ocorrência, com dados de GPS e velocidade)</li>
     <li><strong>Mini-mapa</strong> da localização do evento</li>
     <li><strong>Transições de status:</strong> Iniciar Tratativa → Resolver → Descartar</li>
@@ -935,10 +936,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <div class="filter-mock">Status: Disponível</div>
     </div>
     <table class="tbl-mock" style="margin-top:12px">
-    <tr><th>Arquivo</th><th>IMEI</th><th>Tipo</th><th>Tamanho</th><th>Data</th><th>Status</th></tr>
-    <tr><td style="color:var(--primary);cursor:default">86011207_20260718_01.mp4</td><td class="mono">860112070347838</td><td>vídeo</td><td class="mono">21.4 MB</td><td>18/07 14:32</td><td><span class="pill-mock green">Disponível</span></td></tr>
-    <tr><td style="color:var(--primary);cursor:default">86905807_20260718_02.jpg</td><td class="mono">869058070151343</td><td>imagem</td><td class="mono">245 KB</td><td>18/07 14:28</td><td><span class="pill-mock green">Disponível</span></td></tr>
-    <tr><td>86547807_20260718_03.mp4</td><td class="mono">865478070003241</td><td>vídeo</td><td class="mono">—</td><td>18/07 13:55</td><td><span class="pill-mock yellow">Solicitado</span></td></tr>
+    <tr><th>Arquivo</th><th>Placa</th><th>Tipo</th><th>Tamanho</th><th>Data</th><th>Status</th></tr>
+    <tr><td style="color:var(--primary);cursor:default">86011207_20260718_01.mp4</td><td class="mono">FJR7B59</td><td>vídeo</td><td class="mono">21.4 MB</td><td>18/07 14:32</td><td><span class="pill-mock green">Disponível</span></td></tr>
+    <tr><td style="color:var(--primary);cursor:default">86905807_20260718_02.jpg</td><td class="mono">RQP2A41</td><td>imagem</td><td class="mono">245 KB</td><td>18/07 14:28</td><td><span class="pill-mock green">Disponível</span></td></tr>
+    <tr><td>86547807_20260718_03.mp4</td><td class="mono">GHT5C08</td><td>vídeo</td><td class="mono">—</td><td>18/07 13:55</td><td><span class="pill-mock yellow">Solicitado</span></td></tr>
     </table>
 </div>
 </div>
@@ -1135,8 +1136,13 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Tipos de Alarme</td><td>Clique nos tipos para incluí-los na consulta — dá para selecionar vários de uma vez</td></tr>
 <tr><td>Ver posições no mapa</td><td>Abre um mapa com todos os alarmes da consulta. Cada marcador traz a <strong>placa, a data/hora e o nome do alarme</strong> — aqui cada ponto é de um veículo diferente</td></tr>
 <tr><td>Ver Mapa (na linha)</td><td>Abre o mapa em uma nova aba, no local exato daquele alarme</td></tr>
+<tr><td>Ver Vídeo (na linha)</td><td>Abre o vídeo do evento numa janela sobre a tela, já posicionado num quadro do <strong>meio</strong> do vídeo. Toca ali mesmo — baixar é opcional. Só aparece nos alarmes cujo equipamento anexou vídeo</td></tr>
 <tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados filtrados</td></tr>
 </table>
+
+<div class="callout info">
+<strong>Nem todo alarme tem vídeo.</strong> A coluna Vídeo mostra o arquivo que o próprio equipamento anexou ao alarme. Câmeras que não anexam vídeo ao evento — ou alarmes que não são de câmera, como excesso de velocidade — aparecem com um traço. Para essas, o caminho é pedir a gravação em <strong>Vídeos → Playback</strong>.
+</div>
 
 <div class="callout info">
 <strong>Alarme sem nome, só com número.</strong> Alguns poucos alarmes aparecem como <span class="mono">Código 1047 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que o fabricante não documenta — o sistema mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos.

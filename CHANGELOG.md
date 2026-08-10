@@ -5,6 +5,29 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.8
+
+### Added
+- **Coluna Vídeo no relatório de alarmes** (`/relatorios/alarmes`). Mostra o anexo que o próprio equipamento declarou no push do alarme; abre num modal com o player embutido, sem sair da grade e sem baixar nada. O `<video>` é montado **no clique**, não uma vez por linha — 25 elementos com `preload="metadata"` abririam 25 conexões só para exibir a tabela.
+- **Player com snapshot no detalhe da ocorrência.** O bloco de mídia abre num quadro do **meio** do vídeo (10 s → 5 s; 20 s → 10 s) e toca na própria tela.
+  - O snapshot é capturado **no navegador**: o servidor **não tem ffmpeg** (conferido no homolog) e instalá-lo seria mais uma peça de infraestrutura fora do git. Como os anexos de evento têm 1–4 MB e `/midia` responde a `Range`, pedir ao `<video>` que decodifique o quadro do meio custa uma fração do arquivo e nenhuma dependência nova. O quadro é copiado para um canvas e fixado como `poster` — sem isso, o play (que volta a agulha para 0) pisca o primeiro quadro, quase sempre preto num vídeo DMS.
+  - `.ts` passa pelo mpegts.js, carregado **só quando há MPEG-TS na tela**. Sem a biblioteca, nenhum navegador decodifica TS no `<video>` nativo e o player fica preto sem reclamar.
+  - Novos: `includes/media.php` (ponto único de "por qual URL isto toca / que tipo é / está no disco?") e `web/components/video_player.php` + `video_player_assets.php`.
+
+### Fixed
+- 🔴 **"Sem vídeo vinculado" com o vídeo no disco** — no núcleo do produto. Em câmera JIMI o device sobe o vídeo do evento sozinho e anuncia o nome no **próprio push do alarme** (ADR-001); não há webhook de upload. `link_media_to_occurrence()` procurava esse arquivo em `media_files` e **nada no sistema o inseria ali** — só o fluxo JT/T (extração 37382 → `/pushftpfileupload`) cria a linha. Medido no homolog: 4 alarmes com anexo, **0** linhas em `media_files`, 5 de 8 ocorrências sem mídia, e **todos** os arquivos presentes em `/iothub/dvr-upload/uploadFile`.
+  - Corrigido nos dois sentidos: o motor passa a **criar** a linha na chegada (`source_type = 'pushalarm'`, `download_status = 'disponivel'` — o alarme é a declaração do device de que o arquivo já está no storage), e `migration_v4.9.8.sql` faz o mesmo para trás, religando as ocorrências já gravadas.
+  - O vínculo passou a valer também no ramo de **agrupamento**: numa rajada, quem traz o anexo raramente é o primeiro alarme.
+  - A leitura do detalhe ganhou dois degraus de reserva (anexo de um dos alarmes agrupados → upload do mesmo equipamento na janela de ±3 min), porque o vídeo pode chegar **depois** de a ocorrência nascer.
+- 🔴 **A busca do Dashboard de Ocorrências nunca devolveu nada.** O `$where` é montado uma vez e reaproveitado por três consultas, e só a última tem os JOINs: as de KPI e contagem são `FROM occurrences o` puro. Com o termo preenchido, o `dr.name` do filtro virava *Unknown column 'dr.name' in 'where clause'* já no KPI — o `catch` devolvia o payload zerado com `code: 0`, e a tela mostrava grade vazia e KPIs em zero **como se não houvesse ocorrência**. O predicado passou a ser todo em `EXISTS`, que não depende de JOIN nenhum.
+- **`.ts` não era reconhecido como vídeo na chegada do alarme.** O regex de `pushalarm.php` conhecia `mp4|avi|flv|mkv` e nada mais, então todo anexo MPEG-TS — o formato das câmeras JT/T — gravou `alarms.file_type` NULL (metade dos anexos reais do homolog). Passou a usar `detect_media_type()`, o mesmo catálogo de extensões dos outros dois handlers de upload; e `media_kind()` resolve pela **extensão** na leitura, para acertar também nas linhas já gravadas erradas.
+- **`/midia` recusava o anexo de alarme.** O escopo multi-tenant conferia só `media_files`; o anexo que vive em `alarms.file_url` dava 404 mesmo sendo do cliente logado. Agora as duas origens autorizam (com índice de prefixo em `alarms.file_url`, senão é varredura completa da maior tabela a cada byte servido).
+- **`/ativos/{imei}` linkava mídia pela porta 23010** (`FILE_STORAGE_URL`), que serve os mesmos bytes **sem autenticação nenhuma** e com `Content-Disposition: attachment`. Passou por `/midia`, como o resto do sistema desde a v4.9.1. Nenhuma tela usa mais o `FILE_STORAGE_URL`.
+
+### Changed
+- **A ocorrência é identificada pela PLACA, não pelo IMEI.** Cabeçalho do detalhe ("Placa: FJR7B59"), coluna da grade do dashboard e busca — que agora casa a placa, justamente o que a tela exibe. `devices.device_name` é onde a placa mora; o IMEI volta só como último recurso, para equipamento sem placa cadastrada. O campo `imei` continua no payload de `/ocorrenciasdata` (integrações e `multitenant.spec.js` o usam).
+- `/video/downloads`: a coluna "Equipamento" virou **Placa** e assumiu a primeira posição depois do arquivo, com o IMEI rebaixado a coluna secundária.
+
 ## [Unreleased] — 4.9.7
 
 ### Added

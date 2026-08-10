@@ -14,6 +14,7 @@ require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
+require_once __DIR__ . '/../includes/media.php';     // coluna Vídeo (v4.9.8)
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_alarmes', '/relatorios/alarmes');
 
@@ -169,6 +170,7 @@ $offset = ($page - 1) * $perPage;
 $dataStmt = $db->prepare("
     SELECT a.id, a.imei, $alarmNameExpr AS alarm_label, a.alarm_time,
            a.status, a.speed, a.latitude, a.longitude,
+           a.file_url, a.file_type,
            COALESCE(d.device_name, a.imei) AS device_name
     FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
@@ -228,9 +230,22 @@ try {
     $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
 } catch (Exception $e) {}
 
+// Coluna Vídeo (v4.9.8): o anexo do evento que o device declarou no próprio
+// push do alarme. Resolvido pela EXTENSÃO — `alarms.file_type` está NULL em
+// todo anexo `.ts` gravado antes desta versão (ver includes/media.php).
+$temTs = false;
+foreach ($rows as $r) {
+    if (!empty($r['file_url']) && media_is_ts($r['file_url'])) { $temTs = true; break; }
+}
+
 $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
+// mpegts.js só quando alguma linha da página for `.ts` — remuxa TS→fMP4 em JS,
+// que é a única forma de o navegador tocar a gravação da câmera.
+if ($temTs) {
+    $extra_head .= '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>';
+}
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
@@ -333,14 +348,16 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Velocidade</th>
                 <th>Endereço</th>
                 <th>Mapa</th>
+                <th>Vídeo</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
+            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);">Nenhum alarme encontrado</td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
+                $temVideo  = !empty($r['file_url']) && media_kind($r['file_url'], $r['file_type']) === 'video';
             ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
@@ -363,6 +380,18 @@ require_once __DIR__ . '/../web/layout_base.php';
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
+                <td>
+                    <?php if ($temVideo): ?>
+                    <button type="button" class="badge badge-primary" style="border:0;cursor:pointer;"
+                            onclick="abrirVideo(this)"
+                            data-url="<?= htmlspecialchars(media_play_url($r['file_url'])) ?>"
+                            data-ts="<?= media_is_ts($r['file_url']) ? '1' : '0' ?>"
+                            data-nome="<?= htmlspecialchars(basename((string)$r['file_url'])) ?>"
+                            data-titulo="<?= htmlspecialchars(($r['device_name'] ?? '') . ' · ' . ($r['alarm_label'] ?: '—') . ' · ' . fmt_brt($r['alarm_time'], 'd/m/Y H:i:s')) ?>">
+                        &#9654; Ver Vídeo
+                    </button>
+                    <?php else: echo '—'; endif; ?>
+                </td>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
@@ -370,6 +399,59 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?= report_pagination($page, $totalPages, $totalRows, 'alarmes') ?>
+
+<!-- ── Modal do vídeo do alarme (v4.9.8) ────────────────────────────────────
+     O player é MONTADO no clique, não uma vez por linha: 25 elementos <video>
+     com `preload="metadata"` numa página abrem 25 conexões só para exibir a
+     grade. Aqui só o alarme aberto carrega bytes. -->
+<div id="video-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,11,13,.62);align-items:center;justify-content:center;padding:24px;">
+    <div class="card" style="max-width:820px;width:100%;padding:16px 18px;">
+        <div class="flex-between mb-12" style="gap:12px;">
+            <div style="min-width:0;">
+                <h3 id="video-modal-titulo" style="font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></h3>
+                <span id="video-modal-arquivo" class="text-mono" style="font-size:11px;color:var(--muted);"></span>
+            </div>
+            <div style="display:flex;gap:8px;flex-shrink:0;">
+                <a id="video-modal-baixar" class="btn btn-outline btn-sm" download>Baixar</a>
+                <button type="button" class="btn btn-outline btn-sm" onclick="fecharVideo()">Fechar</button>
+            </div>
+        </div>
+        <div id="video-modal-player"></div>
+    </div>
+</div>
+
+<?php
+// Emite o CSS/JS do player mesmo sem nenhum bloco renderizado no HTML — aqui
+// quem monta o player é o JS do modal.
+require_once __DIR__ . '/../web/components/video_player_assets.php';
+?>
+<script>
+function abrirVideo(btn) {
+    var m = document.getElementById('video-modal');
+    document.getElementById('video-modal-titulo').textContent  = btn.dataset.titulo || 'Vídeo do alarme';
+    document.getElementById('video-modal-arquivo').textContent = btn.dataset.nome || '';
+    var dl = document.getElementById('video-modal-baixar');
+    dl.href = btn.dataset.url;
+    dl.setAttribute('download', btn.dataset.nome || '');
+    m.style.display = 'flex';
+    bcPlayer.montar(document.getElementById('video-modal-player'), btn.dataset.url, btn.dataset.ts === '1', 440);
+}
+
+function fecharVideo() {
+    var m = document.getElementById('video-modal');
+    // Destruir, e não apenas esconder: um <video> oculto continua baixando.
+    bcPlayer.destruir(m.querySelector('.bc-player'));
+    document.getElementById('video-modal-player').innerHTML = '';
+    m.style.display = 'none';
+}
+
+document.getElementById('video-modal').addEventListener('click', function (e) {
+    if (e.target === this) fecharVideo();   // clique no fundo fecha
+});
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.getElementById('video-modal').style.display === 'flex') fecharVideo();
+});
+</script>
 
 <?php if ($mapPoints): ?>
 <script>

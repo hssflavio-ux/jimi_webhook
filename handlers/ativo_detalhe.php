@@ -66,7 +66,10 @@ $isOnline = $dtLast && ($dtNow->getTimestamp() - $dtLast->getTimestamp()) < 600;
 
 $dashToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
 $streamUrl = getenv('STREAM_URL') ?: 'http://localhost:8881';
-$fileStorageUrl = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+// Mídia pela NOSSA origem (com login e escopo de cliente), não pela 23010 do
+// IoTHub — que serve os mesmos bytes sem autenticação nenhuma e com
+// `Content-Disposition: attachment`. Ver handlers/midia.php e includes/media.php.
+require_once __DIR__ . '/../includes/media.php';
 
 // ── Dados por aba ──────────────────────────────────────
 
@@ -292,7 +295,7 @@ case 'alertas':
                 <td><span class="badge" style="background:<?= $sevBorder ?>15;color:<?= $sevBorder ?>;border:1px solid <?= $sevBorder ?>40"><?= htmlspecialchars(alarm_severity_label($a['severity'])) ?></span></td>
                 <td><?= round($a['speed'] ?? 0) ?> km/h</td>
                 <td><?php if ($hasAlarmGps): ?><a href="https://www.google.com/maps?q=<?= $a['latitude'] ?>,<?= $a['longitude'] ?>" target="_blank" class="btn btn-outline btn-sm">Mapa</a><?php endif; ?></td>
-                <td><?php if ($a['file_url']): ?><a href="<?= htmlspecialchars($fileStorageUrl . $a['file_url']) ?>" target="_blank" class="btn btn-outline btn-sm">Arquivo</a><?php endif; ?></td>
+                <td><?php if ($a['file_url']): ?><a href="<?= htmlspecialchars(media_play_url($a['file_url'])) ?>" target="_blank" class="btn btn-outline btn-sm">Arquivo</a><?php endif; ?></td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($alarms)): ?>
@@ -384,7 +387,7 @@ case 'video':
                 <div style="font-size:11px;color:var(--muted)"><?= $mf['file_type'] ?> &middot; <?= number_format(($mf['file_size'] ?? 0) / 1024 / 1024, 1) ?> MB</div>
             </div>
             <?php if ($mf['file_url']): ?>
-            <a href="<?= htmlspecialchars($fileStorageUrl . $mf['file_url']) ?>" target="_blank" class="btn btn-outline btn-sm">Download</a>
+            <a href="<?= htmlspecialchars(media_play_url($mf['file_url'])) ?>" target="_blank" class="btn btn-outline btn-sm" download>Download</a>
             <?php endif; ?>
         </div>
         <?php endforeach; ?>

@@ -46,7 +46,8 @@ $offset = ($page - 1) * $perPage;
 $filesStmt = $db->prepare("
     SELECT mf.id, mf.imei, mf.file_name, mf.file_url, mf.file_type, mf.file_size,
            mf.event_time, mf.created_at, mf.channel, mf.download_status,
-           d.device_name, COALESCE(dm.model_name, '—') as model_name
+           COALESCE(NULLIF(d.device_name, ''), mf.imei) AS device_name,
+           COALESCE(dm.model_name, '—') as model_name
     FROM media_files mf
     LEFT JOIN devices d ON d.imei = mf.imei
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
@@ -89,8 +90,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>Arquivo</th>
+                <th>Placa</th>
                 <th>IMEI</th>
-                <th>Equipamento</th>
                 <th>Modelo</th>
                 <th>Canal</th>
                 <th>Tipo</th>
@@ -114,8 +115,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                     <?= htmlspecialchars($f['file_name'] ?? '—') ?>
                 </td>
-                <td><span class="text-mono"><?= htmlspecialchars($f['imei']) ?></span></td>
-                <td><?= htmlspecialchars($f['device_name'] ?? '—') ?></td>
+                <td><span class="text-mono"><?= htmlspecialchars($f['device_name']) ?></span></td>
+                <td><span class="text-mono" style="font-size:11px;color:var(--muted);"><?= htmlspecialchars($f['imei']) ?></span></td>
                 <td><?= htmlspecialchars($f['model_name']) ?></td>
                 <td><?= $f['channel'] ? 'CH' . $f['channel'] : '—' ?></td>
                 <td><span class="badge"><?= htmlspecialchars($f['file_type'] ?? '—') ?></span></td>

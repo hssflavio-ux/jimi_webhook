@@ -13,20 +13,13 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/media.php';
 
 $page_title = 'Dashboard de Ocorrências';
 $current_route = 'ocorrencias';
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
 $user = get_jimi_user();
-
-// Mídias de webhook guardam só o nome do arquivo em file_url — o download
-// real sai do file storage do IoTHub (:23010/download/), como no playback
-$fileStorageUrl = rtrim(getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/', '/') . '/';
-$mediaHref = function ($url) use ($fileStorageUrl) {
-    if (!$url) return '';
-    return preg_match('#^https?://#i', $url) ? $url : $fileStorageUrl . ltrim($url, '/');
-};
 
 // ── POST: Transição de status da tratativa ─────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['occurrence_id'])) {
@@ -61,14 +54,20 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot
 // ── Detalhe de uma ocorrência específica ──────────────────────
 $detailOcc = null;
 $detailEvents = [];
-$detailMedia = null;
+$detailMedia = null;      // ['file_url' => …, 'file_type' => …, 'file_name' => …]
 if (!empty($_GET['id'])) {
     try {
+        // A PLACA (devices.device_name) substitui o IMEI no cabeçalho: é o
+        // identificador que quem trata a ocorrência reconhece. O COALESCE
+        // existe porque equipamento sem cadastro de placa ficaria sem rótulo
+        // nenhum — aí o IMEI volta, como último recurso.
         $stmt = $db->prepare(
-            "SELECT o.*, c.name as customer_name, d.name as driver_name
+            "SELECT o.*, c.name as customer_name, d.name as driver_name,
+                    COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label
              FROM occurrences o
              LEFT JOIN customers c ON c.id = o.customer_id
              LEFT JOIN drivers d ON d.id = o.driver_id
+             LEFT JOIN devices dv ON dv.imei = o.imei
              WHERE o.id = :id AND o.customer_id = :cid"
         );
         $stmt->execute([':id' => (int)$_GET['id'], ':cid' => $customerId]);
@@ -77,7 +76,7 @@ if (!empty($_GET['id'])) {
         if ($detailOcc) {
             $stmt = $db->prepare(
                 "SELECT e.id as event_id, a.id as alarm_id, a.alarm_name, a.alarm_time,
-                        a.latitude, a.longitude, a.speed, a.file_url
+                        a.latitude, a.longitude, a.speed, a.file_url, a.file_type
                  FROM occurrence_events e
                  JOIN alarms a ON a.id = e.alarm_id
                  WHERE e.occurrence_id = :oid
@@ -86,15 +85,66 @@ if (!empty($_GET['id'])) {
             $stmt->execute([':oid' => $detailOcc['id']]);
             $detailEvents = $stmt->fetchAll();
 
+            // ── Resolução da mídia, em três degraus ──────────────────────
+            //
+            // Só o primeiro existia, e por isso a tela dizia "Sem vídeo
+            // vinculado" com o arquivo no disco: `media_file_id` fica NULL
+            // sempre que o vídeo veio como ANEXO DO ALARME (câmera JIMI, que
+            // sobe o arquivo sozinha e anuncia o nome no próprio push) — não
+            // havia nada que criasse a linha em `media_files`. A v4.9.8 passou
+            // a criar, mas os degraus 2 e 3 continuam valendo para tudo que já
+            // estava gravado e para o vídeo que chega DEPOIS da ocorrência.
             if (!empty($detailOcc['media_file_id'])) {
                 $stmt = $db->prepare("SELECT * FROM media_files WHERE id = :mid");
                 $stmt->execute([':mid' => $detailOcc['media_file_id']]);
-                $detailMedia = $stmt->fetch();
+                $detailMedia = $stmt->fetch() ?: null;
+            }
+            // 2) anexo declarado por um dos alarmes agrupados (vídeo na frente
+            //    de imagem: a prova do comportamento é o vídeo)
+            if (!$detailMedia) {
+                foreach (['video', ''] as $preferido) {
+                    foreach ($detailEvents as $ev) {
+                        if (empty($ev['file_url'])) continue;
+                        $tipo = media_kind($ev['file_url'], $ev['file_type']);
+                        if ($preferido && $tipo !== $preferido) continue;
+                        $detailMedia = [
+                            'file_url'  => $ev['file_url'],
+                            'file_type' => $tipo,
+                            'file_name' => basename((string)$ev['file_url']),
+                        ];
+                        break 2;
+                    }
+                }
+            }
+            // 3) upload do mesmo equipamento na janela da ocorrência (±3 min) —
+            //    a mesma regra que link_upload_to_occurrence() usa na chegada
+            if (!$detailMedia) {
+                $stmt = $db->prepare(
+                    "SELECT file_url, file_type, file_name FROM media_files
+                      WHERE imei = :imei
+                        AND file_url IS NOT NULL AND file_url <> ''
+                        AND event_time BETWEEN DATE_SUB(:fat, INTERVAL 3 MINUTE)
+                                           AND DATE_ADD(:lat, INTERVAL 3 MINUTE)
+                      ORDER BY (file_type = 'video') DESC, event_time DESC
+                      LIMIT 1"
+                );
+                $stmt->execute([
+                    ':imei' => $detailOcc['imei'],
+                    ':fat'  => $detailOcc['first_alarm_at'],
+                    ':lat'  => $detailOcc['last_alarm_at'],
+                ]);
+                $detailMedia = $stmt->fetch() ?: null;
             }
         }
     } catch (Exception $e) {
         $detailOcc = null;
     }
+}
+
+// mpegts.js só quando a mídia resolvida for MPEG-TS: `.ts` é o formato das
+// câmeras JT/T e nenhum navegador o decodifica no <video> nativo.
+if ($detailMedia && media_is_ts($detailMedia['file_url'] ?? null)) {
+    $extra_head .= '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>';
 }
 
 require_once __DIR__ . '/../web/layout_base.php';
@@ -115,7 +165,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             </h2>
             <p class="text-muted" style="font-size:12px;">
                 <?= htmlspecialchars($detailOcc['customer_name']) ?> ·
-                IMEI: <span class="text-mono"><?= htmlspecialchars($detailOcc['imei']) ?></span> ·
+                Placa: <span class="text-mono"><?= htmlspecialchars($detailOcc['device_label']) ?></span> ·
                 <?= fmt_brt($detailOcc['last_alarm_at']) ?>
             </p>
         </div>
@@ -140,17 +190,31 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <!-- Mídia -->
         <div>
-            <?php if ($detailMedia): ?>
-            <div style="background:var(--ink);border-radius:var(--radius-md);overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center;">
-                <?php if (in_array($detailMedia['file_type'] ?? '', ['video', 'mp4', 'flv'])): ?>
-                <video controls style="width:100%;max-height:300px;" poster="">
-                    <source src="<?= htmlspecialchars($mediaHref($detailMedia['file_url'])) ?>" type="video/mp4">
-                </video>
-                <?php elseif (($detailMedia['file_type'] ?? '') === 'image'): ?>
-                <img src="<?= htmlspecialchars($mediaHref($detailMedia['file_url'])) ?>" style="max-width:100%;max-height:300px;" alt="Mídia da ocorrência">
-                <?php else: ?>
-                <p style="color:var(--muted-soft);">Mídia: <?= htmlspecialchars($detailMedia['file_name'] ?? $detailMedia['file_url'] ?? '—') ?></p>
-                <?php endif; ?>
+            <?php
+            $midiaTipo = $detailMedia ? media_kind($detailMedia['file_url'] ?? null, $detailMedia['file_type'] ?? null) : 'other';
+            if ($detailMedia && in_array($midiaTipo, ['video', 'image'], true)):
+                // Player embutido: snapshot do MEIO do vídeo e reprodução sem
+                // baixar nada. Ver web/components/video_player.php.
+                $vp_url     = media_play_url($detailMedia['file_url']);
+                $vp_ts      = media_is_ts($detailMedia['file_url']);
+                $vp_kind    = $midiaTipo;
+                $vp_name    = $detailMedia['file_name'] ?? basename((string)$detailMedia['file_url']);
+                $vp_height  = 300;
+                $vp_missing = !media_available($detailMedia['file_url']);
+                $vp_auto    = true;
+                $vp_id      = 'occ-player';
+                include __DIR__ . '/../web/components/video_player.php';
+            ?>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+                <span class="text-mono" style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    <?= htmlspecialchars($vp_name) ?>
+                </span>
+                <a href="<?= htmlspecialchars($vp_url) ?>" download="<?= htmlspecialchars($vp_name) ?>"
+                   class="btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;white-space:nowrap;">Baixar</a>
+            </div>
+            <?php elseif ($detailMedia): ?>
+            <div style="background:var(--canvas-soft);border-radius:var(--radius-md);padding:40px;text-align:center;color:var(--muted);">
+                Mídia: <?= htmlspecialchars($detailMedia['file_name'] ?? $detailMedia['file_url'] ?? '—') ?>
             </div>
             <?php else: ?>
             <div style="background:var(--canvas-soft);border-radius:var(--radius-md);padding:40px;text-align:center;color:var(--muted);">
@@ -165,7 +229,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <h3 style="font-size:14px;font-weight:600;color:var(--ink);margin:20px 0 10px;">Alarmes Agrupados</h3>
     <div class="table-wrap">
         <table>
-            <thead><tr><th>Alarme</th><th>Data/Hora</th><th>Canal</th></tr></thead>
+            <thead><tr><th>Alarme</th><th>Data/Hora</th><th>Vídeo</th></tr></thead>
             <tbody>
             <?php foreach ($detailEvents as $ev): ?>
             <tr>
@@ -173,7 +237,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
                 <td>
                     <?php if ($ev['file_url']): ?>
-                    <a href="<?= htmlspecialchars($mediaHref($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
+                    <a href="<?= htmlspecialchars(media_play_url($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
             </tr>
@@ -288,7 +352,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
     <div>
         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Busca</label>
-        <input type="text" id="filter-search" placeholder="IMEI ou motorista..." oninput="debounceSearch()"
+        <input type="text" id="filter-search" placeholder="Placa ou motorista..." oninput="debounceSearch()"
                style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:180px;">
     </div>
     <button onclick="refreshData()" class="btn btn-outline btn-sm">Atualizar</button>
@@ -300,7 +364,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <thead>
             <tr>
                 <th>Cliente</th>
-                <th>IMEI</th>
+                <th>Placa</th>
                 <th>Motorista</th>
                 <th>Tipo</th>
                 <th>Último Alarme</th>
@@ -427,7 +491,7 @@ function updateTable(data) {
         var dateStr = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
         html += '<tr>' +
             '<td>' + esc(r.customer_name) + '</td>' +
-            '<td><span class="text-mono">' + esc(r.imei) + '</span></td>' +
+            '<td><span class="text-mono">' + esc(r.device_label) + '</span></td>' +
             '<td>' + esc(r.driver_name) + '</td>' +
             '<td>' + esc(r.alarm_type) + '</td>' +
             '<td>' + dateStr + '</td>' +
