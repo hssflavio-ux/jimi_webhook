@@ -1,4 +1,97 @@
-# STATUS.md — Jimi Webhook System v4.9.7 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.8 (YUV Parity)
+
+> ### 📍 ESTADO EM 10/08/2026 — v4.9.8 publicada e verificada no homolog
+>
+> | | git HEAD | `/ping` | `system_info` |
+> |---|---|---|---|
+> | Local / `origin/main` | `b63c16f` | — | — |
+> | **Homolog** (`189.22.240.43`) | **`b63c16f`** | **4.9.8** | **4.9.8** |
+>
+> Os três em paridade. `system_info` subiu para 4.9.8 porque desta vez **houve
+> migração** de esquema/dados (`migration_v4.9.8.sql`).
+>
+> #### O que entrou na v4.9.8
+>
+> | Entrega | Tipo | Estado |
+> |---|---|---|
+> | Coluna **Vídeo** no relatório de alarmes (modal com player) | feature | ✅ verificado no servidor |
+> | **Player com snapshot** no detalhe da ocorrência (quadro do meio) | feature | ✅ verificado (menos a decodificação — ver abaixo) |
+> | 🔴 "Sem vídeo vinculado" **com o vídeo no disco** | fix | ✅ migração aplicada, conferências em zero |
+> | 🔴 Busca do Dashboard de Ocorrências **nunca devolveu nada** | fix | ✅ provado antes e depois |
+> | `.ts` não era reconhecido como vídeo na chegada do alarme | fix | ✅ |
+> | `/midia` recusava o anexo de alarme | fix | ✅ HTTP 206 no servidor |
+> | Ocorrência identificada pela **placa**, não pelo IMEI | change | ✅ |
+>
+> #### O fio que liga a v4.9.8
+>
+> **Duas fontes para o mesmo arquivo, e o sistema só olhava uma.** O vídeo do
+> evento chega por dois caminhos que nunca se encontraram: em JT/T pela extração
+> 37382 → `/pushftpfileupload`, que grava `media_files`; em JIMI o device sobe o
+> arquivo sozinho e só ANUNCIA o nome dentro do push do alarme (ADR-001), sem
+> webhook de upload. Todo o resto do sistema — o vínculo da ocorrência, o escopo
+> do `/midia`, a fila de downloads — consultava apenas `media_files`. Resultado
+> medido: **4 alarmes com anexo, 0 linhas em `media_files`, todos os arquivos
+> presentes no disco**, e a tela de tratativa dizendo "Sem vídeo vinculado"
+> justamente no caminho JIMI, que é o núcleo do produto. Como ausência de mídia
+> não é erro em lugar nenhum, nada apareceu em log nem na tela.
+>
+> É o mesmo padrão das v4.9.4–4.9.6 (*"um valor de identidade em duas camadas"*),
+> com uma variação: aqui as duas camadas nem se contradiziam — uma simplesmente
+> **não era consultada**.
+>
+> #### Como foi verificado (sem servidor local)
+>
+> O MySQL de desenvolvimento continua sem data dir, então a suíte Playwright
+> segue bloqueada. A verificação veio de:
+>
+> 1. **Migração numa cópia real ANTES do deploy** — `jimi_migtest` com dump de
+>    `alarms`, `media_files`, `occurrences`, `occurrence_events` do homolog. As
+>    duas conferências do arquivo voltaram **zero linhas**; ocorrências com mídia
+>    foram de 3 para 5, e as 3 que sobraram são as que **de fato** não têm anexo.
+>    Rodada duas vezes: idempotente (nenhuma linha duplicada). Cópia descartada.
+>    No deploy, o banco real reproduziu o MESMO resultado (8 / 5 / 3).
+> 2. **`/midia` servindo o anexo no servidor** — `HTTP/1.1 206 Partial Content`,
+>    `Accept-Ranges: bytes`, `Content-Range: bytes 0-1023/1149033`,
+>    `Content-Type: video/mp4` (e `video/mp2t` no `.ts`), `Disposition: inline`.
+>    É exatamente o que o player precisa para buscar o meio sem baixar o arquivo
+>    inteiro. Sem cookie → **302** (barra); arquivo inexistente → **404**.
+> 3. **Telas reais, servidas pelo Apache do homolog**: ocorrência 8 (mp4) e 7
+>    (`.ts`) abrem com player, placa no cabeçalho e mpegts.js carregado **só** no
+>    caso `.ts`; ocorrência 5, que não tem anexo, segue mostrando "Sem vídeo
+>    vinculado" — o fallback não inventa mídia. No relatório de alarmes os botões
+>    saem com `/midia?f=…` e o `data-ts` certo em cada protocolo.
+> 4. **A busca de ocorrências, antes e depois** — o `SELECT` cru reproduz
+>    `Unknown column 'dr.name'`; depois do fix, buscar pela placa devolve 2 de 2.
+> 5. **O JS do player, executado de verdade** —
+>    `tests/helpers/player_snapshot.test.js` roda o script **real** extraído de
+>    `video_player_assets.php` sobre um DOM mínimo em Node: **49 asserções**,
+>    incluindo a regra que define a entrega (10 s → 5 s, 20 s → 10 s, 15 s →
+>    7,5 s, 37,4 s → 18,7 s), o play voltando a agulha para 0, o `pause()` no
+>    mpegts após capturar o quadro e o `destroy()` ao fechar o modal.
+>
+> ⚠️ **O que NÃO foi verificado**: a **decodificação**. Um `<video>` de mentira
+> não desenha quadro nenhum, e a extensão do Chrome não estava conectada nesta
+> sessão. A máquina de estados está provada; que a miniatura *apareça* depende
+> do decodificador do navegador e **só se confirma abrindo a tela**. Vale
+> especialmente para o `.ts`, cujo caminho passa pelo remux do mpegts.js.
+>
+> #### Pendências da v4.9.8
+>
+> - 👀 **Abrir a ocorrência 8 (mp4) e a 7 (`.ts`) no navegador** e confirmar que
+>   a miniatura do meio aparece — é o único elo não provado (item ⚠️ acima).
+> - ⚠️ **As placas do parque de teste não são placas.** `devices.device_name`
+>   está como `400AD` e `400AD_2` nos dois equipamentos das ocorrências novas,
+>   então o cabeçalho mostra "Placa: 400AD_2". A tela está certa; o **cadastro**
+>   é que não tem a placa. Corrigir em *Equipamentos* para ver o efeito real.
+> - 💡 **O anexo do alarme agora aparece em `/video/downloads`** (linha com
+>   `source_type = 'pushalarm'`, status Disponível). É consequência desejada —
+>   o arquivo existe e é baixável —, mas muda o que aquela fila mostra: ela
+>   deixou de ser só "o que eu pedi por extração".
+> - 🔭 **Exports de alarmes seguem sem a coluna Vídeo.** O pedido era a tela, e
+>   um link que exige sessão não se sustenta bem num PDF que circula por e-mail.
+>   Se for para entrar, o caminho é o link assinado do `download_token.php`.
+
+---
 
 > ### 📍 ESTADO EM 09/08/2026, 23h00 — tudo publicado e verificado no homolog
 >
