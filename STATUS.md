@@ -1,4 +1,40 @@
-# STATUS.md — Jimi Webhook System v4.9.6 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.7 (YUV Parity)
+
+> ### 📍 v4.9.7 (09/08/2026) — Comandos: catálogo por modelo, parâmetros e respostas legíveis
+>
+> **Sem migração** — só código. `system_info` fica em **4.9.5**.
+>
+> **Catálogo**: `includes/command_catalog.php`, **119 comandos** (87 com tabela de
+> parâmetros, 68 com exemplos), extraído das 10 páginas da wiki Foco na Via.
+> Cobertura: JC371 94 · JC182 50 · JC400AD 42 · JC400D 41 · JC450 31 · JC181 19.
+>
+> ⚠️ **Só a forma de PLATAFORMA entrou.** A wiki documenta cada comando em duas
+> formas: SMS (`SENALM#666666#ON#1`, com senha) e plataforma (`SENALM,ON,1`).
+> O envio daqui é proNo 128 pelo IoT Hub — a forma de SMS seria recusada pelo
+> device. Teste afirma que nenhuma sintaxe carrega `666666`.
+>
+> **As duas regras da tela**
+> - Comando específico de modelo **desabilita** os equipamentos dos outros.
+> - Comando universal (5+ das 6 páginas — 14 no catálogo) **solta a trava**.
+>
+> **Respostas**: `includes/command_response.php` desembrulha o envelope do gateway
+> e traduz com dica de ação. 🔴 Descoberto no caminho: **`commands.status` não é o
+> desfecho** — há linhas com `status='executed'` e resposta `"request timeout"`.
+> O status registra que o callback chegou, não que o device obedeceu; o histórico
+> passou a mostrar o desfecho interpretado.
+>
+> **Verificação**: o JS **real** da página (extraído do HTML renderizado) foi
+> exercitado em Node sobre um DOM mínimo — **12 asserções, todas passando**. Render
+> completo contra o banco do homolog validou os 5 blocos JSON embutidos, e foi ele
+> que pegou `video_stream_config()['ip']`, chave que não existe (`php -l` passa).
+>
+> ⚠️ **`tests/comandos.spec.js` foi escrito mas NÃO rodou** — a suíte precisa de
+> servidor e banco locais, e o MySQL de desenvolvimento desta máquina não tem mais
+> data dir. Spec que pula não é cobertura: a prova desta entrega é o harness em
+> Node e o render, não o spec.
+>
+> ---
+
 
 > ### 📍 v4.9.6 (09/08/2026) — 🔴 notificação de DMS/ADAS em JT/T nunca disparava
 >

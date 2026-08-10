@@ -1,0 +1,177 @@
+<?php
+/**
+ * JIMI Webhook System — Leitura das respostas de comando v4.9.7
+ *
+ * A resposta que chega do IoT Hub é inútil para quem opera: vem embrulhada em
+ * um envelope de gateway e o texto que importa está em inglês técnico
+ * (`Device busy (previous command has not returned)`). Este arquivo desembrulha
+ * e traduz para uma frase que diz **o que aconteceu e o que fazer**.
+ *
+ * ⚠️ `commands.status` NÃO é confiável como desfecho. Há linhas no homolog com
+ * `status = 'executed'` e resposta `"request timeout"` — o status registra que o
+ * callback CHEGOU, não que o device obedeceu. Por isso a tela passou a mostrar o
+ * desfecho interpretado da resposta, e não o status cru.
+ *
+ * Formas de resposta observadas em produção:
+ *   1. envelope: {"msg":"success","code":0,"data":{"_msg":"...","_code":"601"}}
+ *   2. texto puro: "request timeout"
+ *   3. texto com pares: "ext Battery:12.1V; GPRS:Link Up PROBE489 6a72..."
+ */
+
+/**
+ * Desembrulha a resposta gravada e devolve o texto que interessa.
+ *
+ * @param string|null $payload Conteúdo de `commands.response_payload`
+ * @returns array{texto:string, codigo:string}
+ */
+function command_response_extract(?string $payload): array
+{
+    $payload = trim((string)$payload);
+    if ($payload === '') return ['texto' => '', 'codigo' => ''];
+
+    $j = json_decode($payload, true);
+    if (!is_array($j)) {
+        // Pode ser uma string JSON ("request timeout") ou texto cru
+        return ['texto' => is_string($j) ? $j : $payload, 'codigo' => ''];
+    }
+
+    // Envelope do gateway: o que vale está em data._msg / data._code
+    $d = $j['data'] ?? null;
+    if (is_array($d)) {
+        $texto = (string)($d['_msg'] ?? $d['resultContent'] ?? $d['content'] ?? '');
+        $cod   = (string)($d['_code'] ?? '');
+        if ($texto !== '') return ['texto' => $texto, 'codigo' => $cod];
+    }
+
+    foreach (['resultContent', 'content', 'msg', 'message'] as $k) {
+        if (!empty($j[$k]) && is_string($j[$k])) return ['texto' => $j[$k], 'codigo' => (string)($j['code'] ?? '')];
+    }
+    return ['texto' => json_encode($j, JSON_UNESCAPED_UNICODE), 'codigo' => (string)($j['code'] ?? '')];
+}
+
+/**
+ * Traduz a resposta para desfecho legível.
+ *
+ * Casar por trecho, não por igualdade: o gateway varia a frase entre versões
+ * ("Command communication successful response" vs "... ack successful response")
+ * e uma tabela de igualdade exata envelheceria em silêncio, voltando a mostrar
+ * inglês cru — que é o defeito que esta função existe para corrigir.
+ *
+ * @param string $texto  Texto vindo de command_response_extract()
+ * @param string $codigo Código do gateway, quando houver
+ * @returns array{nivel:string, titulo:string, detalhe:string, dica:string}
+ *          nivel: ok | aguardando | erro | neutro
+ */
+function command_response_interpret(string $texto, string $codigo = ''): array
+{
+    $t = mb_strtolower(trim($texto));
+    if ($t === '') {
+        return ['nivel' => 'aguardando', 'titulo' => 'Sem resposta ainda',
+                'detalhe' => '', 'dica' => 'O equipamento ainda não respondeu. Comando offline fica em fila até ele se conectar.'];
+    }
+
+    $regras = [
+        ['successful response|success|ack successful|\bok\b', 'ok', 'Executado',
+         'O equipamento confirmou o comando.'],
+        ['device busy|previous command has not returned', 'aguardando', 'Equipamento ocupado',
+         'Há um comando anterior sem resposta. Espere ele terminar e reenvie — mandar de novo agora costuma receber a mesma recusa.'],
+        ['request timeout|failed to respond|timeout', 'erro', 'Sem resposta no prazo',
+         'O equipamento não respondeu a tempo. Confira se ele está transmitindo; comando enviado com o device offline não é executado.'],
+        ['media resource is empty|resource is empty', 'neutro', 'Nenhuma gravação no período',
+         'O comando funcionou; o cartão não tem vídeo no intervalo pedido. Tente outro horário.'],
+        ['not support|unsupported|invalid command|unknown command', 'erro', 'Comando não suportado',
+         'Este modelo não aceita o comando. Confira a lista por modelo — a tela só libera o que a documentação registra para o equipamento escolhido.'],
+        ['param|parameter.*(error|invalid)|invalid param', 'erro', 'Parâmetro inválido',
+         'A sintaxe foi recusada. Confira o formato aceito de cada parâmetro no painel do comando.'],
+        ['offline|not online', 'aguardando', 'Equipamento offline',
+         'O comando fica na fila e é entregue quando o equipamento voltar a se conectar.'],
+        ['fail|error|refus', 'erro', 'Recusado pelo equipamento', ''],
+    ];
+
+    foreach ($regras as [$re, $nivel, $titulo, $dica]) {
+        if (preg_match('/' . $re . '/i', $t)) {
+            return ['nivel' => $nivel, 'titulo' => $titulo, 'detalhe' => $texto, 'dica' => $dica];
+        }
+    }
+
+    // Resposta de dados do próprio device (ex.: `ext Battery:12.1V; GPRS:Link Up`)
+    if (command_response_kv($texto)) {
+        return ['nivel' => 'ok', 'titulo' => 'Dados recebidos', 'detalhe' => $texto, 'dica' => ''];
+    }
+
+    return ['nivel' => 'neutro', 'titulo' => 'Resposta do equipamento',
+            'detalhe' => $texto . ($codigo !== '' ? " (código $codigo)" : ''), 'dica' => ''];
+}
+
+/**
+ * Quebra respostas do tipo `Battery:12.1V; GPRS:Link Up` em pares legíveis.
+ *
+ * O device responde consulta de status assim, numa linha só — a tela mostrava a
+ * linha inteira truncada, e o operador não conseguia ler a tensão da bateria
+ * sem passar o mouse por cima.
+ *
+ * @param string $texto
+ * @returns array<string,string> Vazio quando não é resposta de pares
+ */
+function command_response_kv(string $texto): array
+{
+    $t = preg_replace('/^\s*ext\s+/i', '', trim($texto));
+    $out = [];
+    foreach (preg_split('/\s*;\s*/', $t) as $parte) {
+        if (!preg_match('/^\s*([A-Za-z][A-Za-z0-9 _\/\.-]{1,28})\s*:\s*(.+?)\s*$/', $parte, $m)) continue;
+        $chave = trim($m[1]);
+        $valor = trim($m[2]);
+        if ($valor === '') continue;
+        $out[$chave] = $valor;
+    }
+    // Um par só, com valor longo, quase sempre é frase comum com dois-pontos
+    if (count($out) === 1 && mb_strlen(reset($out)) > 40) return [];
+    return $out;
+}
+
+/**
+ * Nome legível do comando a partir do que foi enviado.
+ *
+ * Para texto (proNo 128) casa contra o catálogo pelo nome do comando; para JT/T
+ * usa o proNo. Sem isto o histórico mostrava o JSON cru do payload, que numa
+ * coluna de 180 px não diz nada.
+ *
+ * @param string $conteudo Conteúdo enviado (texto ou JSON)
+ * @param int|null $proNo
+ * @returns string
+ */
+function command_label(string $conteudo, ?int $proNo = null): string
+{
+    static $catalogo = null;
+    static $porCmd   = null;
+    if ($catalogo === null) {
+        $catalogo = @require __DIR__ . '/command_catalog.php';
+        if (!is_array($catalogo)) $catalogo = [];
+        $porCmd = [];
+        foreach ($catalogo as $syn => $d) {
+            $porCmd[$d['cmd']] = $porCmd[$d['cmd']] ?? $d['nome'];
+        }
+    }
+
+    $conteudo = trim($conteudo);
+
+    // JT/T: payload JSON → nome pelo proNo
+    $jt = [
+        37121 => 'Vídeo ao vivo',      37377 => 'Playback',
+        37381 => 'Lista de gravações', 37382 => 'Upload FTP',
+        37384 => 'Anexo do alarme',    33283 => 'Confirmar alarme',
+        33536 => 'TTS (voz)',          34817 => 'Foto',
+        33027 => 'Definir parâmetro',  33028 => 'Consultar parâmetros',
+        33031 => 'Info do dispositivo',
+    ];
+    if ($proNo !== null && $proNo !== 128 && isset($jt[$proNo])) return $jt[$proNo];
+
+    if ($conteudo !== '' && $conteudo[0] === '{') {
+        return $proNo ? ('Comando JT/T ' . $proNo) : 'Comando JT/T';
+    }
+
+    // Texto: primeiro token antes de vírgula ou #
+    $base = strtoupper(preg_split('/[,#]/', $conteudo)[0] ?? '');
+    if ($base !== '' && isset($porCmd[$base])) return $porCmd[$base];
+    return $base !== '' ? $base : $conteudo;
+}

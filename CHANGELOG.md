@@ -5,6 +5,32 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.7
+
+### Added
+- **Tela de Comandos reorganizada em torno do MODELO do equipamento**, com catálogo extraído da wiki Foco na Via (`wiki-foconavia.newtectelemetria.com.br`) além da doc oficial.
+  - **`includes/command_catalog.php`** — **119 comandos**, dos quais **87 com tabela de parâmetros** e **68 com exemplos**, cobrindo os 6 modelos do parque (JC371 94, JC182 50, JC400AD 42, JC400D 41, JC450 31, JC181 19). Gerado das 10 páginas da wiki, que usam **dois formatos diferentes** (`<strong>SINTAXE,P1,P2#</strong>` + tabela no JC371/JC182/JC450; tabela com `<mark>` e parâmetros `A`/`B` no JC400/JC400AD).
+  - ⚠️ **Só entra a forma de PLATAFORMA.** A wiki documenta cada comando em duas formas — SMS (`SENALM#666666#ON#1`, com senha) e plataforma (`SENALM,ON,1`). O envio daqui é por **proNo 128** pelo IoT Hub, onde não há senha de SMS; mandar a forma de SMS faz o device recusar. O gerador converte e o teste afirma que **nenhuma** sintaxe do catálogo carrega `666666`.
+  - **Multi-seleção com trava de modelo**: marcar um JC371 desabilita os equipamentos de outro modelo enquanto o comando escolhido for específico daquele modelo. O aviso diz *por quê* — enviar assim mesmo devolveria "comando não suportado" só minutos depois, no callback.
+  - **Exceção do proNo 128 universal**: comando documentado em 5+ das 6 páginas (`STATUS#`, `VERSION#`, `REBOOT#`, `SERVER`…) é o núcleo comum do protocolo de texto. Com um desses escolhido a trava solta e o envio vale para a frota inteira. São **14** no catálogo.
+  - **Campo por parâmetro**, com o que a documentação diz de cada um: descrição, **formato aceito** e **padrão de fábrica** (ex.: `DMSSP,P1,P2,P3,P4#` → P1 = função de IA, P2 = 10–120 km/h, P3 = canal, P4 = área de detecção). Exemplos da wiki viram chips clicáveis que preenchem os campos. O preview mostra exatamente o que sai.
+  - **Placeholder não preenchido bloqueia o envio.** Antes, um campo em branco viraria `DMSSP,ADAS,P2,1,0#` — comando inválido despachado para o veículo.
+  - **Envio em lote NÃO virou endpoint novo**: o frontend chama `/sendcommand` uma vez por equipamento. A checagem de posse por IMEI, o log e o registro em `commands` continuam idênticos; um endpoint de lote teria de reimplementar tudo isso num caminho crítico de despacho.
+
+### Fixed
+- **A resposta do comando chegava em inglês técnico de gateway.** `Device busy (previous command has not returned)`, `media resource is empty`, `request timeout` — sem tradução e embrulhados no envelope `{"data":{"_msg":…}}`. `includes/command_response.php` desembrulha e traduz para desfecho com **dica do que fazer** ("há um comando anterior sem resposta; espere e reenvie"). Casa por trecho, não por igualdade: o gateway varia a frase entre versões e uma tabela exata envelheceria em silêncio, voltando a mostrar inglês cru.
+- 🔴 **`commands.status` não é o desfecho, e a tela tratava como se fosse.** Há linhas no homolog com `status = 'executed'` e resposta `"request timeout"` — o status registra que o **callback chegou**, não que o device obedeceu. O histórico passou a mostrar o desfecho **interpretado da resposta**; o status cru ficou no detalhe, onde não engana.
+- **Resposta de dados vinha numa linha só, truncada.** `ext Battery:12.1V; GPRS:Link Up` era cortado na coluna e só aparecia inteiro no `title`. Agora vira grade de pares — a tensão da bateria é legível sem passar o mouse.
+- **O histórico mostrava o JSON cru do payload** numa coluna de 180 px. Passou a mostrar o **nome** do comando (resolvido pelo catálogo, ou pelo proNo em JT/T), com a placa, o modelo, o **tempo até a resposta** e filtros por equipamento e por desfecho.
+
+### Notas de implementação
+- **A lógica da tela foi testada executando o JS REAL da página**, extraído do HTML renderizado (não uma cópia), sobre um DOM mínimo em Node: **12 asserções**, incluindo trava estrita (`DISCAMERA`, só JC371 → só JC371 habilitado), trava de dois modelos, liberação pelo universal, desmarcação automática ao trocar de comando, montagem da string e integridade do catálogo.
+  - ⚠️ **O teste pegou um erro do TESTE, não do código**: a primeira versão presumia que `DMSSP` era exclusivo do JC371 e acusou falha por o JC450 seguir habilitado. A wiki documenta `DMSSP` nos **dois** modelos — o comportamento estava certo. A asserção passou a conferir contra a lista real do comando em vez de um valor fixo.
+- **Render de verdade contra o banco do homolog** (somente leitura), com auth e layout stubbados: 244 KB de HTML, 119 comandos e 112 linhas de histórico, e os **5 blocos JSON embutidos** (`CATALOGO`, `DEVICES`, `JTT`, `LINHAS`, `ROTCAT`) validados — JSON quebrado ali mata a tela no navegador e `php -l` não veria.
+  - Foi esse render que pegou `video_stream_config()['ip']`/`['port']`, que não existem: as chaves são `ingest_ip`/`ingest_port`. `php -l` passa limpo num acesso a chave inexistente.
+- ⚠️ **`tests/comandos.spec.js` foi escrito mas NÃO executado**: a suíte precisa de servidor + banco locais, e o MySQL de desenvolvimento desta máquina não tem mais data dir. O spec pula sem `TEST_EMAIL`/`TEST_PASSWORD`, e **spec que pula não é cobertura** — a verificação desta entrega veio do harness em Node e do render, não dele.
+- Duas armadilhas do parser da wiki, registradas por serem do tipo que falha calada: `json_encode` devolvendo `false` e gravando **arquivo vazio** sem erro (agora o gerador aborta), e `trim($s, " \t-–—:")` cortando **bytes** — os travessões são multibyte e o `trim` comia o `e2` inicial de um `⚠️` vizinho, deixando uma cauda inválida que derrubava o encode.
+
 ## [Unreleased] — 4.9.6
 
 ### Fixed
