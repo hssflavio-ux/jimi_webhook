@@ -1,13 +1,99 @@
 # STATUS.md — Jimi Webhook System v4.9.9 (YUV Parity)
 
-> ### 📍 ESTADO EM 10/08/2026 — v4.9.9 publicada e verificada no homolog
+> ### 📍 ESTADO EM 10/08/2026, 21h15 — v4.9.8 e v4.9.9 publicadas e verificadas
 >
 > | | git HEAD | `/ping` | `system_info` |
 > |---|---|---|---|
-> | Local / `origin/main` | `063354c` (+ docs) | — | — |
-> | **Homolog** (`189.22.240.43`) | **`063354c`** | **4.9.9** | **4.9.9** |
+> | Local | `063354c` (+ docs) | — | — |
+> | `origin/main` | `063354c` (+ docs) | — | — |
+> | **Homolog** (`189.22.240.43`) | **`063354c`** (+ docs) | **4.9.9** | **4.9.9** |
 >
-> #### O que entrou: evento de diagnóstico deixou de ser alarme
+> Árvore limpa, os três em paridade. `063354c` é o último commit de **código**;
+> o que veio depois nesta sessão é documentação. **Duas migrações** foram
+> aplicadas (`v4.9.8` e `v4.9.9`), por isso `system_info` acompanha o código.
+>
+> #### O que entrou nesta sessão
+>
+> | Versão | Entrega | Migração | Estado |
+> |---|---|---|---|
+> | **4.9.8** | Vídeo da ocorrência toca na tela (snapshot do meio) + coluna Vídeo em alarmes | sim | ✅ verificado no navegador |
+> | **4.9.8** | 🔴 "Sem vídeo vinculado" com o vídeo no disco | sim | ✅ |
+> | **4.9.8** | 🔴 Busca do Dashboard de Ocorrências nunca devolveu nada | não | ✅ |
+> | **4.9.8** | Ocorrência identificada pela **placa**, não pelo IMEI | não | ✅ |
+> | **4.9.8** | 🔴 As **9 abas** de `/ativos/{imei}` renderizavam vazias *(defeito antigo)* | não | ✅ |
+> | **4.9.9** | 🔴 Evento de **diagnóstico** deixou de ser tratado como alarme | sim | ✅ |
+>
+> #### O fio que liga as duas versões
+>
+> **As duas nasceram da mesma pergunta: quem é o público deste dado?**
+>
+> A v4.9.8 achou um vídeo que existia no disco e não aparecia, porque o sistema
+> só olhava `media_files` e o vídeo do evento JIMI é anunciado dentro do push do
+> alarme — **duas fontes para o mesmo arquivo, e só uma consultada.** A v4.9.9
+> achou o inverso: 5.073 linhas aparecendo para o operador que nunca foram
+> destinadas a ele — **um público só, para dados de dois públicos diferentes.**
+>
+> Em ambas o sintoma era **ausência de sinal**, não erro: nenhum log, nenhum
+> HTTP ≠ 200, nenhuma exceção. É a mesma família das v4.9.4–4.9.6, com uma
+> variação — ali um valor em duas camadas se contradizia; aqui uma camada
+> simplesmente **não era consultada**, e uma classificação **não existia**.
+>
+> #### Números depois de tudo
+>
+> | | antes | depois |
+> |---|---|---|
+> | Linhas na tela de alarmes | 5.112 | **39** |
+> | Aba Alertas de um equipamento | 51 | **14** |
+> | Ocorrências com vídeo vinculado | 3 de 8 | **5 de 8** *(as 3 restantes não têm anexo)* |
+> | Abas com conteúdo em `/ativos/{imei}` | 0 de 9 | **9 de 9** |
+>
+> #### Verificação (executada, não presumida)
+>
+> - `php -l` em toda a árvore — limpo.
+> - `tests/helpers/player_snapshot.test.js` — **59 asserções**, 0 falhas.
+> - `tests/helpers/diagnostico_guard.test.php` — **12 casos**, 0 falhas
+>   (contra o banco do homolog).
+> - **Navegador real** contra o homolog: player mp4 e `.ts` com snapshot do meio,
+>   modal do relatório, grade por placa, busca, trava de admin com usuário
+>   `operator` de verdade, e varredura de **36 rotas + 9 abas** sem erro.
+> - Ambiente de teste **removido**: 0 bancos `jimi_migtest*`, 0 sessões órfãs,
+>   0 usuários de teste.
+>
+> #### Pendências desta sessão
+>
+> - 👀 **Defeito de equipamento saiu da tela do operador** (decisão de produto).
+>   `Falha no Armazenamento`, `Perda de Sinal de Vídeo` e `Falha de Câmera` são
+>   `critical` e somam **4.541** linhas — há defeito real acontecendo no parque.
+>   Eles seguem no modo diagnóstico, restrito ao admin. Se ninguém com esse
+>   perfil olhar, câmera quebrada deixa de ser percebida. Caminho combinado, se
+>   incomodar: **visão de manutenção com o flag invertido**, não devolvê-los ao
+>   operador.
+> - ⚠️ **As placas do parque de teste não são placas** — `devices.device_name`
+>   está `400AD` e `400AD_2` nos equipamentos das ocorrências novas. A tela está
+>   certa; o cadastro é que não tem placa.
+> - 💡 **O `.ts` é baixado duas vezes** para montar o snapshot (mpegts.js
+>   bufferiza o clipe e o seek reabre o stream). Com 1–4 MB não tem sintoma; se
+>   esse player abrir gravação de cartão (21 MB), revisitar.
+> - 🔭 **Exports de alarmes seguem sem a coluna Vídeo** — link que exige sessão
+>   não se sustenta em PDF que circula por e-mail; o caminho seria o link
+>   assinado do `download_token.php`.
+> - ⚠️ **Suíte Playwright continua bloqueada** — o MySQL de desenvolvimento
+>   desta máquina não tem data dir. As duas suítes acima rodam sem ele, mas
+>   `tests/*.spec.js` (40 testes) não roda desde a sessão anterior.
+>
+> #### Pendências herdadas (seguem abertas)
+>
+> - **`Código 1047 (JTT)`** — não consta da doc oficial; depende do fornecedor.
+>   *(Aparece na tela normalmente: o filtro de diagnóstico falha para o lado de
+>   mostrar.)*
+> - **`devices.last_communication` incompleta** — só `pushalarm` e `pushlbs` a escrevem.
+> - **Cercas**: coluna Mapa existe na tela e não no PDF/XLS.
+> - **`tests/comandos.spec.js` escrito e não executado** (v4.9.7).
+> - **Nenhum comando disparado para veículo real** (v4.9.7).
+
+---
+
+> ### 📍 v4.9.9 (10/08/2026) — evento de diagnóstico deixou de ser alarme
 >
 > **Diagnóstico é o que o equipamento diz ao SISTEMA** — handshake de upload de
 > vídeo, entrada e saída de repouso, defeito de hardware — **e não o que o
@@ -105,9 +191,9 @@
 > | `.ts` não era reconhecido como vídeo na chegada do alarme | fix | ✅ |
 > | `/midia` recusava o anexo de alarme | fix | ✅ HTTP 206 no servidor |
 > | Ocorrência identificada pela **placa**, não pelo IMEI | change | ✅ |
-| 🔴 Snapshot do `.ts` parava no início, vídeo tocava mudo sozinho | fix | ✅ achado e provado no navegador |
-| 🔴 As **9 abas** de `/ativos/{imei}` renderizavam vazias (defeito antigo) | fix | ✅ |
-| Sidebar do ativo empilhava sobre o conteúdo (CSS órfão) | fix | ✅ |
+> | 🔴 Snapshot do `.ts` parava no início, vídeo tocava mudo sozinho | fix | ✅ achado e provado no navegador |
+> | 🔴 As **9 abas** de `/ativos/{imei}` renderizavam vazias (defeito antigo) | fix | ✅ |
+> | Sidebar do ativo empilhava sobre o conteúdo (CSS órfão) | fix | ✅ |
 >
 > #### O fio que liga a v4.9.8
 >
