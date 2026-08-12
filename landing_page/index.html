@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>bycamera — três opções de landing page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<style>
+  /* Folha de contato interna — não é uma página de marketing, então não
+     carrega macroestrutura, nav nem footer. Só a lista das três opções. */
+  .sheet-head { padding-block: var(--space-3xl) var(--space-xl); display: grid; gap: var(--space-md); }
+  .sheet-head img { height: 28px; width: auto; }
+  .sheet-head h1 { font-size: var(--text-display-md); letter-spacing: var(--tracking-display); max-width: 20ch; }
+  .sheet-head p { max-width: 60ch; }
+
+  .group-head {
+    padding-block: var(--space-xl) var(--space-xs);
+    font-family: var(--font-mono);
+    font-size: var(--text-caption-str);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+  .opts { display: grid; gap: 0; padding-block-end: var(--space-xl); }
+  .opts:last-of-type { padding-block-end: var(--space-3xl); }
+  .opt {
+    display: grid;
+    gap: var(--space-sm);
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: var(--space-xl);
+    border-top: var(--rule-hair) solid var(--color-hairline);
+  }
+  .opt:last-child { border-bottom: var(--rule-hair) solid var(--color-hairline); }
+  @media (min-width: 56rem) {
+    .opt { grid-template-columns: 72px minmax(0, 20ch) minmax(0, 1fr) auto; gap: var(--space-lg); align-items: start; }
+  }
+  .opt__n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 500; color: var(--color-primary); font-size: var(--text-number); }
+  .opt__name { font-family: var(--font-display); font-size: var(--text-title-lg); font-weight: 400; letter-spacing: var(--tracking-title); color: var(--color-ink); }
+  .opt__spec { display: grid; gap: var(--space-xs); }
+  .opt__spec p { margin: 0; font-size: var(--text-body-sm); }
+  .opt__meta { font-family: var(--font-mono); font-size: var(--text-caption-str); letter-spacing: 0.04em; color: var(--color-muted); }
+  .opt .btn { align-self: center; }
+</style>
+</head>
+<body>
+
+<div class="wrap sheet-head">
+  <img class="lockup-ink" src="assets/logo-lockup-ink.png" alt="bycamera" width="720" height="188">
+  <h1>Seis opções de landing page.</h1>
+  <p class="lede">
+    Mesmo sistema de design (Coinbase, conforme <code>DESIGN-coinbase.md</code>).
+    As três primeiras contam o produto inteiro; as três últimas resumem tudo em
+    uma frase, com a marca grande. Nenhuma estrutura, nav ou rodapé se repete.
+  </p>
+</div>
+
+<div class="wrap group-head"><span>01–03 · páginas completas</span></div>
+
+<div class="wrap opts">
+
+  <article class="opt">
+    <span class="opt__n">01</span>
+    <span class="opt__name">Sinal</span>
+    <div class="opt__spec">
+      <p>
+        Hero preto de tela cheia com uma frase só, e logo abaixo o catálogo
+        completo de alertas em tabela. Denso, técnico, prova por catálogo.
+        Barra de contato fixa no rodapé.
+      </p>
+      <p class="opt__meta">Marquee Hero · nav pílula flutuante · tabela de especificação · rodapé-declaração</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-1-sinal.html">Abrir</a>
+  </article>
+
+  <article class="opt">
+    <span class="opt__n">02</span>
+    <span class="opt__name">Fluxo</span>
+    <div class="opt__spec">
+      <p>
+        Abre com um diagrama desenhado à mão dos dois campos de visão e conta o
+        produto em quatro etapas numeradas, do volante à tratativa. Fecha com um
+        formulário que monta o e-mail.
+      </p>
+      <p class="opt__meta">Narrative Workflow · nav SaaS de três seções · sequência de etapas · rodapé em linha</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-2-fluxo.html">Abrir</a>
+  </article>
+
+  <article class="opt">
+    <span class="opt__n">03</span>
+    <span class="opt__name">Balanço</span>
+    <div class="opt__spec">
+      <p>
+        Faixa de anúncio de lançamento no topo e a página inteira em pares:
+        argumento de um lado, prova do outro, alternando o sentido. Segurança e
+        economia ganham um bloco cada.
+      </p>
+      <p class="opt__meta">Split Studio · faixa de anúncio retrátil · grade bento · rodapé com marca</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-3-balanco.html">Abrir</a>
+  </article>
+
+</div>
+
+<div class="wrap group-head"><span>04–06 · uma frase, marca grande</span></div>
+
+<div class="wrap opts">
+
+  <article class="opt">
+    <span class="opt__n">04</span>
+    <span class="opt__name">Declaração</span>
+    <div class="opt__spec">
+      <p>
+        Pôster. O lockup <b>com o descritor</b> ocupa o topo, uma frase enorme
+        ocupa a página, e o pedido de contato é o rodapé inteiro.
+      </p>
+      <p class="opt__meta">Manifesto · nav alinhada às bordas · rodapé-pedido · logo-lockup-full (fundo branco)</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-4-declaracao.html">Abrir</a>
+  </article>
+
+  <article class="opt">
+    <span class="opt__n">05</span>
+    <span class="opt__name">Retrato</span>
+    <div class="opt__spec">
+      <p>
+        Dobra inteira em preto com a marca clara dominando a tela. A frase é
+        legenda, não manchete. Fecha com um colofão em mono.
+      </p>
+      <p class="opt__meta">Photographic · chip flutuante · colofão · logo-lockup-light (alfa real)</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-5-retrato.html">Abrir</a>
+  </article>
+
+  <article class="opt">
+    <span class="opt__n">06</span>
+    <span class="opt__name">Carta</span>
+    <div class="opt__spec">
+      <p>
+        Timbre com a marca centrada e o descritor em texto de verdade, três
+        parágrafos curtos e um P.S. com o e-mail.
+      </p>
+      <p class="opt__meta">Letter · timbre centrado · fecho de carta · logo-lockup-ink (fundo branco)</p>
+    </div>
+    <a class="btn btn--primary" href="opcao-6-carta.html">Abrir</a>
+  </article>
+
+</div>
+
+</body>
+</html>

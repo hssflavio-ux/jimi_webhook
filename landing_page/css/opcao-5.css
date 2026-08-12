@@ -1,0 +1,138 @@
+/* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V5
+ * genre: modern-minimal · macrostructure: Photographic
+ * theme: Coinbase (locked — DESIGN-coinbase.md)
+ * hero: H6 Photographic fold (área=full-bleed · legenda=inferior-esquerda · texto sobreposto)
+ * nav: N2 Floating chip (âncora=superior-direita · conteúdo=ação única · backdrop=blur)
+ * footer: Ft4 Dense colophon (família=mono · layout=bloco único · inclui data e endereço)
+ * enrichment: none — a própria marca é a imagem
+ * tone: austero · anchor hue: #0052ff (única voltagem)
+ * motion: reveal (uma sequência) · press
+ *
+ * ARTE DA MARCA: usa logo-lockup-light.png — a ÚNICA arte com alfa real
+ * (canto A=0), portanto a única legal sobre --color-surface-dark. As outras
+ * duas são opacas de fundo branco e desenhariam um retângulo branco aqui.
+ * Nativo 600x186: fica nítido em 1x até ~600px. Acima disso, e em telas 2x,
+ * suaviza — vale exportar uma versão maior com alfa se este caminho for o
+ * escolhido.
+ */
+
+/* ── N2 · Floating chip ─────────────────────────────────────────────── */
+
+.chip-nav {
+  position: fixed;
+  inset: var(--space-md) var(--space-md) auto auto;
+  z-index: var(--z-nav);
+  display: inline-flex;
+}
+.chip-nav .btn {
+  background: color-mix(in srgb, var(--color-surface-dark-elevated) 78%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: var(--rule-hair) solid var(--color-hairline-dark);
+  color: var(--color-on-dark);
+}
+.chip-nav .btn:hover { background: var(--color-surface-dark-elevated); border-color: var(--color-muted); }
+
+/* ── H6 · Photographic fold ─────────────────────────────────────────── */
+
+.fold {
+  background: var(--color-surface-dark);
+  color: var(--color-on-dark-soft);
+  min-height: 100svh;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding-block: calc(var(--space-3xl) + 44px) var(--space-2xl);
+}
+
+/* A marca ocupa a área da imagem — enviesada à esquerda, nunca centrada,
+   para não cair no hero-centralizado-de-viewport-inteiro. */
+.fold__art {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+}
+.fold__art img {
+  width: clamp(240px, 46vw, 560px);
+  height: auto;
+}
+
+.fold__caption {
+  display: grid;
+  gap: var(--space-lg);
+  padding-block-start: var(--space-xl);
+  border-top: var(--rule-hair) solid var(--color-hairline-dark);
+}
+
+/* Na macroestrutura Photographic o texto é legenda, não manchete: fica um
+   degrau abaixo do display para a marca continuar dominando a dobra. */
+.fold__line {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-display-sm);
+  line-height: var(--leading-title);
+  letter-spacing: var(--tracking-display);
+  color: var(--color-on-dark);
+  max-width: 22ch;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.fold__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.fold__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+.fold__tags span { white-space: nowrap; }
+.fold__status { margin: 0; font-size: var(--text-caption); color: var(--color-muted); }
+
+/* ── Ft4 · Dense colophon ───────────────────────────────────────────── */
+
+.colophon {
+  background: var(--color-surface-dark-elevated);
+  color: var(--color-on-dark-soft);
+  padding-block: var(--space-section) var(--space-2xl);
+  font-family: var(--font-mono);
+}
+.colophon__block {
+  display: grid;
+  gap: var(--space-md);
+  max-width: 70ch;
+  font-size: var(--text-body-sm);
+  line-height: 1.7;
+}
+.colophon__block p { margin: 0; }
+.colophon__mail {
+  display: inline-block;
+  font-size: clamp(1.25rem, 0.85rem + 1.8vw, 2rem);
+  font-weight: 500;
+  color: var(--color-on-dark);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  border-bottom: 2px solid var(--color-primary);
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.colophon__mail:hover { color: var(--color-primary); }
+
+.colophon__rule {
+  margin-block: var(--space-xl);
+  border: 0;
+  border-top: var(--rule-hair) solid var(--color-hairline-dark);
+}
+.colophon__legal {
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}

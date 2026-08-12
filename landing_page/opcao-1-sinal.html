@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>bycamera — videomonitoramento veicular inteligente</title>
+<meta name="description" content="Câmera com IA que enxerga o motorista e a via, alerta na hora e transforma o evento em ocorrência com vídeo. Em lançamento.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/opcao-1.css">
+</head>
+<body class="page-1">
+
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+
+<!-- N5 · Floating pill -->
+<nav class="pill" aria-label="Principal">
+  <a class="pill__brand" href="#topo" aria-label="bycamera — início">
+    <img class="lockup-ink" src="assets/logo-lockup-ink.png" alt="bycamera" width="720" height="188">
+  </a>
+  <ul class="pill__links">
+    <li><a class="pill__link" href="#alertas">Alertas</a></li>
+    <li><a class="pill__link" href="#argumento">Por que instalar</a></li>
+  </ul>
+  <a class="btn btn--primary" href="mailto:contato@bycamera.com.br?subject=Quero%20saber%20mais%20sobre%20a%20bycamera">Falar conosco</a>
+</nav>
+
+<!-- H1 · Marquee hero -->
+<header class="marquee is-dark" id="topo">
+  <div class="wrap marquee__inner">
+    <div class="marquee__status reveal" style="--i:0">
+      <span class="badge badge--on-dark"><span class="badge__dot"></span> Em lançamento</span>
+      <span class="badge badge--live">DMS + ADAS</span>
+    </div>
+
+    <h1 class="marquee__line reveal" style="--i:1">
+      A câmera não olha para a estrada. Olha para <em>quem dirige</em>.
+    </h1>
+
+    <div class="marquee__foot reveal" style="--i:2">
+      <p class="marquee__sub">
+        Videomonitoramento veicular com inteligência embarcada. O alerta soa na
+        cabine no instante da distração — e a mesma cena chega à central como
+        ocorrência, com vídeo.
+      </p>
+      <span class="marquee__scroll" aria-hidden="true">↓ o catálogo de alertas</span>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+
+  <!-- F3 · Tabular spec sheet -->
+  <section class="sheet wrap" id="alertas">
+    <div class="sheet__head">
+      <h2>O que a câmera reconhece sozinha, dentro do veículo.</h2>
+      <p class="lede">
+        Dois olhos independentes: um voltado ao motorista (DMS), outro à via
+        (ADAS). Cada linha abaixo é um evento que a bycamera classifica sem
+        depender de ninguém assistindo.
+      </p>
+    </div>
+
+    <table class="sheet__table">
+      <thead>
+        <tr>
+          <th scope="col">Alerta</th>
+          <th scope="col">Origem</th>
+          <th scope="col">Gravidade</th>
+          <th scope="col">O que dispara</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="sheet__name">Fadiga extrema do motorista</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Olhos fechados além do tempo tolerado para a velocidade.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Motorista ao telefone</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Aparelho na mão, junto ao rosto, com o veículo em movimento.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Motorista ausente</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Banco do condutor vazio com o veículo rodando.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Distração do motorista</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Rosto fora do eixo da via.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Olhar lateral prolongado</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Cabeça virada por mais tempo que o limite configurado.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Motorista bocejando</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Padrão de sonolência antes da fadiga crítica.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Motorista fumando</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Cigarro detectado na região da boca.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Comendo ou bebendo ao volante</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Mão levando objeto à boca de forma repetida.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Câmera DMS bloqueada</td>
+          <td class="sheet__kind" data-label="Origem">DMS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Lente obstruída, coberta ou desviada.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Colisão frontal iminente</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Fechamento rápido da distância para o veículo à frente.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Colisão com pedestre</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Pedestre na trajetória do veículo.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Violação de sinal vermelho</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--crit" data-label="Gravidade">Crítico</td>
+          <td data-label="Dispara">Cruzamento com o semáforo fechado.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Saída de faixa</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Faixa cruzada sem seta.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Distância insegura</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Espaço abaixo do tempo seguro para a velocidade atual.</td>
+        </tr>
+        <tr>
+          <td class="sheet__name">Mudança de faixa frequente</td>
+          <td class="sheet__kind" data-label="Origem">ADAS</td>
+          <td class="sheet__sev sheet__sev--warn" data-label="Gravidade">Atenção</td>
+          <td data-label="Dispara">Zigue-zague entre faixas em janela curta.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="sheet__note">
+      Recorte do catálogo. A bycamera lê os alarmes dos protocolos JIMI e
+      JT/T 808, e cada cliente escolhe quais deles viram ocorrência, em que
+      faixa de horário e com que severidade.
+    </p>
+  </section>
+
+  <!-- The prose · economia | segurança -->
+  <section class="argument" id="argumento">
+    <div class="wrap argument__grid">
+
+      <div class="argument__col">
+        <h2>Economia</h2>
+        <p>
+          O custo de uma frota não está na câmera. Está no sinistro que ninguém
+          viu chegar, no combustível queimado em direção agressiva e nas horas
+          que um gestor gasta reconstruindo o que aconteceu.
+        </p>
+        <p>
+          <strong>Videomonitoramento inteligente muda o lugar da informação:</strong>
+          ela chega pronta, com vídeo, antes de virar prejuízo.
+        </p>
+        <ul class="argument__points">
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Sinistro que não acontece</b> é o único custo que nunca entra na planilha.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Prova em vídeo</b> encerra disputa de responsabilidade sem pagar por acidente alheio.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Direção mais suave</b> — menos frenagem brusca — significa menos combustível, freio e pneu.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Histórico limpo</b> é argumento concreto na hora de renegociar a apólice.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Ocorrência pronta</b> devolve ao gestor as horas gastas caçando informação.</span></li>
+        </ul>
+      </div>
+
+      <div class="argument__col">
+        <h2>Segurança</h2>
+        <p>
+          Fadiga e celular não avisam. Eles aparecem no segundo anterior ao
+          acidente — e é exatamente ali que a câmera age, com um alerta sonoro
+          dentro da cabine, antes de qualquer relatório existir.
+        </p>
+        <p>
+          <strong>O efeito começa antes do primeiro alerta:</strong> o motorista
+          sabe que a câmera está ali, e a condução muda no primeiro dia.
+        </p>
+        <ul class="argument__points">
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Alerta na hora</b>, no veículo, sem depender de alguém assistindo.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Vídeo do evento</b> fica vinculado à ocorrência — o fato, não a suspeita.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Treinamento com base em cena real</b> muda a conversa com o motorista.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Rastreamento ao vivo</b> e botão de pânico para roubo e emergência.</span></li>
+          <li><span class="argument__mark" aria-hidden="true"></span><span><b>Regras por cliente</b> — sua frota define o que é grave na sua operação.</span></li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Ft5 · Statement -->
+  <footer class="stmt wrap">
+    <p class="stmt__line">Sua frota já gera essas imagens todos os dias. Ninguém está olhando.</p>
+    <a class="stmt__mail" href="mailto:contato@bycamera.com.br?subject=Quero%20saber%20mais%20sobre%20a%20bycamera">contato@bycamera.com.br</a>
+
+    <div class="stmt__meta">
+      <img class="lockup-ink" src="assets/logo-lockup-ink.png" alt="bycamera" width="720" height="188" loading="lazy">
+      <span>Videomonitoramento inteligente · produto em lançamento</span>
+    </div>
+  </footer>
+
+</main>
+
+<!-- C4 · Sticky bottom bar -->
+<div class="dock" id="dock">
+  <div class="wrap dock__inner">
+    <p class="dock__copy"><b>Ainda não lançamos.</b> Quem escrever agora entra nas primeiras instalações.</p>
+    <a class="btn btn--primary" href="mailto:contato@bycamera.com.br?subject=Quero%20saber%20mais%20sobre%20a%20bycamera">Pedir informações</a>
+  </div>
+</div>
+
+<script>
+  // C4 reveal — the dock appears once the hero has left the viewport.
+  // IntersectionObserver, never a scroll listener.
+  (function () {
+    var dock = document.getElementById('dock');
+    var hero = document.getElementById('topo');
+    if (!dock || !hero || !('IntersectionObserver' in window)) { return; }
+    new IntersectionObserver(function (entries) {
+      dock.classList.toggle('is-up', !entries[0].isIntersecting);
+    }, { threshold: 0 }).observe(hero);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,62 @@
+[
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Letter",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "light / grotesk-sans / cool",
+    "nav": "N1a Wordmark + 2 links (centrado)",
+    "footer": "Ft6 Letter close",
+    "enrichment": "none — timbre com lockup-ink, descritor como texto real",
+    "brief": "bycamera · teaser de uma frase, opcao 6 'Carta'"
+  },
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Photographic",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "dark / grotesk-sans / cool",
+    "nav": "N2 Floating chip",
+    "footer": "Ft4 Dense colophon",
+    "enrichment": "none — a marca (lockup-light, alfa real) e a imagem da dobra",
+    "brief": "bycamera · teaser de uma frase, opcao 5 'Retrato'"
+  },
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Manifesto",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "light / grotesk-sans / cool",
+    "nav": "N9 Edge-aligned minimal",
+    "footer": "Ft7 Newsletter-first (pedido por e-mail)",
+    "enrichment": "none — tipografia e lockup-full com descritor",
+    "brief": "bycamera · teaser de uma frase, opcao 4 'Declaracao'"
+  },
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Split Studio",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "light / grotesk-sans / cool",
+    "nav": "N12 Banner + retract",
+    "footer": "Ft1 Mast-headed",
+    "enrichment": "Tier-A pure CSS (ledger rules, band rotation)",
+    "brief": "bycamera · landing pre-lancamento, opcao 3 'Balanco'"
+  },
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Narrative Workflow",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "light / grotesk-sans / cool",
+    "nav": "N1b SaaS three-section",
+    "footer": "Ft2 Inline single line",
+    "enrichment": "Tier-B hand-built SVG (dois campos de visao DMS/ADAS)",
+    "brief": "bycamera · landing pre-lancamento, opcao 2 'Fluxo'"
+  },
+  {
+    "date": "2026-08-11",
+    "macrostructure": "Marquee Hero",
+    "theme": "Coinbase (locked via DESIGN-coinbase.md)",
+    "theme_axes": "light / grotesk-sans / cool",
+    "nav": "N5 Floating pill",
+    "footer": "Ft5 Statement",
+    "enrichment": "none — typography only",
+    "brief": "bycamera · landing pre-lancamento, opcao 1 'Sinal'"
+  }
+]

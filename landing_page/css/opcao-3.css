@@ -1,0 +1,307 @@
+/* Hallmark · pre-emit critique: P5 H4 E5 S5 R5 V5
+ * genre: modern-minimal · macrostructure: Split Studio
+ * theme: Coinbase (locked — DESIGN-coinbase.md)
+ * hero: H2 Split diptych (ratio=7/5 · right=proof column · divider=vertical rule)
+ * nav: N12 Announcement banner + retracting nav (fill=solid accent · dismiss=yes · bar=sticky)
+ * features: F1 Bento grid (tiles=6 · spans=irregular · border=hairline all)
+ * cta: C1 Outlined chip (shape=pill · density=spacious · adornment=arrow) on a dark band
+ * footer: Ft1 Mast-headed (wordmark=xl · tagline=roman body · links=inline)
+ * enrichment: Tier-A pure CSS — the ledger rules and the dark/light band rotation
+ * tone: institucional, comparativo · anchor hue: #0052ff (única voltagem)
+ * motion: banner-retract · card-lift · press
+ */
+
+:root {
+  --banner-h: 44px;
+  --bar-h: 64px;
+}
+
+/* ── N12 · Announcement banner + retracting nav ─────────────────────── */
+
+.top {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: var(--z-nav);
+  transform: translateY(0);
+  transition: transform var(--dur-long) var(--ease-out);
+}
+.top.is-compact { transform: translateY(calc(var(--banner-h) * -1)); }
+.top.is-dismissed { transform: none; }
+.top.is-dismissed .top__banner { display: none; }
+
+.top__banner {
+  position: relative;   /* the dismiss × anchors here, not on .top */
+  min-height: var(--banner-h);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  padding-inline: var(--page-gutter);
+  /* solid accent — this system has no gradients */
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+.top__banner p { margin: 0; font-size: var(--text-body-sm); text-align: center; }
+.top__banner b { font-weight: 600; }
+.top__banner-link {
+  white-space: nowrap;
+  font-weight: 600;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-on-primary) 50%, transparent);
+}
+.top__banner-link:hover { border-bottom-color: var(--color-on-primary); }
+
+.top__x {
+  position: absolute;
+  inset-inline-end: var(--space-xs);
+  top: 50%;
+  transform: translateY(-50%);
+  inline-size: 32px;
+  block-size: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: var(--color-on-primary);
+  font-size: 18px;
+  line-height: 1;
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+.top__x:hover { background: color-mix(in srgb, var(--color-ink) 18%, transparent); }
+
+.top__bar {
+  min-height: var(--bar-h);
+  background: color-mix(in srgb, var(--color-canvas) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+}
+.top__bar-inner {
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+  min-height: var(--bar-h);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+.top__brand { display: flex; flex: none; margin-inline-end: auto; }
+.top__brand img { height: 22px; width: auto; }
+
+.top__links { display: flex; gap: var(--space-lg); }
+.top__link {
+  white-space: nowrap;
+  font-size: var(--text-nav);
+  font-weight: 500;
+  color: var(--color-body);
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.top__link:hover { color: var(--color-ink); }
+
+@media (max-width: 52rem) {
+  .top__links { display: none; }
+  .top__banner p { font-size: var(--text-caption); padding-inline-end: var(--space-xl); }
+}
+
+/* ── H2 · Split diptych hero ────────────────────────────────────────── */
+
+.lead {
+  padding-block: calc(var(--banner-h) + var(--bar-h) + var(--space-3xl)) var(--space-section);
+}
+.lead__grid {
+  display: grid;
+  gap: var(--space-2xl);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 62rem) {
+  .lead__grid {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    gap: var(--space-3xl);
+    align-items: start;
+  }
+  /* the vertical rule is this macrostructure's divider language */
+  .lead__proof {
+    padding-inline-start: var(--space-3xl);
+    border-inline-start: var(--rule-hair) solid var(--color-hairline);
+  }
+}
+
+.lead__copy { display: grid; gap: var(--space-lg); justify-items: start; }
+.lead__copy h1 {
+  font-size: var(--text-display-mega);
+  letter-spacing: var(--tracking-display-mega);
+  line-height: var(--leading-display);
+  max-width: 13ch;
+}
+.lead__actions { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+.ledger__head {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding-block-end: var(--space-sm);
+  border-bottom: var(--rule-hair) solid var(--color-ink);
+}
+.ledger { display: grid; }
+.ledger li {
+  display: grid;
+  gap: var(--space-xxs);
+  padding-block: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+  font-size: var(--text-body-sm);
+}
+.ledger b { color: var(--color-ink); font-weight: 600; font-size: var(--text-body); }
+.ledger span { color: var(--color-body); }
+
+/* ── Split Studio · alternating diptychs ────────────────────────────── */
+
+.dip { padding-block: var(--space-section); }
+.dip--soft { background: var(--color-surface-soft); border-block: var(--rule-hair) solid var(--color-hairline); }
+
+.dip__grid {
+  display: grid;
+  gap: var(--space-2xl);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 62rem) {
+  .dip__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3xl); }
+  /* the pairing alternates direction down the page */
+  .dip--flip .dip__text  { order: 2; }
+  .dip--flip .dip__panel { order: 1; }
+}
+
+.dip__text { display: grid; gap: var(--space-md); }
+.dip__text h2 { font-size: var(--text-display-lg); letter-spacing: var(--tracking-display); max-width: 16ch; }
+.dip__text p { margin: 0; }
+.dip__text strong { color: var(--color-ink); font-weight: 600; }
+.dip__kicker {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+.panel {
+  background: var(--color-canvas);
+  border: var(--rule-hair) solid var(--color-hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+}
+.panel__title {
+  font-family: var(--font-body);
+  font-size: var(--text-title-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+  padding-block-end: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+}
+.pair { display: grid; }
+.pair li {
+  display: grid;
+  gap: var(--space-xxs);
+  padding-block: var(--space-md);
+  font-size: var(--text-body-sm);
+}
+.pair li + li { border-top: var(--rule-hair) solid var(--color-hairline-soft); }
+.pair dt, .pair b { color: var(--color-ink); font-weight: 600; }
+.pair__from {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* ── F1 · Bento grid ────────────────────────────────────────────────── */
+
+.bento { padding-block: var(--space-section); }
+.bento__head { max-width: 50ch; margin-block-end: var(--space-2xl); display: grid; gap: var(--space-md); }
+.bento__head h2 { font-size: var(--text-display-lg); letter-spacing: var(--tracking-display); }
+
+.bento__grid {
+  display: grid;
+  gap: var(--space-md);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 44rem) {
+  .bento__grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .tile--a { grid-column: span 4; }
+  .tile--b { grid-column: span 2; }
+  .tile--c { grid-column: span 2; }
+  .tile--d { grid-column: span 4; }
+  .tile--e { grid-column: span 3; }
+  .tile--f { grid-column: span 3; }
+}
+
+.tile {
+  background: var(--color-canvas);
+  border: var(--rule-hair) solid var(--color-hairline);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  display: grid;
+  gap: var(--space-xs);
+  align-content: start;
+  transition: box-shadow var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .tile:hover { box-shadow: var(--shadow-soft); border-color: var(--color-muted-soft); }
+}
+.tile h3 { font-family: var(--font-body); font-size: var(--text-title-md); font-weight: 600; letter-spacing: 0; }
+.tile p { margin: 0; font-size: var(--text-body-sm); }
+.tile__tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-primary);
+}
+
+/* ── C1 · Outlined chip on a dark band ──────────────────────────────── */
+
+.close {
+  background: var(--color-surface-dark);
+  color: var(--color-on-dark-soft);
+  padding-block: var(--space-section);
+}
+.close__grid { display: grid; gap: var(--space-xl); justify-items: start; }
+.close h2 {
+  color: var(--color-on-dark);
+  font-size: var(--text-display-md);
+  letter-spacing: var(--tracking-display);
+  max-width: 20ch;
+}
+.close p { max-width: 46ch; margin: 0; }
+.close__actions { display: flex; flex-wrap: wrap; gap: var(--space-md); align-items: center; }
+.close__mail {
+  font-family: var(--font-mono);
+  font-size: var(--text-body-sm);
+  color: var(--color-on-dark-soft);
+  overflow-wrap: anywhere;
+}
+.close__mail:hover { color: var(--color-on-dark); }
+
+/* ── Ft1 · Mast-headed footer ───────────────────────────────────────── */
+
+.mast { padding-block: var(--space-2xl); }
+.mast__band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding-block-end: var(--space-lg);
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+}
+.mast__brand { display: grid; gap: var(--space-sm); }
+.mast__brand img { height: 30px; width: auto; }
+.mast__tagline { font-size: var(--text-body-sm); color: var(--color-body); }
+.mast__links { display: flex; flex-wrap: wrap; gap: var(--space-lg); }
+.mast__link { white-space: nowrap; font-size: var(--text-body-sm); color: var(--color-body); }
+.mast__link:hover { color: var(--color-primary); }
+.mast__legal {
+  padding-block-start: var(--space-md);
+  font-size: var(--text-caption);
+  color: var(--color-muted);
+}

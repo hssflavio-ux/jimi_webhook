@@ -1,0 +1,146 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S4 R5 V5
+ * genre: modern-minimal · macrostructure: Manifesto
+ * theme: Coinbase (locked — DESIGN-coinbase.md)
+ * nav: nenhuma — a pedido. Sem CTA no topo e sem links, a página deixa de ter
+ *      navegação: é um pôster com um destino só, o e-mail no pé. O topo passa
+ *      a ser um timbre centrado (crest), não uma barra.
+ * cta/footer: Ft7 Newsletter-first (layout=empilhado · submit=link · privacy line=sim)
+ * enrichment: none — a marca e a frase, nada mais
+ * tone: declaração · anchor hue: #0052ff (única voltagem)
+ * motion: reveal (uma sequência) · press
+ *
+ * ARTE DA MARCA: logo-lockup-full-hi.png — recorte justo, 1200x298, gerado a
+ * partir de docs/imagens/logo_bycamera.png (1774x887) para aguentar exibição
+ * grande sem perder nitidez. É OPACO de fundo branco (#FFFFFF), então só é
+ * legal sobre --color-canvas; a classe .lockup-ink (multiply) é o que impede
+ * o retângulo branco de aparecer se um dia ele cair sobre fundo tingido.
+ */
+
+:root {
+  /* O ramp do sistema para em 80px (display-mega). Um pôster precisa de mais
+     fôlego, então esta superfície declara um degrau próprio — nomeado, não
+     um valor solto no meio do arquivo. */
+  --text-poster: clamp(2.5rem, 0.9rem + 6.8vw, 6.5rem);
+  /* As funcionalidades saíram do corpo de legenda (12px) para um corpo que se
+     lê de longe — elas são a segunda leitura da página, depois da frase. */
+  --text-feature: clamp(0.9375rem, 0.82rem + 0.5vw, 1.1875rem);
+}
+
+/* ── Timbre — a marca centrada, sem barra e sem links ───────────────── */
+
+.crest {
+  display: grid;
+  justify-items: center;
+  padding-block: var(--space-2xl) var(--space-xl);
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+}
+.crest__mark {
+  /* nativo 1200px — nítido mesmo exibido a 660px em tela 2x */
+  width: clamp(280px, 62vw, 660px);
+  height: auto;
+}
+
+/* ── Manifesto · o pôster ───────────────────────────────────────────── */
+
+/* A frase permanece alinhada à esquerda de propósito: com o timbre centrado
+   acima, centralizar também o texto cairia no hero-tudo-centralizado. O
+   filete sob a marca é o que torna o contraste deliberado. */
+.poster {
+  padding-block: clamp(var(--space-3xl), 12vh, 168px) var(--space-section);
+}
+
+.poster__line {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-poster);
+  line-height: 0.98;
+  letter-spacing: var(--tracking-display-mega);
+  color: var(--color-ink);
+  max-width: 16ch;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.poster__line em { font-style: normal; color: var(--color-primary); }
+
+.poster__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md) var(--space-lg);
+  margin-block-start: clamp(var(--space-2xl), 9vh, 104px);
+  padding-block-start: var(--space-lg);
+  border-top: var(--rule-hair) solid var(--color-hairline);
+}
+
+.poster__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-feature);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-body);
+}
+.poster__tags span { white-space: nowrap; }
+.poster__tags .sep { color: var(--color-muted-soft); }
+
+/* Mesmo corpo das funcionalidades para a linha não ficar torta, mas em tinta
+   cheia e semibold: é uma afirmação, não uma legenda. Sem azul — a voltagem
+   da faixa já está gasta no “antes” da frase. */
+.poster__status {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-feature);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-ink);
+  white-space: nowrap;
+}
+
+/* ── Ft7 · Newsletter-first — o pedido É o rodapé ───────────────────── */
+
+.ask7 {
+  border-top: var(--rule-hair) solid var(--color-hairline);
+  padding-block: var(--space-section) var(--space-2xl);
+}
+.ask7__label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Sem botão ao lado, o endereço é a única ação da página — então ele carrega
+   o peso sozinho e ganha um degrau a mais de corpo. */
+.ask7__mail {
+  display: inline-block;
+  /* sem margem inferior: o respiro até a linha legal é dado por .ask7__meta */
+  margin-block: var(--space-sm) 0;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.5rem, 0.95rem + 2.4vw, 2.75rem);
+  color: var(--color-primary);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+  border-bottom: 2px solid transparent;
+  transition: border-color var(--dur-micro) var(--ease-out);
+}
+.ask7__mail:hover { border-bottom-color: var(--color-primary); }
+
+.ask7__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-block-start: var(--space-3xl);
+  padding-block-start: var(--space-md);
+  border-top: var(--rule-hair) solid var(--color-hairline-soft);
+  font-size: var(--text-caption-str);
+  color: var(--color-muted-soft);
+}

@@ -1,0 +1,211 @@
+/* Hallmark · base · bycamera landing
+ * Reset + the parts of the Coinbase system that are identical across all
+ * three options (button voice, focus rings, the mobile floor). Anything that
+ * shapes the PAGE lives in the per-option stylesheet, never here.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  /* clip, never hidden — `hidden` on the root kills position:sticky */
+  overflow-x: clip;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-body);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, p, figure, blockquote, ol, ul, dl, dd { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+
+/* Display type is roman, weight 400, tight-tracked. That combination IS the
+   brand — bolding it shifts the voice (DESIGN-coinbase § Don't). */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--color-ink);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-title);
+  /* long words break inside rather than push the layout wide at 320px */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+img, svg { display: block; max-width: 100%; height: auto; }
+
+/* logo-lockup-ink.png e logo-lockup-full.png são OPACOS, de fundo branco —
+   não têm canal alfa (conferido: canto #FDFDFD / #FEFEFE, A=255). Sobre o
+   canvas branco isso passa despercebido, mas dentro de uma nav translúcida
+   que cruza uma faixa escura o retângulo branco aparece em volta da marca.
+   `multiply` resolve sem mexer no arquivo: sobre qualquer fundo claro o
+   branco vira no-op e o texto escuro permanece.
+   NUNCA usar esta classe sobre superfície escura — ali a arte correta é
+   logo-lockup-light.png, a única com alfa real. */
+.lockup-ink { mix-blend-mode: multiply; }
+
+a { color: inherit; text-decoration: none; }
+
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+
+::selection { background: var(--color-primary); color: var(--color-on-primary); }
+
+/* Every number renders in mono, tabular. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* — Focus. Appears instantly; never transitioned. ——————————————— */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+.on-dark :focus-visible,
+.is-dark :focus-visible { outline-color: var(--color-focus-dark); }
+
+.skip {
+  position: absolute;
+  left: var(--space-md);
+  top: calc(var(--space-md) * -6);
+  z-index: var(--z-top);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-ink);
+  color: var(--color-on-dark);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm);
+  transition: top var(--dur-short) var(--ease-out);
+}
+.skip:focus-visible { top: var(--space-md); }
+
+/* — Container ————————————————————————————————————————————— */
+.wrap {
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/* — Buttons. Pill (100px) is non-negotiable in this system. ———————— */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  /* affordances are single-line objects — let the parent reflow, not the label */
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: var(--text-button);
+  font-weight: 600;
+  line-height: 1.15;
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-pill);
+  transition:
+    background-color var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+.btn:active { transform: translateY(1px); }
+
+.btn--primary { background: var(--color-primary); color: var(--color-on-primary); }
+.btn--primary:hover { background: var(--color-primary-active); }
+
+.btn--lg { min-height: 56px; padding: var(--space-md) var(--space-xl); }
+
+.btn--soft { background: var(--color-surface-strong); color: var(--color-ink); }
+.btn--soft:hover { background: var(--color-hairline); }
+
+.btn--dark { background: var(--color-surface-dark-elevated); color: var(--color-on-dark); }
+.btn--dark:hover { background: var(--color-surface-dark-hover); }
+
+.btn--outline-dark {
+  background: transparent;
+  color: var(--color-on-dark);
+  border: var(--rule-hair) solid var(--color-on-dark-soft);
+  padding: 11px var(--space-md);
+}
+.btn--outline-dark:hover { border-color: var(--color-on-dark); }
+
+.btn--text { color: var(--color-primary); padding-inline: 0; min-height: 44px; }
+.btn--text:hover { color: var(--color-primary-active); }
+
+@media (pointer: coarse) {
+  .btn { min-height: 48px; }
+}
+
+/* — Badge pill. Section labels, status chips. —————————————————— */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xxs) var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-strong);
+  color: var(--color-ink);
+  font-size: var(--text-caption-str);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge--on-dark { background: var(--color-surface-dark-elevated); color: var(--color-on-dark); }
+.badge--live { background: transparent; border: var(--rule-hair) solid var(--color-hairline-dark); color: var(--color-on-dark-soft); }
+
+.badge__dot {
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  flex: none;
+}
+
+/* — Prose ————————————————————————————————————————————————— */
+.lede { font-size: clamp(1.0625rem, 0.98rem + 0.4vw, 1.25rem); color: var(--color-body); max-width: 46ch; }
+.prose { max-width: var(--measure); }
+.muted { color: var(--color-muted); }
+
+/* Illustrative UI is always labelled as such — nothing on these pages
+   pretends to be a real measurement or a real customer record. */
+.exemplo {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* — Page-load orchestration. One sequence, staggered by DOM index. ——— */
+.reveal {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: reveal var(--dur-long) var(--ease-out) forwards;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+@keyframes reveal { to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 150ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 150ms !important;
+  }
+  .reveal { animation: reveal-reduced 150ms linear forwards; }
+  @keyframes reveal-reduced { to { opacity: 1; transform: none; } }
+}

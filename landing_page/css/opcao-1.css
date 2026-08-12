@@ -1,0 +1,294 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5
+ * genre: modern-minimal · macrostructure: Marquee Hero
+ * theme: Coinbase (locked — DESIGN-coinbase.md; this project is design.md-managed,
+ *        so all three options share the system and differ structurally)
+ * H1 Marquee knobs: size=xl · alignment=left-bias · underlay=single rule below
+ * nav: N5 Floating pill (width=content-sized · backdrop=blur+saturate · anchor=top-centred)
+ * features: F3 Tabular spec sheet (columns=3 · rules=every row · numbers=tabular)
+ * cta: C4 Sticky bottom bar (reveal=after fold · anchored=viewport bottom · shadow=hairline)
+ * footer: Ft5 Statement (width=38ch · wordmark=under sentence · rule=hairline)
+ * enrichment: none — typography only
+ * tone: institucional, utilitário · anchor hue: #0052ff (única voltagem)
+ * motion: bar-reveal · row-tint · press
+ */
+
+/* ── N5 · Floating pill ─────────────────────────────────────────────── */
+
+.pill {
+  position: fixed;
+  inset: var(--space-md) auto auto 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-nav);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-lg);
+  max-width: calc(100% - var(--space-lg) * 2);
+  padding: var(--space-xs) var(--space-xs) var(--space-xs) var(--space-md);
+  background: color-mix(in srgb, var(--color-canvas) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: var(--rule-hair) solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lift);
+}
+
+.pill__brand { display: flex; flex: none; }
+.pill__brand img { height: 20px; width: auto; }
+
+.pill__links { display: flex; align-items: center; gap: var(--space-lg); }
+.pill__link {
+  white-space: nowrap;
+  font-size: var(--text-nav);
+  font-weight: 500;
+  color: var(--color-ink);
+  padding-block: var(--space-xs);
+  transition: color var(--dur-micro) var(--ease-out);
+}
+.pill__link:hover { color: var(--color-primary); }
+
+@media (max-width: 52rem) {
+  /* pill drops the link list, keeps wordmark + CTA (cookbook mobile collapse) */
+  .pill__links { display: none; }
+}
+
+/* ── H1 · Marquee hero, dark full-bleed ─────────────────────────────── */
+
+.marquee {
+  background: var(--color-surface-dark);
+  color: var(--color-on-dark);
+  /* content-height biased tall, not a 100vh centred box */
+  min-height: 84svh;
+  display: flex;
+  align-items: flex-end;
+  padding-block: calc(var(--space-3xl) * 2) var(--space-section);
+  border-bottom: var(--rule-hair) solid var(--color-hairline-dark);
+}
+
+.marquee__inner { display: grid; gap: var(--space-xl); }
+
+.marquee__status { display: flex; flex-wrap: wrap; gap: var(--space-sm); }
+
+.marquee__line {
+  font-size: var(--text-display-mega);
+  letter-spacing: var(--tracking-display-mega);
+  line-height: var(--leading-display);
+  color: var(--color-on-dark);
+  max-width: 15ch;
+}
+.marquee__line em { font-style: normal; color: var(--color-primary); }
+
+.marquee__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-block-start: var(--space-lg);
+  border-top: var(--rule-hair) solid var(--color-hairline-dark);
+}
+.marquee__sub { color: var(--color-on-dark-soft); max-width: 44ch; margin: 0; }
+.marquee__scroll {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+/* ── The list · F3 tabular spec sheet ───────────────────────────────── */
+
+.sheet { padding-block: var(--space-section); }
+
+.sheet__head { display: grid; gap: var(--space-md); max-width: 54ch; margin-block-end: var(--space-2xl); }
+.sheet__head h2 { font-size: var(--text-display-lg); letter-spacing: var(--tracking-display); }
+
+.sheet__table { width: 100%; border-collapse: collapse; }
+
+.sheet__table thead th {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md) var(--space-sm) 0;
+  border-bottom: var(--rule-hair) solid var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.sheet__table tbody tr {
+  border-bottom: var(--rule-hair) solid var(--color-hairline);
+  transition: background-color var(--dur-micro) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sheet__table tbody tr:hover { background: var(--color-surface-soft); }
+}
+
+.sheet__table td {
+  padding: var(--space-md) var(--space-md) var(--space-md) 0;
+  vertical-align: baseline;
+  font-size: var(--text-body-sm);
+  color: var(--color-body);
+}
+.sheet__name { color: var(--color-ink); font-weight: 600; font-size: var(--text-body); }
+
+.sheet__kind {
+  font-family: var(--font-mono);
+  font-size: var(--text-caption-str);
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+.sheet__sev { white-space: nowrap; font-size: var(--text-caption); }
+.sheet__sev--crit { color: var(--color-down); font-weight: 600; }
+.sheet__sev--warn { color: var(--color-body); }
+
+.sheet__note {
+  margin-block-start: var(--space-lg);
+  font-size: var(--text-caption);
+  color: var(--color-muted);
+  max-width: 60ch;
+}
+
+/* Below 52rem the table is the wrong representation — each row becomes a
+   block with its label rendered from data-label. */
+@media (max-width: 52rem) {
+  .sheet__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .sheet__table tbody tr { display: block; padding-block: var(--space-md); }
+  .sheet__table td { display: block; padding: 0; }
+  .sheet__table td + td { margin-block-start: var(--space-xxs); }
+  .sheet__table td[data-label]::before {
+    content: attr(data-label) " ";
+    font-family: var(--font-mono);
+    font-size: var(--text-caption-str);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-muted-soft);
+  }
+  .sheet__name { font-size: var(--text-title-md); }
+  .sheet__name::before { content: none !important; }
+}
+
+/* ── The prose · economia | segurança ───────────────────────────────── */
+
+.argument {
+  background: var(--color-surface-soft);
+  padding-block: var(--space-section);
+  border-block: var(--rule-hair) solid var(--color-hairline);
+}
+
+.argument__grid {
+  display: grid;
+  gap: var(--space-2xl);
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 60rem) {
+  .argument__grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-3xl); }
+  /* the single vertical rule is the divider language of this macrostructure */
+  .argument__col + .argument__col {
+    padding-inline-start: var(--space-3xl);
+    border-inline-start: var(--rule-hair) solid var(--color-hairline);
+  }
+}
+
+.argument__col h2 {
+  font-size: var(--text-display-sm);
+  letter-spacing: var(--tracking-display);
+  margin-block-end: var(--space-md);
+}
+.argument__col > p { margin-block-end: var(--space-md); }
+.argument__col strong { color: var(--color-ink); font-weight: 600; }
+
+.argument__points { display: grid; gap: var(--space-md); margin-block-start: var(--space-lg); }
+.argument__points li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-sm);
+  align-items: baseline;
+  padding-block-start: var(--space-md);
+  border-top: var(--rule-hair) solid var(--color-hairline);
+  font-size: var(--text-body-sm);
+}
+.argument__points b { color: var(--color-ink); font-weight: 600; }
+.argument__mark {
+  width: 6px; height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  transform: translateY(-3px);
+}
+
+/* ── Ft5 · Statement footer ─────────────────────────────────────────── */
+
+.stmt { padding-block: var(--space-section) var(--space-2xl); }
+.stmt__line {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--text-display-md);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-display);
+  color: var(--color-ink);
+  max-width: 38ch;
+  overflow-wrap: anywhere;
+}
+.stmt__mail {
+  display: inline-block;
+  margin-block-start: var(--space-lg);
+  font-size: var(--text-title-lg);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--color-primary);
+  border-bottom: 2px solid transparent;
+  transition: border-color var(--dur-micro) var(--ease-out);
+  overflow-wrap: anywhere;
+}
+.stmt__mail:hover { border-bottom-color: var(--color-primary); }
+
+.stmt__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-block-start: var(--space-3xl);
+  padding-block-start: var(--space-md);
+  border-top: var(--rule-hair) solid var(--color-hairline);
+  font-size: var(--text-caption);
+  color: var(--color-muted);
+}
+.stmt__meta img { height: 22px; width: auto; }
+
+/* ── C4 · Sticky bottom bar ─────────────────────────────────────────── */
+
+.dock {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-sticky);
+  background: color-mix(in srgb, var(--color-canvas) 92%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border-top: var(--rule-hair) solid var(--color-hairline);
+  padding-block: var(--space-sm);
+  padding-bottom: max(var(--space-sm), env(safe-area-inset-bottom));
+  transform: translateY(110%);
+  transition: transform var(--dur-long) var(--ease-out);
+}
+.dock.is-up { transform: none; }
+
+.dock__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.dock__copy { font-size: var(--text-body-sm); color: var(--color-body); margin: 0; }
+.dock__copy b { color: var(--color-ink); font-weight: 600; }
+
+@media (max-width: 40rem) {
+  .dock__copy { display: none; }
+  .dock__inner { justify-content: stretch; }
+  .dock .btn { flex: 1; }
+}
+
+/* the dock never covers the last line of the footer */
+.page-1 { padding-bottom: 84px; }

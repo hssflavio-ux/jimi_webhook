@@ -1,0 +1,126 @@
+/* Hallmark · tokens · bycamera landing
+ * ---------------------------------------------------------------------------
+ * Source of truth: DESIGN-coinbase.md (this project is design.md-managed, so
+ * the three landing options SHARE this system and differ only in structure).
+ *
+ * Colours are kept as the brand's exact hex rather than converted to OKLCH:
+ * #0052ff is a fixed brand voltage and a colour-space round-trip would drift
+ * it. Everything downstream references these by name — no inline colour, no
+ * inline font-family, anywhere in the page CSS.
+ * ---------------------------------------------------------------------------
+ */
+
+:root {
+  /* — Brand voltage. The only action colour on the page. ——————————— */
+  --color-primary:          #0052ff;
+  --color-primary-active:   #003ecc;
+  --color-primary-disabled: #a8b8cc;
+
+  /* — Surfaces ————————————————————————————————————————————— */
+  --color-canvas:                #ffffff;
+  --color-surface-soft:          #f7f7f7;
+  --color-surface-strong:        #eef0f3;
+  --color-surface-dark:          #0a0b0d;
+  --color-surface-dark-elevated: #16181c;
+  --color-surface-dark-hover:    #23262b;
+
+  /* — Ink ——————————————————————————————————————————————————— */
+  --color-ink:          #0a0b0d;
+  --color-body:         #5b616e;
+  --color-muted:        #7c828a;
+  --color-muted-soft:   #a8acb3;
+  --color-on-primary:   #ffffff;
+  --color-on-dark:      #ffffff;
+  --color-on-dark-soft: #a8acb3;
+
+  /* — Hairlines. One weight; two values (light surface / dark surface). — */
+  --rule-hair:           1px;
+  --color-hairline:      #dee1e6;
+  --color-hairline-soft: #eef0f3;
+  --color-hairline-dark: #23262b;
+
+  /* — Semantic. Text colour only — never a fill. ————————————————— */
+  --color-up:        #05b169;
+  --color-down:      #cf202f;
+  --color-attention: #f4b000;
+
+  /* — Focus ring. Must clear 3:1 on both canvas and near-black. ——— */
+  --color-focus:      #0052ff;
+  --color-focus-dark: #ffffff;
+
+  /* — Type. CoinbaseDisplay/Sans/Mono are licensed; the documented
+       substitutes are Inter (400/500/600/700) + JetBrains Mono (400/500). — */
+  --font-display: 'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-body:    'Inter', -apple-system, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Display steps collapse 80 → 36px across the range, per DESIGN-coinbase
+     § Responsive Behavior. Display stays weight 400 — that is the brand. */
+  --text-display-mega: clamp(2.25rem, 1.05rem + 5.35vw, 5rem);    /* 36 → 80 */
+  --text-display-xl:   clamp(2.125rem, 1.2rem + 4.1vw, 4rem);     /* 34 → 64 */
+  --text-display-lg:   clamp(1.875rem, 1.15rem + 3.2vw, 3.25rem); /* 30 → 52 */
+  --text-display-md:   clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);   /* 28 → 44 */
+  --text-display-sm:   clamp(1.5rem, 1.15rem + 1.55vw, 2.25rem);  /* 24 → 36 */
+  --text-title-lg:     clamp(1.375rem, 1.15rem + 1vw, 2rem);      /* 22 → 32 */
+  --text-title-md:     1.125rem;   /* 18 */
+  --text-title-sm:     1rem;       /* 16 */
+  --text-body:         1rem;       /* 16 */
+  --text-body-sm:      0.875rem;   /* 14 */
+  --text-caption:      0.8125rem;  /* 13 */
+  --text-caption-str:  0.75rem;    /* 12 */
+  --text-number:       1.125rem;   /* 18, mono */
+  --text-button:       1rem;       /* 16 */
+  --text-nav:          0.875rem;   /* 14 */
+
+  --tracking-display-mega: -0.025em;
+  --tracking-display:      -0.02em;
+  --tracking-title:        -0.0125em;
+
+  --leading-display: 1.0;
+  --leading-title:   1.13;
+  --leading-body:    1.5;
+
+  /* — Space. 4pt base; 96px is the editorial band rhythm. ——————— */
+  --space-xxs:  4px;
+  --space-xs:   8px;
+  --space-sm:  12px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+  --space-3xl: 72px;
+  --space-section: clamp(56px, 8vw, 96px);
+
+  --page-max:    1200px;
+  --page-gutter: clamp(20px, 5vw, 48px);
+  --measure:     62ch;
+
+  /* — Shape. Pill for interactive, xl for containers, full for glyphs. — */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-xl:  24px;
+  --radius-pill: 100px;
+  --radius-full: 9999px;
+
+  /* — Depth. One tier only. ——————————————————————————————— */
+  --shadow-soft: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-lift: 0 8px 24px -12px rgba(10, 11, 13, 0.18);
+
+  /* — Motion ————————————————————————————————————————————— */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long:  420ms;
+
+  /* — Layer scale. Six named levels; no arbitrary z-values. ————— */
+  --z-base:    0;
+  --z-raised:  10;
+  --z-sticky: 100;
+  --z-nav:    500;
+  --z-overlay: 800;
+  --z-top:    900;
+}

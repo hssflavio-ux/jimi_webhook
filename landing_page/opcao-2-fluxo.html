@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>bycamera — do volante à tratativa</title>
+<meta name="description" content="Como o videomonitoramento veicular inteligente funciona: detecção a bordo, alerta na cabine, vídeo na central e ocorrência tratada. Em lançamento.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/opcao-2.css">
+<script>document.documentElement.classList.remove('no-js');</script>
+</head>
+<body>
+
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+
+<!-- N1b · Canonical SaaS three-section -->
+<header class="nav" id="nav">
+  <div class="nav__inner">
+    <a class="nav__brand" href="#topo" aria-label="bycamera — início">
+      <img class="lockup-ink" src="assets/logo-lockup-ink.png" alt="bycamera" width="720" height="188">
+    </a>
+    <nav class="nav__center" aria-label="Principal">
+      <a class="nav__link" href="#fluxo">Como funciona</a>
+      <a class="nav__link" href="#ganhos">Economia e segurança</a>
+      <a class="nav__link" href="#contato">Contato</a>
+    </nav>
+    <div class="nav__right">
+      <a class="btn btn--primary" href="#contato">Pedir informações</a>
+    </div>
+  </div>
+</header>
+
+<main id="conteudo">
+
+  <!-- H9 · Custom illustration centrepiece -->
+  <section class="open" id="topo">
+    <div class="wrap open__grid">
+
+      <div class="open__copy">
+        <span class="badge reveal" style="--i:0"><span class="badge__dot"></span> Produto em lançamento</span>
+        <h1 class="reveal" style="--i:1">Uma câmera. Dois campos de visão.</h1>
+        <p class="lede reveal" style="--i:2">
+          A bycamera olha para dentro da cabine e para a via ao mesmo tempo. A
+          inteligência roda no próprio veículo — o motorista é alertado no
+          segundo do risco, e a central recebe a cena já classificada.
+        </p>
+        <div class="open__actions reveal" style="--i:3">
+          <a class="btn btn--primary btn--lg" href="#contato">Quero conhecer</a>
+          <a class="btn btn--soft btn--lg" href="#fluxo">Ver como funciona</a>
+        </div>
+      </div>
+
+      <figure class="reveal" style="--i:2">
+        <svg class="fov" viewBox="0 0 640 440" role="img" aria-labelledby="fovT fovD">
+          <title id="fovT">Os dois campos de visão da bycamera</title>
+          <desc id="fovD">Uma câmera ao centro projeta dois campos de visão opostos: um voltado para dentro da cabine, que observa o motorista (DMS), e outro voltado para a via à frente do veículo (ADAS).</desc>
+
+          <line class="fov-frame" x1="40" y1="76" x2="600" y2="76"/>
+          <line class="fov-frame" x1="40" y1="372" x2="600" y2="372"/>
+
+          <text class="fov__title" x="40" y="44">DMS</text>
+          <text class="fov__label" x="40" y="62">DENTRO DA CABINE</text>
+          <text class="fov__title" x="600" y="44" text-anchor="end">ADAS</text>
+          <text class="fov__label" x="600" y="62" text-anchor="end">À FRENTE DO VEÍCULO</text>
+
+          <path class="fov-cone" opacity="0.16" d="M320,220 L137,139 A200,200 0 0,0 137,301 Z"/>
+          <path class="fov-cone" opacity="0.10" d="M320,220 L574,128 A270,270 0 0,1 574,312 Z"/>
+
+          <g class="fov-bracket">
+            <path d="M121,198 L121,186 L133,186"/>
+            <path d="M177,186 L189,186 L189,198"/>
+            <path d="M189,242 L189,254 L177,254"/>
+            <path d="M133,254 L121,254 L121,242"/>
+          </g>
+          <g class="fov-bracket">
+            <path d="M506,198 L506,186 L518,186"/>
+            <path d="M562,186 L574,186 L574,198"/>
+            <path d="M574,242 L574,254 L562,254"/>
+            <path d="M518,254 L506,254 L506,242"/>
+          </g>
+
+          <text class="fov__label" x="155" y="284" text-anchor="middle">MOTORISTA</text>
+          <text class="fov__label" x="540" y="284" text-anchor="middle">VIA</text>
+
+          <circle class="fov-ring" cx="320" cy="220" r="30"/>
+          <circle class="fov-ring" cx="320" cy="220" r="20"/>
+          <circle class="fov-lens" cx="320" cy="220" r="10"/>
+          <circle class="fov-catch" cx="324" cy="216" r="3"/>
+
+          <text class="fov__dim" x="320" y="404" text-anchor="middle">DETECÇÃO A BORDO · SEM DEPENDER DE OPERADOR</text>
+        </svg>
+        <figcaption class="open__caption">
+          Esquema dos dois campos de detecção. Diagrama ilustrativo do princípio
+          de funcionamento — não é uma captura do produto.
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <!-- F4 · Step sequence -->
+  <section class="flow" id="fluxo">
+    <div class="wrap">
+      <div class="flow__head">
+        <h2>Do volante à tratativa, em quatro passos.</h2>
+        <p class="lede">
+          O que separa uma câmera comum de videomonitoramento inteligente não é
+          a lente — é o que acontece depois que ela vê alguma coisa.
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li class="step">
+          <span class="step__stage num">1.0</span>
+          <h3>Instalação</h3>
+          <div class="step__body">
+            <p>
+              Uma câmera voltada ao motorista, outra à via, gravador ligado à
+              ignição do veículo. A frota inteira passa a produzir a mesma
+              informação, no mesmo formato.
+            </p>
+            <div class="step__aside">
+              <span class="chip">câmera DMS</span>
+              <span class="chip">câmera ADAS</span>
+              <span class="chip">gravador MDVR</span>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step__stage num">2.0</span>
+          <h3>Detecção a bordo</h3>
+          <div class="step__body">
+            <p>
+              A inteligência roda dentro do veículo. Quando reconhece fadiga,
+              celular, distração ou risco de colisão, <strong>o alerta sonoro
+              toca na cabine no mesmo segundo</strong> — sem esperar a nuvem e
+              sem depender de alguém assistindo.
+            </p>
+            <div class="step__aside">
+              <span class="chip">alerta na cabine</span>
+              <span class="chip">processamento local</span>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step__stage num">3.0</span>
+          <h3>Chegada na central</h3>
+          <div class="step__body">
+            <p>
+              O evento sobe para a plataforma com horário, posição no mapa e o
+              <strong>vídeo do momento anexado</strong>. Não é um alerta seco
+              numa lista: é a cena, com contexto, pronta para julgar.
+            </p>
+            <div class="step__aside">
+              <span class="chip">vídeo do evento</span>
+              <span class="chip">posição GPS</span>
+              <span class="chip">vídeo ao vivo</span>
+            </div>
+          </div>
+        </li>
+
+        <li class="step">
+          <span class="step__stage num">4.0</span>
+          <h3>Tratativa</h3>
+          <div class="step__body">
+            <p>
+              O alarme vira <strong>ocorrência</strong> e percorre um fluxo —
+              aberta, em análise, tratada — com responsável, classificação de
+              risco e histórico por motorista. Regras configuráveis definem o
+              que é grave na sua operação, não na média do mercado.
+            </p>
+            <div class="step__aside">
+              <span class="chip">fluxo de tratativa</span>
+              <span class="chip">risco por motorista</span>
+              <span class="chip">relatório PDF / XLSX</span>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Ganhos -->
+  <section class="gains is-dark" id="ganhos">
+    <div class="wrap">
+      <h2>O retorno chega por dois caminhos.</h2>
+      <p class="gains__intro">
+        Um deles aparece no financeiro. O outro aparece na ausência de uma
+        ligação que ninguém queria receber.
+      </p>
+
+      <div class="gains__cols">
+        <div class="gains__col">
+          <h3>Economia</h3>
+          <ul class="gains__list">
+            <li><b>O sinistro evitado</b><span>É o custo que nunca entra na planilha — franquia, guincho, carga, veículo parado, cliente sem entrega.</span></li>
+            <li><b>Prova em vídeo</b><span>Em disputa de responsabilidade, a gravação decide. Sem ela, a frota paga por acidente que não causou.</span></li>
+            <li><b>Combustível e manutenção</b><span>Condução mais suave, com menos frenagem brusca e menos aceleração agressiva, gasta menos diesel, freio e pneu.</span></li>
+            <li><b>Renegociação do seguro</b><span>Histórico documentado de comportamento é argumento concreto na renovação da apólice.</span></li>
+            <li><b>Tempo do gestor</b><span>A ocorrência chega pronta, com vídeo. Ninguém precisa reconstruir a história por telefone.</span></li>
+          </ul>
+        </div>
+
+        <div class="gains__col">
+          <h3>Segurança</h3>
+          <ul class="gains__list">
+            <li><b>Correção antes do impacto</b><span>Fadiga e celular são detectados no segundo anterior ao acidente — e é ali que o alerta toca.</span></li>
+            <li><b>Mudança de hábito</b><span>O motorista sabe que a câmera está ali. A condução muda antes do primeiro alerta ser gerado.</span></li>
+            <li><b>Conversa baseada em fato</b><span>Treinamento com a cena real na tela substitui a discussão sobre o que teria acontecido.</span></li>
+            <li><b>Roubo e emergência</b><span>Rastreamento ao vivo, botão de pânico e vídeo sob demanda no veículo em movimento.</span></li>
+            <li><b>Proteção do motorista</b><span>A mesma gravação que cobra também defende quem estava certo.</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- C2 · Inline form-as-CTA -->
+  <section class="ask" id="contato">
+    <div class="wrap ask__grid">
+      <div>
+        <h2>Conte da sua frota.</h2>
+        <p class="ask__note">
+          Ainda estamos em lançamento e falamos com cada interessado
+          pessoalmente. Preencha o que souber — respondemos com preço,
+          prazo de instalação e o que dá para fazer na sua operação.
+        </p>
+      </div>
+
+      <form class="form" id="form">
+        <div class="form__row">
+          <label for="f-nome">Seu nome</label>
+          <input id="f-nome" name="nome" type="text" autocomplete="name" placeholder="Como devemos te chamar">
+        </div>
+        <div class="form__row">
+          <label for="f-empresa">Empresa</label>
+          <input id="f-empresa" name="empresa" type="text" autocomplete="organization" placeholder="Nome da transportadora ou operação">
+        </div>
+        <div class="form__row">
+          <label for="f-veiculos">Quantos veículos</label>
+          <input id="f-veiculos" name="veiculos" type="text" inputmode="numeric" placeholder="Ex.: 18">
+        </div>
+        <div class="form__row">
+          <label for="f-msg">O que você precisa resolver</label>
+          <textarea id="f-msg" name="mensagem" placeholder="Sinistros, custo de seguro, comportamento do motorista, roubo de carga…"></textarea>
+        </div>
+
+        <div class="form__submit">
+          <button class="btn btn--primary btn--lg" type="submit">Abrir e-mail</button>
+          <p class="form__help">
+            Esta página é estática e não guarda nada: o botão apenas abre seu
+            programa de e-mail com a mensagem pronta para
+            <a href="mailto:contato@bycamera.com.br">contato@bycamera.com.br</a>.
+          </p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<!-- Ft2 · Inline single line -->
+<footer class="foot">
+  <div class="wrap foot__inner">
+    <img class="lockup-ink" src="assets/logo-lockup-ink.png" alt="bycamera" width="720" height="188" loading="lazy">
+    <a class="foot__link" href="mailto:contato@bycamera.com.br">contato@bycamera.com.br</a>
+    <span class="foot__sep" aria-hidden="true">·</span>
+    <a class="foot__link" href="#fluxo">Como funciona</a>
+    <span class="foot__sep" aria-hidden="true">·</span>
+    <span class="foot__credit">Videomonitoramento inteligente · produto em lançamento</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // N1b frost-on-scroll — rAF-throttled, as the archetype requires.
+  var nav = document.getElementById('nav');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) { return; }
+    ticking = true;
+    requestAnimationFrame(function () {
+      nav.classList.toggle('is-scrolled', window.scrollY > 24);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // F4 reveal — fires once per step, then unobserves.
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
+      });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    document.querySelectorAll('.step').forEach(function (s) { io.observe(s); });
+  } else {
+    document.querySelectorAll('.step').forEach(function (s) { s.classList.add('is-in'); });
+  }
+
+  // C2 — compose a mailto from the form. No backend, nothing stored.
+  document.getElementById('form').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var f = ev.target;
+    var v = function (n) { return (f.elements[n].value || '').trim(); };
+    var body = [
+      'Nome: ' + (v('nome') || '—'),
+      'Empresa: ' + (v('empresa') || '—'),
+      'Veículos: ' + (v('veiculos') || '—'),
+      '',
+      v('mensagem') || 'Gostaria de saber mais sobre a bycamera.'
+    ].join('\n');
+    window.location.href = 'mailto:contato@bycamera.com.br'
+      + '?subject=' + encodeURIComponent('Interesse na bycamera'
+        + (v('empresa') ? ' — ' + v('empresa') : ''))
+      + '&body=' + encodeURIComponent(body);
+  });
+})();
+</script>
+
+</body>
+</html>
