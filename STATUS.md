@@ -56,8 +56,9 @@
 >
 > #### Decisões e pendências
 >
-> - **TLS pendente** — adiado pelo dono em 13/08. Hoje só HTTP: login, senha e o
->   `WEBHOOK_TOKEN` trafegam em claro. Falta domínio apontado para o Let's Encrypt.
+> - **TLS no ar** (13/08) — `https://bycamera.ia.br` e `www`, Let's Encrypt até
+>   **11/11/2026**, redirect 80→443. Ver a subseção abaixo: a renovação **não é
+>   automática** neste servidor.
 > - **`WEBHOOK_TOKEN` segue `a12341234123`**, de propósito: tem de casar com o
 >   que está configurado no IoT Hub, senão todo payload é rejeitado em silêncio.
 > - **MySQL/Webmin/Cockpit alcançáveis de fora** — verificado e reportado;
@@ -67,6 +68,32 @@
 >   câmera deposita na raiz, então o fluxo do `37382` está certo — mas anexo que
 >   caia em `jtt/` não toca na tela.
 > - Usuário de teste `e2e@teste.local` veio no dump e continua no banco.
+>
+> #### 🔴 A renovação do TLS depende de um humano abrir a porta 80
+>
+> A 80 fica **fechada** no dia a dia por decisão de infraestrutura, e o desafio
+> HTTP-01 precisa dela. Logo o certificado **não se renova sozinho**.
+>
+> `scripts/tls_renew_watch.php` (crontab do **root**, de hora em hora) cobre
+> isso: dentro da janela de 30 dias ele tenta renovar a cada hora, alerta por
+> e-mail pedindo a porta e, quando ela abre, renova e avisa que já pode fechar.
+> O timer padrão do `certbot` fica **desligado** — ele falharia em silêncio, que
+> é o modo de falha a evitar.
+>
+> ⚠️ **A liberação tem de aceitar `0.0.0.0/0`.** A validação é multi-perspectiva
+> desde 2020: o desafio é buscado de datacenters em vários continentes e só passa
+> com quórum. Na primeira tentativa a porta estava aberta **só para as redes do
+> cliente** e a emissão falhou com `Timeout during connect` — enquanto o teste
+> a partir do escritório respondia 200. **A assimetria "do escritório funciona,
+> a emissão falha" é a assinatura desse erro.** A 443 pode seguir restrita; isso
+> não afeta a validação.
+>
+> Antes de cada tentativa vale confirmar de um ponto externo neutro
+> (`curl "https://api.hackertarget.com/httpheaders/?q=http://bycamera.ia.br"`):
+> a LE permite só **5 validações falhas por hora** por hostname.
+>
+> O ensaio `certbot renew --dry-run` passou com a porta aberta — o caminho de
+> renovação está provado, não suposto.
 >
 > #### O vhost fecha o que o `.htaccess` não alcança
 >
