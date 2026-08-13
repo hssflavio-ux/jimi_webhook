@@ -353,6 +353,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.9" "mysql/migration_v4.9.9.sql" "evento de diagnóstico separado de alarme"
     run_migration "4.9.10" "mysql/migration_v4.9.10.sql" "capotamento (JT/T 1047) + condução brusca JIMI 144/145/146"
     run_migration "4.9.11" "mysql/migration_v4.9.11.sql" "destrunca command_content + /config na matriz de permissão"
+    run_migration "4.9.12" "mysql/migration_v4.9.12.sql" "parametros das cameras JT/T (catalogo + 3 tabelas)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
