@@ -85,7 +85,13 @@ $imei       = trim($input['imei']       ?? '');
 $cmdContent = trim($input['content']    ?? $input['cmdContent'] ?? '');
 $proNo      = intval($input['proNo']    ?? 128);
 
-if (!$imei || !$cmdContent) {
+// ⚠️ O 33028 é a ÚNICA exceção legítima ao cmdContent obrigatório: a doc manda
+// o campo VAZIO ("Consultar todos os parâmetros" não tem argumento), e foi
+// assim, com o campo vazio, que o JC371 respondeu a configuração inteira na
+// sonda de 12/08/2026. Sem esta ressalva a consulta era recusada aqui, três
+// linhas antes da normalização que existe justamente para montá-la — que é o
+// que o primeiro teste ponta a ponta pegou.
+if (!$imei || ($cmdContent === '' && $proNo !== 33028)) {
     http_response_code(400);
     echo json_encode(['code' => 400, 'msg' => 'Parâmetros obrigatórios: imei, cmdContent']);
     exit;
