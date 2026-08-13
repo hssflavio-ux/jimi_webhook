@@ -286,127 +286,33 @@ if ($proNo === 37382) {
                               JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 }
 
-// ── Configuração do endpoint de comando do IoTHub ─────────────────────────────
+// ── Despacho ao IoTHub ────────────────────────────────────────────────────────
 //
-// BUG #2 CORRIGIDO:
-//   PORTA CORRETA: 10088 → tracker-instruction-server (envio de comandos)
-//   PORTA ERRADA:  9080  → tracker-dvr-api (apenas queries históricas)
+// A chamada HTTP e a leitura da resposta vivem em `includes/iothub_command.php`
+// desde a v4.9.13, porque o `param_sync_worker.php` precisa exatamente do mesmo
+// despacho. Copiá-lo seria repetir o erro que este repositório já pagou três
+// vezes — cópia divergente que ninguém percebe até o dia em que uma das duas
+// deixa de valer (o `worker.php` imprimiu código cru de alarme por meses assim).
 //
-// Configurável via variável de ambiente IOTHUB_COMMAND_URL para flexibilidade
-// em ambientes com múltiplos servidores ou portas customizadas.
-$iothubUrl = getenv('IOTHUB_COMMAND_URL') ?: 'http://localhost:10088/api/device/sendInstruct';
+// ⚠️ `serverFlagId` vem do POST porque aqui ele é SELETOR DE GATEWAY, não chave
+// de correlação: 0 = JT/T (porta 21122), 1 = JIMI (21100).
+require_once __DIR__ . '/../includes/iothub_command.php';
 
-// Token interno da API do IoTHub (não confundir com o token do webhook DataPush)
-// Padrão '123' conforme todos os exemplos curl da documentação oficial
-$iothubApiToken = getenv('IOTHUB_API_TOKEN') ?: '123';
-
-// BUG #3 CORRIGIDO: serverFlagId vem do POST (JS diferencia por protocolo)
-//   serverFlagId=1 → gateway JIMI (porta 21100) → JC400 series
-//   serverFlagId=0 → gateway JT/T (porta 21122) → JC450/JC181 series
 $serverFlagId = isset($input['serverFlagId'])
     ? intval($input['serverFlagId'])
     : intval(getenv('IOTHUB_SERVER_FLAG_ID') ?: '0');
 
-// requestId único para rastreamento ponta-a-ponta (dashboard ↔ IoTHub ↔ device)
-$requestId = 'dash_' . date('YmdHis') . '_' . substr(md5(uniqid('', true)), 0, 8);
+$envio = iothub_send_instruct($imei, $proNo, $cmdContent, $serverFlagId, 'dash');
 
-// ── Payload completo para a API interna do IoTHub ─────────────────────────────
-//
-// BUG #1 CORRIGIDO: 'deviceImei' → 'imei'
-// BUG #3 CORRIGIDO: serverFlagId, cmdType, token — campos obrigatórios adicionados
-//
-// Referência: https://docs.jimicloud.com/test/test.html §1.2.2 e §2.2.2
-// curl --data-urlencode 'imei=...' 'serverFlagId=...' 'cmdType=normallns' 'token=...'
-$postFields = http_build_query([
-    'imei'         => $imei,            // BUG #1: era 'deviceImei'
-    'cmdContent'   => $cmdContent,
-    'serverFlagId' => $serverFlagId,    // BUG #3: campo obrigatório ausente
-    'proNo'        => $proNo,
-    'platform'     => 'web',
-    'requestId'    => $requestId,
-    'cmdType'      => 'normallns',      // BUG #3: campo obrigatório ausente
-    'token'        => $iothubApiToken,  // BUG #3: token API interna ausente
-]);
-
-// ── Chamada cURL ao IoTHub ────────────────────────────────────────────────────
-//
-// TIMEOUT 35s (era 15s): quando o device demora/está offline, o
-// tracker-instruction-server SEGURA a resposta HTTP por até 30s
-// ("processSendInstruct await timeout") antes de responder que o comando
-// virou fila offline. Com 15s o PHP abortava no meio da espera e o comando
-// era marcado "failed" mesmo tendo sido aceito e enfileirado pelo IoTHub.
-$ch = curl_init($iothubUrl);
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => $postFields,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 35,
-    CURLOPT_CONNECTTIMEOUT => 5,
-    CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-]);
-
-$rawResp   = curl_exec($ch);
-$httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlErrno = curl_errno($ch);
-$curlError = curl_error($ch);
-curl_close($ch);
-
-// ── Interpretação da resposta do IoTHub ──────────────────────────────────────
-$iothubResp = [];
-$iothubCode = -1;
-$iothubMsg  = 'Sem resposta';
-$dbStatus   = 'failed';
-$resultMsg  = 'Falha desconhecida';
-
-if ($curlError || $httpCode === 0) {
-    $dbStatus = 'failed';
-    if ($curlErrno === CURLE_OPERATION_TIMEDOUT) {
-        // Timeout ≠ inacessível: o IoTHub recebeu o comando mas não respondeu
-        // a tempo (device lento). O comando pode ter sido enfileirado offline.
-        $resultMsg = 'IoTHub não respondeu a tempo — se o dispositivo estiver '
-                   . 'offline, o comando foi enfileirado e será entregue na '
-                   . 'reconexão. Detalhe: ' . $curlError;
-    } else {
-        // Falha de conectividade real (container down, porta fechada)
-        $resultMsg = 'IoTHub inacessível — verifique se tracker-instruction-server está UP. '
-                   . 'Detalhe: ' . ($curlError ?: "HTTP code=$httpCode");
-    }
-
-} else {
-    // IoTHub respondeu com HTTP 200 — decodifica o body JSON
-    if ($rawResp) {
-        $iothubResp = json_decode($rawResp, true) ?? [];
-    }
-
-    // Suporte a variações de chave entre versões do IoTHub:
-    //   Versões mais antigas: code/msg
-    //   Versões mais novas:   resultCode/resultMsg ou code/message
-    $iothubCode = $iothubResp['code']       ?? $iothubResp['resultCode'] ?? -1;
-    $iothubMsg  = $iothubResp['msg']        ?? $iothubResp['message']
-                ?? $iothubResp['resultMsg'] ?? "code={$iothubCode} (sem msg)";
-
-    if ($iothubCode === 0) {
-        // Sucesso: IoTHub aceitou o comando.
-        // Se o device respondeu SINCRONAMENTE (online), data._content traz a
-        // resposta → status 'executed' já aqui, senão o polling do dashboard
-        // nunca sai de 'sent' e termina em falso "timeout/fila offline".
-        // Se virou fila offline (data._code=600), fica 'sent' aguardando o
-        // callback em /pushinstructresponse.
-        $syncContent = $iothubResp['data']['_content'] ?? null;
-        if ($syncContent !== null && $syncContent !== '') {
-            $dbStatus  = 'executed';
-            $resultMsg = 'Dispositivo respondeu: ' . $syncContent;
-        } else {
-            $dbStatus  = 'sent';
-            $resultMsg = $iothubMsg ?: 'Comando aceito pelo IoTHub';
-        }
-
-    } else {
-        // BUG #5 CORRIGIDO: agora exibe o código real em vez de -1 genérico
-        $dbStatus  = 'failed';
-        $resultMsg = "IoTHub rejeitou o comando (code={$iothubCode}): {$iothubMsg}";
-    }
-}
+$rawResp     = $envio['raw'];
+$httpCode    = $envio['http_code'];
+$requestId   = $envio['request_id'];
+$iothubUrl   = $envio['endpoint'];
+$iothubCode  = $envio['hub_code'];
+$iothubMsg   = $envio['hub_msg'];
+$syncContent = $envio['content'];
+$dbStatus    = $envio['status'];
+$resultMsg   = $envio['result_msg'];
 
 // ── Persistência na tabela `commands` ────────────────────────────────────────
 //
@@ -515,7 +421,7 @@ try {
         'http_code'    => $httpCode,
         'iothub_url'   => $iothubUrl,
         'iothub_resp'  => substr((string)($rawResp ?: ''), 0, 300),
-        'curl_error'   => $curlError ?: null,
+        'curl_error'   => ($envio['status'] === 'failed' && !$envio['raw']) ? $resultMsg : null,
         'request_id'   => $requestId,
     ]);
 
@@ -587,8 +493,8 @@ try {
 // (data._code=600) — o comando só será entregue na reconexão. Fluxos de
 // tempo real (ex.: vídeo ao vivo) usam isso para não esperar um stream
 // que não vai começar.
-$offlineQueued = ($iothubCode === 0)
-    && (int)($iothubResp['data']['_code'] ?? 0) === 600;
+// `device_code` vem do helper; era lido de $iothubResp['data']['_code'].
+$offlineQueued = ($iothubCode === 0) && (int)($envio['device_code'] ?? 0) === 600;
 
 echo json_encode([
     'code'           => ($dbStatus === 'sent') ? 0 : $iothubCode,

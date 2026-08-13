@@ -29,6 +29,11 @@ WORKER_ENTRIES=(
     # frota (medido: 4,7 s por dia de posições hoje; ~2 min com 25× a frota).
     # Aqui o custo é 0,4 s por execução no mesmo cenário.
     "scripts/geocode_worker.php:geocode.log:5 min:*/5 * * * *"
+    # v4.9.13 — le a configuracao das cameras JT/T que nunca foram lidas
+    # (PROJETO_PARAMETROS.md §6). Nao pode morar no webhook: abrir chamada ao
+    # IoT Hub dentro do handler acopla o trafego dos devices a disponibilidade
+    # do hub e vira tempestade quando uma frota reconecta junto.
+    "scripts/param_sync_worker.php:param_sync.log:5 min:*/5 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'
