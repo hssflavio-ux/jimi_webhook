@@ -151,5 +151,36 @@ checa('lista vazia nao estoura', null, param_moda([])[0]);
 checa('um valor so', '5', param_moda(['a'=>'5'])[0]);
 checa('numero e string sao o MESMO valor', '60', param_moda(['a'=>60,'b'=>'60','c'=>'90'])[0]);
 
+// ── Regressao: o catalogo tem de trazer TODAS as colunas (v4.9.14) ─────────
+//
+// 🔴 Este bloco existe por causa de um incidente real em 12/08/2026: o
+// `param_catalog()` selecionava colunas uma a uma e a coluna `is_network` --
+// que marca os parametros cuja escrita errada tira a camera da plataforma --
+// nao entrou na lista. A trava de confirmacao virou decoracao e um parametro
+// `19` (Servidor Principal) foi escrito numa camera REAL sem confirmacao.
+//
+// Precisa de banco; sem ele, PULA em vez de passar por vacuidade.
+echo "\n── Catálogo: colunas de guarda presentes (precisa de banco) ──\n";
+$colunasGuarda = ['writable', 'is_secret', 'is_network', 'doc_ref', 'value_kind', 'grupo'];
+try {
+    require_once __DIR__ . '/../../config/database.php';
+    $dbT = Database::getInstance()->getConnection();
+    $cat = param_catalog($dbT);
+    if (!$cat) {
+        echo "  PULADO: catálogo vazio (migração v4.9.12 não aplicada neste banco)\n";
+    } else {
+        $linha = $cat[19] ?? reset($cat);
+        foreach ($colunasGuarda as $col) {
+            checa("coluna '$col' chega ao código", true, array_key_exists($col, $linha));
+        }
+        if (isset($cat[19])) {
+            checa('🔴 19 (Servidor Principal) marcado como is_network', 1, (int)$cat[19]['is_network']);
+            checa('🔴 128 (medido, sem doc) NAO e gravavel', 0, (int)($cat[128]['writable'] ?? -1));
+        }
+    }
+} catch (Throwable $e) {
+    echo "  PULADO: sem banco (" . $e->getMessage() . ")\n";
+}
+
 echo $falhas ? "\n$falhas falha(s) de $total\n" : "\nTodos os $total casos passaram\n";
 exit($falhas ? 1 : 0);

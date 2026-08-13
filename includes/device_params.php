@@ -260,10 +260,19 @@ function param_catalog(PDO $db): array
     static $cache = null;
     if ($cache !== null) return $cache;
     try {
-        $rows = $db->query(
-            "SELECT param_no, name_pt, unit, value_kind, enum_json, grupo, writable, is_secret, doc_ref
-               FROM device_param_catalog"
-        )->fetchAll(PDO::FETCH_ASSOC);
+        // 🔴 `SELECT *`, e isto é decisão, não preguiça. A versão anterior
+        // listava as colunas uma a uma, e quando a v4.9.14 acrescentou
+        // `is_network` — a coluna que marca os parâmetros cuja escrita errada
+        // tira a câmera da plataforma — ela **não entrou na lista**. Resultado
+        // medido em 12/08/2026: `$cat[19]['is_network']` vinha indefinido, a
+        // trava de confirmação nunca disparava, e um `19` (Servidor Principal)
+        // foi escrito numa câmera REAL sem confirmação nenhuma.
+        //
+        // Lista explícita de colunas num catálogo que é lido INTEIRO só cria
+        // esse modo de falha: a coluna nova é ignorada em silêncio e a guarda
+        // que depende dela vira decoração. Aqui a tabela é pequena, própria
+        // desta feature e sempre lida por completo — `*` é o correto.
+        $rows = $db->query("SELECT * FROM device_param_catalog")->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         return $cache = [];
     }
