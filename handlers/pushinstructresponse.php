@@ -59,7 +59,21 @@ class PushInstructResponseHandler extends WebhookHandler {
                 ':imei'   => $imei,
                 ':iid'    => substr((string)$instructId, 0, 50),
                 ':mtype'  => $msgType,
-                ':cmd'    => substr((string)$content, 0, 250),
+                // 🔴 v4.9.11 — SEM `substr(…, 250)`. Este campo é o `_content`
+                // do callback, e para a família 33028/33030 ele é a
+                // CONFIGURAÇÃO INTEIRA do equipamento: 612 bytes só no JC371
+                // medido em 12/08/2026, e cresce com o número de canais. A
+                // coluna era `varchar(250)` e o corte já tinha acontecido de
+                // verdade — a linha id=14 deste banco tem LENGTH exatamente
+                // 250. O que sobra de um JSON cortado no meio não dá nem para
+                // recusar direito. Coluna agora é TEXT (migration_v4.9.11).
+                //
+                // O teto de 65000 é o da própria TEXT, não um limite de
+                // negócio: sem ele um payload acima de 64 KB faria o INSERT
+                // estourar e a linha não seria gravada de jeito nenhum —
+                // trocaríamos perda parcial por perda total. Mesmo padrão de
+                // `:resp` logo abaixo.
+                ':cmd'    => substr((string)$content, 0, 65000),
                 ':resp'   => substr((string)$response, 0, 65000),
                 ':status' => $status,
                 ':sfid'   => $serverFlagId ? substr((string)$serverFlagId, 0, 20) : null,

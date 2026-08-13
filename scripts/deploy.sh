@@ -351,6 +351,8 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.5" "mysql/migration_v4.9.5.sql" "categoria unificada em pt-BR + remap das regras"
     run_migration "4.9.8" "mysql/migration_v4.9.8.sql" "anexo do alarme vira media_files (vídeo da ocorrência)"
     run_migration "4.9.9" "mysql/migration_v4.9.9.sql" "evento de diagnóstico separado de alarme"
+    run_migration "4.9.10" "mysql/migration_v4.9.10.sql" "capotamento (JT/T 1047) + condução brusca JIMI 144/145/146"
+    run_migration "4.9.11" "mysql/migration_v4.9.11.sql" "destrunca command_content + /config na matriz de permissão"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

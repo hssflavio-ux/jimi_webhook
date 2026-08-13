@@ -1,4 +1,125 @@
-# STATUS.md — Jimi Webhook System v4.9.9 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.11 (YUV Parity)
+
+> ### 📍 v4.9.11 — F1 do PROJETO_PARAMETROS aberta pelos dois consertos independentes
+>
+> | | estado |
+> |---|---|
+> | Migração `v4.9.11` | ✅ **aplicada** no banco do homolog (`system_info` = 4.9.11) |
+> | Código | ⚠️ **na árvore local, não publicado** — falta commit + deploy |
+>
+> | Conserto | Prova |
+> |---|---|
+> | 🔴 `command_responses.command_content` truncava em 250 | linha `id=14` com `LENGTH = 250` exato; `_content` real do JC371 = **612 bytes** |
+> | 🔴 `/config` fora dos dois mapas de permissão (5ª ocorrência) | conferência da migração: `Administrador` mantém, **`Operador Padrão` PERDE** |
+>
+> #### O replay mostrou que a coluna sozinha não bastava
+>
+> Com `command_content` **já** em `TEXT`, repliquei o callback com os 612 bytes
+> reais medidos na câmera. O banco gravou **250** e `JSON_VALID = 0`, cortado no
+> meio de `"16":"cmnet"`. **Quem cortava era o `substr` do PHP, não o banco** —
+> alterar só a coluna teria deixado o defeito de pé com aparência de corrigido.
+> Por isso a verificação final do destruncamento **depende do deploy**: só o
+> banco está corrigido no homolog hoje.
+>
+> Linha sintética do replay **removida** (`command_responses` id 19).
+>
+> #### Bônus: o JC182 respondeu de verdade
+>
+> As linhas `17` e `18` são callbacks **reais** do JC182 à sonda de `33028`:
+> `Device busy (previous command has not returned)` e, um minuto depois,
+> `request timeout`. É exatamente o par de casos que o `PROJETO_PARAMETROS.md`
+> §6 prevê para o worker — e a confirmação de que device com
+> `last_communication` de segundos antes **recusa comando**.
+>
+> #### Pendente para fechar a F1
+>
+> Catálogo de parâmetros + as 3 tabelas + `includes/device_params.php` +
+> `cmdContent` correto em 33028/33030 + captura síncrona + aba Parâmetros.
+
+
+
+> ### 📍 ESTADO EM 12/08/2026 — v4.9.10: acabaram os alarmes sem nome
+>
+> | | git HEAD | `system_info` |
+> |---|---|---|
+> | Local | v4.9.10 (código + migração) | — |
+> | **Homolog** (`189.22.240.43`) | código **ainda em `063354c`** ⚠️ | **4.9.10** (migração aplicada) |
+>
+> ⚠️ **A migração foi aplicada no banco do homolog; o CÓDIGO ainda não foi
+> publicado lá.** Falta commit + `deploy.sh` (o gate de versão já vai pular a
+> v4.9.10, que está aplicada — é só o código de `wiki.php`/`functions.php` que
+> precisa subir). Nada quebra nesse intervalo: a mudança de comportamento veio
+> toda do banco, e as duas alterações em PHP são texto de tela e comentário.
+>
+> #### O que entrou
+>
+> | Versão | Entrega | Migração | Estado |
+> |---|---|---|---|
+> | **4.9.10** | `Código 1047 (JTT)` → **`Capotamento`** | sim | ✅ verificado no banco |
+> | **4.9.10** | `Código 146 (JIMI)` → **`Curva Brusca`** (+ `144`/`145` preventivos) | sim | ✅ |
+> | **4.9.10** | JIMI `45` `Veículo Tumbado` → `Capotamento` (une os dois protocolos) | sim | ✅ |
+> | **4.9.10** | `Capotamento` volta ao perfil padrão de ocorrências (alto / 5 min) | sim | ✅ |
+> | **4.9.10** | 🔴 **três telas** liam `alarm_name` cru e mostravam o código | não | ✅ provado por sonda |
+>
+> #### A medida
+>
+> | | antes | depois |
+> |---|---|---|
+> | Códigos que a tela mostrava como número | **2** (1047 ×10, 146 ×4) | **0** |
+> | Protocolos que chamam capotamento pelo mesmo nome | 0 de 2 | **2 de 2** |
+>
+> #### Verificação (executada, não presumida)
+>
+> - Migração rodada **duas vezes** contra o homolog — idempotente, saída idêntica.
+> - Conferência de alarme sem nome (mesmos JOINs de `alarm_label_sql()`): **0 linhas**.
+> - Conferência de parâmetro de ocorrência órfão: **0 linhas**.
+> - `Veículo Tumbado` nas três camadas, com `BINARY`: **0, 0, 0**.
+> - Rótulo de tela provado com a expressão de `alarm_label_sql()['expr']`:
+>   `Código 1047 (JTT)` → **Capotamento**, `Código 146 (JIMI)` → **Curva Brusca**
+>   (as 14 linhas históricas; `alarms.alarm_name` continua congelado, quem
+>   conserta é a re-resolução na leitura).
+> - `resolve_notification_rule()` reproduzida em SQL: `1047` → regra `acidente`,
+>   `146` → regra `conducao`. **`1046` (Colisão) → nenhuma regra** — ver abaixo.
+> - `get_occurrence_param()` reproduzida: JT/T `1047` e JIMI `45` caem no MESMO
+>   parâmetro `Capotamento` (gera, alto, 5 min).
+> - **As três telas corrigidas**, com sonda que roda as consultas reais contra o
+>   homolog: `ativo_detalhe` (aba Alertas), `relatorios` (tipo=alarmes) e
+>   `ocorrencias_dashboard` (eventos) devolvem `Capotamento` / `Curva Brusca`
+>   nas 14 linhas históricas; o filtro de categoria `acidente` devolve 10; e a
+>   trava `WHERE <expr> LIKE 'Código %'` devolve **0**.
+> - `tests/helpers/diagnostico_guard.test.php` — **14 casos**, 0 falhas.
+> - `php -l` em `handlers/ config/ core/ includes/ scripts/` — limpo.
+>
+> #### 📐 Blueprint novo: `PROJETO_PARAMETROS.md` (parametrização das câmeras)
+>
+> Desenho aprovado para ler/guardar/escrever a configuração das câmeras JT/T via
+> `33027`/`33028`/`33030`, com leitura automática na primeira conexão. **Nenhuma
+> linha de código ainda** — o documento é a entrega.
+>
+> O que o levantamento achou, com **sonda em câmera real** (não pela doc):
+>
+> | Achado | Impacto |
+> |---|---|
+> | Campo de contagem é `paramCount`, doc diz `totalNum` | parser pela doc falha 100% das vezes, calado |
+> | Vídeo vem em `channel_1..N`, doc diz chave `119` | perderia a configuração de vídeo inteira |
+> | 20 dos 46 parâmetros do JC371 não constam da doc | metade invisível na tela |
+> | JC181 devolve **6** parâmetros, JC371 devolve **46+3 canais** | perfil tem de ser por **modelo**, não por cliente |
+> | 🔴 `command_responses.command_content` é `varchar(250)` com `substr(…,250)` | **já perde dado hoje**: linha `id=14` tem `LENGTH = 250` exato |
+> | 🔴 `/config` fora de `$screenByHandler` **e** de `$screens` | 5ª ocorrência da armadilha; qualquer usuário reconfigura câmera |
+> | `_code:600` com `last_communication` de segundos antes (JC182) | frescor de comunicação ≠ device aceita comando |
+>
+> Consequência assumida pelo dono (12/08/2026): **não bloquear** os parâmetros de
+> rede (`19`,`23`,`24`,`25`,`16`,`17`,`18`), porque a câmera continua alcançável
+> por **SMS**. Em troca, o valor anterior é gravado antes do envio — sem isso o
+> SMS de recuperação não tem para onde apontar.
+>
+> #### 🔴 Achado registrado e NÃO corrigido
+>
+> **`Colisão do Veículo` não dispara notificação.** `1046` (JT/T) e `147` (JIMI)
+> estão na categoria `veiculo`, que não tem regra; `Airbag Acionado / Colisão`
+> (JIMI `30`) está em `acidente` e dispara. Confirmado rodando a consulta do
+> motor: colisão devolve zero regras. Movê-la para `acidente` aumenta o volume
+> notificado de um alarme frequente — **decisão de produto, aguardando o dono**.
 
 > ### 📍 ESTADO EM 10/08/2026, 21h15 — v4.9.8 e v4.9.9 publicadas e verificadas
 >
@@ -83,9 +204,9 @@
 >
 > #### Pendências herdadas (seguem abertas)
 >
-> - **`Código 1047 (JTT)`** — não consta da doc oficial; depende do fornecedor.
->   *(Aparece na tela normalmente: o filtro de diagnóstico falha para o lado de
->   mostrar.)*
+> - ~~**`Código 1047 (JTT)`** — não consta da doc oficial; depende do fornecedor.~~
+>   **RESOLVIDO na v4.9.10**: o fornecedor informou que é **capotamento**. Junto
+>   saiu o `Código 146 (JIMI)`, que esta lista nunca mencionou — eram dois.
 > - **`devices.last_communication` incompleta** — só `pushalarm` e `pushlbs` a escrevem.
 > - **Cercas**: coluna Mapa existe na tela e não no PDF/XLS.
 > - **`tests/comandos.spec.js` escrito e não executado** (v4.9.7).

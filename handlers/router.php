@@ -239,6 +239,13 @@ $screenByHandler = [
     // nos dois sentidos: toda tela entra nos DOIS lugares.
     'config_notificacoes.php'   => 'config-notificacoes',
     'config_smtp.php'           => 'config-smtp',
+    // v4.9.11: QUINTA ocorrência do mesmo par de erros. `/config` — a tela que
+    // consulta e RECONFIGURA a câmera (proNo 33027/33028/33030/33029) — estava
+    // em $simpleRoutes e fora dos dois mapas. Só `require_login()`: qualquer
+    // usuário logado, de qualquer grupo, mandava comando de configuração para
+    // o equipamento. O `sendcommand.php` barra cross-tenant (R02), mas não
+    // barra PAPEL. Ver PROJETO_PARAMETROS.md §3.4.
+    'config.php'                => 'config-dispositivos',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
 ];

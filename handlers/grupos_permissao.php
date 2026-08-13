@@ -39,6 +39,7 @@ $screens = [
     'config-ocorrencias'    => 'Config. Ocorrências',
     'config-notificacoes'   => 'Config. Notificações',
     'config-smtp'           => 'Servidor de E-mail',
+    'config-dispositivos'   => 'Config. Dispositivos',
     'usuarios'              => 'Usuários',
     'wiki'                  => 'Central de Ajuda',
 ];
@@ -50,6 +51,12 @@ $screens = [
 // inverso — fora da matriz E fora do router, ou seja, sem proteção nenhuma.
 // Toda tela nova precisa entrar nos DOIS lugares: aqui e no `$screenByHandler`
 // de handlers/router.php.
+//
+// NOTA (v4.9.11): `config-dispositivos` (/config) foi a QUINTA ocorrência —
+// estava fora dos dois. Era a tela que reconfigura a câmera, aberta a qualquer
+// usuário logado. ⚠️ Como `can()` nega por omissão, grupo com `permissions`
+// explícito que não a liste PERDE o acesso quando esta versão sobe. É o
+// objetivo, mas é mudança visível: o admin concede aqui, na linha nova.
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();

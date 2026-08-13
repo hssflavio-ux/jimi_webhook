@@ -5,6 +5,41 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.11
+
+Abertura da **F1 do `PROJETO_PARAMETROS.md`** por dois consertos que valem por si e não dependem de nenhuma decisão do resto do blueprint.
+
+### Fixed
+- 🔴 **`command_responses.command_content` truncava a resposta do equipamento em 250 caracteres — e já estava perdendo dado.** A coluna era `varchar(250)` **e** `pushinstructresponse.php` fazia `substr($content, 0, 250)` antes de gravar. O campo que ela recebe é o `_content` do callback, que para a família `33028`/`33030` é a **configuração inteira do equipamento**.
+  - **Não era hipótese**: a linha `id=14` do homolog tem `LENGTH(command_content) = 250` **exato** — uma resposta de VERSION do JC371 cortada no limite.
+  - **Medido em câmera real** (12/08/2026): o `_content` de um `33028` do JC371 tem **612 bytes**. Perdiam-se 60%, e o que sobrava era JSON sintaticamente inválido — não dava nem para recusar direito.
+  - **As duas correções eram necessárias, e o replay provou isso.** Com a coluna já `TEXT`, um callback replicado com os 612 bytes reais **ainda** gravou 250 e `JSON_VALID = 0`: quem cortava era o `substr` do PHP, não o banco. Alterar só a coluna teria deixado o defeito de pé com a aparência de corrigido.
+  - O teto que ficou é o da própria `TEXT` (65000), não um limite de negócio: sem ele um payload acima de 64 KB faria o `INSERT` estourar e a linha **não seria gravada de jeito nenhum** — perda parcial viraria perda total.
+- 🔴 **`/config` estava fora dos DOIS mapas de permissão — quinta ocorrência da mesma armadilha.** Depois de `checklist` e `wiki` (v4.8.5) e `config-notificacoes`/`config-smtp` (v4.8.9). `config.php` estava em `$simpleRoutes` e em nenhum dos dois mapas, com apenas `require_login()`: **qualquer usuário logado, de qualquer grupo, reconfigurava câmera** (proNo 33027/33028/33029/33030). O `sendcommand.php` barra cross-tenant (R02), mas não barra papel.
+  - Entra como `config-dispositivos` em `$screenByHandler` (router) **e** em `$screens` (grupos_permissao).
+  - ⚠️ **Mudança de comportamento visível**: `can()` nega por omissão para quem tem grupo. Conferido no homolog — `Administrador` mantém (wildcard `*`), **`Operador Padrão` perde `/config`**. É o objetivo, e de propósito a migração **não** concede a tela de volta aos grupos existentes: devolver o que nunca deveria ter sido concedido anularia a correção. O admin libera pela tela de Grupos, onde a entrada nova agora aparece para marcar — que é exatamente o que a matriz incompleta impedia.
+
+### Added
+- **`PROJETO_PARAMETROS.md`** — blueprint da parametrização remota das câmeras JT/T (`33027`/`33028`/`33030`), com leitura automática na primeira conexão. A **§2 vale mais que a doc oficial**: as respostas foram medidas em câmeras reais do homolog e a doc está errada em três pontos — o campo de contagem é `paramCount` (não `totalNum`), os parâmetros de vídeo vêm em blocos `channel_N` (não na chave `119`), e `paramCount` não é o número de chaves de topo. Um parser escrito pela doc falharia calado nos três.
+
+## [Unreleased] — 4.9.10
+
+### Added
+- **`Código 1047 (JTT)` virou `Capotamento`, e com ele saiu o ÚLTIMO alarme sem nome do sistema.** Havia dois, não um: `1047` (JT/T, 10 linhas, 05→12/08/2026) e `146` (JIMI, 4 linhas, 11/08/2026). A conferência que provava isso — os mesmos JOINs que `alarm_label_sql()` usa na leitura — agora devolve **zero linhas**.
+  - **O que destravou o 1047 foi informação do fornecedor, não a doc.** A tabela oficial "Other Alarms" continua indo de `1046` (*Collision (ACDU)*) direto a `3073` (reconferido no HTML servido em 12/08/2026). A regra do `CLAUDE.md` sempre foi contra batizar por **palpite** — não contra catalogar o que se sabe. Duas evidências independentes sustentam: o próprio JT/T 808 põe capotamento ao lado de colisão no bitmask padrão (bit 27 `Pré-aviso de Colisão`, bit 28 `Pré-aviso de Capotamento`, já em `decodeStandardAlarm()`), e a faixa 1042–1046 segue a ordem das unidades ADAS (AHADU, AHBDU, AHTDU, … ACDU), onde 1047 é o passo seguinte.
+  - 🔴 **O mesmo evento já existia no outro protocolo com nome errado.** JIMI `45` — *Vehicle tipped over onto its side* — estava gravado como **"Veículo Tumbado"** (espanhol, não português). Cadastrar `1047` como "Capotamento" e deixar `45` como está reproduziria o defeito que a v4.9.0 descreveu para os pares 1024/1042: **o filtro da tela casa por NOME**, então o usuário escolheria um dos dois rótulos e perderia metade dos eventos — os do outro protocolo. Os dois passaram a se chamar `Capotamento`, com o remapeamento de `occurrence_config_params` e `notification_rules` junto, como o `CLAUDE.md` exige.
+  - **Categoria `acidente`, não `veiculo`** — não é inconsistência com `1046`: é seguir a classificação que o **mesmo evento** já tinha em JIMI `45`. Tem consequência medida: `notification_engine.php` casa a regra por categoria, e a regra ativa `acidente` (id 2) passa a disparar para capotamento. **Provado com a consulta do motor**, não presumido.
+  - **`Capotamento` voltou ao perfil padrão de ocorrências** (`gera`, risco `alto`, janela 5 min — o mesmo do irmão `Airbag Acionado / Colisão`). A v4.0.0 o semeara; a v4.8.7 o apagou por "nome sem alvo no catálogo", que é exatamente o que esta versão derrubou. Sem ele, capotamento seria catalogado, apareceria no relatório e **não geraria ocorrência nenhuma** — `process_alarm_occurrence()` retorna cedo quando não há parâmetro. Nomear o alarme e parar aí seria meia correção, do lado invisível.
+- **JIMI `144`/`145`/`146` — a geração nova de condução brusca.** A doc (`1.7 Driving Behavior Alerts`) publica os três; o catálogo tinha só os antigos `41` e `48`. Só `146` chegou até agora, mas os três vêm do mesmo grupo de firmware — cadastrar apenas o que já apareceu deixaria os outros dois caindo no rótulo genérico no dia em que aparecerem, que é o defeito que a v4.8.1 criou ao inserir 11 de 39 códigos. Nomes **idênticos** aos das linhas JT/T equivalentes (`1042`/`1043`/`1044`), de novo porque o filtro casa por nome. `146` passa a casar a regra ativa `conducao` (id 6).
+
+### Fixed
+- 🔴 **Três telas mostravam o código enquanto o Relatório de Alarmes já mostrava o nome** — liam `a.alarm_name` cru, que é **congelado na chegada do webhook**, em vez da re-resolução na leitura. É a mesma divergência que o `scripts/worker.php` teve por meses (v4.9.0), agora em outras três cópias: a **aba Alertas** de `/ativos/{imei}` (`ativo_detalhe.php`), o **relatório genérico** de alarmes (`relatorios.php`) e os **eventos da ocorrência** no Dashboard (`ocorrencias_dashboard.php`). As três passaram a usar `alarm_label_sql()`, o ponto único.
+  - **Efeito colateral positivo nas duas primeiras**: o JOIN que elas usavam era um `IF(subtipo IS NOT NULL, composto, base)` — **sem fallback**. Alarme JT/T com subtipo fora do catálogo não casava nada, e com isso a **severidade caía para `info`** e o **filtro de categoria não casava**. Os joins do helper tentam composto e depois base.
+  - Provado com sonda contra o homolog: as 14 linhas históricas saem como `Capotamento` (crítico, `acidente`) e `Curva Brusca` (aviso, `conducao`) nas três consultas, e a trava `WHERE <expr> LIKE 'Código %'` devolve **0**.
+
+### Documented
+- 🔴 **`Colisão do Veículo` NÃO dispara notificação, e isto ficou registrado sem ser corrigido.** `1046` (JT/T) e `147` (JIMI) estão na categoria `veiculo`, para a qual **não há regra**; `Airbag Acionado / Colisão` (JIMI `30`) está em `acidente` e dispara. Confirmado rodando a consulta de `resolve_notification_rule()` contra o homolog: colisão devolve **zero regras**. Mover colisão para `acidente` aumentaria o volume notificado de um alarme frequente — é decisão de produto, não de migração.
+
 ## [Unreleased] — 4.9.9
 
 ### Changed
