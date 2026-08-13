@@ -1,5 +1,94 @@
 # STATUS.md — Jimi Webhook System v4.9.14 (YUV Parity)
 
+> ### 📍 ESTADO EM 13/08/2026 — PRODUÇÃO NO AR (`186.248.143.197`)
+>
+> O sistema saiu do homolog. **Produção nova, com câmeras reais reportando**, no
+> commit `46d5dc6` e `system_info` em **4.9.14**.
+>
+> | | Endereço | Papel |
+> |---|---|---|
+> | **Produção** | `186.248.143.197` (LAN `10.1.1.8/24`, host `bycamera`) | operação |
+> | Homolog | `189.22.240.43` | testes |
+>
+> Servidor chegou **cru**: Ubuntu 24.04 com Apache e MySQL 8.4.11, **sem PHP**.
+>
+> | Camada | Estado final |
+> |---|---|
+> | PHP | 8.3-FPM + `pdo_mysql, mbstring, zip, curl, xml, gd, bcmath, intl` |
+> | Apache | `rewrite`, `headers`, `proxy_fcgi`; vhost `bycamera.conf`, `000-default` desabilitado |
+> | App | `/var/www/jimi_webhook`, 121 arquivos com `php -l` limpo |
+> | Banco | dump do homolog — 60 tabelas, já em 4.9.14, **nenhuma migração roda** |
+> | Cron | 9 workers |
+> | IoT Hub | **no mesmo servidor**, 16 containers em `/iothub` |
+> | FTP | `vsftpd`, controle **21222**, passivas **31100–31200** |
+>
+> #### 🔴 `sed -i` no `.env` derruba o site em silêncio
+>
+> O `.env` é `640 administrador:www-data`. O `sed -i` **recria** o arquivo, o
+> grupo vira `administrador`, o `www-data` perde a leitura e a aplicação passa a
+> rodar com os **defaults do código** — inclusive `DB_PASS=1029384756`, a senha
+> do homolog, que em produção não abre.
+>
+> **A assinatura do defeito**: `/ping` responde `"version":"desconhecida"` e os
+> webhooks devolvem **500**. Nada no log da aplicação, porque ela nem chega a
+> conectar.
+>
+> Aconteceu em 13/08 ao gravar a senha do FTP: **12 requisições perdidas em ~3
+> min** (últimas 500 às 17:10:09, corrigido às 17:10:52). O grave é que **o
+> próprio `scripts/deploy.sh` roda esse `sed`** quando `SYSTEM_VERSION` muda —
+> ou seja, o próximo deploy repetiria tudo sozinho.
+>
+> **Mitigado** com `chmod g+s` em `/var/www/jimi_webhook`: arquivo novo (o
+> temporário do `sed` inclusive) herda o grupo `www-data`. Verificado
+> simulando o `sed` do deploy. **Se o setgid se perder num `chmod -R` futuro, o
+> defeito volta.**
+>
+> #### A senha SMTP do dump era irrecuperável — e isso é regra, não acaso
+>
+> `smtp_settings.password_enc` veio cifrado com a `APP_KEY` **do homolog**, que
+> não viaja no dump. Provado por teste de decifragem: nem o `WEBHOOK_TOKEN` nem
+> o fallback abriram. Produção recebeu `APP_KEY` nova e o valor foi recadastrado
+> em `/config-smtp` (`last_test_ok = 1`, fonte da chave = `app_key`).
+>
+> **Todo dump levado para outro ambiente carrega esse buraco**: o que está
+> cifrado em repouso não atravessa junto. Contar as senhas de terceiros como
+> "restauradas pelo backup" é o erro.
+>
+> #### Decisões e pendências
+>
+> - **TLS pendente** — adiado pelo dono em 13/08. Hoje só HTTP: login, senha e o
+>   `WEBHOOK_TOKEN` trafegam em claro. Falta domínio apontado para o Let's Encrypt.
+> - **`WEBHOOK_TOKEN` segue `a12341234123`**, de propósito: tem de casar com o
+>   que está configurado no IoT Hub, senão todo payload é rejeitado em silêncio.
+> - **MySQL/Webmin/Cockpit alcançáveis de fora** — verificado e reportado;
+>   **decisão do cliente**, liberação restrita ao IP deles. Não mexer.
+> - **`/midia` procura o arquivo só na RAIZ de `VIDEO_MEDIA_DIR`**
+>   (`$baseDir . '/' . $arquivo`), e o Hub criou um subdiretório `jtt/`. O FTP da
+>   câmera deposita na raiz, então o fluxo do `37382` está certo — mas anexo que
+>   caia em `jtt/` não toca na tela.
+> - Usuário de teste `e2e@teste.local` veio no dump e continua no banco.
+>
+> #### O vhost fecha o que o `.htaccess` não alcança
+>
+> O `.htaccess` da raiz só reescreve o que **não** é arquivo real (`!-f`), então
+> todo arquivo existente é servido estático — e a config padrão do Ubuntu só nega
+> `.ht*`. Sem as negações do vhost, `/.env`, `/logs/*.log` e `/mysql/*.sql` seriam
+> públicos. O pior era `/scripts/`: aberto, qualquer um dispararia `worker.php`
+> pela web. Conferido: todos em **403**, assets e `manifest.json` em 200.
+>
+> #### Verificação
+>
+> - Webhook ponta a ponta: token errado → **401**; token certo → `{"code":0}` e a
+>   posição gravou com todos os campos mapeados (linha de teste removida depois).
+> - `/setup` bloqueado: POST tentando criar admin não criou nada.
+> - FTP provado **de máquina externa** contra o IP público (login, listagem e
+>   upload em modo passivo) — sonda do localhost não valeria, é a câmera que
+>   conecta de fora.
+> - Fluxo real: 3 câmeras cadastradas reportando, 20 alarmes em 15 min,
+>   `10.1.1.8:10088` em HTTP 200 e `param_sync` sem erro.
+
+---
+
 > ### 📍 ESTADO EM 12/08/2026 — v4.9.10 a v4.9.14 publicadas e verificadas
 >
 > | | git HEAD | `/ping` | `system_info` |
