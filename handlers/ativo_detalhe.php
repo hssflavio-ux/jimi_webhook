@@ -171,8 +171,10 @@ if ($tab === 'parametros') {
         // regra do alarme fora do catálogo, que mostra o número em vez de sumir.
         $stmt = $db->prepare("
             SELECT dp.param_no, dp.channel, dp.value_raw, dp.value_json, dp.read_at, dp.source,
+                   dp.desired_value, dp.previous_value,
                    COALESCE(c.grupo, 'outros') AS grupo, c.name_pt, c.unit, c.value_kind,
-                   c.enum_json, c.writable, c.is_secret, c.doc_ref
+                   c.enum_json, c.writable, c.is_secret, c.doc_ref,
+                   COALESCE(c.is_network, 0) AS is_network
               FROM device_params dp
               LEFT JOIN device_param_catalog c ON c.param_no = dp.param_no
              WHERE dp.imei = :imei
@@ -709,6 +711,8 @@ $gruposLabel = [
     'video' => 'Vídeo', 'identificacao' => 'Identificação', 'outros' => 'Não documentados',
 ];
 $ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
+// Escrita exige a ação `edit` da tela de ativos — ver a nota do JS abaixo.
+$podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 ?>
 <div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
@@ -762,7 +766,7 @@ $ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
     </h4>
     <table class="tbl" style="width:100%">
         <thead><tr>
-            <th style="width:60px">Nº</th><th>Parâmetro</th><th>Valor</th><th style="width:150px">Origem</th>
+            <th style="width:60px">Nº</th><th>Parâmetro</th><th>Valor</th><th style="width:150px">Origem</th><th style="width:110px"></th>
         </tr></thead>
         <tbody>
         <?php foreach ($linhas as $p): $no = (int)$p['param_no']; ?>
@@ -773,11 +777,26 @@ $ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
                         <span style="font-size:10px;color:var(--muted)">· credencial</span>
                     <?php endif; ?>
                 </td>
-                <td class="mono"><?= htmlspecialchars(param_format($paramCatalogo, $no, (string)$p['value_raw'], $ehAdmin)) ?></td>
+                <td class="mono">
+                    <?= htmlspecialchars(param_format($paramCatalogo, $no, (string)$p['value_raw'], $ehAdmin)) ?>
+                    <?php if (!empty($p['desired_value']) && (string)$p['desired_value'] !== (string)$p['value_raw']): ?>
+                        <div style="font-size:10px;color:var(--warning,#b45309)">
+                            pedido: <?= htmlspecialchars((string)$p['desired_value']) ?>
+                            (anterior: <?= htmlspecialchars((string)($p['previous_value'] ?? '—')) ?>)
+                            — confirme relendo
+                        </div>
+                    <?php endif; ?>
+                </td>
                 <td style="font-size:11px;color:var(--muted)">
                     <?= $p['doc_ref'] === null ? 'sem catálogo'
                         : ($p['doc_ref'] === 'medido' ? 'medido, sem doc'
                         : ($p['doc_ref'] === 'medido/inferido' ? 'nome inferido' : 'doc ' . htmlspecialchars($p['doc_ref']))) ?>
+                </td>
+                <td style="width:110px;text-align:right">
+                    <?php if (!empty($p['writable']) && $podeEscrever): ?>
+                        <button class="btn btn-outline btn-sm"
+                                onclick="editarParam(<?= $no ?>, <?= (int)!empty($p['is_network']) ?>, <?= htmlspecialchars(json_encode(param_label($paramCatalogo, $no)), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode((string)$p['value_raw']), ENT_QUOTES) ?>)">Alterar</button>
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -832,6 +851,47 @@ function lerParametros() {
             ? '<span style="color:var(--success)">Leitura solicitada. Atualizando a página…</span>'
             : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao solicitar leitura') + '</span>';
         if (ok) setTimeout(function() { location.reload(); }, 1500);
+    }).catch(function(e) {
+        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+    });
+}
+
+// ── Escrita de parâmetro (v4.9.14) ──────────────────────────────────────────
+//
+// A confirmação de rede aqui é CORTESIA, não segurança: o servidor recusa com
+// HTTP 409 quando falta `confirm_network`, porque quem forja o POST passa por
+// cima de qualquer prompt do navegador.
+function editarParam(no, ehRede, rotulo, atual) {
+    var novo = prompt('Novo valor para "' + rotulo + '" (nº ' + no + ')\n\nValor atual: ' + (atual || '(vazio)'), atual);
+    if (novo === null || novo === atual) return;
+
+    if (ehRede) {
+        var aviso = 'ATENÇÃO — ' + rotulo + ' controla como a câmera chega ao sistema.\n\n'
+                  + 'Valor errado e ela SOME da plataforma: sem log, sem alarme, e a\n'
+                  + 'recuperação é apenas por SMS.\n\n'
+                  + 'De: ' + (atual || '(vazio)') + '\nPara: ' + novo + '\n\n'
+                  + 'O valor anterior fica gravado para o SMS saber para onde voltar.\n'
+                  + 'Confirma?';
+        if (!confirm(aviso)) return;
+    }
+
+    var el = document.getElementById('param-status');
+    el.innerHTML = '<span style="color:var(--muted)">Enviando alteração…</span>';
+    var corpo = {}; corpo[no] = novo;
+    fetch('/sendcommand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({
+            imei: '<?= $imei ?>', proNo: 33027, content: JSON.stringify(corpo),
+            serverFlagId: 0, origem: 'manual', confirm_network: ehRede ? 1 : 0
+        })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        var ok = d && d.code === 0;
+        el.innerHTML = ok
+            ? '<span style="color:var(--success)">Alteração enviada. O valor exibido só muda '
+              + 'depois de <strong>reler</strong> — o equipamento confirma o recebimento, não o efeito.</span>'
+            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao enviar') + '</span>';
+        if (ok) setTimeout(function() { location.reload(); }, 2500);
     }).catch(function(e) {
         el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
     });

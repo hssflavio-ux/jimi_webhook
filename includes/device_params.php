@@ -394,6 +394,162 @@ function param_osd_labels($valor): string
 }
 
 /**
+ * Perfil que vale para um equipamento: o do CLIENTE, senão o padrão do MODELO.
+ *
+ * @param  PDO      $db
+ * @param  int      $modelId
+ * @param  int|null $customerId
+ * @returns array|null  Linha de `param_profiles`, ou null
+ */
+function param_profile_for(PDO $db, int $modelId, ?int $customerId): ?array
+{
+    try {
+        // A ordenação faz a sobreposição: o perfil do cliente vem primeiro.
+        $st = $db->prepare(
+            "SELECT * FROM param_profiles
+              WHERE device_model_id = :m AND is_active = 1
+                AND (customer_id = :c OR customer_id IS NULL)
+              ORDER BY (customer_id IS NULL) ASC LIMIT 1"
+        );
+        $st->execute([':m' => $modelId, ':c' => $customerId]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Diferença entre o que o perfil pede e o que a câmera tem.
+ *
+ * 🔴 SÓ O DIFF É ESCRITO, e isso não é economia de bytes. Reenviar os 46
+ * parâmetros para mudar um significa sobrescrever 45 valores corretos com o que
+ * o perfil acha que eles deveriam ser — inclusive os que alguém ajustou de
+ * propósito naquele veículo. Um `33027` "completo" é destrutivo por natureza.
+ *
+ * Parâmetro que o perfil pede e a câmera NUNCA reportou fica de fora, com
+ * motivo: pode ser que o modelo não o tenha (o JC181 devolve 6 de 46), e
+ * mandá-lo às cegas é escrever no escuro.
+ *
+ * @param  PDO    $db
+ * @param  string $imei
+ * @param  int    $profileId
+ * @returns array{
+ *     alterar: array<int, array{param_no:int, channel:int, de:string, para:string}>,
+ *     iguais: int,
+ *     sem_leitura: array<int, int>
+ * }
+ */
+function param_profile_diff(PDO $db, string $imei, int $profileId): array
+{
+    $out = ['alterar' => [], 'iguais' => 0, 'sem_leitura' => []];
+
+    $st = $db->prepare(
+        "SELECT ppv.param_no, ppv.channel, ppv.value,
+                dp.value_raw, c.writable
+           FROM param_profile_values ppv
+           LEFT JOIN device_param_catalog c ON c.param_no = ppv.param_no
+           LEFT JOIN device_params dp
+                  ON dp.imei = :imei AND dp.param_no = ppv.param_no
+                 AND dp.channel = ppv.channel
+          WHERE ppv.profile_id = :pid
+          ORDER BY ppv.param_no, ppv.channel"
+    );
+    $st->execute([':imei' => $imei, ':pid' => $profileId]);
+
+    foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        // Guarda dupla: a tela barra na entrada, mas um perfil antigo pode
+        // conter parâmetro que deixou de ser gravável.
+        if (empty($r['writable'])) continue;
+
+        if ($r['value_raw'] === null) {
+            $out['sem_leitura'][] = (int)$r['param_no'];
+            continue;
+        }
+        if ((string)$r['value_raw'] === (string)$r['value']) { $out['iguais']++; continue; }
+
+        $out['alterar'][] = [
+            'param_no' => (int)$r['param_no'],
+            'channel'  => (int)$r['channel'],
+            'de'       => (string)$r['value_raw'],
+            'para'     => (string)$r['value'],
+        ];
+    }
+    return $out;
+}
+
+/**
+ * Registra a INTENÇÃO de escrita antes do despacho.
+ *
+ * 🔴 A ORDEM IMPORTA E É O CONTRATO DA F3. O valor anterior é gravado **antes**
+ * de o comando sair, não depois de a resposta chegar. O dono do produto aceitou
+ * o risco de escrever os parâmetros de rede (`19`, `23`, `24`, `25`, `16`-`18`)
+ * porque a câmera continua alcançável por SMS — mas o SMS precisa saber PARA
+ * ONDE voltar. Se o valor anterior só fosse gravado no sucesso, o caso em que
+ * ele é indispensável — a escrita que derrubou a câmera — seria exatamente o
+ * caso em que ele não existe.
+ *
+ * @param  PDO      $db
+ * @param  string   $imei
+ * @param  array    $mudancas  [['param_no','channel','de','para'], …]
+ * @param  string   $origem    'manual' | 'perfil:<id>'
+ * @param  int|null $userId
+ * @returns array<int,int>     ids de `device_param_writes`
+ */
+function record_param_intent(PDO $db, string $imei, array $mudancas,
+                             string $origem, ?int $userId = null): array
+{
+    $ins = $db->prepare(
+        "INSERT INTO device_param_writes
+             (imei, param_no, channel, from_value, to_value, origem, status, user_id)
+         VALUES (:imei, :no, :ch, :de, :para, :origem, 'pedido', :uid)"
+    );
+    $upd = $db->prepare(
+        "UPDATE device_params
+            SET desired_value = :para, previous_value = :de, desired_at = NOW()
+          WHERE imei = :imei AND param_no = :no AND channel = :ch"
+    );
+
+    $ids = [];
+    foreach ($mudancas as $m) {
+        $ins->execute([
+            ':imei' => $imei, ':no' => $m['param_no'], ':ch' => $m['channel'],
+            ':de' => $m['de'], ':para' => $m['para'], ':origem' => $origem, ':uid' => $userId,
+        ]);
+        $ids[] = (int)$db->lastInsertId();
+        $upd->execute([
+            ':para' => $m['para'], ':de' => $m['de'], ':imei' => $imei,
+            ':no' => $m['param_no'], ':ch' => $m['channel'],
+        ]);
+    }
+    return $ids;
+}
+
+/**
+ * Fecha as intenções depois da resposta do device.
+ *
+ * ⚠️ `aceito` NÃO significa "o valor está aplicado". O `33027` responde `ok` de
+ * confirmação de recebimento; o valor real só se conhece relendo (33030). Por
+ * isso `device_params.value_raw` **não** é atualizado aqui — quem o atualiza é
+ * sempre uma leitura. Escrever o valor desejado como se fosse o lido faria a
+ * tela mentir exatamente quando o device recusou em silêncio.
+ *
+ * @param  PDO   $db
+ * @param  array $writeIds
+ * @param  bool  $aceito
+ * @param  int|null $commandId
+ * @returns void
+ */
+function close_param_intent(PDO $db, array $writeIds, bool $aceito, ?int $commandId = null): void
+{
+    if (!$writeIds) return;
+    $ph = implode(',', array_fill(0, count($writeIds), '?'));
+    $st = $db->prepare("UPDATE device_param_writes
+                           SET status = ?, command_id = ?
+                         WHERE id IN ($ph)");
+    $st->execute(array_merge([$aceito ? 'aceito' : 'falhou', $commandId], $writeIds));
+}
+
+/**
  * Valor de referência de uma lista: a MODA (o mais comum).
  *
  * Mora aqui, e não no `rel_parametros.php`, porque é a regra que decide o que o

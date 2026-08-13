@@ -40,6 +40,7 @@ $screens = [
     'config-notificacoes'   => 'Config. Notificações',
     'config-smtp'           => 'Servidor de E-mail',
     'config-dispositivos'   => 'Config. Dispositivos',
+    'config-parametros'     => 'Perfis de Parâmetros',
     'usuarios'              => 'Usuários',
     'wiki'                  => 'Central de Ajuda',
 ];

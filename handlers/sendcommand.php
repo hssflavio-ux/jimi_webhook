@@ -152,6 +152,7 @@ if (!in_array($proNo, $proNosConhecidos, true)) {
 // ponto por onde TODO comando passa: `/comandos`, `/config-dispositivos`, a aba
 // do ativo e o worker de sincronização usam este mesmo handler.
 $paramSpec = null;
+$paramWriteIds = [];
 if (in_array($proNo, [33027, 33028, 33030], true)) {
     require_once __DIR__ . '/../includes/device_params.php';
 
@@ -183,6 +184,84 @@ if (in_array($proNo, [33027, 33028, 33030], true)) {
             http_response_code(400);
             echo json_encode(['code' => 400,
                 'msg' => 'proNo 33027 exige ao menos um parâmetro no formato {"<numero>":"<valor>"}']);
+            exit;
+        }
+
+        // ── Travas da escrita (v4.9.14) ─────────────────────────────────────
+        //
+        // 🔴 Esta é a ÚNICA parte do projeto que mexe em equipamento em
+        // operação. As checagens ficam no SERVIDOR porque o JavaScript da tela
+        // é sugestão, não garantia: quem forjar o POST passa por cima dele.
+        try {
+            $dbW = Database::getInstance()->getConnection();
+            $catW = param_catalog($dbW);
+            $alvos = json_decode($cmdContent, true) ?: [];
+
+            $naoGravaveis = [];
+            foreach (array_keys($alvos) as $no) {
+                if (empty($catW[(int)$no]['writable'])) $naoGravaveis[] = (int)$no;
+            }
+            if ($naoGravaveis) {
+                http_response_code(400);
+                Logger::warning('sendcommand: 33027 barrado em parâmetro não-gravável', [
+                    'imei' => $imei, 'params' => $naoGravaveis,
+                ]);
+                echo json_encode(['code' => 400,
+                    'msg' => 'Parâmetro(s) não graváveis: ' . implode(', ', $naoGravaveis)
+                           . '. Só se escreve o que o catálogo sabe nomear.']);
+                exit;
+            }
+
+            // Parâmetro de rede exige confirmação explícita no payload. Não é
+            // bloqueio — o dono do produto aceitou o risco porque a volta é por
+            // SMS (PROJETO_PARAMETROS.md §8.1) —, é a diferença entre decidir e
+            // esbarrar.
+            $deRede = array_values(array_filter(array_keys($alvos),
+                fn($no) => !empty($catW[(int)$no]['is_network'])));
+            if ($deRede && empty($input['confirm_network'])) {
+                http_response_code(409);
+                echo json_encode(['code' => 409,
+                    'msg' => 'Parâmetro(s) de rede (' . implode(', ', $deRede) . '): escrever '
+                           . 'errado tira a câmera da plataforma e a volta é só por SMS. '
+                           . 'Reenvie com confirm_network=1 para assumir.',
+                    'requires_confirm' => $deRede]);
+                exit;
+            }
+
+            // Valor anterior GRAVADO ANTES DO DESPACHO — é o contrato da F3.
+            // Se ele só fosse gravado no sucesso, o caso em que é
+            // indispensável (a escrita que derrubou a câmera) seria justamente
+            // o caso em que ele não existe.
+            $st = $dbW->prepare("SELECT param_no, channel, value_raw FROM device_params
+                                  WHERE imei = :imei");
+            $st->execute([':imei' => $imei]);
+            $atuais = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $atuais[(int)$r['param_no'] . ':' . (int)$r['channel']] = (string)$r['value_raw'];
+            }
+            $mudancas = [];
+            foreach ($alvos as $no => $valor) {
+                $mudancas[] = [
+                    'param_no' => (int)$no, 'channel' => 0,
+                    'de'   => $atuais[(int)$no . ':0'] ?? '',
+                    'para' => (string)$valor,
+                ];
+            }
+            $paramWriteIds = record_param_intent(
+                $dbW, $imei, $mudancas,
+                (string)($input['origem'] ?? 'manual'),
+                (int)(get_jimi_user()['id'] ?? 0) ?: null
+            );
+        } catch (Throwable $e) {
+            // Não silencia: sem a intenção registrada, a escrita perde a rede de
+            // segurança inteira. Melhor recusar do que escrever às cegas.
+            Logger::error('sendcommand: falha ao registrar intenção de escrita', [
+                'imei' => $imei, 'erro' => $e->getMessage(),
+            ]);
+            http_response_code(500);
+            echo json_encode(['code' => 500,
+                'msg' => 'Não foi possível registrar a escrita antes de enviá-la. '
+                       . 'Comando NÃO despachado.']);
             exit;
         }
     }
@@ -364,6 +443,23 @@ try {
         ':rtime'    => ($dbStatus === 'executed') ? date('Y-m-d H:i:s') : null,
     ]);
     $insertedId = $db->lastInsertId();
+
+    // ── Escrita: fecha a intenção registrada antes do despacho ──────────────
+    //
+    // ⚠️ 'aceito' NÃO quer dizer "valor aplicado". O 33027 responde `ok` de
+    // recebimento; o valor real só se conhece RELENDO (33030). Por isso
+    // `device_params.value_raw` não é tocado aqui — quem o atualiza é sempre
+    // uma leitura. Gravar o desejado como se fosse o lido faria a tela mentir
+    // exatamente quando o device recusou em silêncio.
+    if ($paramWriteIds) {
+        try {
+            close_param_intent($db, $paramWriteIds, $dbStatus !== 'failed', (int)$insertedId);
+        } catch (Throwable $e) {
+            Logger::error('sendcommand: falha ao fechar intenção de escrita', [
+                'imei' => $imei, 'erro' => $e->getMessage(),
+            ]);
+        }
+    }
 
     // ── Leitura de parâmetros: a resposta SÍNCRONA já traz tudo ──────────────
     //

@@ -100,6 +100,7 @@ if (empty($segments)) {
         // mod_dir se antecipa ao mod_rewrite. Renomear a rota resolve sem
         // brigar com o Apache, e alinha com as irmãs config-*.
         'config-dispositivos' => 'config_dispositivos.php',
+        'config-parametros'   => 'config_parametros.php',
         'grupos-permissao'    => 'grupos_permissao.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',
@@ -262,6 +263,7 @@ $screenByHandler = [
     // escondia o primeiro. Com a rota consertada, a trava passa a ser o que
     // impede a exposição. Ver PROJETO_PARAMETROS.md §3.4.
     'config_dispositivos.php'   => 'config-dispositivos',
+    'config_parametros.php'     => 'config-parametros',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
 ];

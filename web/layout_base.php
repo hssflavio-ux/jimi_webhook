@@ -77,6 +77,7 @@ $navGroups = [
             ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],
             ['route' => 'config-notificacoes', 'label' => 'Config. Notificações','href' => '/config-notificacoes'],
             ['route' => 'config-smtp',         'label' => 'Servidor de E-mail',  'href' => '/config-smtp'],
+            ['route' => 'config-parametros',   'label' => 'Perfis de Parâmetros','href' => '/config-parametros'],
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
         ],
     ],
