@@ -1,297 +1,137 @@
 # STATUS.md — Jimi Webhook System v4.9.14 (YUV Parity)
 
-> ### 📍 v4.9.14 — F3 entregue. PROJETO_PARAMETROS completo (F1+F2+F3)
+> ### 📍 ESTADO EM 12/08/2026 — v4.9.10 a v4.9.14 publicadas e verificadas
 >
-> Local, `origin/main` e homolog em paridade; `/ping` **4.9.14**.
->
-> #### 🔴 INCIDENTE nesta sessão, com recuperação completa
->
-> Testando as travas da escrita contra o homolog, **a trava de parâmetro de rede
-> não disparou e a escrita foi para uma câmera real**: `19` (Servidor Principal)
-> recebeu `1.2.3.4` e o equipamento respondeu `ok`.
->
-> **Causa**: `param_catalog()` selecionava colunas uma a uma e a `is_network` —
-> criada pela migração da própria v4.9.14 — não entrou na lista. A guarda virou
-> decoração, em silêncio.
->
-> **Recuperação em ~1 minuto**, e ela validou o desenho da F3:
-> `device_param_writes` tinha `from_value = 189.22.240.43` gravado **antes** do
-> despacho. Valor reescrito e conferido **lendo da própria câmera**:
-> `19 = 189.22.240.43`, `24 = 21122`, `41 = 60`, `48 = 45` — configuração
-> integralmente restaurada.
->
-> **A lição**: lista explícita de colunas num catálogo lido inteiro só cria esse
-> modo de falha — a coluna nova é ignorada sem erro e a guarda que depende dela
-> para de existir. Agora é `SELECT *`, com teste de regressão que **pula** sem
-> banco em vez de passar por vacuidade.
->
-> #### Travas, reverificadas depois da correção
->
-> | Cenário | Resultado |
-> |---|---|
-> | `128` (medido, sem doc) | **400** — não gravável |
-> | `19` sem `confirm_network` | **409** — exige assumir o risco |
-> | `41` + `19` no mesmo lote | **409** — o lote inteiro para |
-> | `33027` sem parâmetro | **400** |
-> | `48`: 45 → 46 → 45 (comum) | **executado e revertido**, conferido na câmera |
->
-> #### Verificação
->
-> - `tests/helpers/device_params.test.php` — **64 casos**, 0 falhas.
-> - `php -l` limpo. Ambiente de teste removido.
->
-> #### O blueprint está concluído
->
-> F1 (ler e guardar) · F2 (ler sozinho + relatório de frota) · F3 (escrever com
-> guardas, perfis por modelo, diff-only). O que ficou **de fora de propósito**:
-> aplicar perfil em lote com um clique — hoje a aplicação é equipamento a
-> equipamento, pela aba Parâmetros, e a tela de perfil só **simula** o impacto.
-> Depois deste incidente, ampliar o alcance de uma escrita pede sessão própria.
-
-
-> ### 📍 v4.9.13 — F2 do PROJETO_PARAMETROS entregue e PUBLICADA
->
-> A leitura de parâmetros virou **automática** e a frota ganhou relatório de
-> configuração. Local, `origin/main` e homolog em paridade; `/ping` **4.9.13**.
->
-> | Entrega | Estado |
-> |---|---|
-> | `scripts/param_sync_worker.php` (cron 5 min, backoff) | ✅ rodado na frota real |
-> | `/relatorios/parametros` — Parâmetros da Frota | ✅ renderizado com dado real |
-> | `includes/iothub_command.php` — despacho em ponto único | ✅ `sendcommand` refatorado e reverificado |
->
-> #### Estado da frota JT/T depois do worker
->
-> | Equipamento | Modelo | Parâmetros | Como foi lido |
+> | | git HEAD | `/ping` | `system_info` |
 > |---|---|---|---|
-> | 371_3241 | JC371 | **49** (3 canais) | resposta síncrona |
-> | FJR7B59 | JC182 | **47** (1 canal) | resposta síncrona |
-> | 181_7838 | JC181 | **6** | 🔴 **callback offline** |
-> | 371_2 · Device E2E | JC371 · JC450 | — | em fila, backoff de 1 h |
+> | Local | `449757c` | — | — |
+> | `origin/main` | `449757c` | — | — |
+> | **Homolog** (`189.22.240.43`) | **`449757c`** | **4.9.14** | **4.9.14** |
 >
-> 🔴 **O caminho do callback foi provado em produção, com dado real.** O JC181
-> saiu do worker como "fila offline" e o `/pushinstructresponse` completou a
-> leitura sozinho: **94 bytes, `JSON_VALID = 1`**. É o destruncamento da v4.9.11
-> valendo num callback de verdade — antes eu só tinha provado por replay.
+> Árvore limpa, os três em paridade. **Cinco migrações** aplicadas (`v4.9.10`,
+> `v4.9.11`, `v4.9.12`, `v4.9.14` — a `v4.9.13` é só código).
 >
-> #### O que o relatório já acusa
+> #### O que entrou nesta sessão
 >
-> **As duas câmeras lidas estão sem limite de velocidade** (`85 = 0`). É a
-> pergunta que motivou o projeto inteiro, agora respondida sozinha.
->
-> Com um equipamento por modelo, tudo cai em *"sem base de comparação"* — que é
-> o comportamento desenhado: dizer "tudo certo" sem ter comparado nada seria
-> aprovar no vazio. A comparação real aparece quando o segundo JC371 reconectar.
->
-> #### Verificação
->
-> - `tests/helpers/device_params.test.php` — **56 casos**, 0 falhas.
-> - `php -l` em toda a árvore — limpo.
-> - Relatório renderizado com sessão real; link na sidebar; rota nos dois mapas.
-> - Ambiente de teste removido.
->
-> #### Falta a F3
->
-> Escrita `33027` com diff-only, `desired_value` gravado **antes** do envio (sem
-> isso o SMS de recuperação não tem para onde apontar) e perfis **por modelo**.
-
-
-> ### 📍 v4.9.12 — F1 do PROJETO_PARAMETROS entregue e PUBLICADA
->
-> | | estado |
-> |---|---|
-> | Local / `origin/main` / Homolog | os três em **`128fbab`** |
-> | `/ping` e `system_info` | **4.9.12** |
->
-> O sistema passa a saber **como cada câmera JT/T está configurada**. Antes só
-> dava para mandar comando e torcer.
->
-> #### Verificação — em câmera real, não em fixture
->
-> Um `33028` e um `33030` disparados pela aplicação (login + CSRF + rota real)
-> contra a **JC371 `865478070003241`**, transmitindo no momento:
->
-> | | resultado |
-> |---|---|
-> | `33028` → snapshot | **612 bytes**, `paramCount` 87, **49 entradas** extraídas |
-> | `33030` (44, 45, 85) → snapshot | 45 bytes, 3 de 3 |
-> | `device_params` | **49 linhas**, 3 delas de canal de vídeo |
-> | Rótulos | `19` → *Servidor Principal*, `16` → *APN da Operadora*, `128` → *Parâmetro 128* |
-> | `params_synced_at` | carimbado só pelo `33028` |
-> | Aba renderizada (JT/T) | todas as seções, `3888000 s` exibido como **45d** |
-> | Aba em câmera **JIMI** | **não existe** — protocolo isolado (ADR-001) |
-> | Credencial do APN, `role=operator` | **mascarada**; `cmnet` (não é segredo) aparece |
-> | Controle: aba Alertas | segue mostrando `Capotamento` (v4.9.10 intacta) |
->
-> `tests/helpers/device_params.test.php` — **48 casos**, 0 falhas. `php -l` limpo.
-> Ambiente de teste removido: 0 usuários, 0 sessões órfãs.
->
-> #### Quatro defeitos que só o teste real achou
->
-> 1. **`33028` recusado com HTTP 400** três linhas antes da normalização que
->    existe para montá-lo — o `cmdContent` da consulta é vazio por especificação.
-> 2. **`33030` marcava o device como sincronizado** com 3 de 46 parâmetros, o
->    que faria o worker parar de buscar o resto, em silêncio.
-> 3. **A migração se derrubava**: `LIKE 'jtt\_%'` perde a barra dentro de string
->    do MySQL, `_` vira coringa, e o `CAST('uct' AS UNSIGNED)` abortava tudo.
-> 4. **Conferência com falso positivo**: `name_pt LIKE 'Parâmetro %'` acusava o
->    `93` (*Parâmetro de Colisão*), que é documentado. Invariante boa é sobre a
->    **procedência** do dado, não sobre como o rótulo começa.
->
-> E um quinto, achado pelo teste unitário: `is_int($k)` não distingue lista de
-> mapa, porque o PHP converte a chave `'85'` para inteiro sozinho.
->
-> #### Pendente (F2 e F3 do blueprint)
->
-> - **F2**: `scripts/param_sync_worker.php` (leitura na primeira conexão, com
->   backoff) + relatório de frota "fora do padrão".
-> - **F3**: escrita `33027` com diff-only, `desired_value` gravado antes do
->   envio, e perfis **por modelo** — JC181 devolve 6 parâmetros e JC371 devolve
->   46+3 canais, então perfil por cliente acusaria divergência falsa.
-
-
-> ### 📍 v4.9.11 — F1 do PROJETO_PARAMETROS aberta pelos dois consertos independentes
->
-> | | estado |
-> |---|---|
-> | Migração `v4.9.11` | ✅ **aplicada** no banco do homolog (`system_info` = 4.9.11) |
-> | Código | ⚠️ **na árvore local, não publicado** — falta commit + deploy |
->
-> | Conserto | Prova |
-> |---|---|
-> | 🔴 `command_responses.command_content` truncava em 250 | linha `id=14` com `LENGTH = 250` exato; `_content` real do JC371 = **612 bytes** |
-> | 🔴 `/config` **morta** (colisão com o diretório `config/`) + fora dos dois mapas | log do Apache: `AH01276: Cannot serve directory .../config/`; renomeada para `/config-dispositivos` |
->
-> #### O replay mostrou que a coluna sozinha não bastava
->
-> Com `command_content` **já** em `TEXT`, repliquei o callback com os 612 bytes
-> reais medidos na câmera. O banco gravou **250** e `JSON_VALID = 0`, cortado no
-> meio de `"16":"cmnet"`. **Quem cortava era o `substr` do PHP, não o banco** —
-> alterar só a coluna teria deixado o defeito de pé com aparência de corrigido.
-> Por isso a verificação final do destruncamento **depende do deploy**: só o
-> banco está corrigido no homolog hoje.
->
-> Linha sintética do replay **removida** (`command_responses` id 19).
->
-> #### ⚠️ Correção de uma afirmação desta sessão
->
-> Eu afirmei que "qualquer usuário logado reconfigurava câmera" por `/config`
-> estar fora dos mapas de permissão. **Isso estava errado, e o teste com usuário
-> restrito de verdade é que mostrou**: `/config` devolvia **301**, não 403.
-> Existe um diretório `config/` no docroot, o `mod_dir` do Apache se antecipa ao
-> `mod_rewrite`, redireciona para `/config/` e serve o diretório — que morre em
-> 403 por `Options -Indexes`. **O PHP nunca rodava.** Ninguém alcançava a tela.
->
-> Eram **dois defeitos empilhados, e o de rota escondia o de permissão**. Os
-> dois estão corrigidos: rota renomeada para `/config-dispositivos` (arquivo
-> `config_dispositivos.php`) e tela nos dois mapas. A trava de permissão passa a
-> valer **a partir de agora**, com a rota viva.
->
-> A regra que faltava, agora escrita no `.htaccess`: **nenhuma rota pode ter o
-> nome de um diretório do docroot** (`config`, `core`, `includes`, `mysql`,
-> `scripts`, `storage`, `tests`, `web`, `logs`, `docs`).
->
-> A tela **continua fora da sidebar** de propósito: é um console cru de JSON e
-> os `cmdContent` que ela monta estão errados (§3.1 do blueprint). A F1 entrega
-> a tela definitiva; linkar a rústica agora seria expor trabalho pela metade.
->
-> #### Bônus: o JC182 respondeu de verdade
->
-> As linhas `17` e `18` são callbacks **reais** do JC182 à sonda de `33028`:
-> `Device busy (previous command has not returned)` e, um minuto depois,
-> `request timeout`. É exatamente o par de casos que o `PROJETO_PARAMETROS.md`
-> §6 prevê para o worker — e a confirmação de que device com
-> `last_communication` de segundos antes **recusa comando**.
->
-> #### Pendente para fechar a F1
->
-> Catálogo de parâmetros + as 3 tabelas + `includes/device_params.php` +
-> `cmdContent` correto em 33028/33030 + captura síncrona + aba Parâmetros.
-
-
-
-> ### 📍 ESTADO EM 12/08/2026 — v4.9.10: acabaram os alarmes sem nome
->
-> | | git HEAD | `system_info` |
+> | Versão | Entrega | Migração |
 > |---|---|---|
-> | Local | v4.9.10 (código + migração) | — |
-> | **Homolog** (`189.22.240.43`) | código **ainda em `063354c`** ⚠️ | **4.9.10** (migração aplicada) |
+> | **4.9.10** | `Código 1047 (JTT)` → **Capotamento**; `146` → Curva Brusca; 3 telas que mostravam código | sim |
+> | **4.9.11** | 🔴 resposta de comando truncada em 250; 🔴 `/config` morta + fora dos mapas de permissão | sim |
+> | **4.9.12** | **F1**: catálogo de 49 parâmetros, 3 tabelas, parser, aba Parâmetros | sim |
+> | **4.9.13** | **F2**: worker de leitura automática + relatório Parâmetros da Frota | não |
+> | **4.9.14** | **F3**: escrita `33027` com travas, perfis por modelo, diff-only | sim |
 >
-> ⚠️ **A migração foi aplicada no banco do homolog; o CÓDIGO ainda não foi
-> publicado lá.** Falta commit + `deploy.sh` (o gate de versão já vai pular a
-> v4.9.10, que está aplicada — é só o código de `wiki.php`/`functions.php` que
-> precisa subir). Nada quebra nesse intervalo: a mudança de comportamento veio
-> toda do banco, e as duas alterações em PHP são texto de tela e comentário.
+> **`PROJETO_PARAMETROS.md`** nasceu e foi concluído nesta sessão (F1+F2+F3). É
+> o blueprint da parametrização remota das câmeras JT/T, e a **§2 dele vale mais
+> que a doc oficial**: as respostas foram medidas em equipamento real.
 >
-> #### O que entrou
+> #### O fio que liga tudo: a doc mente, o equipamento não
 >
-> | Versão | Entrega | Migração | Estado |
-> |---|---|---|---|
-> | **4.9.10** | `Código 1047 (JTT)` → **`Capotamento`** | sim | ✅ verificado no banco |
-> | **4.9.10** | `Código 146 (JIMI)` → **`Curva Brusca`** (+ `144`/`145` preventivos) | sim | ✅ |
-> | **4.9.10** | JIMI `45` `Veículo Tumbado` → `Capotamento` (une os dois protocolos) | sim | ✅ |
-> | **4.9.10** | `Capotamento` volta ao perfil padrão de ocorrências (alto / 5 min) | sim | ✅ |
-> | **4.9.10** | 🔴 **três telas** liam `alarm_name` cru e mostravam o código | não | ✅ provado por sonda |
+> Três divergências entre a doc oficial e o que a câmera manda, cada uma capaz
+> de quebrar um parser **em silêncio**:
 >
-> #### A medida
+> 1. o campo de contagem chama **`paramCount`**; a doc diz `totalNum`, que
+>    nenhum device mandou — código pela doc procuraria campo inexistente em 100%
+>    das respostas;
+> 2. os parâmetros de vídeo vêm num bloco **`channel_N`**, não na chave `119` —
+>    parser fiel à doc perderia a configuração de vídeo inteira;
+> 3. `paramCount` **não** é o número de chaves de topo (JC371 declara 87 e
+>    entrega 46), então não serve para validar "recebi tudo?".
+>
+> O mesmo padrão apareceu no alarme `1047`: a doc não o publica, mas o
+> fornecedor informou que é capotamento, e o bit 28 do bitmask JT/T corrobora.
+> **A regra do repo é não batizar por palpite — não "só o que a doc publica".**
+>
+> #### Números depois de tudo
 >
 > | | antes | depois |
 > |---|---|---|
-> | Códigos que a tela mostrava como número | **2** (1047 ×10, 146 ×4) | **0** |
+> | Códigos de alarme exibidos como número | 2 (1047, 146) | **0** |
 > | Protocolos que chamam capotamento pelo mesmo nome | 0 de 2 | **2 de 2** |
+> | Payload de callback aproveitado | 250 bytes | **até 65.000** |
+> | Câmeras com configuração no banco | 0 | **3** (JC371 49 · JC182 47 · JC181 6) |
 >
-> #### Verificação (executada, não presumida)
+> #### Verificação — em câmera real, não em fixture
 >
-> - Migração rodada **duas vezes** contra o homolog — idempotente, saída idêntica.
-> - Conferência de alarme sem nome (mesmos JOINs de `alarm_label_sql()`): **0 linhas**.
-> - Conferência de parâmetro de ocorrência órfão: **0 linhas**.
-> - `Veículo Tumbado` nas três camadas, com `BINARY`: **0, 0, 0**.
-> - Rótulo de tela provado com a expressão de `alarm_label_sql()['expr']`:
->   `Código 1047 (JTT)` → **Capotamento**, `Código 146 (JIMI)` → **Curva Brusca**
->   (as 14 linhas históricas; `alarms.alarm_name` continua congelado, quem
->   conserta é a re-resolução na leitura).
-> - `resolve_notification_rule()` reproduzida em SQL: `1047` → regra `acidente`,
->   `146` → regra `conducao`. **`1046` (Colisão) → nenhuma regra** — ver abaixo.
-> - `get_occurrence_param()` reproduzida: JT/T `1047` e JIMI `45` caem no MESMO
->   parâmetro `Capotamento` (gera, alto, 5 min).
-> - **As três telas corrigidas**, com sonda que roda as consultas reais contra o
->   homolog: `ativo_detalhe` (aba Alertas), `relatorios` (tipo=alarmes) e
->   `ocorrencias_dashboard` (eventos) devolvem `Capotamento` / `Curva Brusca`
->   nas 14 linhas históricas; o filtro de categoria `acidente` devolve 10; e a
->   trava `WHERE <expr> LIKE 'Código %'` devolve **0**.
-> - `tests/helpers/diagnostico_guard.test.php` — **14 casos**, 0 falhas.
-> - `php -l` em `handlers/ config/ core/ includes/ scripts/` — limpo.
+> Esta sessão desbloqueou um método que o repo tratava como impossível: **sonda
+> contra equipamento real** via `ssh` + `curl` no IoT Hub (`10.1.0.43:10088`).
+> O `M.2.5` ("nenhum comando disparado para veículo real") vale para o despacho
+> pelo dashboard, não para sondar comportamento.
 >
-> #### 📐 Blueprint novo: `PROJETO_PARAMETROS.md` (parametrização das câmeras)
+> - `33028`/`33030` reais em 3 modelos (JC371, JC182, JC181) — a base da §2 do
+>   blueprint.
+> - Worker rodado na frota: 2 lidos na hora, 3 enfileirados com backoff.
+> - 🔴 **Caminho do callback provado em produção**: o JC181 saiu como "fila
+>   offline" e o `/pushinstructresponse` completou sozinho — 94 bytes,
+>   `JSON_VALID = 1`.
+> - Travas de escrita exercitadas uma a uma (400 / 409 / 409 / 400) e o caminho
+>   feliz (`48`: 45 → 46 → 45) conferido **lendo da própria câmera**.
+> - Permissão testada com **usuário restrito de verdade**: 403 no operador, 200
+>   no admin.
+> - `device_params.test.php` — **64 casos**, 0 falhas. `php -l` limpo.
+> - Ambiente de teste removido: 0 usuários, 0 sessões órfãs, 0 linhas sintéticas.
 >
-> Desenho aprovado para ler/guardar/escrever a configuração das câmeras JT/T via
-> `33027`/`33028`/`33030`, com leitura automática na primeira conexão. **Nenhuma
-> linha de código ainda** — o documento é a entrega.
+> #### 🔴 INCIDENTE, com recuperação completa
 >
-> O que o levantamento achou, com **sonda em câmera real** (não pela doc):
+> Testando as travas da F3, **a de parâmetro de rede não disparou e a escrita
+> foi para uma câmera real**: `19` (Servidor Principal) recebeu `1.2.3.4`.
 >
-> | Achado | Impacto |
-> |---|---|
-> | Campo de contagem é `paramCount`, doc diz `totalNum` | parser pela doc falha 100% das vezes, calado |
-> | Vídeo vem em `channel_1..N`, doc diz chave `119` | perderia a configuração de vídeo inteira |
-> | 20 dos 46 parâmetros do JC371 não constam da doc | metade invisível na tela |
-> | JC181 devolve **6** parâmetros, JC371 devolve **46+3 canais** | perfil tem de ser por **modelo**, não por cliente |
-> | 🔴 `command_responses.command_content` é `varchar(250)` com `substr(…,250)` | **já perde dado hoje**: linha `id=14` tem `LENGTH = 250` exato |
-> | 🔴 `/config` fora de `$screenByHandler` **e** de `$screens` | 5ª ocorrência da armadilha; qualquer usuário reconfigura câmera |
-> | `_code:600` com `last_communication` de segundos antes (JC182) | frescor de comunicação ≠ device aceita comando |
+> **Causa**: `param_catalog()` listava colunas uma a uma e a `is_network` —
+> criada pela migração da própria v4.9.14 — não entrou na lista. A guarda virou
+> decoração, sem erro nenhum.
 >
-> Consequência assumida pelo dono (12/08/2026): **não bloquear** os parâmetros de
-> rede (`19`,`23`,`24`,`25`,`16`,`17`,`18`), porque a câmera continua alcançável
-> por **SMS**. Em troca, o valor anterior é gravado antes do envio — sem isso o
-> SMS de recuperação não tem para onde apontar.
+> **Recuperado em ~1 min**, e a recuperação validou o desenho:
+> `device_param_writes` tinha `from_value = 189.22.240.43` gravado **antes** do
+> despacho. Conferido lendo da câmera: `19 = 189.22.240.43`, `24 = 21122`,
+> `41 = 60`, `48 = 45` — configuração integralmente restaurada.
 >
-> #### 🔴 Achado registrado e NÃO corrigido
+> **Duas regras saíram daqui**: catálogo lido inteiro se lê com `SELECT *` (lista
+> explícita ignora coluna nova em silêncio, e se a coluna é uma guarda, a guarda
+> deixa de existir); e trava de segurança precisa de teste que a **exercite**.
 >
-> **`Colisão do Veículo` não dispara notificação.** `1046` (JT/T) e `147` (JIMI)
-> estão na categoria `veiculo`, que não tem regra; `Airbag Acionado / Colisão`
-> (JIMI `30`) está em `acidente` e dispara. Confirmado rodando a consulta do
-> motor: colisão devolve zero regras. Movê-la para `acidente` aumenta o volume
-> notificado de um alarme frequente — **decisão de produto, aguardando o dono**.
+> #### Defeitos que só o teste ponta a ponta achou
+>
+> Nenhum destes apareceria em revisão de código:
+>
+> 1. `33028` recusado com HTTP 400 três linhas antes da normalização que existe
+>    para montá-lo — seu `cmdContent` é vazio por especificação.
+> 2. `33030` marcava o device como sincronizado com 3 de 46 parâmetros.
+> 3. A migração se derrubava: `LIKE 'jtt\_%'` perde a barra dentro de string do
+>    MySQL, `_` vira coringa, e o `CAST('uct' AS UNSIGNED)` abortava tudo.
+> 4. Conferência com falso positivo: `name_pt LIKE 'Parâmetro %'` acusava o `93`
+>    (*Parâmetro de Colisão*), que é documentado.
+> 5. `/config` devolvia **301**, não 403 — colisão com o diretório `config/`.
+> 6. `is_int($k)` não distingue lista de mapa (o PHP converte `'85'` para int).
+>
+> #### 🔴 Achados registrados e NÃO corrigidos
+>
+> - **`Colisão do Veículo` não dispara notificação.** `1046` (JT/T) e `147`
+>   (JIMI) estão em `veiculo`, que não tem regra; `Airbag Acionado / Colisão`
+>   (JIMI `30`) está em `acidente` e dispara. Confirmado rodando a consulta do
+>   motor. Movê-la aumenta o volume notificado de um alarme frequente —
+>   **decisão de produto, aguardando o dono**.
+> - **`/config-dispositivos` fica fora da sidebar de propósito**: é console cru
+>   de JSON. A aba Parâmetros a supera; linkar a rústica seria expor trabalho
+>   pela metade.
+> - ⚠️ **Grupo "Operador Padrão" perdeu `/config-dispositivos`** quando a v4.9.11
+>   subiu — é o objetivo da correção, mas é mudança visível. O admin concede na
+>   tela de Grupos, onde a entrada nova agora aparece.
+>
+> #### O que ficou de fora, de propósito
+>
+> **Aplicar perfil em lote com um clique.** Hoje a escrita é equipamento a
+> equipamento pela aba Parâmetros, e a tela de perfil só **simula** o impacto.
+> Depois do incidente acima, ampliar o alcance de uma escrita — de uma câmera
+> para uma frota — pede sessão própria, com o dono olhando.
+>
+> #### Pendências herdadas (seguem abertas)
+>
+> - **`devices.last_communication` incompleta** — só `pushalarm` e `pushlbs` a escrevem.
+> - **Cercas**: coluna Mapa existe na tela e não no PDF/XLS.
+> - **`tests/comandos.spec.js` escrito e não executado** (v4.9.7).
+> - **Suíte Playwright bloqueada** — o MySQL de desenvolvimento local não tem data dir.
+> - **`serverFlagId` não é chave de correlação** (é seletor de gateway); corrigir
+>   mexe no despacho para veículo real (M.2.5).
 
 > ### 📍 ESTADO EM 10/08/2026, 21h15 — v4.9.8 e v4.9.9 publicadas e verificadas
 >
