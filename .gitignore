@@ -3,6 +3,11 @@
 
 # Logs
 logs/*.log
+# Estado de runtime dos workers (hoje: tls_watch_state.json, o limitador de
+# repetição do alerta de renovação do TLS). É estado da MÁQUINA, não do
+# projeto — versioná-lo faria o horário do último alerta de um servidor
+# viajar para o outro no deploy.
+logs/*.json
 
 # Dependências (não usamos composer; npm só para testes Playwright)
 vendor/
