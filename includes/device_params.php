@@ -332,6 +332,17 @@ function param_format(array $catalogo, int $no, string $raw, bool $revelarSegred
         case 'int':
         case 'decimal':
             if (!is_numeric($raw)) return $raw;
+            // ⚠️ Unidades em DÉCIMOS: a norma transmite décimos, e o número cru
+            // engana quem lê. O JC181 devolve hodômetro `15`, que são 1,5 km —
+            // exibir "15" não parece errado, e é justamente por isso que passa.
+            // A conversão é só de EXIBIÇÃO: o valor cru continua sendo o que
+            // volta para o device na escrita.
+            if ($unit === '1/10 km' || $unit === '1/10 km/h') {
+                $base = $unit === '1/10 km' ? 'km' : 'km/h';
+                $n = number_format((float)$raw / 10, 1, ',', '.');
+                if (substr($n, -2) === ',0') $n = substr($n, 0, -2);
+                return $n . ' ' . $base;
+            }
             // Segundos viram algo legível: 3888000 s não diz nada, 45 dias diz.
             if ($unit === 's' && (float)$raw >= 3600) {
                 return $raw . ' s (' . humanize_seconds((int)$raw) . ')';
@@ -346,6 +357,91 @@ function param_format(array $catalogo, int $no, string $raw, bool $revelarSegred
 
         default:
             return $raw;
+    }
+}
+
+/**
+ * Máscara de entrada do parâmetro: como o valor DEVE ser digitado.
+ *
+ * A tela exibe o valor já convertido ("1,5 km"), mas o device recebe o valor
+ * CRU da norma (décimos de km). Sem dizer isso na hora de digitar, o
+ * administrador informa `15` querendo 15 km e escreve 1,5 km — e o erro não
+ * aparece: o device aceita, a tela relê e mostra um número plausível.
+ *
+ * Por isso a dica descreve a unidade de TRANSMISSÃO, com exemplo, e não a
+ * unidade de leitura.
+ *
+ * @param  array $catalogo Retorno de param_catalog()
+ * @param  int   $no
+ * @returns array{hint:string,placeholder:string,inputmode:string,pattern:?string}
+ */
+function param_input_spec(array $catalogo, int $no): array
+{
+    $c    = $catalogo[$no] ?? null;
+    $kind = $c['value_kind'] ?? 'text';
+    $unit = $c['unit'] ?? null;
+
+    $num = ['inputmode' => 'numeric', 'pattern' => '^[0-9]+$'];
+
+    switch ($kind) {
+        case 'port':
+            return $num + ['hint' => 'Porta TCP/UDP, de 1 a 65535.', 'placeholder' => 'ex.: 21122'];
+
+        case 'ip':
+            return ['hint' => 'IP ou domínio, sem http:// e sem porta.',
+                    'placeholder' => 'ex.: 189.22.240.43',
+                    'inputmode' => 'url', 'pattern' => null];
+
+        case 'enum':
+            $mapa = $c['enum_json'] ? json_decode($c['enum_json'], true) : null;
+            $ops  = is_array($mapa)
+                ? implode(' · ', array_map(fn($k, $v) => "$k = $v", array_keys($mapa), $mapa))
+                : 'valor numérico';
+            return $num + ['hint' => 'Informe o CÓDIGO: ' . $ops, 'placeholder' => 'ex.: 0'];
+
+        case 'bitmask':
+            return $num + ['hint' => 'Máscara de bits em DECIMAL (não hexadecimal).',
+                           'placeholder' => 'ex.: 0'];
+
+        case 'int':
+        case 'decimal':
+            if ($unit === '1/10 km') {
+                return $num + ['hint' => 'Em DÉCIMOS de quilômetro: 150 = 15 km, 15 = 1,5 km.',
+                               'placeholder' => 'ex.: 150'];
+            }
+            if ($unit === '1/10 km/h') {
+                return $num + ['hint' => 'Em DÉCIMOS de km/h: 50 = 5 km/h.',
+                               'placeholder' => 'ex.: 50'];
+            }
+            if ($unit === 's') {
+                return $num + ['hint' => 'Em SEGUNDOS (1 min = 60, 1 h = 3600).',
+                               'placeholder' => 'ex.: 60'];
+            }
+            if ($unit === 'm') {
+                return $num + ['hint' => 'Em METROS (1 km = 1000).', 'placeholder' => 'ex.: 300'];
+            }
+            if ($unit === '°') {
+                return $num + ['hint' => 'Em GRAUS, menor que 180.', 'placeholder' => 'ex.: 45'];
+            }
+            if ($unit === 'km/h') {
+                return $num + ['hint' => 'Em km/h, número inteiro.', 'placeholder' => 'ex.: 90'];
+            }
+            if ($unit === 'vezes') {
+                return $num + ['hint' => 'Número de tentativas.', 'placeholder' => 'ex.: 3'];
+            }
+            return $num + ['hint' => 'Número inteiro.', 'placeholder' => ''];
+
+        case 'csv':
+            return ['hint' => 'Lista posicional separada por vírgula — altere só se souber a ordem exata.',
+                    'placeholder' => '', 'inputmode' => 'text', 'pattern' => null];
+
+        default:
+            if (!empty($c['is_secret'])) {
+                return ['hint' => 'Credencial. Deixe em branco para não alterar.',
+                        'placeholder' => '', 'inputmode' => 'text', 'pattern' => null];
+            }
+            return ['hint' => 'Texto livre.', 'placeholder' => '',
+                    'inputmode' => 'text', 'pattern' => null];
     }
 }
 

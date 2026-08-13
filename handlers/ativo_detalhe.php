@@ -161,20 +161,27 @@ $paramCatalogo = [];
 $paramSnapshot = null;
 $paramCanais = [];
 $paramErro = null;
+$paramOcultos = [];   // v4.9.15: números que o catálogo ainda não sabe nomear
 if ($tab === 'parametros') {
     require_once __DIR__ . '/../includes/device_params.php';
     try {
         $paramCatalogo = param_catalog($db);
 
-        // Ordena pelo GRUPO do catálogo e, dentro dele, pelo número. Parâmetro
-        // sem catálogo cai em 'outros' e vai para o fim, mas APARECE — mesma
-        // regra do alarme fora do catálogo, que mostra o número em vez de sumir.
+        // Ordena pelo GRUPO do catálogo e, dentro dele, pelo número.
+        //
+        // ⚠️ v4.9.15 — MUDANÇA DE REGRA. Até aqui, parâmetro sem catálogo
+        // aparecia com o valor cru, espelhando o `Código NNNN (JTT)` dos
+        // alarmes. O dono do produto decidiu o contrário em 13/08/2026: número
+        // sem significado não ajuda a operar. Eles saem da grade, mas são
+        // CONTADOS e informados no rodapé — esconder sem dizer que escondeu é
+        // que seria o defeito.
         $stmt = $db->prepare("
             SELECT dp.param_no, dp.channel, dp.value_raw, dp.value_json, dp.read_at, dp.source,
                    dp.desired_value, dp.previous_value,
                    COALESCE(c.grupo, 'outros') AS grupo, c.name_pt, c.unit, c.value_kind,
                    c.enum_json, c.writable, c.is_secret, c.doc_ref,
-                   COALESCE(c.is_network, 0) AS is_network
+                   COALESCE(c.is_network, 0) AS is_network,
+                   COALESCE(c.is_hidden, 0) AS is_hidden
               FROM device_params dp
               LEFT JOIN device_param_catalog c ON c.param_no = dp.param_no
              WHERE dp.imei = :imei
@@ -185,6 +192,12 @@ if ($tab === 'parametros') {
         $stmt->execute([':imei' => $imei]);
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
             if ((int)$r['channel'] > 0) { $paramCanais[] = $r; continue; }
+            // Sem linha no catálogo (name_pt NULL) conta como não reconhecido:
+            // firmware novo pode trazer número que ninguém cadastrou ainda.
+            if ((int)$r['is_hidden'] === 1 || $r['name_pt'] === null) {
+                $paramOcultos[] = (int)$r['param_no'];
+                continue;
+            }
             $paramRows[$r['grupo']][] = $r;
         }
 
@@ -717,7 +730,15 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 <div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
         <div>
-            <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin:0 0 4px">Configuração do equipamento</h4>
+            <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin:0 0 4px">
+                Configuração do equipamento
+                <span style="font-weight:400;color:var(--muted)">·</span>
+                <span class="mono" style="font-size:12px"><?= htmlspecialchars($asset['model_display']) ?></span>
+            </h4>
+            <p style="font-size:11px;color:var(--muted);margin:0 0 4px">
+                Cada modelo devolve um conjunto próprio — o JC371 reporta 49 parâmetros e o
+                JC181, 6. Ausência aqui é firmware, não falha de leitura.
+            </p>
             <p style="font-size:12px;color:var(--muted);margin:0">
                 <?php if ($paramSnapshot): ?>
                     Última leitura em <strong><?= fmt_brt_dt($paramSnapshot['created_at']) ?></strong>
@@ -759,49 +780,84 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 </div>
 <?php else: ?>
 
+<style>
+/* Quadro de parâmetros (v4.9.15). `auto-fill` com mínimo de 320px resolve
+   sozinho o "2 ou 3 colunas": 3 no monitor, 2 no notebook, 1 no celular —
+   sem media query e sem escolher um número que estaria errado na outra tela. */
+.param-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
+.param-cell { border:1px solid var(--line,#e5e7eb); border-radius:10px; padding:12px 14px; background:var(--surface,#fff); }
+.param-cell:hover { box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.param-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.param-name { font-size:12px; font-weight:600; color:var(--ink); line-height:1.3; }
+.param-no { font-size:10px; color:var(--muted); flex-shrink:0; }
+.param-val { font-size:18px; font-weight:400; color:var(--ink); margin:6px 0 2px; word-break:break-all; }
+.param-hint { font-size:10px; color:var(--muted); line-height:1.35; }
+.param-acts { display:flex; gap:6px; justify-content:flex-end; margin-top:10px; }
+.param-edit { margin-top:8px; display:none; }
+.param-edit input { width:100%; padding:6px 8px; border:1px solid var(--line,#e5e7eb); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px; }
+</style>
+
 <?php foreach ($paramRows as $grupo => $linhas): ?>
 <div class="card" style="margin-bottom:16px">
     <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px">
         <?= htmlspecialchars($gruposLabel[$grupo] ?? ucfirst($grupo)) ?>
+        <span style="font-weight:400;color:var(--muted)">· <?= count($linhas) ?></span>
     </h4>
-    <table class="tbl" style="width:100%">
-        <thead><tr>
-            <th style="width:60px">Nº</th><th>Parâmetro</th><th>Valor</th><th style="width:150px">Origem</th><th style="width:110px"></th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($linhas as $p): $no = (int)$p['param_no']; ?>
-            <tr>
-                <td class="mono" style="color:var(--muted)"><?= $no ?></td>
-                <td><?= htmlspecialchars(param_label($paramCatalogo, $no)) ?>
-                    <?php if (!empty($p['is_secret'])): ?>
-                        <span style="font-size:10px;color:var(--muted)">· credencial</span>
-                    <?php endif; ?>
-                </td>
-                <td class="mono">
-                    <?= htmlspecialchars(param_format($paramCatalogo, $no, (string)$p['value_raw'], $ehAdmin)) ?>
-                    <?php if (!empty($p['desired_value']) && (string)$p['desired_value'] !== (string)$p['value_raw']): ?>
-                        <div style="font-size:10px;color:var(--warning,#b45309)">
-                            pedido: <?= htmlspecialchars((string)$p['desired_value']) ?>
-                            (anterior: <?= htmlspecialchars((string)($p['previous_value'] ?? '—')) ?>)
-                            — confirme relendo
-                        </div>
-                    <?php endif; ?>
-                </td>
-                <td style="font-size:11px;color:var(--muted)">
-                    <?= $p['doc_ref'] === null ? 'sem catálogo'
-                        : ($p['doc_ref'] === 'medido' ? 'medido, sem doc'
-                        : ($p['doc_ref'] === 'medido/inferido' ? 'nome inferido' : 'doc ' . htmlspecialchars($p['doc_ref']))) ?>
-                </td>
-                <td style="width:110px;text-align:right">
-                    <?php if (!empty($p['writable']) && $podeEscrever): ?>
-                        <button class="btn btn-outline btn-sm"
-                                onclick="editarParam(<?= $no ?>, <?= (int)!empty($p['is_network']) ?>, <?= htmlspecialchars(json_encode(param_label($paramCatalogo, $no)), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode((string)$p['value_raw']), ENT_QUOTES) ?>)">Alterar</button>
-                    <?php endif; ?>
-                </td>
-            </tr>
+    <div class="param-grid">
+        <?php foreach ($linhas as $p):
+            $no    = (int)$p['param_no'];
+            $rot   = param_label($paramCatalogo, $no);
+            $spec  = param_input_spec($paramCatalogo, $no);
+            $bruto = (string)$p['value_raw'];
+            $grav  = !empty($p['writable']) && $podeEscrever;
+            $pend  = !empty($p['desired_value']) && (string)$p['desired_value'] !== $bruto;
+        ?>
+        <div class="param-cell">
+            <div class="param-head">
+                <span class="param-name"><?= htmlspecialchars($rot) ?></span>
+                <span class="param-no mono">nº <?= $no ?></span>
+            </div>
+
+            <div class="param-val mono"><?= htmlspecialchars(param_format($paramCatalogo, $no, $bruto, $ehAdmin)) ?></div>
+
+            <?php if ($grav): ?>
+                <div class="param-hint"><?= htmlspecialchars($spec['hint']) ?></div>
+            <?php else: ?>
+                <div class="param-hint">Somente leitura<?= !empty($p['is_secret']) ? ' · credencial' : '' ?></div>
+            <?php endif; ?>
+
+            <?php if ($pend): ?>
+                <div style="font-size:10px;color:var(--warning,#b45309);margin-top:6px">
+                    Pedido <span class="mono"><?= htmlspecialchars((string)$p['desired_value']) ?></span>
+                    (antes <span class="mono"><?= htmlspecialchars((string)($p['previous_value'] ?? '—')) ?></span>)
+                    — só confirma relendo.
+                </div>
+            <?php endif; ?>
+
+            <div class="param-acts">
+                <button class="btn btn-outline btn-sm" onclick="relerParam(<?= $no ?>)"
+                        title="Pede ao equipamento só este parâmetro (33030)">Reler</button>
+                <?php if ($grav): ?>
+                    <button class="btn btn-outline btn-sm" onclick="abrirEdicao(<?= $no ?>)">Alterar</button>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($grav): ?>
+            <div class="param-edit" id="edit-<?= $no ?>">
+                <input type="text" id="val-<?= $no ?>" value="<?= htmlspecialchars($bruto) ?>"
+                       placeholder="<?= htmlspecialchars($spec['placeholder']) ?>"
+                       inputmode="<?= htmlspecialchars($spec['inputmode']) ?>"
+                       <?= $spec['pattern'] ? 'pattern="' . htmlspecialchars($spec['pattern']) . '"' : '' ?>>
+                <div class="param-acts">
+                    <button class="btn btn-outline btn-sm" onclick="abrirEdicao(<?= $no ?>)">Cancelar</button>
+                    <button class="btn btn-primary btn-sm"
+                            onclick="enviarParam(<?= $no ?>, <?= (int)!empty($p['is_network']) ?>, <?= htmlspecialchars(json_encode($rot), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($bruto), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($spec['pattern']), ENT_QUOTES) ?>)">Enviar</button>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
         <?php endforeach; ?>
-        </tbody>
-    </table>
+    </div>
 </div>
 <?php endforeach; ?>
 
@@ -833,6 +889,15 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 </div>
 <?php endif; ?>
 
+<?php if ($paramOcultos): ?>
+<p style="font-size:11px;color:var(--muted);margin:0 0 16px">
+    <?= count($paramOcultos) ?> parâmetro(s) lido(s) do equipamento não estão na
+    tela porque ainda não sabemos o que significam
+    (nº <span class="mono"><?= htmlspecialchars(implode(', ', $paramOcultos)) ?></span>).
+    O valor continua guardado — quando a identificação aparecer, ele volta sem nova leitura.
+</p>
+<?php endif; ?>
+
 <?php endif; ?>
 
 <script>
@@ -856,14 +921,61 @@ function lerParametros() {
     });
 }
 
-// ── Escrita de parâmetro (v4.9.14) ──────────────────────────────────────────
+// ── Leitura de UM parâmetro (33030) ─────────────────────────────────────────
+//
+// Releitura dirigida em vez do 33028 inteiro: o 33028 traz 49 parâmetros e
+// leva até 35 s, o que é desproporcional para conferir um valor recém-escrito
+// — que é justamente quando mais se relê.
+//
+// O formato é `{"NN":""}` (valor VAZIO), confirmado em câmera real; o servidor
+// remonta por build_param_cmd_content() de qualquer forma.
+function relerParam(no) {
+    var el = document.getElementById('param-status');
+    el.innerHTML = '<span style="color:var(--muted)">Pedindo o parâmetro ' + no + ' ao equipamento…</span>';
+    var corpo = {}; corpo[no] = '';
+    fetch('/sendcommand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': '<?= $dashToken ?>', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ imei: '<?= $imei ?>', proNo: 33030, content: JSON.stringify(corpo), serverFlagId: 0 })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        var ok = d && d.code === 0;
+        el.innerHTML = ok
+            ? '<span style="color:var(--success)">Leitura do nº ' + no + ' solicitada. Atualizando…</span>'
+            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao solicitar') + '</span>';
+        if (ok) setTimeout(function() { location.reload(); }, 2000);
+    }).catch(function(e) {
+        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+    });
+}
+
+/** Abre/fecha o campo de edição da célula. */
+function abrirEdicao(no) {
+    var box = document.getElementById('edit-' + no);
+    if (!box) return;
+    var abrindo = box.style.display !== 'block';
+    box.style.display = abrindo ? 'block' : 'none';
+    if (abrindo) { var i = document.getElementById('val-' + no); if (i) { i.focus(); i.select(); } }
+}
+
+// ── Escrita de parâmetro (v4.9.14, campo inline na v4.9.15) ─────────────────
 //
 // A confirmação de rede aqui é CORTESIA, não segurança: o servidor recusa com
 // HTTP 409 quando falta `confirm_network`, porque quem forja o POST passa por
-// cima de qualquer prompt do navegador.
-function editarParam(no, ehRede, rotulo, atual) {
-    var novo = prompt('Novo valor para "' + rotulo + '" (nº ' + no + ')\n\nValor atual: ' + (atual || '(vazio)'), atual);
-    if (novo === null || novo === atual) return;
+// cima de qualquer prompt do navegador. O mesmo vale para a máscara: `pattern`
+// evita o erro de digitação, não o POST forjado — quem barra valor em
+// parâmetro não-gravável é o catálogo, no servidor.
+function enviarParam(no, ehRede, rotulo, atual, padrao) {
+    var campo = document.getElementById('val-' + no);
+    if (!campo) return;
+    var novo = campo.value;
+    if (novo === atual) { abrirEdicao(no); return; }
+
+    if (padrao && novo !== '' && !(new RegExp(padrao)).test(novo)) {
+        alert('Valor fora do formato esperado para "' + rotulo + '".\n\n'
+            + 'Confira a dica abaixo do valor antes de enviar.');
+        campo.focus();
+        return;
+    }
 
     if (ehRede) {
         var aviso = 'ATENÇÃO — ' + rotulo + ' controla como a câmera chega ao sistema.\n\n'

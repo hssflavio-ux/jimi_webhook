@@ -124,6 +124,30 @@ importa.
 vez de esconder a linha, exatamente como `Código NNNN (JTT)` faz com alarme fora
 do catálogo.
 
+> **✅ RESOLVIDO na v4.9.15 (13/08/2026) — 16 dos 17 nomeados.** Os números do
+> device são os **IDs padrão do JT/T 808 em DECIMAL**; a norma os publica em
+> HEXADECIMAL, e a Tabela 2.3.9.1 da Jimi é um recorte parcial dela. O que
+> parecia não documentado é documentado — em outro lugar.
+>
+> A prova estava no próprio catálogo: `23` (`Servidor de Backup`) e `132`
+> (`Cor da Placa`) vieram da tabela DOCUMENTADA da Jimi e são exatamente
+> `0x0017` e `0x0084` da norma. Se a numeração coincide no que ela publica,
+> coincide no que ela omite. Os valores medidos fecham um a um: `16`=`cmnet`
+> → 0x0010, `19`=IP → 0x0013, `24`=`21122` → 0x0018, `48`=`45` → 0x0030
+> (ângulo <180° pela norma), `131`+`132` → placa vazia e cor 0.
+>
+> `20`/`21`/`22` vazios **não eram defeito**: são o APN do servidor de BACKUP,
+> coerentes com o `23` também vazio. `128` é hodômetro em **décimos de km** —
+> o `15` do JC181 são 1,5 km, e exibir "15" não pareceria errado.
+>
+> Só **`100` (0x0064)** segue sem fonte e continua `Parâmetro 100`: não batizar
+> por palpite é a mesma regra do alarme `1047`.
+>
+> ⚠️ **A regra de exibição MUDOU junto** (decisão do dono, 13/08/2026): o que
+> segue sem identificação **sai da tela**, ao contrário do que a §7.1 dizia. O
+> contrapeso é o rodapé que informa quantos e quais estão ocultos — o custo de
+> esconder é virar invisível, e é esse custo que o rodapé paga.
+
 ⚠️ **5. Cada modelo devolve um conjunto radicalmente diferente.** JC371: 46
 parâmetros + 3 canais. JC181: **6**. Não é falha do JC181 — é firmware
 diferente. **Perfil de configuração tem de ser por `device_model`**, com
@@ -367,6 +391,26 @@ própria. Botão **Reler agora** (33028) e **Reler estes** (33030) na seleção.
 
 Parâmetro sem catálogo aparece como `Parâmetro 128` com o valor cru — visível,
 não escondido. `is_secret` mostra `••••` com revelação só para admin.
+
+> **REESCRITA na v4.9.15 (13/08/2026).** A aba deixou de ser tabela por grupo e
+> virou **quadro**: grade de células com `repeat(auto-fill, minmax(320px,1fr))`,
+> que resolve sozinha "2 ou 3 colunas" — 3 no monitor, 2 no notebook, 1 no
+> celular, sem media query e sem fixar um número que estaria errado na outra
+> tela. Cada célula traz rótulo, número, valor formatado, a **máscara de
+> digitação** e dois botões: **Reler** (`33030`, só aquele parâmetro) e
+> **Alterar** (campo embutido → `33027`).
+>
+> **Reler um só existe porque o `33028` custa caro**: ele traz 49 parâmetros e
+> leva até 35 s, o que é desproporcional justamente no momento em que mais se
+> relê — conferir um valor recém-escrito.
+>
+> **A máscara descreve a unidade de TRANSMISSÃO, não a de leitura.** A tela
+> mostra "1,5 km", mas o device recebe décimos; sem dizer isso na hora de
+> digitar, quem quer 15 km informa `15` e grava 1,5 km — e o erro não aparece,
+> porque o valor relido é plausível.
+>
+> ⚠️ E o que **não** tem identificação sai da tela (§2.5.4), com o rodapé
+> contando quantos são.
 
 ### 7.2 Relatório de frota — "fora do padrão"
 

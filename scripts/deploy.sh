@@ -355,6 +355,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.11" "mysql/migration_v4.9.11.sql" "destrunca command_content + /config na matriz de permissão"
     run_migration "4.9.12" "mysql/migration_v4.9.12.sql" "parametros das cameras JT/T (catalogo + 3 tabelas)"
     run_migration "4.9.14" "mysql/migration_v4.9.14.sql" "perfis de parametros por modelo + escrita 33027"
+    run_migration "4.9.15" "mysql/migration_v4.9.15.sql" "16 parametros nomeados pela norma JT/T 808"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
