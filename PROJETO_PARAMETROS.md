@@ -434,11 +434,33 @@ valor anterior gravado, o SMS de recuperação não tem para onde apontar.
 
 ## 10. Fases e verificação
 
-| Fase | Entrega | Risco |
-|---|---|---|
-| **F1** | Catálogo + 3 tabelas + parser + `cmdContent` correto em 33028/33030 + captura síncrona + **destruncar** + aba Parâmetros + permissão | Baixo — **só leitura** |
-| **F2** | `param_sync_worker.php` + backoff + relatório "fora do padrão" | Médio — tráfego ao hub |
-| **F3** | Escrita 33027, diff-only, perfis por modelo, `desired_value` | Alto — mexe em câmera viva |
+| Fase | Entrega | Risco | Estado |
+|---|---|---|---|
+| **F1** | Catálogo + 3 tabelas + parser + `cmdContent` correto em 33028/33030 + captura síncrona + **destruncar** + aba Parâmetros + permissão | Baixo — **só leitura** | ✅ **v4.9.11 + v4.9.12**, verificada em câmera real |
+| **F2** | `param_sync_worker.php` + backoff + relatório "fora do padrão" | Médio — tráfego ao hub | pendente |
+| **F3** | Escrita 33027, diff-only, perfis por modelo, `desired_value` | Alto — mexe em câmera viva | pendente |
+
+### O que a F1 achou depois de escrito este blueprint
+
+Quatro defeitos que **só o teste ponta a ponta em câmera real** revelou, e que
+nenhuma leitura de código teria pego:
+
+1. **`33028` era recusado com HTTP 400** três linhas antes do bloco que existe
+   para montar seu `cmdContent` — que é vazio por especificação.
+2. **Um `33030` marcava o device como sincronizado** com 3 de 46 parâmetros,
+   fazendo o worker da F2 parar de buscar o resto antes mesmo de existir.
+3. **A migração se derrubava sozinha**: `LIKE 'jtt\_%'` perde a barra dentro de
+   string do MySQL e o `_` vira coringa.
+4. **Uma conferência com falso positivo**: `name_pt LIKE 'Parâmetro %'` acusava
+   o `93` (*Parâmetro de Colisão*), que é documentado e gravável. Invariante boa
+   é sobre a **procedência** do dado, não sobre como o rótulo começa.
+
+Some-se o quinto, pego pelo teste unitário: `is_int($k)` não distingue lista de
+mapa, porque o PHP converte a chave `'85'` para inteiro sozinho.
+
+**A lição para a F2 e a F3**: a sonda contra equipamento real (ssh + `curl` no
+hub, §2) é barata e achou em minutos o que a revisão não achou. Usá-la antes de
+declarar pronto, não depois.
 
 **F1 dá para verificar de verdade**, e isso é raro neste repo: há **4 câmeras
 JT/T transmitindo** no homolog, e as sondas da §2 já provaram o caminho síncrono

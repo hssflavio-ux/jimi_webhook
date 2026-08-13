@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.12
+
+**F1 do `PROJETO_PARAMETROS.md`**: o sistema passa a saber como cada câmera JT/T está configurada, em vez de só poder mandar comando e torcer.
+
+### Added
+- **Três tabelas e um catálogo de 49 parâmetros.** `device_param_catalog` (o dicionário que transforma `"85":"110"` em *Velocidade máxima — 110 km/h*), `device_params` (estado atual, com `channel` na chave para o vídeo por canal) e `device_param_snapshots` (o `_content` bruto de cada leitura, append-only). Mais `devices.params_synced_at`/`params_sync_tries`/`params_sync_next` e `commands.pro_no`.
+  - **Procedência explícita em `doc_ref`**: **27** publicados na Tabela 2.3.9.1, 2 de vídeo, **17 medidos sem doc** (nome honesto `Parâmetro NNN`, `writable = 0`) e **3 medidos com nome inferido do valor** (`16` = `cmnet` é o APN; `17`/`18` usuário e senha, com `is_secret`). A regra do repo é não batizar por palpite — `Parâmetro 128` é um nome honesto para algo que só se sabe existir, e ler `cmnet` não é palpite. A conferência da migração prova que **nada gravável tem nome genérico**.
+- **Aba `Parâmetros` em `/ativos/{imei}`**, agrupada por categoria, com o bloco de vídeo por canal decodificado (resolução, bitrate, OSD) e botão **Ler agora**. **Só aparece para equipamento JT/T** — para câmera JIMI ela não existe, em vez de existir vazia: tela vazia o usuário lê como defeito do sistema, não como "não se aplica".
+- `includes/device_params.php` — parser, upsert, rótulos e formatação, num ponto único usado pelos dois caminhos de captura. `tests/helpers/device_params.test.php` com **48 casos** fixados nas três respostas reais.
+
+### Fixed
+- 🔴 **O `cmdContent` estava errado nas quatro telas que o montavam** (`config_dispositivos.php`, `ativo_detalhe.php`, `comandos.php`) — e errado nas **três** formas: `{"paramId":1,"paramValue":"x"}` no 33027, `{}` no 33028 e `{"paramIds":[44,45]}` no 33030. O gateway **aceita** qualquer um deles (devolve `code:0`) e o device ignora: o defeito se apresentava como *"mandei e não aconteceu nada"*, sem erro em lugar nenhum. Corrigido nas telas **e normalizado no servidor**, que é por onde todo comando passa. O formato antigo do 33027 é **convertido**, não recusado.
+- 🔴 **A resposta síncrona já trazia a configuração inteira e ninguém lia.** `sendcommand.php:335` capturava `data._content` desde antes; faltava o parser. Agora device online grava na mesma requisição, e device offline grava pelo callback — **decidido pelo `pro_no` do comando correlacionado, nunca por adivinhar o formato do conteúdo**, que gravaria configuração a partir de qualquer resposta JSON.
+- 🔴 **`33028` era recusado com HTTP 400 três linhas antes da normalização que existe para montá-lo.** O `cmdContent` da consulta é vazio **por especificação**, e a validação de campo obrigatório não abria exceção. Pego pelo primeiro teste ponta a ponta contra câmera real.
+- 🔴 **Um `33030` marcava o device como sincronizado.** Ele traz um punhado de parâmetros; carimbar `params_synced_at` com ele faria o worker parar de buscar o resto — device com 3 valores lidos e 43 nunca lidos, sem nada na tela denunciando. O caminho do callback já tinha a guarda; o síncrono não.
+- **`UPDATE` da migração derrubava a própria migração**: `LIKE 'jtt\_%'` perde a barra dentro de string do MySQL e o `_` vira coringa, então `api_type = 'instruct'` entrava no `UPDATE` e o `CAST('uct' AS UNSIGNED)` abortava tudo em modo estrito. Trocado por `REGEXP '^jtt_[0-9]+$'`.
+
+### Documented
+- ⚠️ **O parser segue a CÂMERA, não a doc** — e as três divergências estão fixadas como teste: o campo de contagem é `paramCount` (a doc diz `totalNum`, que nenhum device mandou); os parâmetros de vídeo vêm num bloco `channel_N` (não na chave `119`); e `paramCount` **não** é o número de chaves de topo — o JC371 declara 87 e entrega 46.
+- ⚠️ **O upsert nunca apaga o parâmetro ausente.** Ausência não é "desconfigurado": o `94` (ângulo de capotamento, o mesmo evento que a v4.9.10 batizou) é documentado e o JC371 não o devolveu. Um `DELETE` do que não veio apagaria configuração real a cada leitura parcial.
+
 ## [Unreleased] — 4.9.11
 
 Abertura da **F1 do `PROJETO_PARAMETROS.md`** por dois consertos que valem por si e não dependem de nenhuma decisão do resto do blueprint.

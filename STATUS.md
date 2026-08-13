@@ -1,4 +1,58 @@
-# STATUS.md — Jimi Webhook System v4.9.11 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.12 (YUV Parity)
+
+> ### 📍 v4.9.12 — F1 do PROJETO_PARAMETROS entregue e PUBLICADA
+>
+> | | estado |
+> |---|---|
+> | Local / `origin/main` / Homolog | os três em **`128fbab`** |
+> | `/ping` e `system_info` | **4.9.12** |
+>
+> O sistema passa a saber **como cada câmera JT/T está configurada**. Antes só
+> dava para mandar comando e torcer.
+>
+> #### Verificação — em câmera real, não em fixture
+>
+> Um `33028` e um `33030` disparados pela aplicação (login + CSRF + rota real)
+> contra a **JC371 `865478070003241`**, transmitindo no momento:
+>
+> | | resultado |
+> |---|---|
+> | `33028` → snapshot | **612 bytes**, `paramCount` 87, **49 entradas** extraídas |
+> | `33030` (44, 45, 85) → snapshot | 45 bytes, 3 de 3 |
+> | `device_params` | **49 linhas**, 3 delas de canal de vídeo |
+> | Rótulos | `19` → *Servidor Principal*, `16` → *APN da Operadora*, `128` → *Parâmetro 128* |
+> | `params_synced_at` | carimbado só pelo `33028` |
+> | Aba renderizada (JT/T) | todas as seções, `3888000 s` exibido como **45d** |
+> | Aba em câmera **JIMI** | **não existe** — protocolo isolado (ADR-001) |
+> | Credencial do APN, `role=operator` | **mascarada**; `cmnet` (não é segredo) aparece |
+> | Controle: aba Alertas | segue mostrando `Capotamento` (v4.9.10 intacta) |
+>
+> `tests/helpers/device_params.test.php` — **48 casos**, 0 falhas. `php -l` limpo.
+> Ambiente de teste removido: 0 usuários, 0 sessões órfãs.
+>
+> #### Quatro defeitos que só o teste real achou
+>
+> 1. **`33028` recusado com HTTP 400** três linhas antes da normalização que
+>    existe para montá-lo — o `cmdContent` da consulta é vazio por especificação.
+> 2. **`33030` marcava o device como sincronizado** com 3 de 46 parâmetros, o
+>    que faria o worker parar de buscar o resto, em silêncio.
+> 3. **A migração se derrubava**: `LIKE 'jtt\_%'` perde a barra dentro de string
+>    do MySQL, `_` vira coringa, e o `CAST('uct' AS UNSIGNED)` abortava tudo.
+> 4. **Conferência com falso positivo**: `name_pt LIKE 'Parâmetro %'` acusava o
+>    `93` (*Parâmetro de Colisão*), que é documentado. Invariante boa é sobre a
+>    **procedência** do dado, não sobre como o rótulo começa.
+>
+> E um quinto, achado pelo teste unitário: `is_int($k)` não distingue lista de
+> mapa, porque o PHP converte a chave `'85'` para inteiro sozinho.
+>
+> #### Pendente (F2 e F3 do blueprint)
+>
+> - **F2**: `scripts/param_sync_worker.php` (leitura na primeira conexão, com
+>   backoff) + relatório de frota "fora do padrão".
+> - **F3**: escrita `33027` com diff-only, `desired_value` gravado antes do
+>   envio, e perfis **por modelo** — JC181 devolve 6 parâmetros e JC371 devolve
+>   46+3 canais, então perfil por cliente acusaria divergência falsa.
+
 
 > ### 📍 v4.9.11 — F1 do PROJETO_PARAMETROS aberta pelos dois consertos independentes
 >
