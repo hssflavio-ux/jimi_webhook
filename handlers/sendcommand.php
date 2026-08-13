@@ -476,9 +476,17 @@ try {
                 $gravados = upsert_device_params(
                     $db, $imei, $parsed, $paramSpec, (string)$paramSpec, (int)$insertedId
                 );
-                $db->prepare("UPDATE devices SET params_synced_at = NOW(),
-                                     params_sync_tries = 0, params_sync_next = NULL
-                               WHERE imei = :imei")->execute([':imei' => $imei]);
+                // Só a leitura COMPLETA marca o device como sincronizado. Um
+                // 33030 traz um punhado de parâmetros, e chamar isso de
+                // "sincronizado" faria o worker parar de buscar o resto — o
+                // device ficaria com três valores lidos e 43 nunca lidos, sem
+                // nada na tela denunciando. (Medido: um 33030 de 3 parâmetros
+                // carimbou `params_synced_at` antes desta guarda existir.)
+                if ($paramSpec === 33028) {
+                    $db->prepare("UPDATE devices SET params_synced_at = NOW(),
+                                         params_sync_tries = 0, params_sync_next = NULL
+                                   WHERE imei = :imei")->execute([':imei' => $imei]);
+                }
                 Logger::info('sendcommand: parâmetros lidos e gravados', [
                     'imei' => $imei, 'proNo' => $paramSpec,
                     'gravados' => $gravados, 'param_count' => $parsed['param_count'],
