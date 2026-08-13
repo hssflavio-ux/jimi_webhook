@@ -1,6 +1,13 @@
 RewriteEngine On
 RewriteRule ^$ handlers/router.php [L]
-RewriteRule ^config$ handlers/router.php [L]
+# A linha `RewriteRule ^config$ handlers/router.php [L]` viveu aqui como
+# tentativa de contornar a colisão entre a rota /config e o DIRETÓRIO config/
+# do docroot. Ela nunca funcionou: o mod_dir do Apache se antecipa ao
+# mod_rewrite e emite 301 para /config/, que morre em 403 por `Options
+# -Indexes` — o PHP jamais rodava. Removida na v4.9.11 junto com a renomeação
+# da rota para /config-dispositivos, que resolve sem brigar com o Apache.
+# ⚠️ Nenhuma rota nova pode ter o nome de um diretório do docroot
+# (config, core, includes, mysql, scripts, storage, tests, web, logs, docs).
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ handlers/router.php [L,QSA]

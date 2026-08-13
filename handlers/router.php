@@ -82,13 +82,23 @@ if (empty($segments)) {
     // exige login e checa o escopo do cliente dentro do handler. Não é tela:
     // fica fora de $screenByHandler, como 'download'.
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
-                     'exportar','config','ping','customer_switch','usuarios','perfil',
+                     'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
                      'midia'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
         'config-smtp'         => 'config_smtp.php',
+        // 🔴 v4.9.11 — era a rota `/config`, e ela estava MORTA. Existe um
+        // diretório `config/` no docroot (o do PDO singleton), então o mod_dir
+        // do Apache redirecionava `/config` → `/config/` com 301 e servia o
+        // DIRETÓRIO, que morre em 403 por `Options -Indexes`. O PHP nunca
+        // rodava. Provado no log: "AH01276: Cannot serve directory
+        // /var/www/jimi_webhook/config/". A linha `RewriteRule ^config$` do
+        // .htaccess era a tentativa de contornar isso e não funciona — o
+        // mod_dir se antecipa ao mod_rewrite. Renomear a rota resolve sem
+        // brigar com o Apache, e alinha com as irmãs config-*.
+        'config-dispositivos' => 'config_dispositivos.php',
         'grupos-permissao'    => 'grupos_permissao.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',
@@ -239,13 +249,16 @@ $screenByHandler = [
     // nos dois sentidos: toda tela entra nos DOIS lugares.
     'config_notificacoes.php'   => 'config-notificacoes',
     'config_smtp.php'           => 'config-smtp',
-    // v4.9.11: QUINTA ocorrência do mesmo par de erros. `/config` — a tela que
-    // consulta e RECONFIGURA a câmera (proNo 33027/33028/33030/33029) — estava
-    // em $simpleRoutes e fora dos dois mapas. Só `require_login()`: qualquer
-    // usuário logado, de qualquer grupo, mandava comando de configuração para
-    // o equipamento. O `sendcommand.php` barra cross-tenant (R02), mas não
-    // barra PAPEL. Ver PROJETO_PARAMETROS.md §3.4.
-    'config.php'                => 'config-dispositivos',
+    // v4.9.11: QUINTA ocorrência do mesmo par de erros — a tela que consulta e
+    // RECONFIGURA a câmera (proNo 33027/33028/33029/33030) estava em
+    // $simpleRoutes e fora dos dois mapas, só com `require_login()`.
+    //
+    // ⚠️ A exposição, porém, NUNCA chegou a existir: a rota `/config` morria no
+    // Apache antes do PHP (colisão com o diretório `config/` — ver o comentário
+    // em $renamedRoutes). Ou seja, eram DOIS defeitos empilhados, e o segundo
+    // escondia o primeiro. Com a rota consertada, a trava passa a ser o que
+    // impede a exposição. Ver PROJETO_PARAMETROS.md §3.4.
+    'config_dispositivos.php'   => 'config-dispositivos',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
 ];

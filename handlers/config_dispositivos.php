@@ -1,10 +1,17 @@
 <?php
 /**
- * JIMI Webhook System — Configuração de Dispositivos v3.1.0
- * Endpoint: /config
+ * JIMI Webhook System — Configuração de Dispositivos
+ * Endpoint: /config-dispositivos
  *
  * Consulta e define parâmetros de dispositivos via proNo 33027-33031.
- * Modelo-sensível: detecta protocolo automaticamente.
+ *
+ * ⚠️ v4.9.11 — A rota era `/config` e estava MORTA: o diretório `config/` do
+ * docroot fazia o Apache redirecionar para `/config/` e servir o diretório
+ * (403 por `Options -Indexes`), sem nunca chegar ao PHP. Renomeada.
+ *
+ * ⚠️ Os `cmdContent` montados aqui estão ERRADOS em relação ao que o device
+ * aceita — ver `PROJETO_PARAMETROS.md` §3.1. Serão corrigidos na F1, junto
+ * com a tela definitiva de parâmetros; esta continua sendo o console cru.
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_login();
@@ -25,7 +32,7 @@ $devicesStmt->execute([':cid' => $customer_id]);
 $devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title    = 'Configuração';
-$current_route = 'config';
+$current_route = 'config-dispositivos';
 
 include __DIR__ . '/../web/layout_base.php';
 ?>

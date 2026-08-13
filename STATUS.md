@@ -10,7 +10,7 @@
 > | Conserto | Prova |
 > |---|---|
 > | 🔴 `command_responses.command_content` truncava em 250 | linha `id=14` com `LENGTH = 250` exato; `_content` real do JC371 = **612 bytes** |
-> | 🔴 `/config` fora dos dois mapas de permissão (5ª ocorrência) | conferência da migração: `Administrador` mantém, **`Operador Padrão` PERDE** |
+> | 🔴 `/config` **morta** (colisão com o diretório `config/`) + fora dos dois mapas | log do Apache: `AH01276: Cannot serve directory .../config/`; renomeada para `/config-dispositivos` |
 >
 > #### O replay mostrou que a coluna sozinha não bastava
 >
@@ -22,6 +22,28 @@
 > banco está corrigido no homolog hoje.
 >
 > Linha sintética do replay **removida** (`command_responses` id 19).
+>
+> #### ⚠️ Correção de uma afirmação desta sessão
+>
+> Eu afirmei que "qualquer usuário logado reconfigurava câmera" por `/config`
+> estar fora dos mapas de permissão. **Isso estava errado, e o teste com usuário
+> restrito de verdade é que mostrou**: `/config` devolvia **301**, não 403.
+> Existe um diretório `config/` no docroot, o `mod_dir` do Apache se antecipa ao
+> `mod_rewrite`, redireciona para `/config/` e serve o diretório — que morre em
+> 403 por `Options -Indexes`. **O PHP nunca rodava.** Ninguém alcançava a tela.
+>
+> Eram **dois defeitos empilhados, e o de rota escondia o de permissão**. Os
+> dois estão corrigidos: rota renomeada para `/config-dispositivos` (arquivo
+> `config_dispositivos.php`) e tela nos dois mapas. A trava de permissão passa a
+> valer **a partir de agora**, com a rota viva.
+>
+> A regra que faltava, agora escrita no `.htaccess`: **nenhuma rota pode ter o
+> nome de um diretório do docroot** (`config`, `core`, `includes`, `mysql`,
+> `scripts`, `storage`, `tests`, `web`, `logs`, `docs`).
+>
+> A tela **continua fora da sidebar** de propósito: é um console cru de JSON e
+> os `cmdContent` que ela monta estão errados (§3.1 do blueprint). A F1 entrega
+> a tela definitiva; linkar a rústica agora seria expor trabalho pela metade.
 >
 > #### Bônus: o JC182 respondeu de verdade
 >
