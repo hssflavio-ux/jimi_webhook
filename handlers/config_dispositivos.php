@@ -120,11 +120,22 @@ function sendCfg(imei, proNo, content) {
 function queryDevice() {
     var imei = getQueryImei();
     var proNo = parseInt(document.getElementById('cfg-query-type').value);
+    // ⚠️ As formas são DIFERENTES por proNo (PROJETO_PARAMETROS.md §3.1):
+    //   33028 → vazio          33030 → {"44":"","45":""}       33027 → {"1":"60"}
+    // O `sendcommand.php` normaliza de novo no servidor — aqui é só para a tela
+    // mostrar o que vai ser enviado de verdade.
     var content = '{}';
-    if (proNo === 33030) {
+    if (proNo === 33028) {
+        content = '';
+    } else if (proNo === 33030) {
         var ids = document.getElementById('cfg-param-ids').value.trim();
         if (!ids) { alert('Informe os IDs dos parâmetros.'); return; }
-        content = JSON.stringify({ paramIds: ids.split(',').map(function(s) { return parseInt(s.trim()); }) });
+        var mapa = {};
+        ids.split(',').forEach(function(s) {
+            var n = parseInt(s.trim(), 10);
+            if (!isNaN(n)) mapa[n] = '';
+        });
+        content = JSON.stringify(mapa);
     }
     var el = document.getElementById('cfg-query-result');
     el.innerHTML = '<span style="color:var(--muted)">Consultando...</span>';
@@ -141,7 +152,10 @@ function setParam() {
     if (!id) { alert('Informe o ID do parâmetro.'); return; }
     var el = document.getElementById('cfg-set-result');
     el.innerHTML = '<span style="color:var(--muted)">Enviando...</span>';
-    sendCfg(imei, 33027, JSON.stringify({ paramId: id, paramValue: val })).then(function(d) {
+    // Mapa numero→valor, que é o que o device aceita. O formato antigo
+    // ({paramId, paramValue}) era aceito pelo gateway e IGNORADO pela câmera.
+    var corpo = {}; corpo[id] = val;
+    sendCfg(imei, 33027, JSON.stringify(corpo)).then(function(d) {
         el.innerHTML = '<pre style="font-family:JetBrains Mono,monospace;font-size:11px;background:var(--canvas);padding:10px;border-radius:var(--radius-sm)">' +
             JSON.stringify(d, null, 2) + '</pre>';
     });

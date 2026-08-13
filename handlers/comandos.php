@@ -95,7 +95,7 @@ $jttCmds = [
     ['pro' => 33536, 'n' => 'TTS (mensagem de voz)','k' => 'audio', 'c' => '{"text":"","volume":5}'],
     ['pro' => 34817, 'n' => 'Foto',                 'k' => 'video', 'c' => '{"channelId":1,"photoType":0}'],
     ['pro' => 33283, 'n' => 'Confirmar alarme',     'k' => 'alarme', 'c' => '{"alarmSerialNo":0}'],
-    ['pro' => 33028, 'n' => 'Consultar parâmetros', 'k' => 'manutencao', 'c' => '{}'],
+    ['pro' => 33028, 'n' => 'Consultar parâmetros', 'k' => 'manutencao', 'c' => ''],
     ['pro' => 33031, 'n' => 'Info do dispositivo',  'k' => 'manutencao', 'c' => '{}'],
 ];
 

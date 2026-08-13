@@ -155,6 +155,53 @@ if ($tab === 'video') {
     $mediaFiles = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+// aba: parametros (v4.9.12) — configuração lida das câmeras JT/T
+$paramRows = [];
+$paramCatalogo = [];
+$paramSnapshot = null;
+$paramCanais = [];
+$paramErro = null;
+if ($tab === 'parametros') {
+    require_once __DIR__ . '/../includes/device_params.php';
+    try {
+        $paramCatalogo = param_catalog($db);
+
+        // Ordena pelo GRUPO do catálogo e, dentro dele, pelo número. Parâmetro
+        // sem catálogo cai em 'outros' e vai para o fim, mas APARECE — mesma
+        // regra do alarme fora do catálogo, que mostra o número em vez de sumir.
+        $stmt = $db->prepare("
+            SELECT dp.param_no, dp.channel, dp.value_raw, dp.value_json, dp.read_at, dp.source,
+                   COALESCE(c.grupo, 'outros') AS grupo, c.name_pt, c.unit, c.value_kind,
+                   c.enum_json, c.writable, c.is_secret, c.doc_ref
+              FROM device_params dp
+              LEFT JOIN device_param_catalog c ON c.param_no = dp.param_no
+             WHERE dp.imei = :imei
+             ORDER BY FIELD(COALESCE(c.grupo,'outros'),
+                            'rede','reporte','conducao','seguranca','video','identificacao','outros'),
+                      dp.param_no, dp.channel
+        ");
+        $stmt->execute([':imei' => $imei]);
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            if ((int)$r['channel'] > 0) { $paramCanais[] = $r; continue; }
+            $paramRows[$r['grupo']][] = $r;
+        }
+
+        $snap = $db->prepare("
+            SELECT pro_no, param_count, parsed_count, LENGTH(content_raw) AS bytes, created_at
+              FROM device_param_snapshots WHERE imei = :imei
+             ORDER BY id DESC LIMIT 1
+        ");
+        $snap->execute([':imei' => $imei]);
+        $paramSnapshot = $snap->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        // Migração v4.9.12 não aplicada. A aba DIZ isso, em vez de mostrar
+        // "nenhum parâmetro" — que faria o operador achar que a câmera é que
+        // não respondeu, e é o modo de falha que este repo já pagou caro.
+        $paramErro = 'Tabelas de parâmetros ausentes — aplique a migração v4.9.12.';
+        Logger::error('ativo_detalhe: aba parametros sem tabelas', ['erro' => $e->getMessage()]);
+    }
+}
+
 // ── Layout ─────────────────────────────────────────────
 $page_title    = htmlspecialchars($asset['device_name'] ?? $asset['imei']);
 $current_route = 'ativos';
@@ -568,8 +615,8 @@ var jttPresets = {
     'alarm_ack':     { proNo: 33283, content: '{"alarmSerialNo":0}' },
     'tts':           { proNo: 33536, content: '{"text":"","volume":5}' },
     'photo':         { proNo: 34817, content: '{"channelId":1,"photoType":0}' },
-    'query_params':  { proNo: 33028, content: '{}' },
-    'set_param':     { proNo: 33027, content: '{"paramId":0,"paramValue":""}' },
+    'query_params':  { proNo: 33028, content: '' },
+    'set_param':     { proNo: 33027, content: '{"1":"60"}' },
     'device_info':   { proNo: 33031, content: '{}' }
 };
 function fillJttPreset(key) {
@@ -648,6 +695,147 @@ function sendConfigCmd(proNo, content) {
 document.getElementById('query-type').addEventListener('change', function() {
     document.getElementById('specific-params').style.display = this.value === '33030' ? 'block' : 'none';
 });
+</script>
+<?php break; ?>
+
+<?php
+// ═══ PARÂMETROS (v4.9.12) ══════════════════════════════
+// Configuração real da câmera JT/T, lida por 33028/33030 e guardada em
+// `device_params`. Ver PROJETO_PARAMETROS.md.
+case 'parametros':
+$gruposLabel = [
+    'rede' => 'Rede e servidor', 'reporte' => 'Estratégia de reporte',
+    'conducao' => 'Comportamento de condução', 'seguranca' => 'Segurança',
+    'video' => 'Vídeo', 'identificacao' => 'Identificação', 'outros' => 'Não documentados',
+];
+$ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
+?>
+<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+        <div>
+            <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin:0 0 4px">Configuração do equipamento</h4>
+            <p style="font-size:12px;color:var(--muted);margin:0">
+                <?php if ($paramSnapshot): ?>
+                    Última leitura em <strong><?= fmt_brt_dt($paramSnapshot['created_at']) ?></strong>
+                    · comando <span class="mono"><?= (int)$paramSnapshot['pro_no'] ?></span>
+                    · <span class="mono"><?= (int)$paramSnapshot['parsed_count'] ?></span> parâmetros
+                    em <span class="mono"><?= (int)$paramSnapshot['bytes'] ?></span> bytes
+                <?php else: ?>
+                    Nenhuma leitura registrada ainda.
+                <?php endif; ?>
+            </p>
+        </div>
+        <button class="btn btn-primary" onclick="lerParametros()">Ler agora</button>
+    </div>
+    <div id="param-status" style="margin-top:12px;font-size:13px"></div>
+</div>
+
+<?php if ($paramSnapshot && $paramSnapshot['param_count'] !== null
+          && (int)$paramSnapshot['param_count'] !== (int)$paramSnapshot['parsed_count']): ?>
+<div class="callout info" style="margin-bottom:16px;font-size:12px">
+    O equipamento declarou <strong><?= (int)$paramSnapshot['param_count'] ?></strong> parâmetros e
+    entregou <strong><?= (int)$paramSnapshot['parsed_count'] ?></strong>. <strong>Isso é normal</strong> —
+    o firmware conta os sub-valores de cada canal de vídeo de um jeito próprio. O que
+    ficou de fora não foi apagado: parâmetro ausente de uma leitura continua valendo
+    o último valor conhecido.
+</div>
+<?php endif; ?>
+
+<?php if ($paramErro): ?>
+<div class="card">
+    <p style="color:var(--danger);font-size:13px;margin:0"><?= htmlspecialchars($paramErro) ?></p>
+</div>
+<?php elseif (!$paramRows && !$paramCanais): ?>
+<div class="card">
+    <p style="color:var(--muted);font-size:13px;margin:0">
+        Nenhum parâmetro lido deste equipamento. Use <strong>Ler agora</strong> — se a câmera
+        estiver offline, o comando fica em fila e a configuração aparece aqui quando
+        ela reconectar.
+    </p>
+</div>
+<?php else: ?>
+
+<?php foreach ($paramRows as $grupo => $linhas): ?>
+<div class="card" style="margin-bottom:16px">
+    <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px">
+        <?= htmlspecialchars($gruposLabel[$grupo] ?? ucfirst($grupo)) ?>
+    </h4>
+    <table class="tbl" style="width:100%">
+        <thead><tr>
+            <th style="width:60px">Nº</th><th>Parâmetro</th><th>Valor</th><th style="width:150px">Origem</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($linhas as $p): $no = (int)$p['param_no']; ?>
+            <tr>
+                <td class="mono" style="color:var(--muted)"><?= $no ?></td>
+                <td><?= htmlspecialchars(param_label($paramCatalogo, $no)) ?>
+                    <?php if (!empty($p['is_secret'])): ?>
+                        <span style="font-size:10px;color:var(--muted)">· credencial</span>
+                    <?php endif; ?>
+                </td>
+                <td class="mono"><?= htmlspecialchars(param_format($paramCatalogo, $no, (string)$p['value_raw'], $ehAdmin)) ?></td>
+                <td style="font-size:11px;color:var(--muted)">
+                    <?= $p['doc_ref'] === null ? 'sem catálogo'
+                        : ($p['doc_ref'] === 'medido' ? 'medido, sem doc'
+                        : ($p['doc_ref'] === 'medido/inferido' ? 'nome inferido' : 'doc ' . htmlspecialchars($p['doc_ref']))) ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endforeach; ?>
+
+<?php if ($paramCanais): ?>
+<div class="card" style="margin-bottom:16px">
+    <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px">Vídeo por canal</h4>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 12px">
+        Chega num bloco <span class="mono">channel_N</span> — não na chave
+        <span class="mono">119</span> que a documentação descreve.
+    </p>
+    <table class="tbl" style="width:100%">
+        <thead><tr>
+            <th style="width:70px">Canal</th><th>Ao vivo</th><th>Gravação</th><th>Legenda (OSD)</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($paramCanais as $c):
+            $j = $c['value_json'] ? json_decode($c['value_json'], true) : null; ?>
+            <tr>
+                <td class="mono"><?= (int)$c['channel'] ?></td>
+                <td class="mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j)) ?></td>
+                <td class="mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j ? [
+                        'rt_resolucao' => $j['gv_resolucao'] ?? null, 'rt_encoding' => $j['gv_encoding'] ?? null,
+                        'rt_fps' => $j['gv_fps'] ?? null, 'rt_bitrate' => $j['gv_bitrate'] ?? null] : null)) ?></td>
+                <td style="font-size:11px"><?= htmlspecialchars(param_osd_labels($j['osd'] ?? null)) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+<?php endif; ?>
+
+<?php endif; ?>
+
+<script>
+function lerParametros() {
+    var el = document.getElementById('param-status');
+    el.innerHTML = '<span style="color:var(--muted)">Consultando o equipamento… pode levar até 35 s.</span>';
+    fetch('/sendcommand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': '<?= $dashToken ?>', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        // cmdContent vai vazio de propósito: é o que o 33028 exige, e o
+        // servidor normaliza de novo por garantia (sendcommand.php).
+        body: JSON.stringify({ imei: '<?= $imei ?>', proNo: 33028, content: '', serverFlagId: 0 })
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        var ok = d && d.code === 0;
+        el.innerHTML = ok
+            ? '<span style="color:var(--success)">Leitura solicitada. Atualizando a página…</span>'
+            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao solicitar leitura') + '</span>';
+        if (ok) setTimeout(function() { location.reload(); }, 1500);
+    }).catch(function(e) {
+        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+    });
+}
 </script>
 <?php break; ?>
 

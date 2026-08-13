@@ -27,6 +27,14 @@ $tabs = [
     ['id' => 'configuracoes',  'label' => 'Configurações'],
 ];
 
+// Parâmetros (v4.9.12) — SÓ para equipamento JT/T. Os comandos 33027/33028/
+// 33030 são da seção 2 da doc (msgClass=1) e câmera JIMI não os entende
+// (ADR-001). A aba não aparece vazia para JIMI: ela não aparece, porque tela
+// vazia o usuário lê como defeito do sistema, não como "não se aplica".
+if (($asset['protocol'] ?? '') === 'JTT') {
+    $tabs[] = ['id' => 'parametros', 'label' => 'Parâmetros'];
+}
+
 ?>
 <div class="asset-sidebar">
     <div class="asset-sidebar-header">

@@ -134,9 +134,61 @@ if (!in_array($proNo, $proNosConhecidos, true)) {
     exit;
 }
 
+// ── Família de parâmetros (33027/33028/33030): a forma é montada AQUI ────────
+//
+// 🔴 As três formas são DIFERENTES, e a implementação anterior errou nas três
+// (PROJETO_PARAMETROS.md §3.1): mandava `{"paramId":1,"paramValue":"x"}` no
+// 33027, `{}` no 33028 e `{"paramIds":[44,45]}` no 33030. O gateway ACEITA
+// qualquer um deles — devolve `code:0` — e o device ignora. Ou seja: o defeito
+// se apresentava como "mandei e não aconteceu nada", sem erro em lugar nenhum.
+//
+// A normalização mora no servidor, e não só no JavaScript da tela, porque é o
+// ponto por onde TODO comando passa: `/comandos`, `/config-dispositivos`, a aba
+// do ativo e o worker de sincronização usam este mesmo handler.
+$paramSpec = null;
+if (in_array($proNo, [33027, 33028, 33030], true)) {
+    require_once __DIR__ . '/../includes/device_params.php';
+
+    $entrada = json_decode($cmdContent, true);
+    if (!is_array($entrada)) $entrada = [];
+
+    if ($proNo === 33028) {
+        $cmdContent = build_param_cmd_content(33028, []);
+
+    } elseif ($proNo === 33030) {
+        // Aceita `{"44":"","45":""}`, `[44,45]` e o `{"paramIds":[…]}` antigo.
+        $lista = $entrada['paramIds'] ?? $entrada;
+        $cmdContent = build_param_cmd_content(33030, is_array($lista) ? $lista : []);
+
+    } else { // 33027
+        // Compatibilidade com o formato errado que as telas mandavam: convertê-lo
+        // é melhor do que deixar passar, porque quem manda `paramId/paramValue`
+        // hoje recebe "sucesso" e nenhum efeito.
+        if (isset($entrada['paramId'])) {
+            $entrada = [(int)$entrada['paramId'] => (string)($entrada['paramValue'] ?? '')];
+            Logger::warning('sendcommand: 33027 no formato antigo (paramId/paramValue) convertido', [
+                'imei' => $imei,
+            ]);
+        }
+        $cmdContent = build_param_cmd_content(33027, $entrada);
+
+        // Escrever parâmetro sem dizer QUAL é comando sem efeito: recusa alto.
+        if ($cmdContent === '{}') {
+            http_response_code(400);
+            echo json_encode(['code' => 400,
+                'msg' => 'proNo 33027 exige ao menos um parâmetro no formato {"<numero>":"<valor>"}']);
+            exit;
+        }
+    }
+    $paramSpec = $proNo;
+}
+
 // Para comandos JT/T (proNo ≠ 128): cmdContent DEVE ser JSON válido
-// Re-serializa para garantir formato canônico sem espaços antes de enviar ao IoTHub
-if ($proNo !== 128) {
+// Re-serializa para garantir formato canônico sem espaços antes de enviar ao IoTHub.
+// ⚠️ O 33028 é a exceção: a doc manda `cmdContent` VAZIO, e vazio não é JSON
+// válido. Foi confirmado em câmera real — com o campo vazio o JC371 respondeu
+// a configuração inteira.
+if ($proNo !== 128 && $cmdContent !== '') {
     $decodedJson = json_decode($cmdContent, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
         http_response_code(400);
@@ -372,17 +424,24 @@ try {
     $stmt = $db->prepare("
         INSERT INTO commands
             (imei, command_content, command_type, status, operator,
-             api_type, request_id, server_flag_id, response_payload, response_time,
+             api_type, pro_no, request_id, server_flag_id, response_payload, response_time,
              created_at, updated_at)
         VALUES
             (:imei, :cmd, 'request', :status, 'dashboard',
-             :api_type, :rid, :sfid, :resp, :rtime, NOW(), NOW())
+             :api_type, :prono, :rid, :sfid, :resp, :rtime, NOW(), NOW())
     ");
     $stmt->execute([
         ':imei'     => $imei,
-        ':cmd'      => $cmdParaGravar,
+        // 33028 manda cmdContent vazio; gravar '' deixaria a tela de Comandos
+        // com uma linha em branco e a correlação do callback sem nada para
+        // casar. O rótulo diz o que foi pedido.
+        ':cmd'      => ($cmdParaGravar === '' && $proNo === 33028) ? '(consulta de parâmetros)' : $cmdParaGravar,
         ':status'   => $dbStatus,
         ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
+        // v4.9.12: coluna própria. O proNo já vivia dentro de `api_type`
+        // ('jtt_33028'), mas decidir fluxo por substring de string é o tipo de
+        // coisa que quebra calada quando alguém muda o prefixo.
+        ':prono'    => $proNo,
         // v4.8.9: os dois identificadores mandados ao IoTHub passam a ser
         // gravados. Sem isso não havia como ligar esta linha ao rastro que o
         // IoTHub tem do mesmo envio — a doc oficial dá ao requestId exatamente
@@ -393,6 +452,42 @@ try {
         ':rtime'    => ($dbStatus === 'executed') ? date('Y-m-d H:i:s') : null,
     ]);
     $insertedId = $db->lastInsertId();
+
+    // ── Leitura de parâmetros: a resposta SÍNCRONA já traz tudo ──────────────
+    //
+    // Para device online o `_content` do 33028/33030 é a configuração inteira,
+    // e ela chega aqui, nesta mesma requisição — não precisa esperar callback.
+    // Isso já era verdade antes da v4.9.12; o que faltava era alguém LER.
+    //
+    // Falha aqui não derruba o comando: o `rawResp` completo já está gravado em
+    // `commands.response_payload`, então o dado não se perde e o snapshot pode
+    // ser refeito. Mas o erro é LOGADO — foi `catch` silencioso neste mesmo
+    // arquivo que escondeu o "Invalid JSON text" por meses (v4.8.9).
+    if ($paramSpec !== null && $paramSpec !== 33027 && !empty($syncContent)) {
+        try {
+            $parsed = parse_param_content((string)$syncContent);
+            if ($parsed['ok']) {
+                $gravados = upsert_device_params(
+                    $db, $imei, $parsed, $paramSpec, (string)$paramSpec, (int)$insertedId
+                );
+                $db->prepare("UPDATE devices SET params_synced_at = NOW(),
+                                     params_sync_tries = 0, params_sync_next = NULL
+                               WHERE imei = :imei")->execute([':imei' => $imei]);
+                Logger::info('sendcommand: parâmetros lidos e gravados', [
+                    'imei' => $imei, 'proNo' => $paramSpec,
+                    'gravados' => $gravados, 'param_count' => $parsed['param_count'],
+                ]);
+            } else {
+                Logger::warning('sendcommand: _content de parâmetros não parseou', [
+                    'imei' => $imei, 'proNo' => $paramSpec, 'erro' => $parsed['erro'],
+                ]);
+            }
+        } catch (Throwable $e) {
+            Logger::error('sendcommand: falha ao gravar parâmetros', [
+                'imei' => $imei, 'erro' => $e->getMessage(),
+            ]);
+        }
+    }
 
     // BUG #4 CORRIGIDO: agora loga rawResp, iothub_url e iothub_code reais
     Logger::info('sendcommand: comando registrado', [

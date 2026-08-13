@@ -82,7 +82,14 @@ class PushInstructResponseHandler extends WebhookHandler {
             ]);
 
             // 2. Atualizar tabela commands se existir comando pendente
-            $this->updatePendingCommand($imei, $status, $response, $content);
+            $commandId = $this->updatePendingCommand($imei, $status, $response, $content);
+
+            // 3. Se o comando correlacionado era leitura de parâmetros, o
+            //    `_content` deste callback É a configuração do equipamento.
+            //    Este é o caminho MAIS usado, não a borda: na sonda de
+            //    12/08/2026 o JC182 recusou o comando síncrono com
+            //    `last_communication` de segundos antes e caiu aqui.
+            $this->capturarParametros($imei, $content, $commandId);
 
             Logger::info('InstructResponse registrado', [
                 'source' => $this->handlerName, 'imei' => $imei,
@@ -130,6 +137,7 @@ class PushInstructResponseHandler extends WebhookHandler {
      * @param string      $status  'success' | 'failed'
      * @param mixed       $response Conteúdo da resposta
      * @param string|null $content Comando ecoado pelo callback (`_content`)
+     * @returns int|null            Linha de `commands` correlacionada, se houve
      */
     private function updatePendingCommand($imei, $status, $response, $content = null) {
         try {
@@ -145,7 +153,8 @@ class PushInstructResponseHandler extends WebhookHandler {
                 $stmt->execute([':imei' => $imei, ':cmd' => $content]);
                 $existing = $stmt->fetch();
                 if ($existing) {
-                    return $this->applyCommandUpdate($existing['id'], $status, $response);
+                    $this->applyCommandUpdate($existing['id'], $status, $response);
+                    return (int)$existing['id'];
                 }
                 Logger::info('InstructResponse: _content não casou com comando pendente — caindo no mais recente', [
                     'source' => $this->handlerName, 'imei' => $imei,
@@ -163,7 +172,9 @@ class PushInstructResponseHandler extends WebhookHandler {
 
             if ($existing) {
                 $this->applyCommandUpdate($existing['id'], $status, $response);
+                return (int)$existing['id'];
             }
+            return null;
         } catch (Exception $e) {
             // Não relança: a resposta já está salva em command_responses, e
             // derrubar o webhook por causa do espelho em `commands` seria pior.
@@ -172,6 +183,73 @@ class PushInstructResponseHandler extends WebhookHandler {
             Logger::error('InstructResponse: falha ao correlacionar com commands', [
                 'source' => $this->handlerName,
                 'imei'   => $imei,
+                'erro'   => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Grava a configuração quando o callback responde a um 33028/33030.
+     *
+     * ⚠️ A DECISÃO É PELO `pro_no` DO COMANDO, NÃO PELO FORMATO DO CONTEÚDO.
+     * Sniffar "parece JSON de parâmetros" gravaria configuração a partir de
+     * qualquer resposta que por acaso fosse um objeto JSON — inclusive de
+     * comandos de vídeo, que também respondem JSON. O `pro_no` (coluna nova na
+     * v4.9.12) é a única fonte que diz o que foi pedido.
+     *
+     * Sem comando correlacionado, não grava: um `_content` órfão pode ser
+     * resposta de qualquer coisa, e adivinhar é como nasce dado errado que
+     * ninguém desconfia.
+     *
+     * @param string      $imei
+     * @param string|null $content   `_content` do callback
+     * @param int|null    $commandId Linha de `commands` correlacionada
+     * @returns void
+     */
+    private function capturarParametros($imei, $content, $commandId) {
+        if ($commandId === null || $content === null || $content === '') return;
+
+        try {
+            $stmt = $this->db->prepare("SELECT pro_no FROM commands WHERE id = :id");
+            $stmt->execute([':id' => $commandId]);
+            $proNo = (int)$stmt->fetchColumn();
+            if ($proNo !== 33028 && $proNo !== 33030) return;
+
+            require_once __DIR__ . '/../includes/device_params.php';
+            $parsed = parse_param_content((string)$content);
+
+            if (!$parsed['ok']) {
+                // Até a v4.9.11 este era o caso NORMAL: `command_content` era
+                // varchar(250) e o JSON chegava aqui cortado ao meio.
+                Logger::warning('InstructResponse: _content de parâmetros não parseou', [
+                    'source' => $this->handlerName, 'imei' => $imei,
+                    'proNo'  => $proNo, 'erro' => $parsed['erro'],
+                    'tamanho' => strlen((string)$content),
+                ]);
+                return;
+            }
+
+            $gravados = upsert_device_params(
+                $this->db, $imei, $parsed, $proNo, (string)$proNo, (int)$commandId
+            );
+
+            // Só a leitura COMPLETA (33028) marca o device como sincronizado.
+            // O 33030 traz um punhado de parâmetros e dizer "sincronizado" com
+            // três valores faria o worker parar de buscar o resto.
+            if ($proNo === 33028) {
+                $this->db->prepare("UPDATE devices SET params_synced_at = NOW(),
+                                          params_sync_tries = 0, params_sync_next = NULL
+                                    WHERE imei = :imei")->execute([':imei' => $imei]);
+            }
+
+            Logger::info('InstructResponse: parâmetros gravados', [
+                'source' => $this->handlerName, 'imei' => $imei, 'proNo' => $proNo,
+                'gravados' => $gravados, 'param_count' => $parsed['param_count'],
+            ]);
+        } catch (Throwable $e) {
+            Logger::error('InstructResponse: falha ao gravar parâmetros', [
+                'source' => $this->handlerName, 'imei' => $imei,
                 'erro'   => $e->getMessage(),
             ]);
         }
