@@ -1,4 +1,51 @@
-# STATUS.md — Jimi Webhook System v4.9.12 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.13 (YUV Parity)
+
+> ### 📍 v4.9.13 — F2 do PROJETO_PARAMETROS entregue e PUBLICADA
+>
+> A leitura de parâmetros virou **automática** e a frota ganhou relatório de
+> configuração. Local, `origin/main` e homolog em paridade; `/ping` **4.9.13**.
+>
+> | Entrega | Estado |
+> |---|---|
+> | `scripts/param_sync_worker.php` (cron 5 min, backoff) | ✅ rodado na frota real |
+> | `/relatorios/parametros` — Parâmetros da Frota | ✅ renderizado com dado real |
+> | `includes/iothub_command.php` — despacho em ponto único | ✅ `sendcommand` refatorado e reverificado |
+>
+> #### Estado da frota JT/T depois do worker
+>
+> | Equipamento | Modelo | Parâmetros | Como foi lido |
+> |---|---|---|---|
+> | 371_3241 | JC371 | **49** (3 canais) | resposta síncrona |
+> | FJR7B59 | JC182 | **47** (1 canal) | resposta síncrona |
+> | 181_7838 | JC181 | **6** | 🔴 **callback offline** |
+> | 371_2 · Device E2E | JC371 · JC450 | — | em fila, backoff de 1 h |
+>
+> 🔴 **O caminho do callback foi provado em produção, com dado real.** O JC181
+> saiu do worker como "fila offline" e o `/pushinstructresponse` completou a
+> leitura sozinho: **94 bytes, `JSON_VALID = 1`**. É o destruncamento da v4.9.11
+> valendo num callback de verdade — antes eu só tinha provado por replay.
+>
+> #### O que o relatório já acusa
+>
+> **As duas câmeras lidas estão sem limite de velocidade** (`85 = 0`). É a
+> pergunta que motivou o projeto inteiro, agora respondida sozinha.
+>
+> Com um equipamento por modelo, tudo cai em *"sem base de comparação"* — que é
+> o comportamento desenhado: dizer "tudo certo" sem ter comparado nada seria
+> aprovar no vazio. A comparação real aparece quando o segundo JC371 reconectar.
+>
+> #### Verificação
+>
+> - `tests/helpers/device_params.test.php` — **56 casos**, 0 falhas.
+> - `php -l` em toda a árvore — limpo.
+> - Relatório renderizado com sessão real; link na sidebar; rota nos dois mapas.
+> - Ambiente de teste removido.
+>
+> #### Falta a F3
+>
+> Escrita `33027` com diff-only, `desired_value` gravado **antes** do envio (sem
+> isso o SMS de recuperação não tem para onde apontar) e perfis **por modelo**.
+
 
 > ### 📍 v4.9.12 — F1 do PROJETO_PARAMETROS entregue e PUBLICADA
 >

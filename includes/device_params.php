@@ -394,6 +394,31 @@ function param_osd_labels($valor): string
 }
 
 /**
+ * Valor de referência de uma lista: a MODA (o mais comum).
+ *
+ * Mora aqui, e não no `rel_parametros.php`, porque é a regra que decide o que o
+ * relatório chama de "fora do padrão" — e regra de decisão sem teste é como
+ * este repositório já perdeu junção por nome três vezes.
+ *
+ * 🔴 EMPATE DEVOLVE `null`, e isso é a decisão que mais importa. Com dois
+ * valores igualmente comuns não existe padrão; eleger um deles faria metade da
+ * frota aparecer como divergente por sorteio, e o relatório perderia a
+ * credibilidade justamente onde o dado é mais ambíguo.
+ *
+ * @param  array $vals chave => valor (a chave não é usada, só os valores)
+ * @returns array{0:?string,1:int} [moda, quantas vezes] — [null, 0] se empatar
+ */
+function param_moda(array $vals): array
+{
+    if (!$vals) return [null, 0];
+    $cont = array_count_values(array_map('strval', $vals));
+    arsort($cont);
+    $chaves = array_keys($cont);
+    if (count($chaves) > 1 && $cont[$chaves[0]] === $cont[$chaves[1]]) return [null, 0];
+    return [(string)$chaves[0], $cont[$chaves[0]]];
+}
+
+/**
  * Monta o `cmdContent` correto para cada proNo da família de parâmetros.
  *
  * ⚠️ AS TRÊS FORMAS SÃO DIFERENTES, e é onde a implementação anterior errou

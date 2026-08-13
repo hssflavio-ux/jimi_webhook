@@ -140,5 +140,16 @@ checa('33027 vira mapa no=>valor', '{"1":"60","85":"110"}',
 checa('33027 sem parametro nao vira comando vazio perigoso', '{}',
       build_param_cmd_content(33027, []));
 
+// ── Moda: a regra que decide o que e "fora do padrao" (v4.9.13) ────────────
+echo "\n── Padrão da frota (param_moda) ──\n";
+checa('maioria clara', '110', param_moda(['a'=>'110','b'=>'110','c'=>'90'])[0]);
+checa('  e conta quantos', 2, param_moda(['a'=>'110','b'=>'110','c'=>'90'])[1]);
+checa('🔴 EMPATE nao elege vencedor', null, param_moda(['a'=>'110','b'=>'90'])[0]);
+checa('  empate a 2x2 tambem', null, param_moda(['a'=>'1','b'=>'1','c'=>'2','d'=>'2'])[0]);
+checa('unanimidade', '0', param_moda(['a'=>'0','b'=>'0','c'=>'0'])[0]);
+checa('lista vazia nao estoura', null, param_moda([])[0]);
+checa('um valor so', '5', param_moda(['a'=>'5'])[0]);
+checa('numero e string sao o MESMO valor', '60', param_moda(['a'=>60,'b'=>'60','c'=>'90'])[0]);
+
 echo $falhas ? "\n$falhas falha(s) de $total\n" : "\nTodos os $total casos passaram\n";
 exit($falhas ? 1 : 0);

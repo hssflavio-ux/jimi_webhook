@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.13
+
+**F2 do `PROJETO_PARAMETROS.md`**: a leitura vira automática e a frota ganha um relatório de configuração.
+
+### Added
+- **`scripts/param_sync_worker.php`** — lê a configuração das câmeras JT/T que nunca foram lidas (ou cuja leitura passou de 30 dias), a cada 5 min pelo cron. Teto de 20 por rodada.
+  - 🔴 **É cron, e não gatilho dentro do webhook, por decisão de arquitetura.** Seria tentador disparar no `pushgps` quando o device aparece; não: o handler já devolveu 200 e processa em background, e abrir uma chamada HTTP ao IoT Hub ali acopla o tráfego de **todos** os devices à disponibilidade do hub. Numa frota que reconecta junto (queda de energia, virada de turno) vira tempestade, com cada comando segurando até 35 s. O cron dá enfileiramento, teto e backoff de graça.
+  - **`_code:600` não é erro** e o worker trata assim — quem completa a leitura é o callback, pelo mesmo parser. O backoff separa `busy` (15 min; reenviar na hora recebe a mesma recusa, observado no homolog) de `offline` (1 h dobrando até 24 h). Após 5 tentativas o worker para e **deixa visível** — device desistido não pode ficar indistinguível de device que nunca entrou na fila.
+  - `last_communication` entra como **ordenação, não filtro**: quem não fala há meses ainda merece uma tentativa (o comando fica em fila e é entregue na reconexão), só não na frente de quem está transmitindo agora.
+- **Relatório `/relatorios/parametros`** — *Parâmetros da Frota*. O padrão é a **própria frota, por modelo** (a moda entre equipamentos do mesmo modelo), sem ninguém cadastrar nada; perfil declarado é a F3. Três decisões, todas contra o silêncio que parece aprovação:
+  - modelo com **um** equipamento lido não tem padrão (a moda seria ele mesmo) — vai para *"sem base de comparação"* em vez de sumir;
+  - **empate não elege vencedor**: sem maioria não há padrão, e sortear faria metade da frota aparecer como divergente;
+  - **"achados de operação"** independem de comparação — `85 = 0` (sem limite de velocidade) e `94 = 0` (ângulo de capotamento zerado, o alarme não dispara) estariam errados **mesmo que a frota inteira estivesse assim**, que é exatamente onde a moda não ajudaria.
+
+### Changed
+- **O despacho ao IoT Hub virou ponto único** (`includes/iothub_command.php`). O worker precisava do mesmo despacho do `sendcommand.php`; copiá-lo repetiria o erro que este repositório já pagou três vezes — cópia divergente que ninguém percebe até uma das duas deixar de valer (o `worker.php` imprimiu código cru de alarme por meses assim). Ficou lá o que é igual para qualquer chamador; validação de proNo, escopo multi-tenant e injeção de credenciais de FTP continuam no handler, porque worker nenhum precisa disso.
+- `param_moda()` saiu do handler para `includes/device_params.php`: é a regra que decide o que o relatório chama de "fora do padrão", e regra de decisão sem teste é como este repositório já perdeu junção por nome três vezes. **56 casos** no `device_params.test.php`.
+
+### Verified
+- **Worker rodado contra a frota real**: 2 lidos na hora (JC371 com 49 parâmetros, JC182 com 47), 3 enfileirados offline com backoff de 1 h aplicado.
+- 🔴 **O caminho do callback foi provado em produção, com dado real**: o JC181 saiu como "fila offline" e o `/pushinstructresponse` completou a leitura sozinho — 6 parâmetros, **94 bytes, `JSON_VALID = 1`**. É o destruncamento da v4.9.11 valendo num callback de verdade, não em replay.
+
 ## [Unreleased] — 4.9.12
 
 **F1 do `PROJETO_PARAMETROS.md`**: o sistema passa a saber como cada câmera JT/T está configurada, em vez de só poder mandar comando e torcer.

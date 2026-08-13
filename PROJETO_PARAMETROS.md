@@ -437,7 +437,7 @@ valor anterior gravado, o SMS de recuperação não tem para onde apontar.
 | Fase | Entrega | Risco | Estado |
 |---|---|---|---|
 | **F1** | Catálogo + 3 tabelas + parser + `cmdContent` correto em 33028/33030 + captura síncrona + **destruncar** + aba Parâmetros + permissão | Baixo — **só leitura** | ✅ **v4.9.11 + v4.9.12**, verificada em câmera real |
-| **F2** | `param_sync_worker.php` + backoff + relatório "fora do padrão" | Médio — tráfego ao hub | pendente |
+| **F2** | `param_sync_worker.php` + backoff + relatório "fora do padrão" | Médio — tráfego ao hub | ✅ **v4.9.13**, worker rodado na frota real |
 | **F3** | Escrita 33027, diff-only, perfis por modelo, `desired_value` | Alto — mexe em câmera viva | pendente |
 
 ### O que a F1 achou depois de escrito este blueprint

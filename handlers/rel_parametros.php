@@ -74,23 +74,6 @@ if ($imeis) {
     }
 }
 
-/**
- * Valor mais comum de uma lista. Empate devolve null — sem maioria não há
- * padrão, e eleger um dos empatados faria metade da frota aparecer como
- * divergente por sorteio.
- *
- * @param  array $vals imei => valor
- * @returns array{0:?string,1:int} [moda, quantas vezes]
- */
-function moda_valores(array $vals): array {
-    $cont = array_count_values(array_map('strval', $vals));
-    arsort($cont);
-    $topo = array_slice($cont, 0, 2, true);
-    $chaves = array_keys($topo);
-    if (count($chaves) > 1 && $topo[$chaves[0]] === $topo[$chaves[1]]) return [null, 0];
-    return [$chaves ? (string)$chaves[0] : null, $chaves ? $topo[$chaves[0]] : 0];
-}
-
 // ── Divergências ────────────────────────────────────────────────────────────
 $divergencias = [];   // modelo => [ [param_no, channel, padrao, n_padrao, fora[]] ]
 $semBase      = [];   // modelos com um único equipamento lido
@@ -101,7 +84,7 @@ foreach ($valores as $modelo => $porParam) {
 
     foreach ($porParam as $chave => $vals) {
         if (count($vals) < 2) continue;              // parâmetro visto em um só
-        [$padrao, $n] = moda_valores($vals);
+        [$padrao, $n] = param_moda($vals);
         if ($padrao === null) continue;              // empate: sem padrão
         $fora = [];
         foreach ($vals as $im => $v) if ((string)$v !== $padrao) $fora[$im] = $v;
