@@ -41,6 +41,7 @@
  *   /relatorios/ignicao               → rel_ignicao.php
  *   /relatorios/velocidade            → rel_velocidade.php
  *   /relatorios/status-frota          → rel_status_frota.php
+ *   /relatorios/parametros            → rel_parametros.php (config da frota)
  *   /agendamentos                     → agendamentos.php
  *   /geocercas                        → geocercas.php
  *   /perfil                           → perfil.php
@@ -124,6 +125,7 @@ if (empty($segments)) {
             'ignicao'      => 'rel_ignicao.php',
             'velocidade'   => 'rel_velocidade.php',
             'status-frota' => 'rel_status_frota.php',
+            'parametros'   => 'rel_parametros.php',
         ],
         'ocorrencias' => [
             'dashboard' => 'ocorrencias_dashboard.php',
@@ -226,6 +228,7 @@ $screenByHandler = [
     'rel_ignicao.php'           => 'relatorios',
     'rel_velocidade.php'        => 'relatorios',
     'rel_status_frota.php'      => 'relatorios',
+    'rel_parametros.php'        => 'relatorios',
     'geocercas.php'             => 'geocercas',
     'agendamentos.php'          => 'agendamentos',
     'checklist.php'             => 'checklist',

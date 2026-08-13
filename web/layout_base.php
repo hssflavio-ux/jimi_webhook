@@ -55,6 +55,7 @@ $navGroups = [
             ['route' => 'rel_ocorrencias',    'label' => 'Ocorrências',     'href' => '/relatorios/ocorrencias'],
             ['route' => 'rel_geocercas',      'label' => 'Cercas',         'href' => '/relatorios/geocercas'],
             ['route' => 'rel_status_frota',   'label' => 'Status da Frota', 'href' => '/relatorios/status-frota'],
+            ['route' => 'rel_parametros',     'label' => 'Parâmetros da Frota', 'href' => '/relatorios/parametros'],
             ['route' => 'rel_paradas',        'label' => 'Paradas',         'href' => '/relatorios/paradas'],
             ['route' => 'rel_ociosidade',     'label' => 'Ociosidade',      'href' => '/relatorios/ociosidade'],
             ['route' => 'rel_ignicao',        'label' => 'Ignição',         'href' => '/relatorios/ignicao'],
