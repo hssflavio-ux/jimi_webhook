@@ -438,7 +438,7 @@ valor anterior gravado, o SMS de recuperação não tem para onde apontar.
 |---|---|---|---|
 | **F1** | Catálogo + 3 tabelas + parser + `cmdContent` correto em 33028/33030 + captura síncrona + **destruncar** + aba Parâmetros + permissão | Baixo — **só leitura** | ✅ **v4.9.11 + v4.9.12**, verificada em câmera real |
 | **F2** | `param_sync_worker.php` + backoff + relatório "fora do padrão" | Médio — tráfego ao hub | ✅ **v4.9.13**, worker rodado na frota real |
-| **F3** | Escrita 33027, diff-only, perfis por modelo, `desired_value` | Alto — mexe em câmera viva | pendente |
+| **F3** | Escrita 33027, diff-only, perfis por modelo, `desired_value` | Alto — mexe em câmera viva | ✅ **v4.9.14** — com um incidente real, ver abaixo |
 
 ### O que a F1 achou depois de escrito este blueprint
 
@@ -461,6 +461,31 @@ mapa, porque o PHP converte a chave `'85'` para inteiro sozinho.
 **A lição para a F2 e a F3**: a sonda contra equipamento real (ssh + `curl` no
 hub, §2) é barata e achou em minutos o que a revisão não achou. Usá-la antes de
 declarar pronto, não depois.
+
+### 🔴 O incidente da F3, e por que a regra da §8.1 se pagou
+
+Testando as travas da escrita, **a de parâmetro de rede não disparou**: um
+`33027` gravou `19` (Servidor Principal) = `1.2.3.4` numa câmera REAL, aceito
+pelo equipamento.
+
+A causa foi banal e é o ponto: `param_catalog()` listava as colunas uma a uma, e
+a `is_network` — criada pela migração da mesma versão — não entrou na lista. A
+guarda dependia de um campo que nunca chegava, e falhou **sem erro nenhum**.
+
+A recuperação levou ~1 minuto porque `device_param_writes` tinha o valor
+anterior gravado **antes** do despacho — exatamente a contrapartida que o dono
+do produto aceitou em troca de não bloquear os parâmetros de rede. Sem ela, a
+volta dependeria de alguém lembrar qual era o IP.
+
+**Duas regras saem daqui:**
+
+1. **Catálogo lido inteiro se lê com `SELECT *`.** Lista explícita de colunas
+   ignora a coluna nova em silêncio, e quando essa coluna é uma guarda, a guarda
+   deixa de existir sem ninguém saber.
+2. **Trava de segurança precisa de teste que a exercite de verdade.** A desta
+   feature "existia" e não funcionava; só rodar o cenário contra o sistema real
+   mostrou. O teste de regressão agora **pula** quando não há banco, em vez de
+   passar por vacuidade.
 
 **F1 dá para verificar de verdade**, e isso é raro neste repo: há **4 câmeras
 JT/T transmitindo** no homolog, e as sondas da §2 já provaram o caminho síncrono

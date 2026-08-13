@@ -497,6 +497,13 @@ function param_profile_diff(PDO $db, string $imei, int $profileId): array
  * ele é indispensável — a escrita que derrubou a câmera — seria exatamente o
  * caso em que ele não existe.
  *
+ * ⚠️ `from_value` é o ÚLTIMO VALOR LIDO, não o valor vivo do equipamento no
+ * instante da escrita — e isso é deliberado. Duas escritas seguidas sem releitura
+ * no meio registram o mesmo `from_value` (observado em 12/08/2026: 45→46 e
+ * depois 45→45), porque `device_params.value_raw` só muda por LEITURA. É o
+ * comportamento correto para o que este campo existe: a recuperação quer voltar
+ * ao último valor **verificado**, não a um intermediário que ninguém confirmou.
+ *
  * @param  PDO      $db
  * @param  string   $imei
  * @param  array    $mudancas  [['param_no','channel','de','para'], …]

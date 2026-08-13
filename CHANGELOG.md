@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.14
+
+**F3 do `PROJETO_PARAMETROS.md`** — a escrita. É a única parte do projeto que mexe em equipamento em operação.
+
+### Added
+- **Escrita de parâmetro (`33027`) com três travas, todas no servidor.** O JavaScript da tela é sugestão; quem forja o POST passa por cima dele.
+  1. **Só se escreve o que o catálogo sabe nomear** (`writable = 1`). Os 17 parâmetros `medido` — que a doc não publica — nunca são graváveis.
+  2. **O valor anterior é gravado ANTES do despacho.** Foi a contrapartida acordada quando o dono do produto aceitou o risco dos parâmetros de rede: a recuperação é por SMS, e o SMS precisa saber **para onde voltar**. Se o valor anterior só fosse gravado no sucesso, o caso em que ele é indispensável — a escrita que derrubou a câmera — seria exatamente o caso em que ele não existe. Falhou o registro, o comando **não é despachado**.
+  3. **`is_network` marca os sete** (`16`,`17`,`18`,`19`,`23`,`24`,`25`) que tiram a câmera da plataforma. Não bloqueiam — decisão de §8.1 — mas exigem `confirm_network` explícito: é a diferença entre decidir e esbarrar.
+- **Perfis de configuração por MODELO** (`/config-parametros`), com sobreposição por cliente. Por modelo porque foi **medido**: o JC371 devolve 49 parâmetros e o JC181, **6**, com conjuntos diferentes — perfil por cliente aplicaria a um modelo parâmetros que ele não tem. A tela mostra o **impacto antes**, sem enviar nada: é o que separa "aplicar perfil" de "apertar e ver".
+- **`device_param_writes`** — toda escrita tentada, com o valor de origem. `device_params` guarda o **estado**; isto guarda o que foi **tentado**. Uma escrita recusada não muda o estado, mas precisa aparecer para quem investiga.
+
+### Fixed
+- 🔴 **A trava de parâmetro de rede não disparava — e escreveu numa câmera real.** Testando as travas contra o homolog, um `33027` com o parâmetro `19` (Servidor Principal) e valor `1.2.3.4` foi **aceito por uma câmera de verdade**, sem a confirmação obrigatória.
+  - **Causa**: `param_catalog()` selecionava as colunas uma a uma e `is_network` — criada pela própria migração v4.9.14 — **não entrou na lista**. `$cat[19]['is_network']` vinha indefinido, `!empty()` dava `false`, e a guarda virou decoração. Lista explícita de colunas num catálogo lido **inteiro** só cria esse modo de falha: coluna nova é ignorada em silêncio. Trocado por `SELECT *`.
+  - **Recuperação em ~1 minuto, e ela validou o desenho**: `device_param_writes` tinha `from_value = 189.22.240.43` gravado **antes** do despacho, então a volta foi imediata e sem depender da memória de ninguém. Valor reescrito e **conferido relendo da própria câmera**.
+  - É exatamente o caso que justificou a regra. Desta vez foi um IP obviamente falso num equipamento de teste; num caso real seria uma câmera em campo, alcançável só por SMS.
+
+### Documented
+- ⚠️ **`aceito` não significa "valor aplicado".** O `33027` responde `ok` de **recebimento**; o valor real só se conhece **relendo**. Por isso `device_params.value_raw` não é tocado pela escrita — quem o atualiza é sempre uma leitura. Gravar o desejado como se fosse o lido faria a tela mentir exatamente quando o device recusou em silêncio.
+- ⚠️ **`from_value` é o último valor LIDO**, não o valor vivo no instante da escrita. Duas escritas seguidas sem releitura registram o mesmo `from_value` — observado em campo. É o correto para o que o campo existe: a recuperação quer voltar ao último valor **verificado**.
+
 ## [Unreleased] — 4.9.13
 
 **F2 do `PROJETO_PARAMETROS.md`**: a leitura vira automática e a frota ganha um relatório de configuração.

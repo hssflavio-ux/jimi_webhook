@@ -1,4 +1,53 @@
-# STATUS.md — Jimi Webhook System v4.9.13 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.14 (YUV Parity)
+
+> ### 📍 v4.9.14 — F3 entregue. PROJETO_PARAMETROS completo (F1+F2+F3)
+>
+> Local, `origin/main` e homolog em paridade; `/ping` **4.9.14**.
+>
+> #### 🔴 INCIDENTE nesta sessão, com recuperação completa
+>
+> Testando as travas da escrita contra o homolog, **a trava de parâmetro de rede
+> não disparou e a escrita foi para uma câmera real**: `19` (Servidor Principal)
+> recebeu `1.2.3.4` e o equipamento respondeu `ok`.
+>
+> **Causa**: `param_catalog()` selecionava colunas uma a uma e a `is_network` —
+> criada pela migração da própria v4.9.14 — não entrou na lista. A guarda virou
+> decoração, em silêncio.
+>
+> **Recuperação em ~1 minuto**, e ela validou o desenho da F3:
+> `device_param_writes` tinha `from_value = 189.22.240.43` gravado **antes** do
+> despacho. Valor reescrito e conferido **lendo da própria câmera**:
+> `19 = 189.22.240.43`, `24 = 21122`, `41 = 60`, `48 = 45` — configuração
+> integralmente restaurada.
+>
+> **A lição**: lista explícita de colunas num catálogo lido inteiro só cria esse
+> modo de falha — a coluna nova é ignorada sem erro e a guarda que depende dela
+> para de existir. Agora é `SELECT *`, com teste de regressão que **pula** sem
+> banco em vez de passar por vacuidade.
+>
+> #### Travas, reverificadas depois da correção
+>
+> | Cenário | Resultado |
+> |---|---|
+> | `128` (medido, sem doc) | **400** — não gravável |
+> | `19` sem `confirm_network` | **409** — exige assumir o risco |
+> | `41` + `19` no mesmo lote | **409** — o lote inteiro para |
+> | `33027` sem parâmetro | **400** |
+> | `48`: 45 → 46 → 45 (comum) | **executado e revertido**, conferido na câmera |
+>
+> #### Verificação
+>
+> - `tests/helpers/device_params.test.php` — **64 casos**, 0 falhas.
+> - `php -l` limpo. Ambiente de teste removido.
+>
+> #### O blueprint está concluído
+>
+> F1 (ler e guardar) · F2 (ler sozinho + relatório de frota) · F3 (escrever com
+> guardas, perfis por modelo, diff-only). O que ficou **de fora de propósito**:
+> aplicar perfil em lote com um clique — hoje a aplicação é equipamento a
+> equipamento, pela aba Parâmetros, e a tela de perfil só **simula** o impacto.
+> Depois deste incidente, ampliar o alcance de uma escrita pede sessão própria.
+
 
 > ### 📍 v4.9.13 — F2 do PROJETO_PARAMETROS entregue e PUBLICADA
 >
