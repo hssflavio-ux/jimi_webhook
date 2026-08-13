@@ -556,8 +556,10 @@ function alarm_label_sql(): array {
         // linhas no homolog; um filtro por nome precisaria enumerar cada uma.
         //
         // 🔴 `COALESCE(..., 0)` no fim é FALHA PARA O LADO DE MOSTRAR. Código
-        // que não está no catálogo — `Código 1047 (JTT)` é o caso real hoje —
-        // dá NULL nos dois joins. Sem o zero final, a comparação com NULL
+        // que não está no catálogo — `Código 1047 (JTT)` e `Código 146 (JIMI)`
+        // eram os casos reais até a v4.9.10 cadastrá-los; o próximo código novo
+        // do fabricante recria a situação — dá NULL nos dois joins. Sem o zero
+        // final, a comparação com NULL
         // eliminaria a linha e um alarme novo desapareceria da tela em
         // silêncio, que é o modo de falha que o CLAUDE.md documenta três vezes.
         // Composto na frente da base, na mesma ordem do rótulo.

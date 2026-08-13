@@ -1145,7 +1145,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </div>
 
 <div class="callout info">
-<strong>Alarme sem nome, só com número.</strong> Alguns poucos alarmes aparecem como <span class="mono">Código 1047 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que o fabricante não documenta — o sistema mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos.
+<strong>Alarme sem nome, só com número.</strong> Raramente um alarme aparece como <span class="mono">Código 1234 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que ainda não está no catálogo do sistema — que mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos. Assim que o código é cadastrado, o nome aparece também nos alarmes antigos, sem precisar refazer nada. Hoje não há nenhum nesta situação: os dois últimos (<span class="mono">1047</span>, capotamento, e <span class="mono">146</span>, curva brusca) foram cadastrados.
 </div>
 
 <h3 id="rel-ocorrencias">Ocorrências</h3>

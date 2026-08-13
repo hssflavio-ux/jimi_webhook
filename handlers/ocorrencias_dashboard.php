@@ -74,11 +74,17 @@ if (!empty($_GET['id'])) {
         $detailOcc = $stmt->fetch();
 
         if ($detailOcc) {
+            // Nome resolvido na leitura pelo helper compartilhado (v4.9.10) —
+            // `alarms.alarm_name` é congelado na chegada do webhook, então um
+            // evento cujo código só entrou no catálogo depois apareceria aqui
+            // como `Código NNNN (JTT)` mesmo já tendo nome no relatório.
+            ['joins' => $evtJoins, 'expr' => $evtExpr] = alarm_label_sql();
             $stmt = $db->prepare(
-                "SELECT e.id as event_id, a.id as alarm_id, a.alarm_name, a.alarm_time,
+                "SELECT e.id as event_id, a.id as alarm_id, {$evtExpr} AS alarm_name, a.alarm_time,
                         a.latitude, a.longitude, a.speed, a.file_url, a.file_type
                  FROM occurrence_events e
                  JOIN alarms a ON a.id = e.alarm_id
+                 {$evtJoins}
                  WHERE e.occurrence_id = :oid
                  ORDER BY a.alarm_time DESC"
             );

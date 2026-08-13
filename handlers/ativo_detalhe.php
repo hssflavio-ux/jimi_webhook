@@ -98,23 +98,26 @@ $geoTrack = $tracks ? geocode_map_rows($tracks) : [];
 // aba: alertas
 $alarms = [];
 if ($tab === 'alertas') {
+    // Nome resolvido na LEITURA, pelo helper compartilhado (v4.9.10). Esta aba
+    // lia `a.alarm_name` cru e por isso mostrava `Código 1047 (JTT)` enquanto o
+    // Relatório de Alarmes, que usa o helper, já mostrava o nome — a mesma
+    // divergência que o `scripts/worker.php` teve por meses. Os joins do helper
+    // também tentam o código BASE quando o composto não está no catálogo, o que
+    // o join anterior (um `IF`, sem fallback) não fazia.
+    ['joins' => $alarmJoins, 'expr' => $alarmExpr, 'diag' => $alarmDiag] = alarm_label_sql();
     $alarmStmt = $db->prepare("
-        SELECT a.id, a.alarm_name, a.alarm_time, a.created_at, a.msg_class,
+        SELECT a.id, {$alarmExpr} AS alarm_name, a.alarm_time, a.created_at, a.msg_class,
                a.alarm_label, a.latitude, a.longitude, a.file_url, a.speed,
-               COALESCE(at.severity, 'info') AS severity
+               COALESCE(atc.severity, atb.severity, 'info') AS severity
         FROM alarms a
-        LEFT JOIN alarm_types at ON (
-            (a.msg_class=1 AND at.protocol='JTT' AND at.alarm_code=IF(a.alarm_subtype IS NOT NULL,
-                CONCAT(a.alarm_type, '-', a.alarm_subtype), a.alarm_type))
-            OR (a.msg_class=0 AND at.protocol='JIMI' AND at.alarm_code=a.alarm_type)
-        )
+        {$alarmJoins}
         WHERE a.imei = ?
           -- Sem os eventos de diagnóstico (v4.9.9): esta aba responde o que
           -- aconteceu com o VEICULO, e as falhas de armazenamento deste
           -- equipamento sozinhas enchiam as 100 linhas do LIMIT. Para conferir
           -- os tecnicos existe o modo diagnostico do relatorio de alarmes,
           -- restrito ao administrador.
-          AND COALESCE(at.is_diagnostic, 0) = 0
+          AND {$alarmDiag} = 0
         ORDER BY a.created_at DESC LIMIT 100
     ");
     $alarmStmt->execute([$imei]);

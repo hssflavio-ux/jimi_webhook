@@ -55,27 +55,32 @@ if ($reportType === 'alarmes') {
     $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
     $where .= " AND a.created_at >= :df AND a.created_at <= :dt";
     if ($imeiFilter) { $where .= " AND a.imei = :imei"; $params[':imei'] = $imeiFilter; }
-    if ($alarmSev) { $where .= " AND COALESCE(at.severity,'info') = :sev"; $params[':sev'] = $alarmSev; }
-    if ($alarmCat) { $where .= " AND at.category = :cat"; $params[':cat'] = $alarmCat; }
+    // Joins e expressão de nome vêm do helper compartilhado (v4.9.10) — esta
+    // tela lia `a.alarm_name` cru e mostrava `Código 1047 (JTT)` onde o
+    // Relatório de Alarmes já mostrava o nome. Os joins do helper tentam o
+    // código BASE quando o composto não está no catálogo; o join anterior (um
+    // `IF`, sem fallback) devolvia NULL e com ele a severidade caía para 'info'
+    // e o filtro de categoria não casava.
+    ['joins' => $alarmJoins, 'expr' => $alarmExpr, 'diag' => $alarmDiag] = alarm_label_sql();
+    $sevExpr = "COALESCE(atc.severity, atb.severity, 'info')";
+    $catExpr = "COALESCE(atc.category, atb.category)";
+
+    if ($alarmSev) { $where .= " AND {$sevExpr} = :sev"; $params[':sev'] = $alarmSev; }
+    if ($alarmCat) { $where .= " AND {$catExpr} = :cat"; $params[':cat'] = $alarmCat; }
 
     $stmt = $db->prepare("
-        SELECT a.id, a.imei, a.alarm_name, a.alarm_time, a.created_at, a.msg_class,
+        SELECT a.id, a.imei, {$alarmExpr} AS alarm_name, a.alarm_time, a.created_at, a.msg_class,
                a.alarm_label, a.latitude, a.longitude, a.speed, a.file_url,
-               COALESCE(at.severity, 'info') AS severity,
+               {$sevExpr} AS severity,
                d.device_name
         FROM alarms a
         JOIN devices d ON a.imei = d.imei
-        LEFT JOIN alarm_types at ON (
-            (a.msg_class=1 AND at.protocol='JTT' AND at.alarm_code=IF(a.alarm_subtype IS NOT NULL,
-                CONCAT(a.alarm_type, '-', a.alarm_subtype), a.alarm_type))
-            OR (a.msg_class=0 AND at.protocol='JIMI' AND at.alarm_code=a.alarm_type)
-        )
+        {$alarmJoins}
         WHERE $where
-          -- Sem os eventos de diagnóstico (v4.9.9). O JOIN acima já resolve a
-          -- linha do catálogo com a mesma precedência (composto antes da base),
-          -- então basta ler o flag daqui. COALESCE porque código fora do
-          -- catálogo dá NULL e não pode sumir da tela.
-          AND COALESCE(at.is_diagnostic, 0) = 0
+          -- Sem os eventos de diagnóstico (v4.9.9). Falha para o lado de
+          -- MOSTRAR: código fora do catálogo dá NULL nos dois joins e o
+          -- COALESCE do helper devolve 0, então alarme novo não some da tela.
+          AND {$alarmDiag} = 0
         ORDER BY a.created_at DESC LIMIT 200
     ");
     $stmt->execute($params);

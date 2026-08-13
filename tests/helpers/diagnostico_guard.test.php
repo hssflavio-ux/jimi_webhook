@@ -39,7 +39,12 @@ $casos = [
     ['🔴 256 base sozinho segue visível',               '256',  null,       1, false],
     ['DMS: Distração do Motorista (JIMI 143)',          '143',  null,       0, false],
     ['SOS (JIMI 1)',                                    '1',    null,       0, false],
-    ['Código fora do catálogo (JT/T 1047) — fail-open', '1047', null,       1, false],
+    // 1047 era o "fora do catálogo" deste teste até a v4.9.10 cadastrá-lo como
+    // Capotamento. Ficou como caso de alarme REAL (acidente nunca é
+    // diagnóstico), e o fail-open passou a usar um código que não existe mesmo.
+    ['Capotamento (JT/T 1047) — acidente, nunca diagnóstico', '1047', null,  1, false],
+    ['Código fora do catálogo (JT/T 9999) — fail-open', '9999', null,       1, false],
+    ['Curva Brusca (JIMI 146)',                         '146',  null,       0, false],
     ['🔴 105 em JT/T é outro alarme (ADR-001)',         '105',  null,       1, false],
 ];
 
