@@ -1,5 +1,48 @@
 # STATUS.md — Jimi Webhook System v4.9.16 (YUV Parity)
 
+> ### 📍 14/08/2026 — 🔴 O TLS derrubou o vídeo ao vivo (mixed content)
+>
+> Reclamação: "3 câmeras conectadas, nenhuma abre vídeo". A suspeita natural era
+> esquecimento na migração do homolog. **Não era**: o que quebrou foi o HTTPS
+> ligado na véspera.
+>
+> O player (`flv.js`) busca o stream por XHR. Com o painel em
+> `https://bycamera.ia.br` e `STREAM_URL=http://IP:8881`, o navegador **bloqueia
+> como mixed content** — no cliente, sem tocar no servidor. Por isso o quadro
+> era enganoso: o `37121` respondia `ok`, a câmera publicava, e **não havia uma
+> linha de erro em log nenhum**.
+>
+> **Como foi provado, em vez de suposto** — disparado o mesmo `37121` da tela e
+> medido o FLV:
+>
+> | Caminho | Resultado |
+> |---|---|
+> | `http://127.0.0.1:8881/1/<imei>.flv` (direto) | **200, 640 KB**, assinatura `FLV` |
+> | `https://.../stream/…` (proxy, mesma origem) | **200, 630 KB**, assinatura `FLV` |
+> | Do **Mac externo**, pela URL pública HTTPS | **200, 710 KB**, assinatura `FLV` |
+>
+> O caminho de mídia estava íntegro o tempo todo; só o navegador recusava.
+>
+> **Correção**: proxy reverso no Apache, `/stream/ → http://127.0.0.1:8881/`,
+> e `STREAM_URL=https://bycamera.ia.br/stream`. Config versionada em
+> `docs/apache/bycamera-stream.conf` e instalada em `conf-available` — **não**
+> no vhost TLS, que o certbot reescreve a cada renovação.
+>
+> ⚠️ **`flushpackets=on` é o que faz funcionar**, não ajuste fino: o FLV ao vivo
+> é uma resposta que nunca termina, e sem ele o Apache segura os dados no buffer
+> e o player fica preso em "conectando".
+>
+> ⚠️ **`VIDEO_INGEST_IP` virou obrigatória.** Sem ela o código extrai o host de
+> `STREAM_URL`, que agora é um NOME — e mandaria a câmera publicar em
+> `bycamera.ia.br`. Firmware que não resolve DNS aceita o `37121` e nunca
+> publica. Aquele campo é para a CÂMERA, não para o navegador.
+>
+> **Lição que generaliza**: ligar TLS quebra todo subrecurso que continuar em
+> `http://` — stream, iframe, fetch. A busca do defeito começa no console do
+> navegador, não no log do servidor, porque **o servidor nunca fica sabendo**.
+
+---
+
 > ### 📍 v4.9.16 (14/08/2026) — Parâmetros vira área de administrador
 >
 > As três funções de parametrização estavam espalhadas — a leitura numa aba de
