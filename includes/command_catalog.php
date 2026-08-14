@@ -3536,6 +3536,39 @@ return [
     'exemplos' => [
     ],
   ],
+  // v4.9.18 — a listagem de gravações no protocolo JIMI. Ao contrário do JT/T,
+  // que responde a uma consulta com janela (`37381` → /pushresourcelist), aqui
+  // a câmera SOBE sozinha um TXT com a lista inteira para a URL informada, sem
+  // filtro de data. O receptor é /filelist/{imei} (handlers/filelist.php).
+  //
+  // ⚠️ A URL tem de ser HTTP simples e alcançável pela câmera na internet —
+  // ela não faz TLS, e o redirect 80→443 do site tem exceção para este caminho.
+  'FILELIST,A#' => [
+    'cmd' => 'FILELIST',
+    'nome' => 'Lista de gravações do cartão (JIMI)',
+    'desc' => 'Manda a câmera subir, para a URL informada, um TXT com os nomes das gravações do cartão. Não aceita intervalo de datas: envia a lista inteira.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC400D',
+      1 => 'JC400AD',
+    ],
+    'universal' => false,
+    'template' => true,
+    'params' => [
+      0 => [
+        'p' => 'A',
+        'desc' => 'URL HTTP que recebe a lista (termine com o IMEI da câmera)',
+        'format' => 'http://<servidor>/filelist/<IMEI>',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+      0 => [
+        'cmd' => 'FILELIST,http://186.248.143.197/filelist/862798051583785',
+        'desc' => 'Pede à câmera a lista de gravações do cartão',
+      ],
+    ],
+  ],
   'UPLOAD,A#' => [
     'cmd' => 'UPLOAD',
     'nome' => 'Upload de vídeos',

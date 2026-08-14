@@ -171,6 +171,15 @@ if (empty($segments)) {
             }
         }
 
+    // /filelist/{imei} (v4.9.18) — a CÂMERA JIMI sobe aqui a lista de gravações
+    // do cartão, em resposta ao comando de texto FILELIST. Não é tela e não
+    // exige login, pelo mesmo motivo de `download` e `midia`: quem chama é o
+    // equipamento, que não carrega sessão. Fica FORA de $screenByHandler de
+    // propósito — a defesa é o IMEI conhecido, dentro do handler.
+    } elseif ($first === 'filelist') {
+        $handler = 'filelist.php';
+        $params['imei'] = $second ?? '';
+
     } elseif ($first === 'ativos') {
         if ($second === 'novo') {
             $handler = 'ativos_novo.php';
