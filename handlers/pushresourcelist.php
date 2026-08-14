@@ -71,17 +71,37 @@ class PushResourceListHandler extends WebhookHandler {
         $duplicates = 0;
         $errors = 0;
 
+        // Instante ÚNICO desta listagem — ver a nota no execute() abaixo.
+        $capturaEm = date('Y-m-d H:i:s');
+
         // Prepara query fora do loop
         try {
+            // ⚠️ v4.9.17 — `captured_at` é o que dá VALIDADE à lista, e por isso
+            // o ON DUPLICATE é obrigatório: antes, arquivo já conhecido caía no
+            // catch de duplicidade e era só contado. Agora, uma listagem nova
+            // que reporta o MESMO arquivo tem de renovar a marca de tempo —
+            // senão o arquivo continuaria "vencido" logo depois de a câmera
+            // acabar de confirmar que ele existe.
+            //
+            // Sem VALUES() nem alias de linha: os dois têm ressalvas de versão
+            // no MySQL 8. Repetir o placeholder com outro nome funciona em
+            // qualquer versão e não depende de EMULATE_PREPARES.
             $sql = "INSERT INTO resource_lists (
-                        imei, resource_type, file_name, file_size, 
-                        start_time, end_time, channel_id, alarm_type, 
-                        created_at
+                        imei, resource_type, file_name, file_size,
+                        start_time, end_time, channel_id, alarm_type,
+                        created_at, captured_at
                     ) VALUES (
                         :imei, :res_type, :fname, :fsize,
                         :start, :end, :chan, :alarm,
-                        NOW()
-                    )";
+                        NOW(), :captured
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        captured_at   = :captured2,
+                        resource_type = :res_type2,
+                        file_size     = :fsize2,
+                        start_time    = :start2,
+                        end_time      = :end2,
+                        alarm_type    = :alarm2";
             $stmt = $this->db->prepare($sql);
             
             $globalType = $item['msg']['resourceType'] ?? $item['resourceType'] ?? null;
@@ -116,15 +136,28 @@ class PushResourceListHandler extends WebhookHandler {
                 }
 
                 try {
+                    // Uma listagem = UM instante. `$capturaEm` é calculado fora
+                    // do laço (mais abaixo, no início do processItem) para que
+                    // todos os arquivos da mesma resposta compartilhem a marca
+                    // — se cada linha usasse NOW(), uma lista de 800 arquivos
+                    // ficaria espalhada por segundos e a "idade da captura"
+                    // dependeria de qual linha se olhasse.
                     $stmt->execute([
-                        ':imei'     => $imei,
-                        ':res_type' => $resType,
-                        ':fname'    => $fileName,
-                        ':fsize'    => $fileSize,
-                        ':start'    => $startTime,
-                        ':end'      => $endTime,
-                        ':chan'     => $channelId,
-                        ':alarm'    => $alarmType
+                        ':imei'      => $imei,
+                        ':res_type'  => $resType,
+                        ':fname'     => $fileName,
+                        ':fsize'     => $fileSize,
+                        ':start'     => $startTime,
+                        ':end'       => $endTime,
+                        ':chan'      => $channelId,
+                        ':alarm'     => $alarmType,
+                        ':captured'  => $capturaEm,
+                        ':captured2' => $capturaEm,
+                        ':res_type2' => $resType,
+                        ':fsize2'    => $fileSize,
+                        ':start2'    => $startTime,
+                        ':end2'      => $endTime,
+                        ':alarm2'    => $alarmType,
                     ]);
                     $inserted++;
 

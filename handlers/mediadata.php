@@ -68,11 +68,18 @@ try {
         $paramsRes[':imei'] = $imei;
     }
 
+    // ⚠️ v4.9.17 — só listagem dentro da validade, mesma regra da tela de
+    // playback. Sem isto, este endpoint continuaria devolvendo arquivos de
+    // listas de semanas atrás como se estivessem no cartão, e a inconsistência
+    // entre as duas telas seria pior que o defeito original.
+    $ttlRes = resource_list_ttl_minutes();
     $stmtRes = $db->prepare("
         SELECT imei, resource_type, file_name, file_size, start_time, end_time,
-               channel_id, alarm_type, created_at
+               channel_id, alarm_type, created_at, captured_at
         FROM resource_lists
         $whereRes
+          AND captured_at IS NOT NULL
+          AND captured_at >= (NOW() - INTERVAL {$ttlRes} MINUTE)
         ORDER BY created_at DESC
         LIMIT :limit OFFSET :offset
     ");

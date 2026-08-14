@@ -1040,6 +1040,26 @@ function report_has_query(): bool {
  *
  * @return array{flv_base:string, ingest_ip:string, ingest_port:string, playback_port:string}
  */
+/**
+ * Validade da listagem de gravações do cartão, em minutos (v4.9.17).
+ *
+ * O cartão é buffer circular e a retenção real depende de quantas horas o
+ * veículo roda — não há número fixo de dias. Por isso a lista não tenta ser um
+ * acervo: é um RETRATO com hora de validade curta. Vencida, ela deixa de ser
+ * acionável e a tela pede uma nova, em vez de oferecer arquivo que muito
+ * provavelmente já foi sobrescrito.
+ *
+ * 30 min é a decisão do dono do produto (14/08/2026): longo o bastante para
+ * trabalhar a lista, curto o bastante para não enganar.
+ *
+ * @returns int Minutos
+ */
+function resource_list_ttl_minutes(): int
+{
+    $v = (int)(getenv('RESOURCE_LIST_TTL_MINUTES') ?: 30);
+    return $v > 0 ? $v : 30;
+}
+
 function video_stream_config() {
     $flvBase = rtrim(getenv('STREAM_URL') ?: 'http://localhost:8881', '/');
     $host = parse_url($flvBase, PHP_URL_HOST) ?: 'localhost';

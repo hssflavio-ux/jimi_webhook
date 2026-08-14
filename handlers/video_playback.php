@@ -66,6 +66,11 @@ $dateTo     = $_GET['date_to'] ?? date('Y-m-d');
 $requested  = !empty($_GET['request']);
 
 $recordings = [];
+// Defaults ANTES do bloco condicional: o template renderiza sob `$requested`,
+// mas a consulta só roda com `$requested && $selImei`. Sem isto, pedir a tela
+// sem equipamento selecionado usaria variável indefinida.
+$ttl         = resource_list_ttl_minutes();
+$capturaInfo = ['ultima' => null, 'minutos' => null];
 if ($requested && $selImei) {
     // Dias digitados são BRT; colunas do banco são UTC
     list($utcFrom, $utcTo) = brt_day_range_to_utc($dateFrom, $dateTo);
@@ -77,18 +82,38 @@ if ($requested && $selImei) {
     };
 
     // 1) Gravações que a câmera reportou no cartão (37381 → /pushresourcelist)
+    //
+    // ⚠️ v4.9.17 — SÓ LISTAGEM DENTRO DA VALIDADE. O cartão é buffer circular:
+    // até aqui a tela mostrava listas de até 32 dias como se fossem atuais, e o
+    // usuário clicava em download de arquivo havia muito sobrescrito. A idade
+    // vem junto para a tela poder dizer "capturada há X" em vez de fingir que
+    // é agora. ($ttl já vem definido acima, para o template também enxergá-lo.)
     $stmt = $db->prepare("
-        SELECT id, resource_type, file_name, file_size, start_time, end_time, channel_id, alarm_type
+        SELECT id, resource_type, file_name, file_size, start_time, end_time, channel_id, alarm_type,
+               captured_at
         FROM resource_lists
         WHERE imei = :imei
           AND (channel_id = :ch OR channel_id = 0 OR channel_id IS NULL)
           AND start_time <= :dt
           AND COALESCE(end_time, start_time) >= :df
+          AND captured_at IS NOT NULL
+          AND captured_at >= (NOW() - INTERVAL {$ttl} MINUTE)
         ORDER BY start_time DESC
         LIMIT 300
     ");
     $stmt->execute([':imei' => $selImei, ':ch' => $selChannel, ':df' => $utcFrom, ':dt' => $utcTo]);
     $resources = $stmt->fetchAll();
+
+    // Idade da ÚLTIMA listagem deste equipamento, mesmo vencida — é o que
+    // permite distinguir "nunca listado" de "listado há 3 h", que para o
+    // operador são situações completamente diferentes.
+    $stmtCap = $db->prepare("
+        SELECT MAX(captured_at) AS ultima,
+               TIMESTAMPDIFF(MINUTE, MAX(captured_at), NOW()) AS minutos
+          FROM resource_lists WHERE imei = :imei
+    ");
+    $stmtCap->execute([':imei' => $selImei]);
+    $capturaInfo = $stmtCap->fetch(PDO::FETCH_ASSOC) ?: ['ultima' => null, 'minutos' => null];
 
     // 2) Arquivos já extraídos para o servidor (→ /pushfileupload)
     $stmt = $db->prepare("
@@ -251,14 +276,51 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?= count($recordings) ?> gravação<?= count($recordings) !== 1 ? 'ões' : '' ?>
             </div>
 
+            <?php
+            // ── Idade da listagem (v4.9.17) ─────────────────────────────────
+            // O cartão é buffer circular; a lista é um RETRATO com validade
+            // curta. Dizer a idade é o que separa "informação velha rotulada"
+            // (útil) de "informação velha disfarçada de atual" (armadilha) —
+            // a segunda é o que esta tela fazia até aqui.
+            $capMin     = $capturaInfo['minutos'] ?? null;
+            $capVencida = $capturaInfo['ultima'] !== null && $capMin !== null && $capMin > $ttl;
+            ?>
+            <?php if ($capturaInfo['ultima'] === null): ?>
+                <div class="callout info" style="font-size:11px;margin-bottom:8px">
+                    Este equipamento <strong>nunca teve o cartão listado</strong>.
+                    Use <strong>Consultar gravações</strong> para pedir a lista à câmera.
+                </div>
+            <?php elseif ($capVencida): ?>
+                <div class="callout" style="font-size:11px;margin-bottom:8px;background:#fdf6e3;border-left:3px solid #b45309;color:#7c4a03">
+                    A última listagem foi feita
+                    <strong>há <?= $capMin >= 1440 ? intdiv($capMin,1440).' dia(s)' : ($capMin >= 60 ? intdiv($capMin,60).' h' : $capMin.' min') ?></strong>
+                    e <strong>venceu</strong> (validade: <?= (int)$ttl ?> min).
+                    O cartão grava em ciclo — o que estava lá já pode ter sido
+                    sobrescrito. <strong>Consulte novamente</strong> antes de baixar.
+                </div>
+            <?php else: ?>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+                    Listagem de <strong><?= $capMin < 1 ? 'agora' : 'há ' . (int)$capMin . ' min' ?></strong>
+                    · vence em <?= max(0, $ttl - (int)$capMin) ?> min
+                </div>
+            <?php endif; ?>
+
             <?php if (empty($recordings)): ?>
             <div class="empty-state" style="padding:24px 12px;" id="pb-empty">
+                <?php if ($capVencida): ?>
+                <p>A listagem anterior venceu.</p>
+                <p style="font-size:11px;margin-top:4px;">
+                    Ela não é exibida de propósito: ofereceria download de arquivo
+                    que provavelmente não está mais no cartão. Peça uma nova.
+                </p>
+                <?php else: ?>
                 <p>Nenhuma gravação encontrada no período.</p>
                 <p style="font-size:11px;margin-top:4px;">
                     A câmera responde à consulta em alguns segundos — esta página
                     atualiza sozinha. Se persistir, verifique se o equipamento está
                     online e se há cartão de memória.
                 </p>
+                <?php endif; ?>
             </div>
             <?php else: ?>
             <?php foreach ($recordings as $rec): ?>

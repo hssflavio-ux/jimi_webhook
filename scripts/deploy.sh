@@ -395,6 +395,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.12" "mysql/migration_v4.9.12.sql" "parametros das cameras JT/T (catalogo + 3 tabelas)"
     run_migration "4.9.14" "mysql/migration_v4.9.14.sql" "perfis de parametros por modelo + escrita 33027"
     run_migration "4.9.15" "mysql/migration_v4.9.15.sql" "16 parametros nomeados pela norma JT/T 808"
+    run_migration "4.9.17" "mysql/migration_v4.9.17.sql" "validade de 30 min na lista de gravacoes"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
@@ -422,7 +423,11 @@ find config core handlers includes web -type f -exec chmod 644 {} \; 2>/dev/null
 if [ ! -d logs ]; then
     mkdir -p logs
 fi
-chmod 777 logs
+# 2777 e não 777: o setgid faz o arquivo de log criado pelo CRON nascer no
+# grupo www-data, e não no grupo primário do usuário do deploy. Sem ele, o
+# Apache só consegue escrever porque o Logger usa 0666 — cinto e suspensório,
+# porque este par (cron × www-data no mesmo arquivo) já falhou uma vez.
+chmod 2777 logs
 # Storage — reports e media
 if [ ! -d storage/reports ]; then
     mkdir -p storage/reports
@@ -430,7 +435,9 @@ fi
 if [ ! -d storage/media ]; then
     mkdir -p storage/media
 fi
-chmod 777 storage storage/reports storage/media 2>/dev/null || true
+# 2777 pelo mesmo motivo de logs/: relatório gerado pelo cron precisa ficar
+# legível para o Apache servi-lo em /download.
+chmod 2777 storage storage/reports storage/media 2>/dev/null || true
 # Manter logs existentes com permissão de escrita
 find logs -type f -exec chmod 666 {} \; 2>/dev/null || true
 echo "  ✓ Permissões configuradas"

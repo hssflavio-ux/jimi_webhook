@@ -250,9 +250,25 @@ class Logger {
             // Criar arquivo com flag para append
             file_put_contents($filename, $entry, FILE_APPEND | LOCK_EX);
             
-            // Garantir permissões corretas
+            // 🔴 0666, NÃO 0644 — e isto não é relaxamento de segurança, é o que
+            // faz o log existir. DOIS usuários diferentes escrevem no mesmo
+            // arquivo: o Apache (`www-data`, nos webhooks) e o cron (o usuário
+            // do deploy, nos workers). Com 0644 quem cria o arquivo do dia é o
+            // dono exclusivo e o OUTRO fica trancado até a virada do dia.
+            //
+            // Medido em produção em 14/08/2026: o cron criou
+            // `webhook_2026-08-14.log` às 00:00:08 como `644 administrador`, e
+            // TODO webhook do dia falhou ao logar — "Failed to open stream:
+            // Permission denied", uma vez por requisição, só no error_log do
+            // Apache. Os webhooks continuaram gravando no banco, então nada
+            // parecia errado: só o diagnóstico é que sumiu, que é justamente o
+            // que se procura quando algo dá errado.
+            //
+            // `chmod` só funciona para o DONO do arquivo, então o segundo
+            // usuário nem consegue corrigir sozinho — daí o aviso de
+            // "Operation not permitted" que aparecia em seguida.
             if (file_exists($filename)) {
-                chmod($filename, 0644);
+                @chmod($filename, 0666);
             }
             
         } catch (Exception $e) {
