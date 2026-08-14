@@ -136,8 +136,16 @@ Logger::info('filelist: captura recebida', [
 ]);
 
 // ── 3. Resposta ─────────────────────────────────────────────────────────────
-// 200 curto e em texto: não se sabe o que o firmware espera, e resposta grande
-// ou JSON inesperado é uma variável a mais numa fase que existe para OBSERVAR.
+//
+// 🔴 JSON, e não texto. A câmera manda `Content-Type: application/json` com
+// `Transfer-Encoding: chunked` e corpo VAZIO — três vezes seguidas, medido em
+// 14/08/2026. O padrão é de HANDSHAKE: ela anuncia, espera a resposta, e só
+// então envia. Respondendo `ok` em texto puro ela desistia e o corpo nunca
+// vinha.
+//
+// O envelope segue o mesmo dos receptores de webhook deste projeto
+// (`{"code":0,...}`), que é o que o ecossistema Jimi usa e a câmera
+// presumivelmente espera.
 http_response_code(200);
-header('Content-Type: text/plain; charset=utf-8');
-echo "ok\n";
+header('Content-Type: application/json; charset=utf-8');
+echo json_encode(['code' => 0, 'message' => 'success'], JSON_UNESCAPED_UNICODE) . "\n";
