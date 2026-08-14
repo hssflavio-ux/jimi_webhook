@@ -8,6 +8,10 @@ logs/*.log
 # projeto — versioná-lo faria o horário do último alerta de um servidor
 # viajar para o outro no deploy.
 logs/*.json
+# Capturas cruas do FILELIST (v4.9.18): conteúdo enviado pelo EQUIPAMENTO,
+# com nomes de arquivo de gravação. É dado de cliente e de diagnóstico —
+# fica na máquina, nunca no repositório.
+logs/filelist/
 
 # Dependências (não usamos composer; npm só para testes Playwright)
 vendor/
