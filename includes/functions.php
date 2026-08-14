@@ -1041,6 +1041,35 @@ function report_has_query(): bool {
  * @return array{flv_base:string, ingest_ip:string, ingest_port:string, playback_port:string}
  */
 /**
+ * Base da URL que a câmera JIMI usa para subir a lista do cartão (v4.9.18).
+ *
+ * Termina com barra; o IMEI é concatenado pelo chamador, formando
+ * `http://<host>/filelist/<imei>` — o caminho de handlers/filelist.php.
+ *
+ * ⚠️ HTTP, NUNCA HTTPS: a câmera JIMI não faz TLS. O redirect 80→443 do site
+ * tem exceção só para `/filelist/` (ver docs/apache/bycamera.conf).
+ *
+ * ⚠️ IP, NÃO DOMÍNIO — por isso reaproveita `VIDEO_INGEST_IP`, que já é, por
+ * definição, "o endereço que o EQUIPAMENTO alcança". Muitos firmwares JIMI não
+ * resolvem DNS: com um nome, aceitam o comando e nunca conectam. É a mesma
+ * razão pela qual o `UPLOAD` das câmeras sempre foi configurado por IP.
+ *
+ * @returns string URL base com barra final
+ */
+function filelist_url_base(): string
+{
+    $cfg = trim((string)getenv('FILELIST_URL'));
+    if ($cfg !== '') {
+        return rtrim($cfg, '/') . '/';
+    }
+    $host = trim((string)getenv('VIDEO_INGEST_IP'));
+    if ($host === '') {
+        $host = parse_url((string)(getenv('STREAM_URL') ?: ''), PHP_URL_HOST) ?: 'localhost';
+    }
+    return 'http://' . $host . '/filelist/';
+}
+
+/**
  * Validade da listagem de gravações do cartão, em minutos (v4.9.17).
  *
  * O cartão é buffer circular e a retenção real depende de quantas horas o

@@ -374,6 +374,9 @@ var fileStorageUrl = <?= json_encode($fileStorageUrl) ?>;
 var selImei = <?= json_encode($selImei) ?>;
 var selChannel = <?= $selChannel ?>;
 var selProtocol = <?= json_encode($selProtocol) ?>;
+// Base do FILELIST (JIMI): montada no SERVIDOR, porque depende de VIDEO_INGEST_IP
+// — o endereço que o EQUIPAMENTO alcança, que não é o mesmo que o navegador usa.
+var filelistBase = <?= json_encode(filelist_url_base()) ?>;
 
 // Reconstrói as opções de canal conforme o cadastro do equipamento escolhido
 // (devices.camera_count, fallback máximo do modelo — via data-cam da option)
@@ -472,7 +475,10 @@ function pbSendCmd(imei, proNo, contentObj, cb) {
             imei: imei,
             proNo: proNo,
             serverFlagId: serverFlagId,
-            content: JSON.stringify(contentObj)
+            // Comando de texto (proNo 128, família JIMI) vai CRU. Passá-lo por
+            // JSON.stringify mandaria `"FILELIST,http://..."` com aspas, e a
+            // câmera receberia um comando que não existe.
+            content: (typeof contentObj === 'string') ? contentObj : JSON.stringify(contentObj)
         })
     }).then(function (r) {
         if (!cb) return;
@@ -531,12 +537,23 @@ function onSubmitRequest(e) {
     if (!imei || !from || !to) return true;
 
     if (selProtoOf(imei) === 'JIMI') {
-        // Protocolo JIMI não tem 0x9205 — mantém 0x8802 na janela inteira (legado)
-        pbSendCmd(imei, 34818, {
-            mediaType: 2, channel: channel, channelId: channel, eventCode: 0,
-            beginTime: jttUtcCompact(from, false),
-            endTime: jttUtcCompact(to, true)
-        });
+        // ── FILELIST (v4.9.18) ──────────────────────────────────────────────
+        //
+        // 🔴 Aqui ia **34818** até a v4.9.17, e ele NUNCA funcionou para JIMI.
+        // É comando JT/T (0x8802, "multimedia data retrieval"): o IoT Hub
+        // aceitava, a tela dizia "consultando", e a câmera nem respondia —
+        // os comandos ficavam em `sent`, nunca `executed`. 18 tentativas
+        // registradas antes de alguém desconfiar, e `resource_lists` tem
+        // 1.321 linhas, ZERO de JIMI.
+        //
+        // No JIMI a listagem é ao contrário: em vez de responder a uma
+        // consulta com janela, a câmera SOBE um TXT com a lista inteira para
+        // a URL que mandamos. Por isso não há beginTime/endTime aqui — o
+        // comando não aceita intervalo, e o filtro de data continua valendo
+        // só na exibição.
+        //
+        // Comando de TEXTO (proNo 128), não JSON.
+        pbSendCmd(imei, 128, 'FILELIST,' + filelistBase + imei);
     } else {
         // proNo 37381 (0x9205): lista as gravações do cartão; resposta assíncrona
         // via /pushresourcelist. channel+channelId: exemplos da doc divergem.
