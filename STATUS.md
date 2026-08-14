@@ -32,6 +32,32 @@
 > logado", não "sem permissão". Teste de restrição precisa de um caso positivo
 > junto: sem o `/comandos → 200`, um 403 universal por sessão quebrada seria
 > lido como sucesso.
+>
+> #### 🔴 O `.env` ilegível voltou — e a causa raiz não era a que parecia
+>
+> O defeito do `sed -i` (`/ping` → `"version":"desconhecida"`, webhooks em 500,
+> nada no log) **repetiu em 14/08**, um dia depois de "mitigado". A mitigação da
+> véspera era `chmod g+s` no diretório da aplicação — e o próprio `deploy.sh`,
+> na FASE 3c, fazia `chmod 755 "$APP_DIR"`, **apagando o setgid**. Mitigação que
+> o próprio deploy desarma não é mitigação.
+>
+> Ao corrigir para `chmod 2755`, o bit **continuou não grudando**. A causa real:
+> `administrador` **não pertencia ao grupo `www-data`**, e o POSIX manda o
+> kernel **descartar o setgid em silêncio** quando quem chama `chmod` está fora
+> do grupo do arquivo e não tem `CAP_FSETID`. Pelo mesmo motivo, o `chgrp
+> www-data .env` que eu havia acrescentado falhava — mascarado por um `|| true`.
+> Medido lado a lado: `chmod 2755` como `administrador` → **755**; como root →
+> **2755**.
+>
+> **Correção em três camadas**, porque uma só já provou ser frágil:
+> 1. `usermod -aG www-data administrador` (servidor) — sem isto, as outras duas
+>    são no-ops silenciosos;
+> 2. `deploy.sh` restaura `chgrp`+`chmod` do `.env` logo após o `sed`;
+> 3. `deploy.sh` usa `chmod 2755` e **avisa na FASE 1** se o usuário do deploy
+>    não estiver em `www-data`.
+>
+> Verificado com o ciclo completo: `.env` rebaixado → `deploy.sh` → `.env`
+> segue `administrador:www-data 640`, diretório em `2755`, `/ping` em 4.9.16.
 
 ---
 

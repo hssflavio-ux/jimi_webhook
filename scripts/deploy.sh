@@ -148,6 +148,27 @@ else
     exit 1
 fi
 
+# Grupo do servidor web — o que sustenta a leitura do .env pelo PHP.
+#
+# 🔴 SILENCIOSO SE FALTAR, E DERRUBA O SITE. O .env é 640 com grupo www-data,
+# e todo `sed -i` (inclusive o que ESTE script faz na FASE 3a) recria o
+# arquivo. Se quem roda o deploy não pertence ao www-data:
+#   • o `chgrp www-data .env` da FASE 3a falha com "Operation not permitted";
+#   • o `chmod 2755` da FASE 3c tem o setgid DESCARTADO PELO KERNEL sem erro
+#     (POSIX: sem CAP_FSETID e fora do grupo, o bit é limpo em silêncio);
+# e o .env fica ilegível para o Apache. Sintoma: `/ping` responde
+# `"version":"desconhecida"` e os webhooks devolvem 500, sem nada no log da
+# aplicação — ela não chega a conectar no banco. Ocorreu em 13 e 14/08/2026.
+echo "  Verificando grupo do servidor web..."
+if id -nG 2>/dev/null | tr ' ' '\n' | grep -qx www-data; then
+    echo "  ✓ $(whoami) pertence ao grupo www-data"
+else
+    echo "  ⚠ AVISO: $(whoami) NÃO pertence ao grupo www-data."
+    echo "          O .env pode ficar ilegível para o PHP no próximo 'sed -i'."
+    echo "          Corrija com: sudo usermod -aG www-data $(whoami) && sudo chmod 2755 $APP_DIR"
+    echo "          (é preciso reabrir a sessão para o grupo valer)"
+fi
+
 # Disco
 DISK_USAGE=$(df -h "$APP_DIR" | tail -1 | awk '{print $5}' | tr -d '%')
 echo "  Disco: ${DISK_USAGE}% usado"
@@ -266,6 +287,24 @@ if [ -f .env ] && [ -f .env.example ]; then
         echo "  ℹ Versão do sistema no .env: $LOCAL_VERSION → $REPO_VERSION (repositório)"
         echo "    Atualizando SYSTEM_VERSION no .env..."
         sed -i "s/SYSTEM_VERSION=.*/SYSTEM_VERSION=$REPO_VERSION/" .env
+
+        # 🔴 `sed -i` NÃO edita no lugar: escreve um arquivo novo e o renomeia
+        # por cima. O novo nasce com o grupo PRIMÁRIO de quem roda o deploy, e
+        # como o .env é 640, o www-data perde a leitura na hora. A aplicação
+        # passa a rodar com os DEFAULTS DO CÓDIGO — inclusive a senha de banco
+        # do homolog, que em produção não abre.
+        #
+        # Sintoma: `/ping` responde `"version":"desconhecida"` e os webhooks
+        # devolvem 500, sem NADA no log da aplicação (ela não chega a conectar).
+        # Aconteceu duas vezes em 13–14/08/2026.
+        #
+        # O setgid do diretório (abaixo, FASE 3c) resolve o caso geral, mas
+        # aqui a restauração é explícita de propósito: a primeira ocorrência
+        # foi mitigada só com setgid, e o `chmod 755` desta mesma FASE 3c o
+        # apagou no deploy seguinte — a mitigação sozinha se desarmou.
+        chgrp www-data .env 2>/dev/null || true
+        chmod 640 .env 2>/dev/null || true
+        echo "    ✓ .env: $(stat -c '%U:%G %a' .env 2>/dev/null || echo '?')"
     fi
 fi
 
@@ -362,7 +401,17 @@ fi
 echo "  Configurando permissões..."
 
 # Diretórios PHP — leitura
-chmod 755 "$APP_DIR"
+#
+# ⚠️ 2755, NÃO 755: o `2` é o setgid, e é ele que faz todo arquivo novo criado
+# aqui herdar o grupo do diretório (www-data) em vez do grupo primário de quem
+# escreveu. Sem isso, qualquer `sed -i` no .env — inclusive o desta mesma FASE
+# 3a — deixa o arquivo ilegível para o Apache e derruba o site em silêncio.
+#
+# Foi exatamente o que aconteceu em 14/08/2026: o setgid tinha sido posto à mão
+# na véspera para conter o problema, e este `chmod 755` o removeu, reabrindo o
+# defeito no deploy seguinte. Mitigação que o próprio deploy desarma não é
+# mitigação.
+chmod 2755 "$APP_DIR"
 find config core handlers includes web -type d -exec chmod 755 {} \; 2>/dev/null || true
 find config core handlers includes web -type f -exec chmod 644 {} \; 2>/dev/null || true
 
