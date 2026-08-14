@@ -23,7 +23,10 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
-require_login();
+// 🔒 v4.9.16 — saiu do menu Relatórios para a área Parâmetros, de
+// administrador. Sem esta linha, tirá-lo do menu não restringiria nada: a URL
+// continuaria aberta a qualquer um com acesso a relatórios.
+require_admin();
 require_once __DIR__ . '/../includes/device_params.php';
 
 $page_title    = 'Parâmetros da Frota';

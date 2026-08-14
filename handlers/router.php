@@ -82,10 +82,13 @@ if (empty($segments)) {
     // 'midia' (v4.9.1) serve o vídeo extraído do cartão pela NOSSA origem —
     // exige login e checa o escopo do cliente dentro do handler. Não é tela:
     // fica fora de $screenByHandler, como 'download'.
+    // 'parametros' (v4.9.16) é a área dedicada de configuração das câmeras
+    // JT/T. Não colide com o diretório do docroot como `/config` colidiu
+    // (v4.9.11): não existe `parametros/` na raiz.
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
-                     'midia'];
+                     'midia','parametros'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -213,6 +216,11 @@ $screenByHandler = [
     'bi.php'                    => 'bi',
     'ocorrencias_dashboard.php' => 'ocorrencias_dashboard',
     'comandos.php'              => 'comandos',
+    // v4.9.16 — área dedicada de parâmetros. Entra aqui E em `$screens`
+    // (grupos_permissao.php): só no router, o admin não tem o que marcar; só
+    // na matriz, o `view` não é verificado por ninguém. O acesso efetivo é
+    // `require_admin()` dentro do handler — `can()` é permissivo por omissão.
+    'parametros.php'            => 'parametros',
     'exportar.php'              => 'exportar',
     'video_aovivo.php'          => 'video_aovivo',
     'video_playback.php'        => 'video_playback',

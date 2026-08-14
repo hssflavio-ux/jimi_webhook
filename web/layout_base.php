@@ -55,7 +55,7 @@ $navGroups = [
             ['route' => 'rel_ocorrencias',    'label' => 'Ocorrências',     'href' => '/relatorios/ocorrencias'],
             ['route' => 'rel_geocercas',      'label' => 'Cercas',         'href' => '/relatorios/geocercas'],
             ['route' => 'rel_status_frota',   'label' => 'Status da Frota', 'href' => '/relatorios/status-frota'],
-            ['route' => 'rel_parametros',     'label' => 'Parâmetros da Frota', 'href' => '/relatorios/parametros'],
+            // 'rel_parametros' saiu daqui na v4.9.16 → menu Parâmetros (só admin).
             ['route' => 'rel_paradas',        'label' => 'Paradas',         'href' => '/relatorios/paradas'],
             ['route' => 'rel_ociosidade',     'label' => 'Ociosidade',      'href' => '/relatorios/ociosidade'],
             ['route' => 'rel_ignicao',        'label' => 'Ignição',         'href' => '/relatorios/ignicao'],
@@ -77,17 +77,24 @@ $navGroups = [
             ['route' => 'config-ocorrencias',  'label' => 'Config. Ocorrências', 'href' => '/config-ocorrencias'],
             ['route' => 'config-notificacoes', 'label' => 'Config. Notificações','href' => '/config-notificacoes'],
             ['route' => 'config-smtp',         'label' => 'Servidor de E-mail',  'href' => '/config-smtp'],
-            ['route' => 'config-parametros',   'label' => 'Perfis de Parâmetros','href' => '/config-parametros'],
+            // 'config-parametros' saiu daqui na v4.9.16 → menu Parâmetros (só admin).
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
         ],
     ],
 ];
 
 // Bottom-level nav items (after groups)
+//
+// v4.9.16 — `parametros` entra LOGO ABAIXO de Comandos e reúne as três funções
+// de parametrização, que estavam espalhadas entre Relatórios e Cadastros. É
+// vizinha de Comandos de propósito: as duas mandam instrução para equipamento
+// em operação, e é o mesmo perfil de gente que as usa.
 $navBottom = [
-    ['route' => 'comandos', 'label' => 'Comandos', 'icon' => 'terminal', 'href' => '/comandos'],
-    ['route' => 'exportar', 'label' => 'Exportar', 'icon' => 'download', 'href' => '/exportar'],
-    ['route' => 'wiki',     'label' => 'Ajuda',   'icon' => 'book',   'href' => '/wiki'],
+    ['route' => 'comandos',   'label' => 'Comandos',   'icon' => 'terminal', 'href' => '/comandos'],
+    ['route' => 'parametros', 'label' => 'Parâmetros', 'icon' => 'sliders',  'href' => '/parametros',
+     'admin_only' => true],
+    ['route' => 'exportar',   'label' => 'Exportar',   'icon' => 'download', 'href' => '/exportar'],
+    ['route' => 'wiki',       'label' => 'Ajuda',      'icon' => 'book',     'href' => '/wiki'],
 ];
 
 // ── RBAC (v4.2.0 — Fase B2): esconde itens de nav sem permissão 'view' ──
@@ -103,7 +110,15 @@ foreach ($navGroups as $gk => $g) {
     $navGroups[$gk]['items'] = array_values(array_filter($g['items'], fn($l) => $navCanView($l['route'])));
     if (empty($navGroups[$gk]['items'])) unset($navGroups[$gk]);
 }
-$navBottom = array_values(array_filter($navBottom, fn($l) => $navCanView($l['route'])));
+// ⚠️ `admin_only` é filtrado pelo PAPEL, não por can(): `can()` devolve **true**
+// para todo usuário sem grupo de permissão (get_user_permissions() → null =
+// "sem restrição"), que é o estado de todos os usuários deste banco. Um item
+// que leva a escrever configuração em equipamento em operação não pode
+// aparecer por causa de uma checagem permissiva por omissão. O handler repete
+// a trava com require_admin() — o menu escondido é conveniência, não defesa.
+$ehAdminNav = (get_jimi_user()['role'] ?? '') === 'admin';
+$navBottom = array_values(array_filter($navBottom, fn($l) =>
+    (empty($l['admin_only']) || $ehAdminNav) && $navCanView($l['route'])));
 
 // Legacy compatibility: also match 'dashboard' → 'resumo', 'live' → 'rastreamento'
 if ($current_route === 'dashboard') $current_route = 'resumo';
@@ -137,6 +152,7 @@ function nav_icon($name) {
         'alert'   => '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
         'download'=> '<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
         'book'    => '<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',
+        'sliders'  => '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
         'chevron-down' => '<polyline points="6 9 12 15 18 9"/>',
     ];
     return $icons[$name] ?? '';

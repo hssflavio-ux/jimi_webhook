@@ -20,6 +20,11 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/device_params.php';
+// 🔒 v4.9.16 — a parametrização virou área de administrador. `require_admin()`
+// ANTES do require_permission de propósito: `can()` é permissivo por omissão
+// (usuário sem grupo passa em tudo), e esta tela aplica configuração em lote
+// a equipamento em operação.
+require_admin();
 require_permission('config-parametros', 'view');
 
 $db         = Database::getInstance()->getConnection();

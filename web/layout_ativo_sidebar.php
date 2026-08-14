@@ -31,7 +31,13 @@ $tabs = [
 // 33030 são da seção 2 da doc (msgClass=1) e câmera JIMI não os entende
 // (ADR-001). A aba não aparece vazia para JIMI: ela não aparece, porque tela
 // vazia o usuário lê como defeito do sistema, não como "não se aplica".
-if (($asset['protocol'] ?? '') === 'JTT') {
+//
+// 🔒 v4.9.16 — e SÓ para administrador, junto com a mudança que levou a
+// parametrização para um menu próprio. Deixar a aba aberta aqui tornaria a
+// restrição do menu decorativa: é a mesma informação, pelo mesmo caminho de
+// escrita, a um clique de distância.
+if (($asset['protocol'] ?? '') === 'JTT'
+    && (get_jimi_user()['role'] ?? '') === 'admin') {
     $tabs[] = ['id' => 'parametros', 'label' => 'Parâmetros'];
 }
 

@@ -41,6 +41,10 @@ $screens = [
     'config-smtp'           => 'Servidor de E-mail',
     'config-dispositivos'   => 'Config. Dispositivos',
     'config-parametros'     => 'Perfis de Parâmetros',
+    // v4.9.16 — a área dedicada. Marcar aqui NÃO basta para liberar: os três
+    // handlers de parâmetro exigem `require_admin()`, porque `can()` devolve
+    // true para quem não tem grupo e isso escreve em equipamento em operação.
+    'parametros'            => 'Parâmetros (só admin)',
     'usuarios'              => 'Usuários',
     'wiki'                  => 'Central de Ajuda',
 ];

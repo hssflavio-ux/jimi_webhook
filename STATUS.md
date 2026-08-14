@@ -1,4 +1,39 @@
-# STATUS.md — Jimi Webhook System v4.9.14 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.16 (YUV Parity)
+
+> ### 📍 v4.9.16 (14/08/2026) — Parâmetros vira área de administrador
+>
+> As três funções de parametrização estavam espalhadas — a leitura numa aba de
+> `/ativos/{imei}`, o relatório em **Relatórios**, os perfis em **Cadastros** —
+> e nenhuma referenciava a outra. Agora há um menu **Parâmetros**, logo abaixo
+> de **Comandos**, e ele é **só de administrador**.
+>
+> Vizinho de Comandos de propósito: as duas telas mandam instrução para
+> equipamento em operação, e é o mesmo perfil de gente que as usa.
+>
+> 🔴 **A trava é `require_admin()`, não `can()`.** `can()` devolve **true** para
+> todo usuário SEM grupo de permissão (`get_user_permissions()` → `null` = "sem
+> restrição"), que é o estado dos usuários deste banco hoje. Uma tela que
+> escreve configuração em câmera em operação não pode depender de uma checagem
+> permissiva por omissão.
+>
+> **Restringir o menu não bastaria**: `/relatorios/parametros` continuaria
+> aberta por URL a qualquer um com acesso a relatórios, e `?tab=parametros` é
+> digitável. Por isso a trava está nos **quatro** caminhos — hub, relatório,
+> perfis e a aba do equipamento.
+>
+> Verificado com usuário `operator` real (criado e apagado no teste): **403**
+> nas três rotas, aba caindo em Visão Geral com 0 células, item some do menu.
+> Sanidade junto — `/comandos` respondeu 200 com a mesma sessão, provando que o
+> 403 era a permissão e não sessão inválida.
+>
+> ⚠️ **A primeira rodada do teste foi inválida e quase passou por boa**: a
+> coluna era `password_hash` (não `password`), `UID` é variável reservada do
+> bash, a sessão falhou por FK e as rotas responderam **302** — que é "não
+> logado", não "sem permissão". Teste de restrição precisa de um caso positivo
+> junto: sem o `/comandos → 200`, um 403 universal por sessão quebrada seria
+> lido como sucesso.
+
+---
 
 > ### 📍 ESTADO EM 13/08/2026 — PRODUÇÃO NO AR (`186.248.143.197`)
 >

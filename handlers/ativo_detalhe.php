@@ -162,6 +162,11 @@ $paramSnapshot = null;
 $paramCanais = [];
 $paramErro = null;
 $paramOcultos = [];   // v4.9.15: números que o catálogo ainda não sabe nomear
+// 🔒 v4.9.16 — a aba é de administrador. Esconder o item na sidebar não
+// protege nada: `?tab=parametros` é digitável. A trava real é aqui.
+if ($tab === 'parametros' && (get_jimi_user()['role'] ?? '') !== 'admin') {
+    $tab = 'visao-geral';
+}
 if ($tab === 'parametros') {
     require_once __DIR__ . '/../includes/device_params.php';
     try {
