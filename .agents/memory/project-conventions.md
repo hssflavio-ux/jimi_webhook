@@ -10,12 +10,14 @@ updated: 2026-07-12
 - **Produto**: Plataforma de rastreamento com telemetria de vídeo e gestão de ocorrências DMS
 - **Cópia fiel do**: YUV (`app.yuv.com.br`)
 - **Nome**: Jimi Webhook System v4.0.0 "YUV Parity"
-- **Servidor produção**: `http://189.22.240.43` (Apache 2.4 + PHP 8.3 FPM + MySQL)
+- **Servidor produção**: `https://bycamera.ia.br` = `186.248.143.197` (host `bycamera`, Ubuntu 24.04, Apache 2.4.58 + PHP 8.3 FPM + MySQL 8.4) — no ar desde 13/08/2026
+- **Servidor homolog**: `http://189.22.240.43` (host `iothub`, Apache 2.4 + PHP 8.3 FPM + MySQL 8.0) — 🔴 **até 14/08/2026 esta linha chamava o homolog de "produção"**, e o engano já mandou deploy para o servidor errado
 
-## Deploy (homolog 189.22.240.43)
+## Deploy (mesmo procedimento nos dois servidores)
 - **Repo canônico**: `hssflavio-ux/jimi_webhook` — o repo `Flaviohses/jimi_webhook` é legado e NÃO recebe os pushes do dev (causou homolog desatualizado até 12/07/2026)
 - **Servidor puxa de**: `git@github.com:hssflavio-ux/jimi_webhook.git` com deploy key dedicada `/root/.ssh/github_hssflavio` (read-only, via `core.sshCommand` do repo em `/var/www/jimi_webhook`)
-- **Executar deploy**: `ssh administrador@189.22.240.43` (chave da máquina dev instalada) → `sudo ./scripts/deploy.sh` (sudo exige senha; a chave GitHub fica no root)
+- **Executar deploy**: `ssh -t administrador@<ip> "cd /var/www/jimi_webhook && sudo ./scripts/deploy.sh"` — `<ip>` é `186.248.143.197` (produção) ou `189.22.240.43` (homolog). O `sudo` exige senha (daí o `-t`); a chave do GitHub fica no root
+- **Chaves SSH**: produção aceita a chave do **Mac** de dev; homolog só tem a da máquina **Windows** (do Mac responde `Permission denied (publickey,password)` — chave ausente, não senha errada)
 - **Usuário E2E no homolog**: `e2e@teste.local` / `E2e-Playwright-2026` (admin, customer 1) — para Playwright com `BASE_URL=http://189.22.240.43`
 
 ## Tech Stack (imutável)

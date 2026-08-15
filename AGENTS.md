@@ -143,8 +143,8 @@ Asset Detail (secondary sidebar, 9 tabs):
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` | — | MySQL connection |
 | `WEBHOOK_TOKEN` | `a12341234123` | Token for webhook and dashboard auth |
 | `SYSTEM_VERSION` | `3.1.0` | System version |
-| `FILE_STORAGE_URL` | `http://189.22.240.43:23010/download/` | Base URL for media files |
-| `STREAM_URL` | `http://189.22.240.43:8881` | Base URL for HTTP-FLV live streams |
+| `FILE_STORAGE_URL` | `http://localhost:23010/download/` | Base URL for media files — prod: `http://186.248.143.197:23010/download/` |
+| `STREAM_URL` | `http://localhost:8881` | Base URL for HTTP-FLV live streams — prod: `https://bycamera.ia.br/stream` (proxy TLS), homolog: `http://189.22.240.43:8881` |
 | `IOTHUB_COMMAND_URL` | `http://localhost:10088/api/device/sendInstruct` | IoTHub command endpoint |
 | `IOTHUB_API_TOKEN` | `123` | IoTHub internal API token |
 

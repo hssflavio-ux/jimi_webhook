@@ -11,7 +11,9 @@
 #
 # Uso:
 #   ./scripts/test_e2e.sh                          # auto-detecta o servidor local
-#   BASE_URL=http://189.22.240.43 ./scripts/test_e2e.sh   # alvo explícito
+#   BASE_URL=http://189.22.240.43 ./scripts/test_e2e.sh   # alvo explícito (HOMOLOG)
+#   # produção é https://bycamera.ia.br (186.248.143.197) — o replay grava alarme
+#   # e ocorrência de verdade, então não aponte para lá sem querer exatamente isso
 #
 # Variáveis (todas opcionais):
 #   BASE_URL   — default: auto-detecta via /ping em http://localhost (Apache,

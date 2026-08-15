@@ -2571,11 +2571,23 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql # v4.1.0 (Excel/PDF +
 ## 8. Ambiente de Desenvolvimento
 
 ### Servidor produção
-- **IP**: `189.22.240.43`
-- **Apache**: 2.4 + mod_rewrite
-- **PHP**: 8.3 (FPM)
-- **MySQL**: 8.0 em localhost
+- **IP**: `186.248.143.197` — domínio **`https://bycamera.ia.br`** (o DNS aponta para cá), LAN `10.1.1.8`
+- **Host**: `bycamera` · Ubuntu 24.04.4 LTS
+- **Apache**: 2.4.58 + mod_rewrite (HTTP 80 redireciona 301 para HTTPS)
+- **PHP**: 8.3.6 (FPM)
+- **MySQL**: **8.4.11** em localhost
 - **Path**: `/var/www/jimi_webhook`
+- **IoTHub**: 16 containers Docker no mesmo host
+- **Acesso**: `ssh administrador@186.248.143.197` (chave do Mac de dev autorizada); `sudo` pede senha → usar `ssh -t`
+
+### Servidor homologação
+- **IP**: `189.22.240.43` (`http://189.22.240.43`, sem TLS)
+- **Host**: `iothub`
+- **Apache**: 2.4 + mod_rewrite · **PHP**: 8.3 (FPM) · **MySQL**: 8.0 em localhost
+- **Path**: `/var/www/jimi_webhook`
+- **Acesso**: chave da máquina **Windows** instalada em `administrador@189.22.240.43`. Do Mac de dev a conexão é recusada (`publickey,password`) — é chave ausente, não senha errada.
+
+> 🔴 **Até 14/08/2026 esta seção chamava `189.22.240.43` de "servidor produção"** — verdade até 13/08, quando produção subiu em `186.248.143.197`. O texto velho já induziu erro de leitura (deploy apontado para o servidor errado). Produção é a que responde em `bycamera.ia.br`.
 
 ### Dev Windows
 - **PHP**: `C:\Users\flavi\php\php.exe` (8.3.32)
@@ -2590,12 +2602,15 @@ DB_NAME=jimi_tracker
 DB_USER=root
 DB_PASS=***
 WEBHOOK_TOKEN=a12341234123
-SYSTEM_VERSION=4.0.0
-FILE_STORAGE_URL=http://189.22.240.43:23010/download/
-STREAM_URL=http://189.22.240.43:8881
-IOTHUB_COMMAND_URL=http://localhost:10088/api/device/sendInstruct
+SYSTEM_VERSION=4.9.19
+APP_URL=https://bycamera.ia.br
+FILE_STORAGE_URL=http://186.248.143.197:23010/download/
+STREAM_URL=https://bycamera.ia.br/stream
+IOTHUB_COMMAND_URL=http://10.1.1.8:10088/api/device/sendInstruct
 IOTHUB_API_TOKEN=123
 ```
+
+Acima é o `.env` **de produção** (valores reais, sem os segredos). No **homolog** as três URLs apontam para ele mesmo em texto claro — `FILE_STORAGE_URL=http://189.22.240.43:23010/download/`, `STREAM_URL=http://189.22.240.43:8881`, `IOTHUB_COMMAND_URL=http://localhost:10088/...`. Em produção o `STREAM_URL` passa pelo **proxy HTTPS** (`/stream`) porque a página é servida em TLS e o navegador recusa FLV em `http://`, e o `IOTHUB_COMMAND_URL` usa o **IP da LAN** (`10.1.1.8`) porque os containers não alcançam o host por `localhost`.
 
 ---
 

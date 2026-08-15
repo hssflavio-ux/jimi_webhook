@@ -20,6 +20,19 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 
 **Read `STATUS.md` before continuing development** — it tracks current bugs, fixed issues, pending work, and the YUV-parity roadmap status. `AGENTS.md` holds the same architectural detail as this file with the full route/table tables.
 
+## Ambientes — DOIS servidores, e a doc antiga trocava os nomes
+
+| | Endereço | Host | Stack | Papel |
+|---|---|---|---|---|
+| **Produção** | `186.248.143.197` — **`https://bycamera.ia.br`** (o DNS aponta para cá), LAN `10.1.1.8` | `bycamera` | Ubuntu 24.04 · Apache 2.4.58 · PHP 8.3 FPM · **MySQL 8.4** · 16 containers IoTHub | operação, câmeras reais |
+| Homologação | `189.22.240.43` (`http://189.22.240.43`, sem TLS) | `iothub` | Apache 2.4 · PHP 8.3 FPM · **MySQL 8.0** · 16 containers IoTHub | testes |
+
+🔴 **`189.22.240.43` NÃO é produção.** Ele foi o ambiente único até 13/08/2026 e ficou gravado como "produção" em textos de julho (`.agents/memory/`, §8 do STATUS.md) — corrigido, mas o engano ressurge de qualquer doc velha. Produção é a que responde em `bycamera.ia.br`. Os dois `/ping` divergem **de propósito** (homolog costuma estar à frente ou atrás); comparar os dois é o jeito mais rápido de saber o que está no ar em cada um.
+
+- **Deploy** (idêntico nos dois): `ssh -t administrador@<ip> "cd /var/www/jimi_webhook && sudo ./scripts/deploy.sh"`. O `sudo` **pede senha** — daí o `-t`, senão a sessão morre sem prompt.
+- **Chave SSH**: a do Mac de dev está autorizada **em produção**; no homolog está instalada a da máquina **Windows**, então do Mac o homolog recusa (`Permission denied (publickey,password)`) — não é senha errada.
+- **A versão anunciada mora no `.env.example`** (`SYSTEM_VERSION`), e o `deploy.sh` a propaga para o `.env` do servidor. Subir código sem subir esse número faz o `/ping` anunciar a versão antiga com o código novo no ar — foi o que as v4.9.18 e v4.9.19 fizeram.
+
 ## Commands
 
 ```bash

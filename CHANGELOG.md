@@ -23,6 +23,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Changed
 - Os chips do BI passam a usar `web/components/chips_multiselect.php` — componente que foi **extraído desta própria tela** na v4.2.0 e nunca reaproveitado aqui. Some a cópia de CSS/JS que vivia só no `bi.php` e que já divergia da do Relatório de Alarmes.
 - O `catch` mudo do BI virou `Logger::error` + aviso na tela. Os quatro defeitos acima sobreviveram porque não havia diferença visível entre "erro de SQL" e "período sem alarme".
+- **`SYSTEM_VERSION` do `.env.example` foi para `4.9.19`.** Ficou em `4.9.17` durante duas versões, e é dele que o `deploy.sh` propaga o valor para o `.env` do servidor — o `/ping` de produção anunciava `4.9.17` com o código da v4.9.18 no ar.
+
+### Docs
+- 🔴 **A doc chamava o servidor errado de produção.** `189.22.240.43` foi o ambiente único até 13/08/2026 e ficou registrado como "servidor produção" na §8 do `STATUS.md` e em `.agents/memory/project-conventions.md`; desde então **produção é `186.248.143.197` (`https://bycamera.ia.br`)** e aquele endereço é **homologação**. O texto velho já custou um deploy apontado para o servidor errado. Corrigidos os dois arquivos e criada a seção **Ambientes** do `CLAUDE.md`, com a tabela dos dois servidores, o comando de deploy (`ssh -t`, porque o `sudo` pede senha) e a assimetria das chaves SSH — produção aceita a chave do Mac de dev, o homolog só tem a da máquina Windows, e a recusa de lá é **chave ausente, não senha errada**.
+- Exemplos com o IP do homolog passaram a dizer que são do homolog (`scripts/test_e2e.sh`, `scripts/run-tests.ps1`); o replay E2E grava alarme e ocorrência de verdade, então apontá-lo para produção sem querer não é inofensivo.
+- `AGENTS.md`: a coluna "Default" de `FILE_STORAGE_URL`/`STREAM_URL` mostrava o endereço do homolog, que não é default de nada — o código cai em `localhost`. Agora traz o default real e o valor de cada ambiente, inclusive o `STREAM_URL` de produção passando pelo proxy HTTPS (`/stream`), sem o qual o navegador recusa o FLV em página TLS.
 
 ## [Unreleased] — 4.9.14
 
