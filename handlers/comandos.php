@@ -122,8 +122,14 @@ $resumo = ['ok' => 0, 'aguardando' => 0, 'erro' => 0, 'neutro' => 0];
 foreach ($hist as $h) {
     $env  = command_response_extract($h['response_payload']);
     $desf = command_response_interpret($env['texto'], $env['codigo'], $env['conteudo']);
-    if ($filtroDesf !== '' && $desf['nivel'] !== $filtroDesf) continue;
+
+    // 🔴 Contar ANTES de aplicar o filtro. Enquanto o resumo era contado
+    // depois, filtrar por "com erro" zerava os outros três números — o painel
+    // afirmava "0 executados" para um histórico cheio deles. Passava
+    // despercebido porque os números eram decorativos; agora eles são o
+    // filtro, e um zero falso levaria o operador a concluir que não há nada.
     $resumo[$desf['nivel']] = ($resumo[$desf['nivel']] ?? 0) + 1;
+    if ($filtroDesf !== '' && $desf['nivel'] !== $filtroDesf) continue;
 
     // Tempo até a resposta — o que diz se o device está respondendo rápido
     $espera = '';
@@ -153,6 +159,18 @@ $page_title    = 'Comandos';
 $current_route = 'comandos';
 
 $extra_head = '<style>
+/* 🔴 Este layout era `style="display:grid;grid-template-columns:1fr 1fr"` no
+   próprio elemento. Estilo inline não pode ser sobreposto por media query —
+   não existe media query dentro do atributo `style`, e na cascata ele vence a
+   folha — então a tela ficava com DUAS colunas densas em qualquer largura,
+   inclusive em telefone, espremendo o painel de envio e o histórico. Virou
+   classe justamente para poder colapsar. */
+.cmd-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
+@media (max-width: 1100px) { .cmd-layout { grid-template-columns:minmax(0,1fr); } }
+.resumo-chip { display:inline-flex; align-items:center; gap:5px; text-decoration:none; color:inherit;
+               padding:2px 8px; border-radius:100px; border:1px solid transparent; }
+.resumo-chip:hover { border-color:var(--hairline); background:var(--canvas-soft); }
+.resumo-chip.ativo { border-color:var(--brand); color:var(--brand); }
 .dev-list { max-height:230px; overflow-y:auto; border:1px solid var(--hairline); border-radius:var(--radius-sm); }
 .dev-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-bottom:1px solid var(--hairline-soft); font-size:13px; cursor:pointer; }
 .dev-row:last-child { border-bottom:0; }
@@ -188,7 +206,7 @@ tr.cmd-row:focus-visible { outline:2px solid var(--brand); outline-offset:-2px; 
 include __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px">
+<div class="cmd-layout">
 
   <!-- ══════════ ENVIO ══════════ -->
   <div class="card">
@@ -296,14 +314,24 @@ include __DIR__ . '/../web/layout_base.php';
       <button class="btn btn-outline btn-sm" type="submit">Filtrar</button>
     </form>
 
-    <div style="display:flex;gap:12px;font-size:11px;color:var(--muted);margin-bottom:8px">
-      <span><span class="res-dot dot-ok" style="display:inline-block"></span> <?= $resumo['ok'] ?> executados</span>
-      <span><span class="res-dot dot-aguardando" style="display:inline-block"></span> <?= $resumo['aguardando'] ?> aguardando</span>
-      <span><span class="res-dot dot-erro" style="display:inline-block"></span> <?= $resumo['erro'] ?> com erro</span>
-      <?php /* O nível `neutro` era contado e filtrável, mas não aparecia aqui:
-               a soma dos três números não batia com "N registros" e não havia
-               como saber quantos eram informativos sem aplicar o filtro. */ ?>
-      <span><span class="res-dot dot-neutro" style="display:inline-block"></span> <?= $resumo['neutro'] ?> informativos</span>
+    <?php
+    /* Os números viram FILTRO. Eles já respondiam "quantos deram erro?", mas
+       para ver quais era preciso descer até o `<select>` de desfecho e
+       submeter o formulário — dois passos para uma pergunta que o próprio
+       número acabou de levantar. O nível `neutro` também passou a aparecer:
+       era contado e filtrável, mas invisível, e a soma dos três não batia
+       com o total de registros. */
+    $chips = ['ok' => 'executados', 'aguardando' => 'aguardando', 'erro' => 'com erro', 'neutro' => 'informativos'];
+    ?>
+    <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap">
+      <?php foreach ($chips as $nivel => $rotulo): ?>
+      <a class="resumo-chip <?= $filtroDesf === $nivel ? 'ativo' : '' ?>"
+         href="?<?= http_build_query(array_filter(['imei' => $filtroImei, 'desfecho' => $filtroDesf === $nivel ? '' : $nivel])) ?>"
+         title="<?= $filtroDesf === $nivel ? 'Remover o filtro' : 'Filtrar por este desfecho' ?>">
+        <span class="res-dot dot-<?= $nivel ?>" style="display:inline-block;margin-top:0"></span>
+        <?= (int)$resumo[$nivel] ?> <?= $rotulo ?>
+      </a>
+      <?php endforeach; ?>
     </div>
 
     <div style="max-height:520px;overflow-y:auto">
