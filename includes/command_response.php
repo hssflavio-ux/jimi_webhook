@@ -230,7 +230,12 @@ function command_label(string $conteudo, ?int $proNo = null): string
     }
 
     // Texto: primeiro token antes de vírgula ou #
-    $base = strtoupper(preg_split('/[,#]/', $conteudo)[0] ?? '');
+    // `mb_strtoupper`, não `strtoupper`: o segundo é byte a byte e deixa o
+    // acento para trás — o rótulo saía "CONSULTA DE PARâMETROS", com um único
+    // caractere minúsculo no meio. Passou despercebido enquanto isso só
+    // aparecia numa coluna estreita da tela; agora sai no Excel e no PDF que
+    // circulam fora dela.
+    $base = mb_strtoupper(preg_split('/[,#]/', $conteudo)[0] ?? '', 'UTF-8');
     if ($base !== '' && isset($porCmd[$base])) return $porCmd[$base];
     return $base !== '' ? $base : $conteudo;
 }
