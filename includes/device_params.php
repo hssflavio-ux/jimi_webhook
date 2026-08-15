@@ -403,6 +403,24 @@ function param_input_spec(array $catalogo, int $no): array
             return $num + ['hint' => 'Máscara de bits em DECIMAL (não hexadecimal).',
                            'placeholder' => 'ex.: 0'];
 
+        // 🔴 `composite` NÃO é bitmask, e a diferença custou caro: o `93`
+        // (0x005D — alarme de colisão) é DOIS campos independentes com
+        // unidades diferentes (tempo em ms + aceleração em 0,1 g, faixa 0–79),
+        // e vinha marcado como bitmask. A dica mandava digitar "máscara de
+        // bits em decimal": quem informasse `10` querendo 10 × 0,1 g de
+        // aceleração escreveria tempo de colisão = 0, num parâmetro de
+        // SEGURANÇA, numa câmera em operação — e a releitura devolveria um
+        // número plausível. Corrigido na v4.9.24.
+        //
+        // Todos os `composite` estão `writable = 0` justamente porque uma
+        // caixa de texto não expressa N campos; esta dica é a rede de
+        // segurança para o dia em que alguém marcar um como gravável sem
+        // antes construir o seletor de campos.
+        case 'composite':
+            return ['hint' => 'Vários campos num valor só — precisa de seletor próprio. '
+                            . 'Não altere por texto livre.',
+                    'placeholder' => '', 'inputmode' => 'text', 'pattern' => null];
+
         case 'int':
         case 'decimal':
             if ($unit === '1/10 km') {

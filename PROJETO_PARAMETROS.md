@@ -143,6 +143,24 @@ do catálogo.
 > Só **`100` (0x0064)** segue sem fonte e continua `Parâmetro 100`: não batizar
 > por palpite é a mesma regra do alarme `1047`.
 >
+> **✅ FECHADO na v4.9.24 (15/08/2026) — 17 de 17.** O `100` é
+> `0x0064 = Timing photo control`, composto de 12 campos (liga/desliga e
+> destino dos 5 canais + unidade de tempo + intervalo). A fonte é a tabela
+> COMPLETA da norma em [`QuecPython/jtt808`](https://github.com/QuecPython/jtt808/blob/master/docs/en/API_Reference.md)
+> (`TerminalParams.set_params`): os 86 IDs de `0x0001` a `0x0110`, que nem a
+> Tabela 2.3.9.1 da Jimi nem o PDF da MEITRACK (`docs/jtt-808-2019-meigou.pdf`,
+> que publica **4** IDs) trazem. Ela confirmou os 47 parâmetros conferidos sem
+> uma divergência de numeração — a regra da v4.9.15 valia inteira.
+>
+> A espera se pagou duas vezes. Não batizar o `100` por palpite evitou um nome
+> errado; e a mesma leitura mostrou que **`93` estava errado desde a v4.9.12** —
+> catalogado como `bitmask` e **gravável**, quando são dois campos com unidades
+> diferentes (tempo de colisão em ms + aceleração em 0,1 g, faixa 0–79). A tela
+> mandava digitar "máscara de bits em decimal" num parâmetro de segurança:
+> informar `10` querendo 10 × 0,1 g gravaria tempo de colisão = 0, e a releitura
+> devolveria um número plausível. Daí o tipo novo `composite`, sempre somente
+> leitura enquanto não houver seletor de campos na tela.
+>
 > ⚠️ **A regra de exibição MUDOU junto** (decisão do dono, 13/08/2026): o que
 > segue sem identificação **sai da tela**, ao contrário do que a §7.1 dizia. O
 > contrapeso é o rodapé que informa quantos e quais estão ocultos — o custo de

@@ -441,6 +441,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.14" "mysql/migration_v4.9.14.sql" "perfis de parametros por modelo + escrita 33027"
     run_migration "4.9.15" "mysql/migration_v4.9.15.sql" "16 parametros nomeados pela norma JT/T 808"
     run_migration "4.9.17" "mysql/migration_v4.9.17.sql" "validade de 30 min na lista de gravacoes"
+    run_migration "4.9.24" "mysql/migration_v4.9.24.sql" "catalogo completo do JT/T 808 (86 IDs) + tipo composite"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

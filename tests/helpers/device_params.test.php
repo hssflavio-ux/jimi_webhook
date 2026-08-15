@@ -128,6 +128,39 @@ checa('osd zero e explicito', 'nenhuma legenda', param_osd_labels(0));
 checa('resumo de video', '720P · ABR · 30 fps · 500 kbps',
       param_video_resumo(['rt_resolucao' => 5, 'rt_encoding' => 2, 'rt_fps' => 30, 'rt_bitrate' => 500]));
 
+// ── Dica de digitação: `composite` NAO pode cair na dica de bitmask (v4.9.24) ──
+//
+// 🔴 O `93` (0x005D — alarme de colisao) sao DOIS campos com unidades
+// diferentes (tempo em ms + aceleracao em 0,1 g, faixa 0-79), e estava
+// catalogado como `bitmask` E gravavel. A dica mandava digitar "mascara de
+// bits em DECIMAL": quem informasse `10` querendo 10 x 0,1 g de aceleracao
+// gravaria tempo de colisao = 0 numa camera real, e a releitura devolveria um
+// numero plausivel. O teste trava a dica, nao so o tipo.
+echo "\n── Dica de digitação por tipo ──\n";
+$catE = [
+     93 => ['name_pt' => 'Alarme de Colisão (tempo + aceleração)', 'unit' => null,
+            'value_kind' => 'composite', 'enum_json' => null, 'is_secret' => 0],
+     80 => ['name_pt' => 'Máscara de Bloqueio de Alarme', 'unit' => null,
+            'value_kind' => 'bitmask', 'enum_json' => null, 'is_secret' => 0],
+    132 => ['name_pt' => 'Cor da Placa', 'unit' => null, 'value_kind' => 'enum',
+            'enum_json' => '{"0":"Sem placa","1":"Azul","5":"Verde","9":"Outra"}',
+            'is_secret' => 0],
+];
+$spec93 = param_input_spec($catE, 93);
+checa('🔴 composite NAO recebe a dica de bitmask', false,
+      str_contains($spec93['hint'], 'Máscara de bits'));
+checa('  composite avisa que sao varios campos', true,
+      str_contains($spec93['hint'], 'Vários campos'));
+checa('  composite nao forca teclado numerico', 'text', $spec93['inputmode']);
+checa('bitmask de verdade continua com a dica de bitmask', true,
+      str_contains(param_input_spec($catE, 80)['hint'], 'Máscara de bits'));
+
+// A cor `0` e a que o JC371 devolveu em campo: sem ela no mapa, a tela
+// mostrava o numero cru. A `5` (verde) faltava por omissao da tabela da Jimi.
+checa('🔴 cor da placa 0 = Sem placa (o valor real do JC371)',
+      'Sem placa (0)', param_format($catE, 132, '0'));
+checa('  cor da placa 5 = Verde', 'Verde (5)', param_format($catE, 132, '5'));
+
 // ── cmdContent: as tres formas sao DIFERENTES ──────────────────────────────
 echo "\n── cmdContent (§3.1: a implementação antiga errou nas três) ──\n";
 checa('33028 vai VAZIO', '', build_param_cmd_content(33028, []));

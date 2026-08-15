@@ -6,7 +6,8 @@
  * Data:   2026-02-24
  *
  * Proxy entre o Dashboard (AJAX) e a API interna do IoTHub.
- * Suporta comandos JIMI (proNo 128) e JT/T (proNo 37121, 37377, 37381, 37382, 33283, 33536).
+ * Suporta comandos JIMI (proNo 128) e JT/T (proNo 37121/37122, 37377/37378,
+ * 37381, 37382/37383, 37384, 33283, 33536 e a família de parâmetros 33027-33031).
  *
  * ┌─────────────────────────────────────────────────────────────────────────────┐
  * │ BUGS CORRIGIDOS em relação à versão anterior (v1.x)                        │
@@ -126,7 +127,24 @@ try {
 }
 
 // Validação de proNo — deve ser inteiro positivo conhecido (R03: whitelist bloqueante)
-$proNosConhecidos = [128, 37121, 37377, 37381, 37382, 37384, 33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
+//
+// ⚠️ 37122 / 37378 / 37383 (0x9102, 0x9202, 0x9207) são os CONTROLES que fazem
+// par com requisições que já disparamos: parar o stream ao vivo do 37121,
+// pausar/avançar/parar o playback do 37377 e pausar/cancelar o upload do
+// 37382. Sem eles conseguíamos INICIAR as três operações e não conseguíamos
+// interromper nenhuma — a câmera segue transmitindo até o timeout dela.
+// Liberados aqui (v4.9.24) a partir da Tabela 83 do
+// `docs/jtt-808-2019-meigou.pdf`, que descreve os três.
+//
+// 🔴 Ainda NÃO têm preset em `comandos.php`/`ativo_detalhe.php`, e é de
+// propósito: os presets carregam os nomes de campo do HUB da Jimi
+// (`videoIP`, `codeStreamType`…), que não são os da norma e não constam de
+// nenhuma das duas fontes conferidas. Inventá-los produziria comando aceito
+// pelo gateway e ignorado pelo device — exatamente o defeito que o 37382
+// tinha antes da v4.9.1. Enquanto isso, chegam por chamada direta ao
+// endpoint, com o `cmdContent` montado por quem souber os campos.
+$proNosConhecidos = [128, 37121, 37122, 37377, 37378, 37381, 37382, 37383, 37384,
+                     33283, 33536, 33027, 33028, 33029, 33030, 33031, 34817, 34818];
 if (!in_array($proNo, $proNosConhecidos, true)) {
     http_response_code(400);
     Logger::warning('sendcommand: proNo desconhecido bloqueado', [

@@ -192,7 +192,8 @@ if ($tab === 'parametros') {
               LEFT JOIN device_param_catalog c ON c.param_no = dp.param_no
              WHERE dp.imei = :imei
              ORDER BY FIELD(COALESCE(c.grupo,'outros'),
-                            'rede','reporte','conducao','seguranca','video','identificacao','outros'),
+                            'rede','reporte','conducao','seguranca','video','gnss','can',
+                            'telefonia','identificacao','outros'),
                       dp.param_no, dp.channel
         ");
         $stmt->execute([':imei' => $imei]);
@@ -742,7 +743,9 @@ case 'parametros':
 $gruposLabel = [
     'rede' => 'Rede e servidor', 'reporte' => 'Estratégia de reporte',
     'conducao' => 'Comportamento de condução', 'seguranca' => 'Segurança',
-    'video' => 'Vídeo', 'identificacao' => 'Identificação', 'outros' => 'Não documentados',
+    'video' => 'Vídeo', 'gnss' => 'GNSS', 'can' => 'CAN bus',
+    'telefonia' => 'Telefonia', 'identificacao' => 'Identificação',
+    'outros' => 'Não documentados',
 ];
 $ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
 // Escrita exige a ação `edit` da tela de ativos — ver a nota do JS abaixo.
