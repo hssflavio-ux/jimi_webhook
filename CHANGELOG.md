@@ -5,6 +5,29 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.20
+
+**A tela de comandos mostrava o recibo do gateway no lugar da resposta do equipamento.** O operador via "Executado" e nada mais; o que o device respondeu — `OK!`, a leitura dos parâmetros, a linha de status com sinal e bateria — não aparecia em lugar nenhum da interface. Medido no histórico de produção: **168 comandos com resposta gravada, 120 (71%) mostravam texto errado ao operador**.
+
+🔴 **E não era só omissão: 5 comandos recusados pelo equipamento eram anunciados como `Executado`.** O device respondeu `failed!` (FILELIST) e `command error` (RECORDSW#) enquanto a tela dizia que tinha dado certo, porque o `msg:"success"` do envelope significa "a mensagem foi entregue ao gateway", não "o comando funcionou".
+
+### Fixed
+- **A resposta do equipamento vem em `data._content`, e nenhum dos três leitores lia esse campo.** `command_response_extract()` passa a devolver `conteudo` (o que o device respondeu) separado de `texto` (o que o gateway diz da entrega), e `command_response_interpret()` classifica **primeiro pela palavra do equipamento**, caindo no gateway só quando o device não disse nada reconhecível — senão um `_content` dizendo `Device busy` com envelope em `success` continua saindo como "Executado".
+  - ⚠️ `_content` vem como **string vazia** (não ausente) quando o device está offline, então a checagem é de "não vazio": com `??` o vazio vence e a mensagem útil (`Device not online`, que está em `_msg`) se perde. Era esse o bug do `commandstatus.php`.
+  - ⚠️ Resposta **estruturada** (`{...}`) não passa pelas regras de frase: o retorno da consulta de parâmetros começa com `{"paramCount":…` e a regra de parâmetro casava em `param`, anunciando "Parâmetro inválido" para uma leitura correta.
+- 🔴 **O painel de envio lia `j.response`, um campo de primeiro nível que o `/commandstatus` nunca emitiu** (o endpoint devolve `{commands:[{…response}]}`). A condição era falsa **sempre**: o painel parava em "enfileirado #N" e, um minuto depois, afirmava "sem resposta (fila offline)" mesmo com a resposta já gravada no banco. Quebra de contrato silenciosa — sem erro no console, sem 500, só uma tela que mente.
+- **Três cópias divergentes da mesma regra de leitura viraram uma.** `commandstatus.php` tinha a sua (preferia `_content`, mas com `??`), `relatorios.php` a terceira e pior (lia só o topo do envelope, nunca entrava em `data`) e `includes/command_response.php` a que a tela usava. Duas cópias divergentes da mesma regra são o motivo de corrigir uma nunca corrigir a outra.
+- **`/ativos/{imei}` selecionava `response_payload` do banco e não renderizava nada dele** — a aba de comandos mostrava só o status de envio. Passa a mostrar o desfecho interpretado e a resposta, pela mesma leitura única.
+
+### Changed
+- **A resposta do equipamento aparece na LISTA**, sob o desfecho, monoespaçada e limitada a duas linhas (payload de parâmetros passa de 300 caracteres e esticaria a linha). Antes era preciso abrir o detalhe de cada linha — e mesmo lá vinha o texto errado.
+- **Detalhe do comando ganhou "Copiar" e a resposta bruta do gateway** num `<details>` fechado. O envelope cru é o que permite ver que a interpretação está certa — ou provar que não está — sem abrir o banco, que é exatamente o que faltou para este defeito aparecer antes.
+- **Contagem de "informativos" no resumo**: o nível `neutro` era contado e filtrável mas não aparecia, e a soma dos três números não batia com o total de registros.
+- **Acessibilidade e teclado**: as linhas do histórico abrem um modal, então viraram controles de verdade (`tabindex`, Enter/Espaço, `aria-label`) e o modal fecha com **ESC**.
+- **Aviso de histórico defasado**: a lista é renderizada no servidor e não incluía o que acabou de ser enviado. Some a impressão de que a tela engoliu o comando.
+- `.res-dot`/`.dot-*`/`.res-msg` saíram da tela de comandos para o `layout_base.php`: duas telas mostram o mesmo desfecho, e a cópia local faria as cores divergirem.
+- **Teste novo** (`tests/helpers/command_response.test.php`, 17 checagens) fixado em payloads **reais** de produção — inclusive o device offline com `_content` vazio e o `_msg: null` dos comandos de texto, que são os dois casos que quebravam.
+
 ## [Unreleased] — 4.9.19
 
 **O BI passa a falar o nome do evento.** Era a última tela que agrupava, rotulava e filtrava pelo **código cru**: o gráfico dizia `264` e `45` onde o Relatório de Alarmes, `/relatorios` e a aba de alertas do ativo já diziam *Fadiga do Motorista* e *Capotamento* — as três foram convertidas na v4.9.10 e o BI ficou para trás.

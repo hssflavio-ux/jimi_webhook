@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
+require_once __DIR__ . '/../includes/command_response.php'; // leitura única da resposta de comando
 require_login();
 
 $customer_id = get_customer_id();
@@ -258,13 +259,14 @@ include __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td class="text-mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px">
                     <?php
+                    // Ponto único de leitura (`includes/command_response.php`).
+                    // Esta era a terceira cópia da regra e a mais errada das
+                    // três: olhava só o topo do envelope, nunca entrava em
+                    // `data`, então imprimia o `msg` do gateway ("success") em
+                    // vez do que o equipamento respondeu.
                     if ($r['response_payload']) {
-                        $resp = json_decode($r['response_payload'], true);
-                        if (is_array($resp)) {
-                            echo htmlspecialchars($resp['resultContent'] ?? $resp['content'] ?? $resp['msg'] ?? $r['response_payload']);
-                        } else {
-                            echo htmlspecialchars($r['response_payload']);
-                        }
+                        $env = command_response_extract($r['response_payload']);
+                        echo htmlspecialchars($env['conteudo'] !== '' ? $env['conteudo'] : $env['texto']);
                     } else {
                         echo '-';
                     }

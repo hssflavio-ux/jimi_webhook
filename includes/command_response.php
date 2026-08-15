@@ -21,32 +21,66 @@
 /**
  * Desembrulha a resposta gravada e devolve o texto que interessa.
  *
+ * 🔴 São DOIS textos, e confundi-los foi o defeito da tela até 15/08/2026:
+ *   • `texto`    — o que o **gateway** diz sobre a entrega (`data._msg`), do
+ *                  tipo "Command communication successful response" ou
+ *                  "Device not online". Serve para classificar o desfecho.
+ *   • `conteudo` — o que o **equipamento** respondeu (`data._content`): `OK!`,
+ *                  o JSON dos parâmetros lidos, a linha de status com a tensão
+ *                  da bateria. É a resposta que o operador foi buscar.
+ *
+ * Ler só `_msg` fazia a tela mostrar "Executado" e nada mais — o comando
+ * aparecia entregue e a resposta simplesmente não existia na interface. Pior
+ * nos casos em que `_msg` vem **`null`** (é o normal nos comandos de texto,
+ * proNo 128): aí o `??` caía no `msg` do envelope e a tela exibia `success`,
+ * um eco do gateway, enquanto o device tinha respondido `OK!`.
+ *
+ * ⚠️ `_content` vem como **string vazia** quando o device está offline (não
+ * ausente — a chave existe). Por isso a checagem é de "não vazio", nunca `??`:
+ * com `??` o vazio vence e a mensagem útil (`Device not online`, que está em
+ * `_msg`) se perde. `commandstatus.php` tinha exatamente esse bug.
+ *
  * @param string|null $payload Conteúdo de `commands.response_payload`
- * @returns array{texto:string, codigo:string}
+ * @returns array{texto:string, codigo:string, conteudo:string}
  */
 function command_response_extract(?string $payload): array
 {
+    $vazio = ['texto' => '', 'codigo' => '', 'conteudo' => ''];
+
     $payload = trim((string)$payload);
-    if ($payload === '') return ['texto' => '', 'codigo' => ''];
+    if ($payload === '') return $vazio;
 
     $j = json_decode($payload, true);
     if (!is_array($j)) {
         // Pode ser uma string JSON ("request timeout") ou texto cru
-        return ['texto' => is_string($j) ? $j : $payload, 'codigo' => ''];
+        return ['texto' => is_string($j) ? $j : $payload, 'codigo' => '', 'conteudo' => ''];
     }
 
-    // Envelope do gateway: o que vale está em data._msg / data._code
+    // Envelope do gateway: o status da entrega está em data._msg / data._code,
+    // e a resposta do equipamento em data._content.
     $d = $j['data'] ?? null;
+    $conteudo = '';
     if (is_array($d)) {
-        $texto = (string)($d['_msg'] ?? $d['resultContent'] ?? $d['content'] ?? '');
+        foreach (['_content', 'resultContent', 'content'] as $k) {
+            if (isset($d[$k]) && is_scalar($d[$k]) && trim((string)$d[$k]) !== '') {
+                $conteudo = trim((string)$d[$k]);
+                break;
+            }
+        }
+        $texto = trim((string)($d['_msg'] ?? ''));
         $cod   = (string)($d['_code'] ?? '');
-        if ($texto !== '') return ['texto' => $texto, 'codigo' => $cod];
+        if ($texto !== '' || $conteudo !== '') {
+            return ['texto' => $texto, 'codigo' => $cod, 'conteudo' => $conteudo];
+        }
     }
 
     foreach (['resultContent', 'content', 'msg', 'message'] as $k) {
-        if (!empty($j[$k]) && is_string($j[$k])) return ['texto' => $j[$k], 'codigo' => (string)($j['code'] ?? '')];
+        if (!empty($j[$k]) && is_string($j[$k])) {
+            return ['texto' => $j[$k], 'codigo' => (string)($j['code'] ?? ''), 'conteudo' => $conteudo];
+        }
     }
-    return ['texto' => json_encode($j, JSON_UNESCAPED_UNICODE), 'codigo' => (string)($j['code'] ?? '')];
+    return ['texto' => json_encode($j, JSON_UNESCAPED_UNICODE),
+            'codigo' => (string)($j['code'] ?? ''), 'conteudo' => $conteudo];
 }
 
 /**
@@ -57,15 +91,25 @@ function command_response_extract(?string $payload): array
  * e uma tabela de igualdade exata envelheceria em silêncio, voltando a mostrar
  * inglês cru — que é o defeito que esta função existe para corrigir.
  *
- * @param string $texto  Texto vindo de command_response_extract()
- * @param string $codigo Código do gateway, quando houver
+ * A palavra do EQUIPAMENTO (`$conteudo`) é classificada primeiro, e a do
+ * gateway (`$texto`) só entra quando o device não disse nada reconhecível.
+ * Sem essa ordem, um `_content` dizendo `Device busy` com o envelope em
+ * `success` era anunciado como **Executado** — a tela afirmando o oposto do
+ * que o equipamento respondeu. O `detalhe` mostrado é sempre a resposta do
+ * device quando ela existe; o ACK do gateway não interessa a quem opera.
+ *
+ * @param string $texto    Status da entrega, vindo de command_response_extract()
+ * @param string $codigo   Código do gateway, quando houver
+ * @param string $conteudo Resposta do equipamento (`data._content`)
  * @returns array{nivel:string, titulo:string, detalhe:string, dica:string}
  *          nivel: ok | aguardando | erro | neutro
  */
-function command_response_interpret(string $texto, string $codigo = ''): array
+function command_response_interpret(string $texto, string $codigo = '', string $conteudo = ''): array
 {
-    $t = mb_strtolower(trim($texto));
-    if ($t === '') {
+    $conteudo = trim($conteudo);
+    $detalhe  = $conteudo !== '' ? $conteudo : trim($texto);
+
+    if ($detalhe === '') {
         return ['nivel' => 'aguardando', 'titulo' => 'Sem resposta ainda',
                 'detalhe' => '', 'dica' => 'O equipamento ainda não respondeu. Comando offline fica em fila até ele se conectar.'];
     }
@@ -88,19 +132,34 @@ function command_response_interpret(string $texto, string $codigo = ''): array
         ['fail|error|refus', 'erro', 'Recusado pelo equipamento', ''],
     ];
 
-    foreach ($regras as [$re, $nivel, $titulo, $dica]) {
-        if (preg_match('/' . $re . '/i', $t)) {
-            return ['nivel' => $nivel, 'titulo' => $titulo, 'detalhe' => $texto, 'dica' => $dica];
+    // Ordem deliberada: primeiro o que o EQUIPAMENTO disse, depois o gateway.
+    //
+    // ⚠️ As regras acima são frases em prosa e só valem sobre prosa. Resposta
+    // estruturada (`{...}` / `[...]`) é PAYLOAD, não recado: o retorno de uma
+    // consulta de parâmetros começa com `{"paramCount":...` e a regra de
+    // parâmetro casaria em `param`, anunciando "Parâmetro inválido" para uma
+    // leitura que deu certo. Payload não é classificado — quem classifica
+    // nesse caso é o gateway, e o payload aparece inteiro no detalhe.
+    $candidatos = [];
+    if ($conteudo !== '' && $conteudo[0] !== '{' && $conteudo[0] !== '[') $candidatos[] = $conteudo;
+    if (trim($texto) !== '') $candidatos[] = trim($texto);
+
+    foreach ($candidatos as $cand) {
+        $t = mb_strtolower($cand);
+        foreach ($regras as [$re, $nivel, $titulo, $dica]) {
+            if (preg_match('/' . $re . '/i', $t)) {
+                return ['nivel' => $nivel, 'titulo' => $titulo, 'detalhe' => $detalhe, 'dica' => $dica];
+            }
         }
     }
 
     // Resposta de dados do próprio device (ex.: `ext Battery:12.1V; GPRS:Link Up`)
-    if (command_response_kv($texto)) {
-        return ['nivel' => 'ok', 'titulo' => 'Dados recebidos', 'detalhe' => $texto, 'dica' => ''];
+    if (command_response_kv($detalhe)) {
+        return ['nivel' => 'ok', 'titulo' => 'Dados recebidos', 'detalhe' => $detalhe, 'dica' => ''];
     }
 
     return ['nivel' => 'neutro', 'titulo' => 'Resposta do equipamento',
-            'detalhe' => $texto . ($codigo !== '' ? " (código $codigo)" : ''), 'dica' => ''];
+            'detalhe' => $detalhe . ($codigo !== '' ? " (código $codigo)" : ''), 'dica' => ''];
 }
 
 /**

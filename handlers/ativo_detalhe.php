@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
+require_once __DIR__ . '/../includes/command_response.php'; // leitura única da resposta de comando
 require_login();
 
 $customer_id = get_customer_id();
@@ -577,15 +578,30 @@ case 'comandos':
             <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Histórico de Comandos</h4>
             <div style="max-height:400px;overflow-y:auto">
                 <table style="font-size:12px">
-                    <thead><tr><th>Data</th><th>Comando</th><th>Status</th></tr></thead>
+                    <?php /* Coluna "Desfecho" no lugar de "Status": esta aba
+                             lia `response_payload` do banco e não mostrava NADA
+                             dele — só o status de envio, que nem desfecho é
+                             (há linhas `executed` cuja resposta é
+                             `request timeout`). Mesma leitura da tela de
+                             comandos, pelo mesmo ponto único. */ ?>
+                    <thead><tr><th>Data</th><th>Comando</th><th>Desfecho</th></tr></thead>
                     <tbody>
                         <?php foreach ($commands as $c):
-                            $statusBadge = $c['status'] === 'executed' ? 'badge-success' : ($c['status'] === 'failed' ? 'badge-error' : ($c['status'] === 'sent' ? 'badge-info' : ''));
+                            $cEnv  = command_response_extract($c['response_payload']);
+                            $cDesf = command_response_interpret($cEnv['texto'], $cEnv['codigo'], $cEnv['conteudo']);
                         ?>
                         <tr>
                             <td style="white-space:nowrap"><?= fmt_brt_dt($c['created_at']) ?></td>
                             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:11px"><?= htmlspecialchars($c['command_content']) ?></td>
-                            <td><span class="badge <?= $statusBadge ?>"><?= $c['status'] ?></span></td>
+                            <td>
+                                <div style="display:flex;gap:6px;align-items:flex-start">
+                                    <span class="res-dot dot-<?= htmlspecialchars($cDesf['nivel']) ?>"></span>
+                                    <span><?= htmlspecialchars($cDesf['titulo']) ?></span>
+                                </div>
+                                <?php if ($cDesf['detalhe'] !== ''): ?>
+                                <div class="res-msg" title="<?= htmlspecialchars($cDesf['detalhe']) ?>"><?= htmlspecialchars($cDesf['detalhe']) ?></div>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endforeach; ?>
                         <?php if (empty($commands)): ?>

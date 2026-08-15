@@ -121,7 +121,7 @@ $linhas = [];
 $resumo = ['ok' => 0, 'aguardando' => 0, 'erro' => 0, 'neutro' => 0];
 foreach ($hist as $h) {
     $env  = command_response_extract($h['response_payload']);
-    $desf = command_response_interpret($env['texto'], $env['codigo']);
+    $desf = command_response_interpret($env['texto'], $env['codigo'], $env['conteudo']);
     if ($filtroDesf !== '' && $desf['nivel'] !== $filtroDesf) continue;
     $resumo[$desf['nivel']] = ($resumo[$desf['nivel']] ?? 0) + 1;
 
@@ -140,6 +140,11 @@ foreach ($hist as $h) {
         'quando' => fmt_brt_cmd($h['created_at']),
         'espera' => $espera, 'status' => $h['status'], 'desfecho' => $desf,
         'kv' => command_response_kv($desf['detalhe']),
+        // Envelope cru, para o detalhe. Quando a interpretação erra — e ela
+        // errou por meses lendo o campo errado — sem isto ninguém consegue ver
+        // o que o gateway realmente mandou sem abrir o banco. Truncado porque
+        // este array inteiro é serializado para dentro da página.
+        'bruto' => mb_substr((string)$h['response_payload'], 0, 1200),
     ];
 }
 
@@ -168,11 +173,16 @@ $extra_head = '<style>
 .ex-chip { display:inline-block; font-family:"JetBrains Mono",monospace; font-size:11px; background:var(--canvas-soft); border:1px solid var(--hairline); border-radius:100px; padding:3px 10px; margin:3px 4px 3px 0; cursor:pointer; }
 .ex-chip:hover { border-color:var(--brand); color:var(--brand); }
 .res-row { display:flex; gap:8px; align-items:flex-start; padding:6px 0; font-size:12px; border-bottom:1px solid var(--hairline-soft); }
-.res-dot { width:8px; height:8px; border-radius:50%; margin-top:5px; flex-shrink:0; }
-.dot-ok{background:#0a7a52}.dot-erro{background:#cf2d56}.dot-aguardando{background:#c08532}.dot-neutro{background:#8a919e}
+/* .res-dot, .dot-* e .res-msg vivem no layout_base.php — são compartilhados
+   com a aba de comandos do ativo. Duplicar aqui faria as duas telas divergirem
+   na cor do mesmo desfecho. */
 .kv-grid { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:11px; margin-top:4px; }
 .kv-k { color:var(--muted); }
 .kv-v { font-family:"JetBrains Mono",monospace; color:var(--ink); }
+.res-raw { font-family:"JetBrains Mono",monospace; font-size:11px; line-height:1.5;
+           background:#0a0b0d; color:#9fb3c8; padding:10px; border-radius:var(--radius-sm);
+           max-height:200px; overflow:auto; white-space:pre-wrap; word-break:break-all; margin-top:6px; }
+tr.cmd-row:focus-visible { outline:2px solid var(--brand); outline-offset:-2px; }
 </style>';
 
 include __DIR__ . '/../web/layout_base.php';
@@ -290,6 +300,10 @@ include __DIR__ . '/../web/layout_base.php';
       <span><span class="res-dot dot-ok" style="display:inline-block"></span> <?= $resumo['ok'] ?> executados</span>
       <span><span class="res-dot dot-aguardando" style="display:inline-block"></span> <?= $resumo['aguardando'] ?> aguardando</span>
       <span><span class="res-dot dot-erro" style="display:inline-block"></span> <?= $resumo['erro'] ?> com erro</span>
+      <?php /* O nível `neutro` era contado e filtrável, mas não aparecia aqui:
+               a soma dos três números não batia com "N registros" e não havia
+               como saber quantos eram informativos sem aplicar o filtro. */ ?>
+      <span><span class="res-dot dot-neutro" style="display:inline-block"></span> <?= $resumo['neutro'] ?> informativos</span>
     </div>
 
     <div style="max-height:520px;overflow-y:auto">
@@ -299,7 +313,13 @@ include __DIR__ . '/../web/layout_base.php';
         </tr></thead>
         <tbody>
         <?php foreach ($linhas as $l): ?>
-          <tr style="cursor:pointer" onclick="verDetalhe(<?= (int)$l['id'] ?>)">
+          <?php /* tabindex + Enter/Espaço: a linha abre um modal, então é um
+                   controle. Com `onclick` sozinho ela não existia para quem
+                   navega por teclado. */ ?>
+          <tr class="cmd-row" style="cursor:pointer" tabindex="0" role="button"
+              aria-label="Detalhe do comando <?= htmlspecialchars($l['rotulo']) ?>"
+              onclick="verDetalhe(<?= (int)$l['id'] ?>)"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();verDetalhe(<?= (int)$l['id'] ?>)}">
             <td style="white-space:nowrap"><?= htmlspecialchars($l['quando']) ?></td>
             <td>
               <?= htmlspecialchars($l['placa']) ?>
@@ -320,6 +340,12 @@ include __DIR__ . '/../web/layout_base.php';
                     <span class="kv-k"><?= htmlspecialchars($k) ?></span><span class="kv-v"><?= htmlspecialchars($v) ?></span>
                   <?php endforeach; ?>
                 </div>
+              <?php elseif ($l['desfecho']['detalhe'] !== ''): ?>
+                <?php /* A RESPOSTA do equipamento. Sem esta linha a coluna
+                        mostrava só a classificação ("Executado") e o que o
+                        device respondeu não aparecia em lugar nenhum da lista
+                        — era preciso abrir o detalhe de cada linha para ver. */ ?>
+                <div class="res-msg" title="<?= htmlspecialchars($l['desfecho']['detalhe']) ?>"><?= htmlspecialchars($l['desfecho']['detalhe']) ?></div>
               <?php endif; ?>
             </td>
             <td style="white-space:nowrap;color:var(--muted)"><?= htmlspecialchars($l['espera'] ?: '—') ?></td>
@@ -666,27 +692,72 @@ function enviarLote() {
             linha.lastChild.textContent = 'erro de rede';
         })
         .finally(function () {
-            if (++feitos === imeis.length) { btn.disabled = false; atualizarBotao(); }
+            if (++feitos !== imeis.length) return;
+            btn.disabled = false; atualizarBotao();
+            // O histórico ao lado é renderizado no servidor: os envios que
+            // acabaram de sair não estão nele até a página recarregar. Sem
+            // dizer isso, a tela parece ter engolido o comando.
+            if (!document.getElementById('recarregar-hist')) {
+                var aviso = document.createElement('div');
+                aviso.id = 'recarregar-hist';
+                aviso.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px';
+                aviso.innerHTML = 'O histórico ao lado ainda não inclui estes envios · ' +
+                                  '<a href="#" onclick="location.reload();return false">atualizar</a>';
+                cx.appendChild(aviso);
+            }
         });
     });
 }
 
-/** Acompanha a resposta de um comando e escreve o desfecho na linha dele. */
+/**
+ * Acompanha a resposta de um comando e escreve o desfecho na linha dele.
+ *
+ * 🔴 Até 15/08/2026 esta função lia `j.response` — um campo de PRIMEIRO NÍVEL
+ * que o `/commandstatus` nunca emitiu: o endpoint devolve
+ * `{code, commands:[{...response}], offline_count, offline_recent}`. A condição
+ * era falsa sempre, então o painel parava em "enfileirado #N" e, um minuto
+ * depois, afirmava "sem resposta (fila offline)" mesmo quando o equipamento já
+ * tinha respondido — 119 dos 120 comandos dos últimos 30 dias em produção
+ * tinham resposta gravada quando o defeito foi encontrado. Quebra de contrato
+ * silenciosa: nenhum erro no console, nenhum 500, só uma tela que mente.
+ */
 function acompanhar(id, linha) {
     var t = 0;
+    var alvo = linha.lastChild;
+    var ultimo = null;
+
+    var pinta = function (nivel, titulo, resposta) {
+        linha.querySelector('.res-dot').className = 'res-dot dot-' + (nivel || 'neutro');
+        var html = '<span>' + esc(titulo || '') + '</span>';
+        if (resposta) {
+            html += '<div class="res-msg" title="' + esc(resposta) + '">' + esc(resposta) + '</div>';
+        }
+        alvo.innerHTML = html;
+    };
+
     var tick = function () {
         fetch('/commandstatus?command_id=' + id)
             .then(function (r) { return r.json(); })
             .then(function (j) {
-                if (j && j.response) {
-                    linha.lastChild.textContent = String(j.response).slice(0, 60);
-                    linha.querySelector('.res-dot').className = 'res-dot dot-ok';
-                    return;
+                var c = (j && j.commands && j.commands[0]) || null;
+                if (c && (c.response || (c.titulo && c.titulo !== 'Sem resposta ainda'))) {
+                    ultimo = c;
+                    pinta(c.nivel, c.titulo, c.response);
+                    // 'aguardando' não é desfecho: o equipamento ainda pode
+                    // responder (offline entra em fila). Segue consultando até
+                    // o orçamento acabar, mas já mostrando o que se sabe.
+                    if (c.nivel !== 'aguardando') return;
                 }
-                if (++t < 12) setTimeout(tick, t < 8 ? 3000 : 10000);
-                else linha.lastChild.textContent = 'sem resposta (fila offline)';
+                if (++t < 12) { setTimeout(tick, t < 8 ? 3000 : 10000); return; }
+                if (!ultimo) {
+                    pinta('aguardando', 'Sem resposta ainda',
+                          'o equipamento não respondeu; comando fica na fila até ele se conectar');
+                }
             })
-            .catch(function () {});
+            .catch(function () {
+                if (++t < 12) setTimeout(tick, 5000);
+                else if (!ultimo) pinta('erro', 'Falha ao consultar o status', '');
+            });
     };
     setTimeout(tick, 3000);
 }
@@ -712,14 +783,54 @@ function verDetalhe(id) {
         '<div style="margin-top:10px"><label style="font-size:11px">Conteúdo enviado</label>' +
           '<div class="cmd-preview">' + esc(l.enviado) + '</div></div>' +
         '<div style="margin-top:10px;padding:10px;border-radius:var(--radius-sm);background:var(--canvas-soft)">' +
-          '<div style="display:flex;gap:8px;align-items:center"><span class="res-dot dot-' + esc(d.nivel) + '"></span>' +
-          '<strong>' + esc(d.titulo) + '</strong></div>' +
-          (d.detalhe ? '<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;margin-top:6px;color:var(--muted);word-break:break-all">' + esc(d.detalhe) + '</div>' : '') +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<span class="res-dot dot-' + esc(d.nivel) + '"></span>' +
+            '<strong style="flex:1">' + esc(d.titulo) + '</strong>' +
+            (d.detalhe ? '<button type="button" class="btn btn-outline btn-sm" onclick="copiarResposta(this)">Copiar</button>' : '') +
+          '</div>' +
+          (d.detalhe ? '<div id="resp-texto" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;margin-top:6px;color:var(--muted);word-break:break-all">' + esc(d.detalhe) + '</div>' : '') +
           kv +
           (d.dica ? '<div style="font-size:12px;margin-top:8px;line-height:1.6">' + esc(d.dica) + '</div>' : '') +
-        '</div>';
+        '</div>' +
+        // Envelope cru sob demanda: fechado por padrão para não poluir, mas
+        // disponível — é o que permite ver que a leitura interpretada está
+        // certa (ou provar que não está) sem precisar de acesso ao banco.
+        (l.bruto ? '<details style="margin-top:10px">' +
+            '<summary style="font-size:12px;cursor:pointer;color:var(--muted)">Resposta bruta do gateway</summary>' +
+            '<div class="res-raw">' + esc(l.bruto) + '</div></details>' : '');
     document.getElementById('detail-modal').style.display = 'flex';
+    document.querySelector('#detail-modal .btn').focus();
 }
+
+/** Copia a resposta do equipamento — payload de parâmetros não se transcreve à mão. */
+function copiarResposta(btn) {
+    var el = document.getElementById('resp-texto');
+    if (!el) return;
+    var txt = el.textContent;
+    var fim = function (ok) {
+        btn.textContent = ok ? 'Copiado' : 'Falhou';
+        setTimeout(function () { btn.textContent = 'Copiar'; }, 1600);
+    };
+    // navigator.clipboard exige contexto seguro; em HTTP puro (homolog) ele
+    // nem existe, e sem o fallback o botão não faria nada, calado.
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(txt).then(function () { fim(true); }, function () { fim(false); });
+        return;
+    }
+    var ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    fim(ok);
+}
+
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var m = document.getElementById('detail-modal');
+    if (m && m.style.display === 'flex') m.style.display = 'none';
+});
 
 montarListaComandos();
 atualizarBotao();

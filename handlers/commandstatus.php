@@ -20,6 +20,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/command_response.php';
 
 // ── Apenas GET ────────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -91,24 +92,17 @@ try {
 
     $commands = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        // Extrai mensagem de resposta legível do JSON armazenado.
-        // Prioridade: resposta real do device (data._content / data._msg,
-        // formato sendInstruct síncrono) > campos legados > msg genérico.
-        $respDisplay = null;
-        if ($row['response_payload']) {
-            $decoded = json_decode($row['response_payload'], true);
-            if (is_array($decoded)) {
-                $respDisplay = $decoded['data']['_content']
-                    ?? $decoded['data']['_msg']
-                    ?? $decoded['resultContent']
-                    ?? $decoded['content']
-                    ?? $decoded['msg']
-                    ?? $decoded['message']
-                    ?? json_encode($decoded, JSON_UNESCAPED_UNICODE);
-            } else {
-                $respDisplay = (string)$row['response_payload'];
-            }
-        }
+        // A leitura da resposta é do ponto único `includes/command_response.php`,
+        // o MESMO que a tela usa para montar o histórico.
+        //
+        // 🔴 Até 15/08/2026 este handler tinha a sua própria cópia da lógica, e
+        // as duas discordavam: aqui `data._content` era preferido com `??`, que
+        // devolve a string VAZIA do device offline em vez do `_msg` útil; lá o
+        // `_content` sequer era lido. Duas cópias divergentes da mesma regra são
+        // o motivo de a tela mostrar uma coisa no painel e outra no histórico —
+        // corrigir uma nunca corrigia a outra.
+        $env  = command_response_extract($row['response_payload']);
+        $desf = command_response_interpret($env['texto'], $env['codigo'], $env['conteudo']);
 
         $commands[] = [
             'id'       => (int)$row['id'],
@@ -117,7 +111,12 @@ try {
             'type'     => $row['command_type'],
             'status'   => $row['status'],
             'operator' => $row['operator'],
-            'response' => $respDisplay,
+            'response' => $desf['detalhe'] !== '' ? $desf['detalhe'] : null,
+            // Desfecho já interpretado, para o painel de envio pintar o mesmo
+            // ponto colorido e o mesmo título que o histórico mostra.
+            'nivel'    => $desf['nivel'],
+            'titulo'   => $desf['titulo'],
+            'dica'     => $desf['dica'],
             'created'  => $fmtDate($row['created_at']),
             'updated'  => $fmtDate($row['updated_at']),
         ];

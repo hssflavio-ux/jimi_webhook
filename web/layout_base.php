@@ -633,6 +633,22 @@ tbody tr:hover { background: var(--canvas-soft); }
 .badge-info    { background: var(--primary-soft); color: var(--primary); }
 .badge-primary { background: var(--primary-soft); color: var(--primary); }
 
+/* ── Desfecho de comando ─────────────────────────────────
+   Ponto colorido + resposta do equipamento. Vive aqui, e não na tela de
+   comandos, porque /comandos e /ativos/{imei} mostram o MESMO desfecho — a
+   cópia local fazia a aba do ativo herdar marcação sem estilo. Os quatro
+   níveis vêm de command_response_interpret(): ok | aguardando | erro | neutro. */
+.res-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.dot-ok         { background: #0a7a52; }
+.dot-erro       { background: #cf2d56; }
+.dot-aguardando { background: #c08532; }
+.dot-neutro     { background: #8a919e; }
+/* A resposta é dado, não prosa: monoespaçada e limitada a duas linhas, senão
+   um payload de parâmetros (300+ caracteres) estica a linha da tabela. */
+.res-msg { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted);
+           margin-top: 3px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2;
+           -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+
 /* ── Buttons ─────────────────────────────────────────── */
 .btn {
     display: inline-flex;
