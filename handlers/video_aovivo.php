@@ -15,6 +15,20 @@ $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
+// ── Escopo multi-tenant (v4.9.23) ──────────────────────────────────────────
+// Antes a tela era presa ao cliente da sessão: o administrador precisava
+// TROCAR de cliente no cabeçalho para ver a câmera de outra carteira.
+// O `?customer_id` passa por `report_customer_scope()` — para quem não é admin
+// o parâmetro é ignorado, não validado (CLAUDE.md).
+$filtroCust  = $_GET['customer_id'] ?? null;
+$scopeCust   = report_customer_scope($filtroCust, $isAdmin, $customerId);
+$customers   = $isAdmin ? report_customer_options($db) : [];
+$scopeSql    = $scopeCust !== null ? ' AND d.customer_id = :cid' : '';
+$scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
+// Com "todos", a lista mistura carteiras e abrir a câmera do cliente errado é
+// dano de privacidade: o nome do cliente entra no rótulo só nesse caso.
+$mostrarCliente = ($scopeCust === null);
+
 // flv_base = saída HTTP-FLV (navegador); ingest_ip/port = onde o DEVICE publica o RTP (37121)
 $vsc = video_stream_config();
 $streamUrl = $vsc['flv_base'];
@@ -23,18 +37,10 @@ require_once __DIR__ . '/../includes/fleet_state.php';   // OFFLINE_GAP_SECONDS
 
 // ── Última comunicação: o MAIOR entre os sinais que o device emite ───────────
 //
-// `devices.last_communication` sozinho engana. Ele só é escrito por
-// `pushalarm.php` e `pushlbs.php` — **não** por GPS nem por heartbeat (não há
-// trigger no banco; conferido). Um equipamento que reporta posição e batimento
-// mas não manda LBS ficaria "sem comunicar" para sempre, mesmo transmitindo.
-//
-// Por isso a coluna vira o maior entre `last_communication`, `last_gps_time`,
-// `last_heartbeat_time` e `last_event_time`: qualquer um deles é prova de que
-// o equipamento falou com o servidor.
-//
-// O limiar de online é o mesmo do resto do produto (OFFLINE_GAP_SECONDS, 30 min,
-// usado em Status da Frota e em resolve_current_state()). Antes eram 5 minutos
-// cravados aqui — duas respostas diferentes para "está online?" no mesmo sistema.
+// A conta saiu daqui para `device_last_seen_sql()` (includes/fleet_state.php),
+// junto com o limiar: a explicação de POR QUE não basta `last_communication`
+// está lá. Ela vivia inline nesta tela e foi copiada errado para a tela de
+// comandos na v4.9.21 — que é o motivo de virar ponto único.
 //
 // ⚠️ `UTC_TIMESTAMP()` e não `NOW()`: a conexão do app força `time_zone='+00:00'`,
 // mas dizê-lo por extenso evita que a conta dependa dessa configuração.
@@ -42,19 +48,16 @@ $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
            d.streaming_rotation, d.streaming_watermark,
-           GREATEST(
-               COALESCE(d.last_communication,  '1970-01-01'),
-               COALESCE(ds.last_gps_time,      '1970-01-01'),
-               COALESCE(ds.last_heartbeat_time,'1970-01-01'),
-               COALESCE(ds.last_event_time,    '1970-01-01')
-           ) AS last_seen_utc
+           COALESCE(cu.name, '—') AS customer_name,
+           " . device_last_seen_sql() . " AS last_seen_utc
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     LEFT JOIN device_statistics ds ON ds.imei = d.imei
-    WHERE d.customer_id = :cid
-    ORDER BY d.is_active DESC, d.device_name ASC
+    LEFT JOIN customers cu ON cu.id = d.customer_id
+    WHERE 1=1 {$scopeSql}
+    ORDER BY cu.name, d.is_active DESC, d.device_name ASC
 ");
-$devices->execute([':cid' => $customerId]);
+$devices->execute($scopeParams);
 $devices = $devices->fetchAll();
 
 // Formatação em PHP, não em SQL: `DATE_FORMAT()` imprimia o UTC cru como se
@@ -114,6 +117,22 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <!-- Controls -->
         <div style="margin-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+            <?php if ($isAdmin): ?>
+            <?php /* Trocar o cliente recarrega a tela: a lista de equipamentos,
+                     os canais e o player dependem do device escolhido, e manter
+                     tudo em memória para depois descartar não paga. O `imei` sai
+                     da URL de propósito — o da carteira anterior não existe na
+                     nova, e mantê-lo selecionaria um equipamento alheio. */ ?>
+            <select id="cust-sel" onchange="location.href='?customer_id='+this.value"
+                    style="padding:8px 12px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+                <option value="">Todos os clientes</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($c['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
             <select id="dev-sel" onchange="onDeviceChange()" style="padding:8px 12px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:200px;">
                 <?php foreach ($devices as $d): ?>
                 <?php // Os data-* alimentam o painel lateral pelo JS: ele precisa
@@ -126,7 +145,10 @@ require_once __DIR__ . '/../web/layout_base.php';
                         data-last="<?= htmlspecialchars($d['last_com'], ENT_QUOTES) ?>"
                         data-online="<?= $d['is_online'] ? 1 : 0 ?>"
                         <?= $selectedImei === $d['imei'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?>
+                    <?php // Com "todos os clientes" a lista mistura carteiras e
+                          // abrir a câmera errada é dano de privacidade, não
+                          // engano cosmético: o cliente entra no rótulo. ?>
+                    <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?>
                     (<?= $d['is_online'] ? 'Online' : 'Offline' ?>)
                 </option>
                 <?php endforeach; ?>

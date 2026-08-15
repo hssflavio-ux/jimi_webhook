@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.23
+
+**As três telas de vídeo tinham o mesmo problema da tela de comandos: presas ao cliente da sessão.** Para ver a câmera de outra carteira, o administrador precisava trocar de cliente no cabeçalho.
+
+### Added
+- **Filtro de cliente em `/video/aovivo`, `/video/playback` e `/video/downloads`**, pelos mesmos pontos únicos (`report_customer_scope()` + `report_customer_options()`): para quem não é admin o `?customer_id` é **ignorado**, não validado. Com "Todos os clientes" a lista mistura carteiras — abrir a câmera do cliente errado é dano de privacidade, não engano cosmético —, então nesse modo o nome do cliente entra no rótulo do equipamento e numa coluna da grade.
+- **Filtro de vários equipamentos e exportação (Excel/PDF/CSV) em `/video/downloads`**, sensível a cliente, equipamentos e status. Exporta o recorte inteiro, não a página, com teto de 5000 declarado no subtítulo quando atingido.
+
+### Fixed
+- 🔴 **`/video/downloads` mostrava a fila de TODOS os clientes quando a sessão estava sem cliente no contexto.** O filtro era `if ($customerId)`: com o contexto vazio — estado normal do admin de plataforma antes de escolher um cliente — a cláusula não entrava e a grade trazia os arquivos da base inteira, sem que a tela dissesse isso em lugar nenhum. Agora o escopo é sempre explícito e, quando é "todos", a tela declara de quem é cada arquivo.
+- **Os filtros de `/video/downloads` deixam de se apagar entre si.** O status recarregava com `location.href='?status='+…`, que descarta qualquer outro parâmetro — com cliente e equipamentos na URL, trocar o status jogaria os dois fora. Viraram um `form` GET.
+- 🔴 **"Está online?" tinha uma terceira resposta no sistema.** `video_aovivo` usa o MAIOR entre `last_communication`, `last_gps_time`, `last_heartbeat_time` e `last_event_time`, com limiar `OFFLINE_GAP_SECONDS` (30 min) — porque **só `pushalarm.php` e `pushlbs.php` escrevem `last_communication`**; GPS e heartbeat não a tocam. A presença que a v4.9.21 colocou na tela de comandos usava aquela coluna sozinha, com limiar próprio de 15 min. Nos 8 equipamentos de produção hoje as duas regras concordam — a falha é **latente**: divergiria no dia em que um equipamento parasse de mandar LBS/alarme e seguisse reportando posição, dizendo "offline" numa tela e "online" na outra. A conta virou ponto único (`device_last_seen_sql()` + `device_presence()` em `includes/fleet_state.php`) e as duas telas passam a usá-la.
+
 ## [Unreleased] — 4.9.22
 
 **A tela de comandos era presa ao cliente da sessão, e o histórico não saía de lá.** O administrador só enxergava os comandos do cliente em que estivesse posicionado — sem olhar a base inteira, sem recortar por cliente e sem levar o histórico para fora da tela.

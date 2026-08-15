@@ -51,6 +51,59 @@ const STOP_IDLE_SECONDS = 300;
 const OFFLINE_GAP_SECONDS = 1800;
 
 /**
+ * Expressão SQL do ÚLTIMO SINAL de um equipamento — ponto único.
+ *
+ * 🔴 `devices.last_communication` sozinho engana: só `pushalarm.php` e
+ * `pushlbs.php` escrevem nessa coluna. GPS e heartbeat **não** a tocam (não há
+ * trigger no banco; conferido). Um equipamento que reporta posição e batimento
+ * mas parou de mandar LBS/alarme ficaria "sem comunicar" para sempre, mesmo
+ * transmitindo — e a tela diria offline para um device que está no ar.
+ *
+ * Por isso o último sinal é o MAIOR entre as quatro marcas: qualquer uma delas
+ * é prova de que o equipamento falou com o servidor.
+ *
+ * Existe aqui, e não copiada em cada tela, porque "está online?" já teve
+ * respostas diferentes em telas diferentes do mesmo sistema — `video_aovivo`
+ * usava esta conta e `comandos` usava só `last_communication` com limiar de 15
+ * min (v4.9.21), o que divergiria assim que um device parasse de mandar LBS.
+ *
+ * Exige `LEFT JOIN device_statistics ds ON ds.imei = d.imei` na consulta.
+ *
+ * @param string $d  Alias da tabela `devices`
+ * @param string $ds Alias de `device_statistics`
+ * @returns string Expressão SQL (datetime UTC)
+ */
+function device_last_seen_sql(string $d = 'd', string $ds = 'ds'): string
+{
+    return "GREATEST(
+               COALESCE({$d}.last_communication,   '1970-01-01'),
+               COALESCE({$ds}.last_gps_time,       '1970-01-01'),
+               COALESCE({$ds}.last_heartbeat_time, '1970-01-01'),
+               COALESCE({$ds}.last_event_time,     '1970-01-01')
+           )";
+}
+
+/**
+ * Presença legível a partir dos minutos desde o último sinal.
+ *
+ * O limiar de "online" é `OFFLINE_GAP_SECONDS`, o mesmo do Status da Frota e de
+ * `resolve_current_state()` — duas definições de online no mesmo produto é
+ * exatamente o defeito que este arquivo existe para não repetir.
+ *
+ * @param int|null $min Minutos desde o último sinal (NULL = nunca falou)
+ * @returns array{nivel:string, rotulo:string} nivel: ok | aguardando | erro | neutro
+ */
+function device_presence(?int $min): array
+{
+    if ($min === null)                          return ['nivel' => 'neutro', 'rotulo' => 'sem contato registrado'];
+    if ($min < 0)                               return ['nivel' => 'ok',     'rotulo' => 'agora'];
+    if ($min * 60 <= OFFLINE_GAP_SECONDS)       return ['nivel' => 'ok',     'rotulo' => 'online'];
+    if ($min <= 60)                             return ['nivel' => 'aguardando', 'rotulo' => 'há ' . $min . ' min'];
+    if ($min <= 1440)                           return ['nivel' => 'aguardando', 'rotulo' => 'há ' . intdiv($min, 60) . 'h'];
+    return ['nivel' => 'erro', 'rotulo' => 'há ' . intdiv($min, 1440) . 'd'];
+}
+
+/**
  * Limite de velocidade quando nem o equipamento nem o cliente definiram um.
  *
  * 80 km/h é o limite de rodovia de pista simples no Brasil (CTB art. 61),

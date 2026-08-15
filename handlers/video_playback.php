@@ -37,15 +37,30 @@ $customerId = get_customer_id();
 // `Content-Disposition: attachment`. Ver o cabeçalho de handlers/midia.php.
 $fileStorageUrl = '/midia?f=';
 
+// ── Escopo multi-tenant (v4.9.23) ──────────────────────────────────────────
+// Antes a tela era presa ao cliente da sessão. O `?customer_id` passa por
+// `report_customer_scope()`: para quem não é admin o parâmetro é ignorado, não
+// validado (CLAUDE.md).
+$user        = get_jimi_user();
+$isAdmin     = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+$filtroCust  = $_GET['customer_id'] ?? null;
+$scopeCust   = report_customer_scope($filtroCust, $isAdmin, $customerId);
+$customers   = $isAdmin ? report_customer_options($db) : [];
+$scopeSql    = $scopeCust !== null ? ' AND d.customer_id = :cid' : '';
+$scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
+$mostrarCliente = ($scopeCust === null);
+
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
-           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
+           COALESCE(cu.name, '—') AS customer_name
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = :cid
-    ORDER BY d.device_name ASC
+    LEFT JOIN customers cu ON cu.id = d.customer_id
+    WHERE 1=1 {$scopeSql}
+    ORDER BY cu.name, d.device_name ASC
 ");
-$devices->execute([':cid' => $customerId]);
+$devices->execute($scopeParams);
 $devices = $devices->fetchAll();
 
 // IMEI do GET só vale se pertencer ao cliente da sessão (multi-tenant)
@@ -231,16 +246,41 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div>
         <div class="card" style="margin-bottom:12px;padding:14px 16px;">
             <form method="GET" id="playback-form" style="display:flex;flex-direction:column;gap:10px;" onsubmit="return onSubmitRequest(event)">
+                <?php if ($isAdmin): ?>
+                <div>
+                    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+                    <?php /* Trocar de cliente recarrega sem `imei`: o equipamento
+                             da carteira anterior não existe na nova, e mantê-lo
+                             deixaria o formulário apontando para um device que a
+                             lista não oferece mais. */ ?>
+                    <select id="pb-cust" onchange="location.href='?customer_id='+this.value"
+                            style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                        <option value="">Todos os clientes</option>
+                        <?php foreach ($customers as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($c['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
+
                 <div>
                     <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
                     <select name="imei" id="pb-imei" onchange="pbRebuildChannels()" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                         <?php foreach ($devices as $d): ?>
                         <option value="<?= $d['imei'] ?>" data-cam="<?= $d['camera_count']??1 ?>" data-proto="<?= htmlspecialchars($d['protocol'] ?? 'JTT') ?>" <?= $selImei===$d['imei']?'selected':'' ?>>
-                            <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
+                            <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
                         </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php if ($isAdmin): ?>
+                <?php /* O form é GET: sem este hidden, submeter o filtro de
+                         playback perderia o cliente escolhido e a tela voltaria
+                         para "todos" a cada consulta. */ ?>
+                <input type="hidden" name="customer_id" value="<?= $scopeCust !== null ? (int)$scopeCust : '' ?>">
+                <?php endif; ?>
 
                 <div style="display:flex;gap:8px;">
                     <div style="flex:1;">

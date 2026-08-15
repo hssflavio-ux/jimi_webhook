@@ -28,6 +28,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/command_response.php';
+require_once __DIR__ . '/../includes/fleet_state.php';  // presença: ponto único de "está online?"
 // A permissão de tela é aplicada pelo router (`$screenByHandler`); repetir aqui
 // só duplicaria a checagem.
 require_login();
@@ -73,11 +74,12 @@ $devices = $db->prepare("
            COALESCE(dm.model_name, d.device_model, '-') AS model_display,
            COALESCE(dm.protocol, 'JIMI') AS protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
-           d.last_communication,
-           TIMESTAMPDIFF(MINUTE, d.last_communication, UTC_TIMESTAMP()) AS mudo_min,
+           " . device_last_seen_sql() . " AS last_communication,
+           TIMESTAMPDIFF(MINUTE, " . device_last_seen_sql() . ", UTC_TIMESTAMP()) AS mudo_min,
            COALESCE(cu.name, '—') AS customer_name
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
+    LEFT JOIN device_statistics ds ON ds.imei = d.imei
     LEFT JOIN customers cu ON cu.id = d.customer_id
     WHERE d.is_active = 1 {$scopeSql}
     ORDER BY cu.name, d.device_name
@@ -90,31 +92,17 @@ $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
 // na linha só nesse caso — repeti-lo com escopo fixo seria ruído.
 $mostrarCliente = ($scopeCust === null);
 
-/**
- * Presença do equipamento a partir do último contato.
- *
- * A fonte é `devices.last_communication`, que o gateway atualiza a cada
- * heartbeat — conferido em produção contra `MAX(heartbeats.created_at)`: bate
- * equipamento a equipamento.
- *
- * ⚠️ Isto informa, **não bloqueia**. Comando para equipamento offline é um
- * fluxo legítimo e suportado: o IoT Hub converte em comando de fila
- * ("converted to an offline command") e entrega quando o device reconecta.
- * Desabilitar o envio quebraria esse uso.
- *
- * @param int|null $min Minutos desde o último contato
- * @returns array{nivel:string, rotulo:string}
- */
-function presenca_device(?int $min): array
-{
-    if ($min === null)  return ['nivel' => 'neutro',     'rotulo' => 'sem contato registrado'];
-    if ($min < 0)       return ['nivel' => 'ok',         'rotulo' => 'agora'];
-    if ($min <= 15)     return ['nivel' => 'ok',         'rotulo' => 'online'];
-    if ($min <= 60)     return ['nivel' => 'aguardando', 'rotulo' => 'há ' . $min . ' min'];
-    if ($min <= 1440)   return ['nivel' => 'aguardando', 'rotulo' => 'há ' . intdiv($min, 60) . 'h'];
-    return ['nivel' => 'erro', 'rotulo' => 'há ' . intdiv($min, 1440) . 'd'];
-}
-foreach ($devices as &$d) { $d['presenca'] = presenca_device(isset($d['mudo_min']) ? (int)$d['mudo_min'] : null); }
+// Presença pelo ponto único (`device_presence()` / `device_last_seen_sql()`).
+//
+// ⚠️ Isto informa, **não bloqueia**. Comando para equipamento offline é um
+// fluxo legítimo e suportado: o IoT Hub converte em comando de fila
+// ("converted to an offline command") e entrega quando o device reconecta.
+//
+// 🔴 A v4.9.21 calculava isto aqui, com `last_communication` sozinho e limiar
+// próprio de 15 min — uma terceira resposta para "está online?" num sistema
+// que já tinha unificado as outras duas. Latente enquanto os equipamentos
+// mandam LBS com frequência; divergiria no dia em que um parasse.
+foreach ($devices as &$d) { $d['presenca'] = device_presence(isset($d['mudo_min']) ? (int)$d['mudo_min'] : null); }
 unset($d);
 
 // ── Catálogo de comandos de texto (proNo 128) ──────────────────────────────
