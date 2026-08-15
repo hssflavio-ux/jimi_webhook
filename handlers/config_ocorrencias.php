@@ -198,6 +198,52 @@ $stmt = $db->query(
 );
 $alarmTypes = $stmt->fetchAll();
 
+// ── Parâmetro gravado com valor FORA da lista acima ─────────────────────────
+//
+// `occurrence_config_params.alarm_type` aceita três formas — nome do evento,
+// CÓDIGO (`1047`) e CATEGORIA (`conducao`) —, e a lista do `<select>` só traz
+// nomes, e só de algumas categorias. Um parâmetro gravado em qualquer outra
+// forma não casava com nenhuma `<option>`: a linha abria em branco e, no
+// primeiro salvamento, o parâmetro era **apagado** sem ninguém pedir. Como
+// `get_occurrence_param()` retorna cedo quando não acha parâmetro, o efeito é
+// o modo de falha caro deste sistema — o evento simplesmente para de gerar
+// ocorrência, sem erro em log nem na tela.
+//
+// Aqui o valor é preservado E traduzido: código vira o nome do evento e
+// categoria vira o rótulo em pt-BR, para a tela não mostrar "1047" onde as
+// outras mostram "Capotamento".
+$rotuloForaDaLista = [];
+$valoresGravados = array_values(array_unique(array_filter(array_column($editParams, 'alarm_type'))));
+$foraDaLista = array_values(array_diff($valoresGravados, array_column($alarmTypes, 'alarm_name_pt')));
+if ($foraDaLista) {
+    foreach ($foraDaLista as $v) {
+        $rotuloForaDaLista[$v] = $v; // último recurso: o valor cru, visível
+    }
+    $ph = implode(',', array_fill(0, count($foraDaLista), '?'));
+    try {
+        // Código: o MESMO número significa coisas diferentes em JIMI e JT/T
+        // (ADR-001), então os nomes vêm concatenados em vez de escolhidos.
+        $st = $db->prepare(
+            "SELECT alarm_code,
+                    GROUP_CONCAT(DISTINCT alarm_name_pt ORDER BY alarm_name_pt SEPARATOR ' / ') AS nomes
+               FROM alarm_types WHERE alarm_code IN ($ph) GROUP BY alarm_code"
+        );
+        $st->execute($foraDaLista);
+        foreach ($st->fetchAll() as $r) {
+            $rotuloForaDaLista[$r['alarm_code']] = $r['nomes'] . ' — código ' . $r['alarm_code'];
+        }
+        $st = $db->prepare("SELECT DISTINCT category FROM alarm_types WHERE category IN ($ph)");
+        $st->execute($foraDaLista);
+        foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $cat) {
+            $rotuloForaDaLista[$cat] = alarm_category_label($cat) . ' — categoria inteira';
+        }
+    } catch (Throwable $e) {
+        Logger::error('Falha ao traduzir parâmetros fora do catálogo', [
+            'source' => 'config_ocorrencias', 'error' => $e->getMessage(),
+        ]);
+    }
+}
+
 $page_title = 'Configurações de Ocorrências';
 $current_route = 'config-ocorrencias';
 require_once __DIR__ . '/../web/layout_base.php';
@@ -254,6 +300,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                             onchange="this.style.color = this.value ? 'var(--ink)' : 'var(--muted)'">
                         <option value="">— Selecione o alarme —</option>
                         <?php
+                        // Valor gravado que a lista não contém — ver a nota em
+                        // $rotuloForaDaLista. Sem esta opção a linha abria em
+                        // branco e o parâmetro sumia no salvamento.
+                        if (!empty($p['alarm_type']) && isset($rotuloForaDaLista[$p['alarm_type']])) {
+                            echo '<option value="' . htmlspecialchars($p['alarm_type']) . '" selected>'
+                               . htmlspecialchars($rotuloForaDaLista[$p['alarm_type']])
+                               . '</option>';
+                        }
                         $lastCat = null;
                         foreach ($alarmTypes as $at):
                             if ($at['category'] !== $lastCat):

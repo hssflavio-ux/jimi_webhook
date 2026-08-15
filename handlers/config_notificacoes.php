@@ -183,6 +183,12 @@ if ($action === 'editar' && !empty($_GET['id'])) {
 }
 
 // ── Lista ──────────────────────────────────────────────────────
+//
+// `evento_nome` existe porque a regra gravada por CÓDIGO (`1047`) — forma que
+// `resolve_notification_rule()` aceita — era impressa crua, com o número no
+// lugar do evento. O mesmo número significa coisas diferentes em JIMI e JT/T
+// (ADR-001) e o motor casa os dois, então os nomes vêm CONCATENADOS: escolher
+// um esconderia metade do alcance real da regra.
 $rules = [];
 try {
     if ($isAdmin) {
@@ -193,7 +199,11 @@ try {
                     EXISTS(SELECT 1 FROM alarm_types t
                             WHERE t.alarm_name_pt = nr.alarm_type
                                OR t.alarm_name_en = nr.alarm_type
-                               OR t.alarm_code    = nr.alarm_type) AS is_evento
+                               OR t.alarm_code    = nr.alarm_type) AS is_evento,
+                    (SELECT GROUP_CONCAT(DISTINCT t.alarm_name_pt
+                                         ORDER BY t.alarm_name_pt SEPARATOR ' / ')
+                       FROM alarm_types t
+                      WHERE t.alarm_code = nr.alarm_type) AS evento_nome
              FROM notification_rules nr
              LEFT JOIN customers c ON c.id = nr.customer_id
              WHERE nr.customer_id IS NULL OR nr.customer_id = :cid
@@ -208,7 +218,11 @@ try {
                     EXISTS(SELECT 1 FROM alarm_types t
                             WHERE t.alarm_name_pt = nr.alarm_type
                                OR t.alarm_name_en = nr.alarm_type
-                               OR t.alarm_code    = nr.alarm_type) AS is_evento
+                               OR t.alarm_code    = nr.alarm_type) AS is_evento,
+                    (SELECT GROUP_CONCAT(DISTINCT t.alarm_name_pt
+                                         ORDER BY t.alarm_name_pt SEPARATOR ' / ')
+                       FROM alarm_types t
+                      WHERE t.alarm_code = nr.alarm_type) AS evento_nome
              FROM notification_rules nr
              LEFT JOIN customers c ON c.id = nr.customer_id
              WHERE nr.customer_id = :cid
@@ -245,6 +259,35 @@ try {
         "SELECT DISTINCT category FROM alarm_types WHERE category IS NOT NULL AND category <> '' ORDER BY category"
     )->fetchAll(PDO::FETCH_COLUMN);
 } catch (Exception $e) {}
+
+// Regra gravada por CÓDIGO (`1047`) — forma que `resolve_notification_rule()`
+// aceita — não casava com nenhuma `<option>` do formulário, que só oferece
+// categorias e nomes. A tela abria com "— Selecione —" e o campo é `required`:
+// a única saída era escolher OUTRO alarme, reescrevendo a regra sem que
+// ninguém percebesse que ela já existia. A opção abaixo preserva o valor e
+// mostra o NOME do evento no lugar do número.
+$editRuleForaDaLista = null;
+$editVal = (string)($editRule['alarm_type'] ?? '');
+if ($editVal !== ''
+    && !in_array($editVal, $categories, true)
+    && !in_array($editVal, array_column($alarmTypes, 'alarm_name_pt'), true)) {
+    $editRuleForaDaLista = $editVal;
+    try {
+        $st = $db->prepare(
+            "SELECT GROUP_CONCAT(DISTINCT alarm_name_pt ORDER BY alarm_name_pt SEPARATOR ' / ') AS nomes
+               FROM alarm_types WHERE alarm_code = :v OR alarm_name_en = :v2"
+        );
+        $st->execute([':v' => $editVal, ':v2' => $editVal]);
+        $nomes = $st->fetchColumn();
+        if ($nomes) {
+            $editRuleForaDaLista = $nomes . ' — gravada como "' . $editVal . '"';
+        }
+    } catch (Throwable $e) {
+        Logger::error('Falha ao traduzir regra fora do catálogo', [
+            'source' => 'config_notificacoes', 'error' => $e->getMessage(),
+        ]);
+    }
+}
 
 $smtpOk = mail_is_configured($customerId);
 
@@ -289,6 +332,9 @@ require_once __DIR__ . '/../web/layout_base.php';
             <label>Tipo de Alarme</label>
             <select name="alarm_type" required style="width:100%;padding:9px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">— Selecione —</option>
+                <?php if ($editRuleForaDaLista !== null): ?>
+                <option value="<?= htmlspecialchars($editVal) ?>" selected><?= htmlspecialchars($editRuleForaDaLista) ?></option>
+                <?php endif; ?>
                 <?php if ($categories): ?>
                 <optgroup label="Categorias inteiras">
                     <?php foreach ($categories as $cat): ?>
@@ -432,6 +478,13 @@ require_once __DIR__ . '/../web/layout_base.php';
                     if (!empty($r['is_categoria'])) {
                         echo '<span class="badge badge-info" style="font-weight:600;margin-right:6px;">Categoria</span>';
                         echo htmlspecialchars(alarm_category_label($r['alarm_type']));
+                    } elseif (!empty($r['evento_nome'])) {
+                        // Gravada por código: mostra o NOME do evento, com o
+                        // código ao lado — quem gravou assim precisa reconhecer
+                        // a própria regra na lista.
+                        echo htmlspecialchars($r['evento_nome']);
+                        echo '<span class="text-mono" style="font-size:11px;color:var(--muted);margin-left:6px;">código '
+                           . htmlspecialchars($r['alarm_type']) . '</span>';
                     } else {
                         echo htmlspecialchars($r['alarm_type']);
                     }

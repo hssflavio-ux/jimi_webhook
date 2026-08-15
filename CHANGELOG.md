@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.19
+
+**O BI passa a falar o nome do evento.** Era a última tela que agrupava, rotulava e filtrava pelo **código cru**: o gráfico dizia `264` e `45` onde o Relatório de Alarmes, `/relatorios` e a aba de alertas do ativo já diziam *Fadiga do Motorista* e *Capotamento* — as três foram convertidas na v4.9.10 e o BI ficou para trás.
+
+### Fixed
+- **`/bi` resolve o nome pelo mesmo ponto único das outras telas** (`alarm_label_sql()`): rótulos do "Top 10", chips do multiselect e o filtro que eles alimentam. O filtro casa contra o nome **resolvido**, não contra a coluna gravada — senão o evento que o gráfico mostra como "Capotamento" sumiria ao marcar o próprio chip, porque em `alarms.alarm_name` ele pode estar congelado como `Código 1047 (JTT)`.
+- 🔴 **Quatro defeitos que só apareceram ao trocar código por nome — todos escondidos pelo mesmo `catch (Exception $e) {}` vazio**, que exibia erro de SQL como "nenhum dado no período":
+  1. **Nenhum gráfico de alarme tinha dado quando não havia chip marcado.** O formulário envia `alarm_types` mesmo vazio, `explode(',', '')` devolve `['']` e `!empty([''])` é **verdadeiro** — o filtro virava `IN ('')`, que não casa com nada. Ou seja: o caminho padrão da tela.
+  2. **`alarms` não tem `customer_id`.** O ramo do admin filtrava por `a.customer_id` e derrubava a consulta inteira em *Unknown column*. O cliente vem de `devices`. De quebra, o escopo multi-tenant passou pelo ponto único (`report_customer_scope()`), como manda o CLAUDE.md.
+  3. **O filtro de motorista (`o.driver_id`) ia junto para as consultas de `alarms`**, onde o alias `o` não existe — escolher um motorista zerava a tela inteira.
+  4. **`Ocorrências por Risco` não tinha `GROUP BY`**: a rosca de três fatias vinha de uma linha só.
+- **Marcar qualquer chip zerava os dois gráficos de ocorrência.** `occurrences.alarm_type` guarda o **nome** (é o que `process_alarm_to_occurrence()` grava), e o filtro comparava com o **código**. Com o filtro por nome, os dois lados passam a casar.
+- **Parâmetro de perfil gravado fora da lista do `<select>` era apagado no primeiro salvamento.** `occurrence_config_params.alarm_type` aceita nome, **código** e **categoria** — o `<select>` de `/config-ocorrencias` só oferece nomes, e só de algumas categorias. O que não casava abria em branco e sumia ao salvar; como `get_occurrence_param()` retorna cedo sem parâmetro, o evento parava de gerar ocorrência **em silêncio**. Agora o valor é preservado numa opção própria e **traduzido**: código vira o nome do evento, categoria vira o rótulo em pt-BR.
+- **Mesma correção em `/config-notificacoes`**: regra gravada por código aparecia como número na lista e abria o formulário em branco (campo `required` — a única saída era reescrever a regra por cima). Passa a mostrar o **nome do evento** com o código ao lado. Como o mesmo número significa coisas diferentes em JIMI e JT/T (ADR-001) e o motor casa os dois, os nomes vêm **concatenados** em vez de escolhidos.
+
+### Changed
+- Os chips do BI passam a usar `web/components/chips_multiselect.php` — componente que foi **extraído desta própria tela** na v4.2.0 e nunca reaproveitado aqui. Some a cópia de CSS/JS que vivia só no `bi.php` e que já divergia da do Relatório de Alarmes.
+- O `catch` mudo do BI virou `Logger::error` + aviso na tela. Os quatro defeitos acima sobreviveram porque não havia diferença visível entre "erro de SQL" e "período sem alarme".
+
 ## [Unreleased] — 4.9.14
 
 **F3 do `PROJETO_PARAMETROS.md`** — a escrita. É a única parte do projeto que mexe em equipamento em operação.
