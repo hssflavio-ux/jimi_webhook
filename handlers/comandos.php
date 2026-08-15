@@ -35,6 +35,29 @@ require_login();
 $db          = Database::getInstance()->getConnection();
 $customer_id = get_customer_id();
 
+// ── Escopo multi-tenant ────────────────────────────────────────────────────
+//
+// Até a v4.9.21 esta tela era presa ao cliente da sessão: o administrador só
+// enxergava comandos do cliente em que estivesse posicionado, sem como olhar
+// a base inteira nem recortar por um cliente específico.
+//
+// O `?customer_id` passa OBRIGATORIAMENTE por `report_customer_scope()` (ver
+// CLAUDE.md): para quem não é admin o parâmetro é **ignorado**, não validado —
+// obedecê-lo seria deixar qualquer usuário ler comandos de outro cliente
+// trocando um número na URL. Para revendedor, o helper restringe à carteira
+// dele. NULL só acontece para admin de plataforma e significa "todos".
+$user       = get_jimi_user();
+$isAdmin    = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+$filtroCust = $_GET['customer_id'] ?? null;
+$scopeCust  = report_customer_scope($filtroCust, $isAdmin, $customer_id);
+$customers  = $isAdmin ? report_customer_options($db) : [];
+
+// Cláusula reaproveitada pelas três consultas da tela. Com escopo resolvido,
+// filtra; sem escopo (admin vendo tudo), não filtra — mas a lista de clientes
+// continua vindo de `report_customer_options()`, que já respeita a carteira.
+$scopeSql    = $scopeCust !== null ? ' AND d.customer_id = :cid' : '';
+$scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
+
 /** Data/hora curta em BRT para as grades desta tela. */
 function fmt_brt_cmd($dt) { return fmt_brt($dt, 'd/m H:i:s'); }
 
@@ -51,14 +74,21 @@ $devices = $db->prepare("
            COALESCE(dm.protocol, 'JIMI') AS protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
            d.last_communication,
-           TIMESTAMPDIFF(MINUTE, d.last_communication, UTC_TIMESTAMP()) AS mudo_min
+           TIMESTAMPDIFF(MINUTE, d.last_communication, UTC_TIMESTAMP()) AS mudo_min,
+           COALESCE(cu.name, '—') AS customer_name
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = :cid AND d.is_active = 1
-    ORDER BY d.device_name
+    LEFT JOIN customers cu ON cu.id = d.customer_id
+    WHERE d.is_active = 1 {$scopeSql}
+    ORDER BY cu.name, d.device_name
 ");
-$devices->execute([':cid' => $customer_id]);
+$devices->execute($scopeParams);
 $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
+
+// Com "todos os clientes" a lista de envio mistura carteiras, e disparar
+// comando no veículo do cliente errado é dano real. O nome do cliente entra
+// na linha só nesse caso — repeti-lo com escopo fixo seria ruído.
+$mostrarCliente = ($scopeCust === null);
 
 /**
  * Presença do equipamento a partir do último contato.
@@ -129,7 +159,16 @@ $jttCmds = [
 ];
 
 // ── Histórico, já interpretado do lado do servidor ─────────────────────────
-$filtroImei   = trim($_GET['imei'] ?? '');
+// O filtro de equipamento passou a aceitar VÁRIOS (lista separada por vírgula).
+// Um valor só continua funcionando — links antigos e favoritos não quebram.
+// Os IMEIs são conferidos contra a lista visível ao usuário: assim o parâmetro
+// da URL não escolhe equipamento fora do escopo, mesmo que o JOIN já barrasse.
+$imeisVisiveis = array_column($devices, 'imei');
+$filtroImeis   = array_values(array_intersect(
+    array_filter(array_map('trim', explode(',', (string)($_GET['imei'] ?? '')))),
+    $imeisVisiveis
+));
+$filtroImei   = $filtroImeis[0] ?? '';        // compatibilidade com o que já lia um só
 $filtroDesf   = trim($_GET['desfecho'] ?? '');
 
 // Período em dias BRT → janela UTC (o banco é todo UTC). Padrão: 7 dias.
@@ -147,25 +186,40 @@ if ($filtroDe > $filtroAte) [$filtroDe, $filtroAte] = [$filtroAte, $filtroDe];
 const CMD_HIST_TETO = 2000;
 const CMD_POR_PAGINA = 25;
 
+$imeiSql    = '';
+$imeiParams = [];
+if ($filtroImeis) {
+    $ph = [];
+    foreach ($filtroImeis as $i => $im) { $ph[] = ":im$i"; $imeiParams[":im$i"] = $im; }
+    $imeiSql = ' AND c.imei IN (' . implode(',', $ph) . ')';
+}
+
 $hist = $db->prepare("
     SELECT c.id, c.imei, c.command_content, c.status, c.response_payload,
            c.created_at, c.response_time,
            COALESCE(NULLIF(d.device_name,''), c.imei) AS device_name,
-           COALESCE(dm.model_name, d.device_model, '-') AS model_display
+           COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+           COALESCE(cu.name, '—') AS customer_name
     FROM commands c
     JOIN devices d ON c.imei = d.imei
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = :cid
-      AND (:imei = '' OR c.imei = :imei2)
-      AND c.created_at BETWEEN :de AND :ate
+    LEFT JOIN customers cu ON cu.id = d.customer_id
+    WHERE c.created_at BETWEEN :de AND :ate
+      {$scopeSql}{$imeiSql}
     ORDER BY c.created_at DESC LIMIT " . CMD_HIST_TETO . "
 ");
-$hist->execute([
-    ':cid' => $customer_id, ':imei' => $filtroImei, ':imei2' => $filtroImei,
-    ':de'  => $janelaDe,    ':ate'  => $janelaAte,
-]);
+$hist->execute(array_merge(
+    [':de' => $janelaDe, ':ate' => $janelaAte],
+    $scopeParams, $imeiParams
+));
 $hist = $hist->fetchAll(PDO::FETCH_ASSOC);
 $tetoEstourado = count($hist) >= CMD_HIST_TETO;
+
+// Rótulo de cada nível de desfecho. Fica aqui, e não só no HTML, porque a
+// exportação também precisa dele para escrever o filtro no subtítulo — o PDF
+// circula fora da tela e "erro" cru não diz de que recorte ele saiu.
+$chipsRotulos = ['ok' => 'executados', 'aguardando' => 'aguardando',
+                 'erro' => 'com erro', 'neutro' => 'informativos'];
 
 $linhas = [];
 $resumo = ['ok' => 0, 'aguardando' => 0, 'erro' => 0, 'neutro' => 0];
@@ -190,7 +244,7 @@ foreach ($hist as $h) {
 
     $linhas[] = [
         'id' => $h['id'], 'imei' => $h['imei'], 'placa' => $h['device_name'],
-        'modelo' => $h['model_display'],
+        'modelo' => $h['model_display'], 'cliente' => $h['customer_name'],
         'rotulo' => command_label((string)$h['command_content']),
         'enviado' => (string)$h['command_content'],
         'quando' => fmt_brt_cmd($h['created_at']),
@@ -219,11 +273,12 @@ $linhasPagina  = array_slice($linhas, ($pagina - 1) * CMD_POR_PAGINA, CMD_POR_PA
 function link_hist(array $troca = []): string
 {
     $base = array_filter([
-        'imei'     => $_GET['imei']     ?? '',
-        'desfecho' => $_GET['desfecho'] ?? '',
-        'de'       => $_GET['de']       ?? '',
-        'ate'      => $_GET['ate']      ?? '',
-        'p'        => $_GET['p']        ?? '',
+        'customer_id' => $_GET['customer_id'] ?? '',
+        'imei'        => $_GET['imei']        ?? '',
+        'desfecho'    => $_GET['desfecho']    ?? '',
+        'de'          => $_GET['de']          ?? '',
+        'ate'         => $_GET['ate']         ?? '',
+        'p'           => $_GET['p']           ?? '',
     ], fn($v) => $v !== '' && $v !== null);
     $q = array_filter(array_merge($base, $troca), fn($v) => $v !== '' && $v !== null);
     return '?' . http_build_query($q);
@@ -244,8 +299,8 @@ $offline = $db->prepare("
            COALESCE(NULLIF(d.device_name,''), cr.imei) AS device_name
     FROM command_responses cr
     JOIN devices d ON cr.imei = d.imei
-    WHERE d.customer_id = :cid
-      AND cr.created_at BETWEEN :de AND :ate
+    WHERE cr.created_at BETWEEN :de AND :ate
+      {$scopeSql}
       AND NOT EXISTS (
           SELECT 1 FROM commands c
           WHERE c.imei = cr.imei AND c.response_time IS NOT NULL
@@ -253,13 +308,65 @@ $offline = $db->prepare("
       )
     ORDER BY cr.created_at DESC LIMIT 20
 ");
-$offline->execute([':cid' => $customer_id, ':de' => $janelaDe, ':ate' => $janelaAte]);
+$offline->execute(array_merge([':de' => $janelaDe, ':ate' => $janelaAte], $scopeParams));
 $offline = $offline->fetchAll(PDO::FETCH_ASSOC);
 foreach ($offline as &$o) {
     $oEnv = command_response_extract($o['response_content']);
     $o['desfecho'] = command_response_interpret($oEnv['texto'], $oEnv['codigo'], $oEnv['conteudo']);
 }
 unset($o);
+
+// ── Exportação (XLSX / PDF), sensível aos MESMOS filtros da tela ───────────
+//
+// Sai daqui, antes de qualquer HTML: `stream_export()` manda cabeçalhos e
+// encerra o processo. Exporta o conjunto filtrado INTEIRO (`$linhas`), não a
+// página visível — quem pede relatório quer o recorte, não o pedaço que coube
+// na tela. O teto de leitura continua valendo e vai declarado no subtítulo,
+// para o arquivo nunca dar a entender que é completo quando não é.
+$export = strtolower(trim($_GET['export'] ?? ''));
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_once __DIR__ . '/../includes/export_helper.php';
+
+    $cabecalho = ['Quando', 'Cliente', 'Equipamento', 'Modelo', 'Comando',
+                  'Conteúdo enviado', 'Desfecho', 'Resposta do equipamento', 'Espera'];
+    $expRows = [];
+    foreach ($linhas as $l) {
+        $expRows[] = [
+            $l['quando'],
+            $l['cliente'],
+            $l['placa'],
+            $l['modelo'],
+            $l['rotulo'] . ($l['fila'] ? ' (na fila)' : ''),
+            $l['enviado'],
+            $l['desfecho']['titulo'],
+            $l['desfecho']['detalhe'] !== '' ? $l['desfecho']['detalhe'] : '—',
+            $l['espera'] ?: '—',
+        ];
+    }
+
+    // Subtítulo com o recorte inteiro: o PDF circula fora da tela, e sem isso
+    // ninguém sabe de qual cliente, período ou filtro aquele número saiu.
+    $rotCliente = 'Todos os clientes';
+    if ($scopeCust !== null) {
+        foreach ($customers as $c) if ((int)$c['id'] === (int)$scopeCust) $rotCliente = 'Cliente: ' . $c['name'];
+        if ($rotCliente === 'Todos os clientes') $rotCliente = 'Cliente ' . (int)$scopeCust;
+    }
+    $rotEquip = $filtroImeis
+        ? count($filtroImeis) . ' equipamento(s) selecionado(s)'
+        : 'Todos os equipamentos';
+    $rotDesf  = $filtroDesf !== ''
+        ? 'Desfecho: ' . ($chipsRotulos[$filtroDesf] ?? $filtroDesf)
+        : 'Todos os desfechos';
+    $subtitulo = $rotCliente . '  |  ' . $rotEquip . '  |  ' . $rotDesf
+               . '  |  ' . $filtroDe . ' a ' . $filtroAte
+               . ($tetoEstourado ? '  |  ATENÇÃO: cortado nos ' . CMD_HIST_TETO . ' mais recentes' : '');
+
+    stream_export($export, 'historico_comandos', $cabecalho, $expRows,
+        'Histórico de Comandos', $subtitulo,
+        // Conteúdo enviado e resposta são as colunas longas; as demais são
+        // curtas e de largura previsível.
+        [1.2, 1.2, 1.1, 0.9, 1.2, 2.6, 1.2, 2.6, 0.6]);
+}
 
 $deviceJson = json_encode($devices, JSON_UNESCAPED_UNICODE);
 $page_title    = 'Comandos';
@@ -363,6 +470,9 @@ include __DIR__ . '/../web/layout_base.php';
             <span class="res-dot dot-<?= htmlspecialchars($d['presenca']['nivel']) ?>" style="margin-top:0"></span>
             <?= htmlspecialchars($d['presenca']['rotulo']) ?>
           </span>
+          <?php if ($mostrarCliente): ?>
+            <span class="badge" style="font-size:10px" title="Cliente do equipamento"><?= htmlspecialchars($d['customer_name']) ?></span>
+          <?php endif; ?>
           <span class="dev-model"><?= htmlspecialchars($d['model_display']) ?></span>
           <span class="badge" style="font-size:10px"><?= $d['protocol'] === 'JIMI' ? 'JIMI' : 'JT/T' ?></span>
         </label>
@@ -451,15 +561,21 @@ include __DIR__ . '/../web/layout_base.php';
       </div>
     <?php endif; ?>
 
-    <form method="get" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-      <select name="imei" style="flex:1;min-width:130px;font-size:12px;padding:6px 8px">
-        <option value="">Todos os equipamentos</option>
-        <?php foreach ($devices as $d): ?>
-        <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $filtroImei === $d['imei'] ? 'selected' : '' ?>>
-          <?= htmlspecialchars($d['device_name']) ?>
-        </option>
-        <?php endforeach; ?>
-      </select>
+    <form method="get" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+      <?php if ($isAdmin): ?>
+        <?php /* Só para admin/revendedor. A LISTA vem de
+                 report_customer_options() e o FILTRO de report_customer_scope():
+                 restringir um sem o outro deixaria o revendedor lendo os nomes
+                 de clientes que não são dele num seletor sem efeito. */ ?>
+        <select name="customer_id" style="min-width:150px;font-size:12px;padding:6px 8px" title="Cliente">
+          <option value="">Todos os clientes</option>
+          <?php foreach ($customers as $c): ?>
+          <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+            <?= htmlspecialchars($c['name']) ?>
+          </option>
+          <?php endforeach; ?>
+        </select>
+      <?php endif; ?>
       <?php /* Datas são dias BRT; a conversão para a janela UTC do banco é
                feita por brt_day_range_to_utc(), nunca comparando direto. */ ?>
       <input type="date" name="de"  value="<?= htmlspecialchars($filtroDe) ?>"  style="font-size:12px;padding:5px 8px" title="De (dia BRT)">
@@ -472,7 +588,31 @@ include __DIR__ . '/../web/layout_base.php';
         <option value="neutro"     <?= $filtroDesf==='neutro'?'selected':'' ?>>Informativo</option>
       </select>
       <button class="btn btn-outline btn-sm" type="submit">Filtrar</button>
+
+      <?php
+      /* Equipamentos em multisseleção. Fica DENTRO do mesmo form: o hidden do
+         componente carrega os IMEIs separados por vírgula no `imei`, que é o
+         mesmo parâmetro de antes — link antigo com um IMEI só continua valendo. */
+      $chips_id       = 'cmddev';
+      $chips_label    = 'Equipamentos (nenhum = todos)';
+      $chips_param    = 'imei';
+      $chips_options  = array_column($devices, 'imei');
+      $chips_labels   = array_column($devices, 'device_name', 'imei');
+      $chips_selected = $filtroImeis;
+      $chips_visible  = 12;
+      include __DIR__ . '/../web/components/chips_multiselect.php';
+      ?>
     </form>
+
+    <?php /* Exportação sensível ao filtro: os mesmos parâmetros da URL atual,
+             mais `export=`. Sem a página — o arquivo leva o recorte inteiro. */ ?>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars(link_hist(['p' => '', 'export' => 'xlsx'])) ?>">Exportar Excel</a>
+      <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars(link_hist(['p' => '', 'export' => 'pdf'])) ?>">Exportar PDF</a>
+      <span style="font-size:11px;color:var(--muted);align-self:center">
+        <?= (int)$totalFiltrado ?> linha<?= $totalFiltrado === 1 ? '' : 's' ?> no filtro atual
+      </span>
+    </div>
 
     <?php /* Auto-atualização opcional. Fica DESLIGADA por padrão e a escolha
              persiste em localStorage — recarregar a página sozinha é aceitável
@@ -493,7 +633,7 @@ include __DIR__ . '/../web/layout_base.php';
        número acabou de levantar. O nível `neutro` também passou a aparecer:
        era contado e filtrável, mas invisível, e a soma dos três não batia
        com o total de registros. */
-    $chips = ['ok' => 'executados', 'aguardando' => 'aguardando', 'erro' => 'com erro', 'neutro' => 'informativos'];
+    $chips = $chipsRotulos;   // definido junto com a interpretação, ver acima
     ?>
     <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap">
       <?php foreach ($chips as $nivel => $rotulo): ?>
@@ -512,7 +652,8 @@ include __DIR__ . '/../web/layout_base.php';
     <div style="max-height:520px;overflow-y:auto">
       <table style="font-size:12px;width:100%">
         <thead><tr>
-          <th>Quando</th><th>Placa</th><th>Comando</th><th>Desfecho</th><th>Espera</th>
+          <th>Quando</th><?php if ($mostrarCliente): ?><th>Cliente</th><?php endif; ?>
+          <th>Placa</th><th>Comando</th><th>Desfecho</th><th>Espera</th>
         </tr></thead>
         <tbody>
         <?php foreach ($linhasPagina as $l): ?>
@@ -524,6 +665,9 @@ include __DIR__ . '/../web/layout_base.php';
               onclick="verDetalhe(<?= (int)$l['id'] ?>)"
               onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();verDetalhe(<?= (int)$l['id'] ?>)}">
             <td style="white-space:nowrap"><?= htmlspecialchars($l['quando']) ?></td>
+            <?php if ($mostrarCliente): ?>
+              <td style="font-size:11px"><?= htmlspecialchars($l['cliente']) ?></td>
+            <?php endif; ?>
             <td>
               <?= htmlspecialchars($l['placa']) ?>
               <div class="dev-model"><?= htmlspecialchars($l['modelo']) ?></div>
@@ -558,7 +702,7 @@ include __DIR__ . '/../web/layout_base.php';
           </tr>
         <?php endforeach; ?>
         <?php if (empty($linhasPagina)): ?>
-          <tr><td colspan="5"><div class="empty-state"><p>Nenhum comando no período e filtro atuais.</p></div></td></tr>
+          <tr><td colspan="<?= $mostrarCliente ? 6 : 5 ?>"><div class="empty-state"><p>Nenhum comando no período e filtro atuais.</p></div></td></tr>
         <?php endif; ?>
         </tbody>
       </table>

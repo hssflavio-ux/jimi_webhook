@@ -9,11 +9,20 @@
  *   $chips_id       string  Prefixo único no DOM (ex.: 'alarmtypes')
  *   $chips_label    string  Rótulo do campo
  *   $chips_param    string  Nome do parâmetro GET (ex.: 'alarm_types')
- *   $chips_options  array   Lista de opções (strings)
+ *   $chips_options  array   Lista de opções (strings) — são os VALORES enviados
  *   $chips_selected array   Opções pré-selecionadas
  *   $chips_visible  int     Quantos chips mostrar antes do "+N" (default 15)
+ *   $chips_labels   array   OPCIONAL, mapa valor => rótulo exibido
+ *
+ * `$chips_labels` existe porque o componente nasceu para tipos de alarme, onde
+ * o valor É o texto. Equipamento não funciona assim: o valor tem de ser o
+ * `imei` (é por ele que as consultas casam) e o rótulo tem de ser a placa.
+ * Sem o mapa, a alternativa seria filtrar por NOME de equipamento — e dois
+ * veículos com a mesma placa cadastrada passariam a se confundir no filtro.
+ * Ausente, o comportamento é idêntico ao anterior.
  */
 $chips_visible = $chips_visible ?? 15;
+$chips_labels  = $chips_labels  ?? [];
 $_shown = array_slice($chips_options, 0, $chips_visible);
 $_hiddenCount = max(0, count($chips_options) - $chips_visible);
 ?>
@@ -52,7 +61,7 @@ function yuvChipsExpand(id) {
         ?>
         <span class="yuv-chip<?= $_sel ? ' selected' : '' ?>" data-value="<?= htmlspecialchars($_opt) ?>"
               onclick="yuvChipToggle(this, '<?= $chips_id ?>')" style="<?= $_hidden ? 'display:none;' : '' ?>">
-            <?= htmlspecialchars($_opt) ?>
+            <?= htmlspecialchars($chips_labels[$_opt] ?? $_opt) ?>
         </span>
         <?php endforeach; ?>
         <?php if ($_hiddenCount > 0): ?>

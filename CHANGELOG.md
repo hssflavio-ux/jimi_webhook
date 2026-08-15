@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.22
+
+**A tela de comandos era presa ao cliente da sessão, e o histórico não saía de lá.** O administrador só enxergava os comandos do cliente em que estivesse posicionado — sem olhar a base inteira, sem recortar por cliente e sem levar o histórico para fora da tela.
+
+### Added
+- **Filtro de cliente para admin e revendedor.** O `?customer_id` passa por `report_customer_scope()` e a lista por `report_customer_options()`, como manda o CLAUDE.md: para quem não é admin o parâmetro é **ignorado**, não validado — obedecê-lo deixaria qualquer usuário ler comandos de outro cliente trocando um número na URL; para revendedor, o escopo é a carteira dele.
+  - Com "Todos os clientes" a lista de envio mistura carteiras, e disparar comando no veículo do cliente errado é dano real: nesse modo — e só nele — o nome do cliente aparece na linha do equipamento e numa coluna do histórico.
+- **Filtro de vários equipamentos** (multisseleção com chips) no lugar do seletor de um só. O parâmetro continua sendo `imei`, agora aceitando lista separada por vírgula: **link antigo com um IMEI continua valendo**. Os IMEIs recebidos são conferidos contra a lista visível ao usuário, para o parâmetro da URL não alcançar equipamento fora do escopo.
+- **Exportação do histórico em Excel, PDF e CSV**, sensível aos mesmos filtros da tela (cliente, equipamentos, período, desfecho). Exporta o recorte **inteiro**, não a página visível — quem pede relatório quer o filtro, não o pedaço que coube na tela. O subtítulo carrega cliente, equipamentos, desfecho e período, porque o PDF circula fora da tela e um número sem recorte não diz nada; quando o teto de leitura é atingido, o arquivo declara isso em vez de parecer completo.
+
+### Changed
+- `web/components/chips_multiselect.php` aceita `$chips_labels` (mapa valor ⇒ rótulo). O componente nasceu para tipos de alarme, onde o valor **é** o texto; equipamento precisa de `imei` como valor e placa como rótulo. Sem o mapa a alternativa seria filtrar por nome, e dois veículos com a mesma placa cadastrada passariam a se confundir. Ausente, o comportamento é idêntico ao anterior.
+
 ## [Unreleased] — 4.9.21
 
 **A tela de comandos passa a dizer se o equipamento está online — sem impedir o envio para quem não está.** Comando para equipamento offline é fluxo suportado de ponta a ponta (o IoT Hub responde `converted to an offline command`, guarda e entrega no reconecte), então a presença **informa e só**: quem programa manutenção manda comando de madrugada justamente para o veículo desligado.
