@@ -49,7 +49,9 @@ $devices = $db->prepare("
            COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name,
            COALESCE(dm.model_name, d.device_model, '-') AS model_display,
            COALESCE(dm.protocol, 'JIMI') AS protocol,
-           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
+           d.last_communication,
+           TIMESTAMPDIFF(MINUTE, d.last_communication, UTC_TIMESTAMP()) AS mudo_min
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     WHERE d.customer_id = :cid AND d.is_active = 1
@@ -57,6 +59,33 @@ $devices = $db->prepare("
 ");
 $devices->execute([':cid' => $customer_id]);
 $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
+
+/**
+ * Presença do equipamento a partir do último contato.
+ *
+ * A fonte é `devices.last_communication`, que o gateway atualiza a cada
+ * heartbeat — conferido em produção contra `MAX(heartbeats.created_at)`: bate
+ * equipamento a equipamento.
+ *
+ * ⚠️ Isto informa, **não bloqueia**. Comando para equipamento offline é um
+ * fluxo legítimo e suportado: o IoT Hub converte em comando de fila
+ * ("converted to an offline command") e entrega quando o device reconecta.
+ * Desabilitar o envio quebraria esse uso.
+ *
+ * @param int|null $min Minutos desde o último contato
+ * @returns array{nivel:string, rotulo:string}
+ */
+function presenca_device(?int $min): array
+{
+    if ($min === null)  return ['nivel' => 'neutro',     'rotulo' => 'sem contato registrado'];
+    if ($min < 0)       return ['nivel' => 'ok',         'rotulo' => 'agora'];
+    if ($min <= 15)     return ['nivel' => 'ok',         'rotulo' => 'online'];
+    if ($min <= 60)     return ['nivel' => 'aguardando', 'rotulo' => 'há ' . $min . ' min'];
+    if ($min <= 1440)   return ['nivel' => 'aguardando', 'rotulo' => 'há ' . intdiv($min, 60) . 'h'];
+    return ['nivel' => 'erro', 'rotulo' => 'há ' . intdiv($min, 1440) . 'd'];
+}
+foreach ($devices as &$d) { $d['presenca'] = presenca_device(isset($d['mudo_min']) ? (int)$d['mudo_min'] : null); }
+unset($d);
 
 // ── Catálogo de comandos de texto (proNo 128) ──────────────────────────────
 $catalogo = require __DIR__ . '/../includes/command_catalog.php';
@@ -102,6 +131,22 @@ $jttCmds = [
 // ── Histórico, já interpretado do lado do servidor ─────────────────────────
 $filtroImei   = trim($_GET['imei'] ?? '');
 $filtroDesf   = trim($_GET['desfecho'] ?? '');
+
+// Período em dias BRT → janela UTC (o banco é todo UTC). Padrão: 7 dias.
+$filtroDe  = trim($_GET['de']  ?? '') ?: brt_today('Y-m-d', '-6 days');
+$filtroAte = trim($_GET['ate'] ?? '') ?: brt_today('Y-m-d');
+if ($filtroDe > $filtroAte) [$filtroDe, $filtroAte] = [$filtroAte, $filtroDe];
+[$janelaDe, $janelaAte] = brt_day_range_to_utc($filtroDe, $filtroAte);
+
+// 🔴 Teto de segurança. A paginação NÃO pode ser feita no SQL: o filtro de
+// desfecho depende de interpretar o payload em PHP, então um `LIMIT 25` no
+// banco devolveria páginas de tamanho variável e contagens erradas nos chips
+// do resumo. Lê-se a janela inteira, interpreta-se, e a paginação acontece
+// depois — por isso o período tem um teto, e por isso ele é avisado na tela
+// quando estoura, em vez de truncar em silêncio.
+const CMD_HIST_TETO = 2000;
+const CMD_POR_PAGINA = 25;
+
 $hist = $db->prepare("
     SELECT c.id, c.imei, c.command_content, c.status, c.response_payload,
            c.created_at, c.response_time,
@@ -112,10 +157,15 @@ $hist = $db->prepare("
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     WHERE d.customer_id = :cid
       AND (:imei = '' OR c.imei = :imei2)
-    ORDER BY c.created_at DESC LIMIT 200
+      AND c.created_at BETWEEN :de AND :ate
+    ORDER BY c.created_at DESC LIMIT " . CMD_HIST_TETO . "
 ");
-$hist->execute([':cid' => $customer_id, ':imei' => $filtroImei, ':imei2' => $filtroImei]);
+$hist->execute([
+    ':cid' => $customer_id, ':imei' => $filtroImei, ':imei2' => $filtroImei,
+    ':de'  => $janelaDe,    ':ate'  => $janelaAte,
+]);
 $hist = $hist->fetchAll(PDO::FETCH_ASSOC);
+$tetoEstourado = count($hist) >= CMD_HIST_TETO;
 
 $linhas = [];
 $resumo = ['ok' => 0, 'aguardando' => 0, 'erro' => 0, 'neutro' => 0];
@@ -145,6 +195,11 @@ foreach ($hist as $h) {
         'enviado' => (string)$h['command_content'],
         'quando' => fmt_brt_cmd($h['created_at']),
         'espera' => $espera, 'status' => $h['status'], 'desfecho' => $desf,
+        // Comando na FILA OFFLINE: o gateway aceitou, o equipamento não estava
+        // conectado e a entrega fica pendente até ele voltar. É um estado
+        // legítimo e de espera — diferente de "falhou" —, e sem rótulo próprio
+        // era lido como erro por quem opera.
+        'fila' => ($h['status'] === 'sent' && $desf['nivel'] === 'aguardando'),
         'kv' => command_response_kv($desf['detalhe']),
         // Envelope cru, para o detalhe. Quando a interpretação erra — e ela
         // errou por meses lendo o campo errado — sem isto ninguém consegue ver
@@ -153,6 +208,58 @@ foreach ($hist as $h) {
         'bruto' => mb_substr((string)$h['response_payload'], 0, 1200),
     ];
 }
+
+// ── Paginação, depois da interpretação (ver o comentário do teto) ──────────
+$totalFiltrado = count($linhas);
+$paginas       = max(1, (int)ceil($totalFiltrado / CMD_POR_PAGINA));
+$pagina        = min(max((int)($_GET['p'] ?? 1), 1), $paginas);
+$linhasPagina  = array_slice($linhas, ($pagina - 1) * CMD_POR_PAGINA, CMD_POR_PAGINA);
+
+/** Monta um link do histórico preservando os filtros ativos. */
+function link_hist(array $troca = []): string
+{
+    $base = array_filter([
+        'imei'     => $_GET['imei']     ?? '',
+        'desfecho' => $_GET['desfecho'] ?? '',
+        'de'       => $_GET['de']       ?? '',
+        'ate'      => $_GET['ate']      ?? '',
+        'p'        => $_GET['p']        ?? '',
+    ], fn($v) => $v !== '' && $v !== null);
+    $q = array_filter(array_merge($base, $troca), fn($v) => $v !== '' && $v !== null);
+    return '?' . http_build_query($q);
+}
+
+// ── Respostas offline sem comando correlacionado ───────────────────────────
+//
+// 🔴 O `tracker-instruction-server` grava TODA resposta em `command_responses`,
+// e `pushinstructresponse.php` tenta casá-la com a linha de `commands`. Quando
+// a correlação falha, a resposta existe no banco e some da interface: medido
+// em produção, **14 de 23** respostas offline nunca chegaram a `commands`,
+// incluindo conteúdo real de equipamento (`ext Battery:12.1V; GPRS:Link Up`).
+// Este bloco mostra o que existe, SEM inventar correlação — a associação aqui
+// é por equipamento e horário, e a tela diz isso com todas as letras.
+$offline = $db->prepare("
+    SELECT cr.imei, cr.instruct_id, cr.command_content, cr.response_content,
+           cr.status, cr.created_at,
+           COALESCE(NULLIF(d.device_name,''), cr.imei) AS device_name
+    FROM command_responses cr
+    JOIN devices d ON cr.imei = d.imei
+    WHERE d.customer_id = :cid
+      AND cr.created_at BETWEEN :de AND :ate
+      AND NOT EXISTS (
+          SELECT 1 FROM commands c
+          WHERE c.imei = cr.imei AND c.response_time IS NOT NULL
+            AND ABS(TIMESTAMPDIFF(SECOND, c.response_time, cr.created_at)) < 300
+      )
+    ORDER BY cr.created_at DESC LIMIT 20
+");
+$offline->execute([':cid' => $customer_id, ':de' => $janelaDe, ':ate' => $janelaAte]);
+$offline = $offline->fetchAll(PDO::FETCH_ASSOC);
+foreach ($offline as &$o) {
+    $oEnv = command_response_extract($o['response_content']);
+    $o['desfecho'] = command_response_interpret($oEnv['texto'], $oEnv['codigo'], $oEnv['conteudo']);
+}
+unset($o);
 
 $deviceJson = json_encode($devices, JSON_UNESCAPED_UNICODE);
 $page_title    = 'Comandos';
@@ -178,6 +285,25 @@ $extra_head = '<style>
 .dev-row.dev-off { opacity:.42; cursor:not-allowed; }
 .dev-row input { width:auto; margin:0; }
 .dev-model { font-size:11px; color:var(--muted); font-family:"JetBrains Mono",monospace; }
+.dev-presenca { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--muted); white-space:nowrap; }
+/* O <select size="9"> sai da vista mas continua no fluxo (não é display:none):
+   segue focável, continua sendo o estado lido por aoEscolherComando() e
+   permanece manipulável pelo Playwright, que exige elemento com caixa. */
+.cmd-sel-oculto { position:absolute; left:-10000px; width:280px; height:120px; }
+.cmd-lista { max-height:280px; overflow-y:auto; border:1px solid var(--hairline); border-radius:var(--radius-sm); }
+.cmd-cat { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+           background:var(--canvas-soft); padding:5px 10px; position:sticky; top:0; z-index:1;
+           border-bottom:1px solid var(--hairline-soft); }
+.cmd-item { padding:7px 10px; border-bottom:1px solid var(--hairline-soft); cursor:pointer; }
+.cmd-item:last-child { border-bottom:0; }
+.cmd-item:hover { background:var(--canvas-soft); }
+.cmd-item.sel { background:#e8f0ff; box-shadow:inset 3px 0 0 var(--brand); }
+.cmd-item-top { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+.cmd-item-nome { font-size:13px; color:var(--ink); font-weight:500; }
+.cmd-item-syn { font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--brand); }
+.cmd-item-desc { font-size:11px; color:var(--muted); margin-top:2px; line-height:1.45;
+                 display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.hist-paginacao { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:10px; font-size:12px; }
 .lock-note { font-size:12px; padding:8px 10px; border-radius:var(--radius-sm); background:#fdf3e8; border:1px solid #fce8d0; color:#8a5a20; margin-top:8px; }
 .lock-note.free { background:#f0faf5; border-color:#d4f0e2; color:#0a7a52; }
 .param-grid { display:flex; flex-direction:column; gap:10px; }
@@ -226,9 +352,17 @@ include __DIR__ . '/../web/layout_base.php';
         <label class="dev-row" data-imei="<?= htmlspecialchars($d['imei']) ?>"
                data-modelo="<?= htmlspecialchars($d['model_display']) ?>"
                data-proto="<?= htmlspecialchars($d['protocol']) ?>"
-               data-cams="<?= (int)$d['camera_count'] ?>">
+               data-cams="<?= (int)$d['camera_count'] ?>"
+               data-presenca="<?= htmlspecialchars($d['presenca']['nivel']) ?>">
           <input type="checkbox" class="dev-chk" value="<?= htmlspecialchars($d['imei']) ?>" onchange="aoMarcarDevice()">
           <span style="flex:1"><?= htmlspecialchars($d['device_name']) ?></span>
+          <?php /* Presença INFORMA, não bloqueia: enviar para equipamento
+                   offline é fluxo suportado — o IoT Hub enfileira e entrega no
+                   reconecte. O título traz o horário exato do último contato. */ ?>
+          <span class="dev-presenca" title="Último contato: <?= $d['last_communication'] ? htmlspecialchars(fmt_brt_cmd($d['last_communication'])) : 'nunca' ?>">
+            <span class="res-dot dot-<?= htmlspecialchars($d['presenca']['nivel']) ?>" style="margin-top:0"></span>
+            <?= htmlspecialchars($d['presenca']['rotulo']) ?>
+          </span>
           <span class="dev-model"><?= htmlspecialchars($d['model_display']) ?></span>
           <span class="badge" style="font-size:10px"><?= $d['protocol'] === 'JIMI' ? 'JIMI' : 'JT/T' ?></span>
         </label>
@@ -238,6 +372,11 @@ include __DIR__ . '/../web/layout_base.php';
         <?php endif; ?>
       </div>
       <div id="lock-note" class="lock-note" style="display:none"></div>
+      <?php /* Aviso de fila: aparece quando algum marcado está sem contato
+               recente. É explicação, não impedimento — o botão continua
+               liberado, porque o comando offline é enfileirado e entregue
+               quando o equipamento reconecta. */ ?>
+      <div id="fila-note" class="lock-note free" style="display:none"></div>
     </div>
 
     <!-- 2. Comando -->
@@ -245,8 +384,15 @@ include __DIR__ . '/../web/layout_base.php';
       <label for="cmd-busca">Comando</label>
       <input type="text" id="cmd-busca" placeholder="Buscar por nome ou sintaxe (ex.: volume, DMSSP, reiniciar)"
              oninput="montarListaComandos()" style="margin-bottom:6px">
-      <select id="cmd-sel" size="9" onchange="aoEscolherComando()"
-              style="width:100%;font-size:13px;font-family:'JetBrains Mono',monospace"></select>
+      <?php /* O <select size="9"> continua aqui, fora da vista, como ESTADO:
+               `aoEscolherComando()` lê dele, ele dá um controle nativo de
+               teclado/leitor de tela, e é o que a suíte Playwright manipula
+               (`selectOption('#cmd-sel', …)`). O que o operador vê é a lista
+               abaixo, onde cabe a sintaxe e a descrição — num <option> só o
+               rótulo aparece, e era preciso escolher no escuro. */ ?>
+      <select id="cmd-sel" size="9" onchange="aoEscolherComando();marcarItemLista()"
+              class="cmd-sel-oculto" aria-label="Comando (lista nativa)"></select>
+      <div id="cmd-lista" class="cmd-lista"></div>
       <div id="cmd-conta" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
     </div>
 
@@ -292,8 +438,18 @@ include __DIR__ . '/../web/layout_base.php';
   <div class="card">
     <div class="flex-between" style="margin-bottom:10px">
       <h4 style="font-size:14px;font-weight:600;color:var(--ink)">Histórico de envios</h4>
-      <span style="font-size:12px;color:var(--muted)"><?= count($linhas) ?> registros</span>
+      <span style="font-size:12px;color:var(--muted)">
+        <?= (int)$totalFiltrado ?> registro<?= $totalFiltrado === 1 ? '' : 's' ?>
+        <?php if ($paginas > 1): ?> · página <?= (int)$pagina ?> de <?= (int)$paginas ?><?php endif; ?>
+      </span>
     </div>
+
+    <?php if ($tetoEstourado): ?>
+      <div class="lock-note" style="margin-bottom:10px">
+        O período escolhido tem mais de <?= CMD_HIST_TETO ?> comandos e foi cortado nos mais recentes.
+        Estreite as datas para que as contagens abaixo voltem a valer para o período inteiro.
+      </div>
+    <?php endif; ?>
 
     <form method="get" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
       <select name="imei" style="flex:1;min-width:130px;font-size:12px;padding:6px 8px">
@@ -304,6 +460,10 @@ include __DIR__ . '/../web/layout_base.php';
         </option>
         <?php endforeach; ?>
       </select>
+      <?php /* Datas são dias BRT; a conversão para a janela UTC do banco é
+               feita por brt_day_range_to_utc(), nunca comparando direto. */ ?>
+      <input type="date" name="de"  value="<?= htmlspecialchars($filtroDe) ?>"  style="font-size:12px;padding:5px 8px" title="De (dia BRT)">
+      <input type="date" name="ate" value="<?= htmlspecialchars($filtroAte) ?>" style="font-size:12px;padding:5px 8px" title="Até (dia BRT)">
       <select name="desfecho" style="min-width:120px;font-size:12px;padding:6px 8px">
         <option value="">Todos os desfechos</option>
         <option value="ok"         <?= $filtroDesf==='ok'?'selected':'' ?>>Executado</option>
@@ -313,6 +473,18 @@ include __DIR__ . '/../web/layout_base.php';
       </select>
       <button class="btn btn-outline btn-sm" type="submit">Filtrar</button>
     </form>
+
+    <?php /* Auto-atualização opcional. Fica DESLIGADA por padrão e a escolha
+             persiste em localStorage — recarregar a página sozinha é aceitável
+             quando o operador pediu, e intolerável quando não pediu. As
+             travas (envio em curso, modal aberto, foco em campo) estão no JS,
+             porque recarregar por baixo de quem está digitando um comando é
+             pior do que não atualizar. */ ?>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:400;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" id="auto-atualiza" style="width:auto;margin:0" onchange="alternarAuto()">
+      Atualizar a cada 30 s
+      <span id="auto-contador" style="color:var(--muted);font-size:11px"></span>
+    </label>
 
     <?php
     /* Os números viram FILTRO. Eles já respondiam "quantos deram erro?", mas
@@ -325,8 +497,11 @@ include __DIR__ . '/../web/layout_base.php';
     ?>
     <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);margin-bottom:8px;flex-wrap:wrap">
       <?php foreach ($chips as $nivel => $rotulo): ?>
+      <?php /* O clique preserva equipamento e período e volta para a página 1 —
+               manter `p=3` ao trocar de filtro cairia numa página que talvez
+               nem exista no novo recorte. */ ?>
       <a class="resumo-chip <?= $filtroDesf === $nivel ? 'ativo' : '' ?>"
-         href="?<?= http_build_query(array_filter(['imei' => $filtroImei, 'desfecho' => $filtroDesf === $nivel ? '' : $nivel])) ?>"
+         href="<?= htmlspecialchars(link_hist(['desfecho' => $filtroDesf === $nivel ? '' : $nivel, 'p' => ''])) ?>"
          title="<?= $filtroDesf === $nivel ? 'Remover o filtro' : 'Filtrar por este desfecho' ?>">
         <span class="res-dot dot-<?= $nivel ?>" style="display:inline-block;margin-top:0"></span>
         <?= (int)$resumo[$nivel] ?> <?= $rotulo ?>
@@ -340,7 +515,7 @@ include __DIR__ . '/../web/layout_base.php';
           <th>Quando</th><th>Placa</th><th>Comando</th><th>Desfecho</th><th>Espera</th>
         </tr></thead>
         <tbody>
-        <?php foreach ($linhas as $l): ?>
+        <?php foreach ($linhasPagina as $l): ?>
           <?php /* tabindex + Enter/Espaço: a linha abre um modal, então é um
                    controle. Com `onclick` sozinho ela não existia para quem
                    navega por teclado. */ ?>
@@ -361,6 +536,9 @@ include __DIR__ . '/../web/layout_base.php';
               <div style="display:flex;gap:6px;align-items:flex-start">
                 <span class="res-dot dot-<?= htmlspecialchars($l['desfecho']['nivel']) ?>" style="margin-top:4px"></span>
                 <span><?= htmlspecialchars($l['desfecho']['titulo']) ?></span>
+                <?php if ($l['fila']): ?>
+                  <span class="badge" style="font-size:10px" title="O gateway aceitou e guardou o comando; a entrega acontece quando o equipamento reconectar.">na fila</span>
+                <?php endif; ?>
               </div>
               <?php if ($l['kv']): ?>
                 <div class="kv-grid">
@@ -379,12 +557,68 @@ include __DIR__ . '/../web/layout_base.php';
             <td style="white-space:nowrap;color:var(--muted)"><?= htmlspecialchars($l['espera'] ?: '—') ?></td>
           </tr>
         <?php endforeach; ?>
-        <?php if (empty($linhas)): ?>
-          <tr><td colspan="5"><div class="empty-state"><p>Nenhum comando no filtro atual.</p></div></td></tr>
+        <?php if (empty($linhasPagina)): ?>
+          <tr><td colspan="5"><div class="empty-state"><p>Nenhum comando no período e filtro atuais.</p></div></td></tr>
         <?php endif; ?>
         </tbody>
       </table>
     </div>
+
+    <?php if ($paginas > 1): ?>
+    <div class="hist-paginacao">
+      <?php if ($pagina > 1): ?>
+        <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars(link_hist(['p' => $pagina - 1])) ?>">← anterior</a>
+      <?php else: ?>
+        <span class="btn btn-outline btn-sm" style="opacity:.4;pointer-events:none">← anterior</span>
+      <?php endif; ?>
+      <span style="color:var(--muted)"><?= (int)$pagina ?> / <?= (int)$paginas ?></span>
+      <?php if ($pagina < $paginas): ?>
+        <a class="btn btn-outline btn-sm" href="<?= htmlspecialchars(link_hist(['p' => $pagina + 1])) ?>">próxima →</a>
+      <?php else: ?>
+        <span class="btn btn-outline btn-sm" style="opacity:.4;pointer-events:none">próxima →</span>
+      <?php endif; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($offline): ?>
+    <?php /* 🔴 Respostas que chegaram e não acharam o comando. Medido em
+             produção: 14 de 23 respostas offline nunca chegaram a `commands`,
+             e a tela nunca as mostrou — inclusive conteúdo real de
+             equipamento. O texto abaixo é explícito quanto ao fato de a
+             associação ser por equipamento e horário: inventar correlação aqui
+             seria repetir, na interface, o erro que já existe no motor. */ ?>
+    <details style="margin-top:14px">
+      <summary style="font-size:12px;cursor:pointer;color:var(--muted)">
+        <?= count($offline) ?> resposta(s) recebida(s) sem comando correlacionado no período
+      </summary>
+      <div style="font-size:11px;color:var(--muted);margin:6px 0 8px;line-height:1.5">
+        O equipamento respondeu, mas o sistema não conseguiu ligar a resposta a um envio específico.
+        Estão listadas por equipamento e horário — a associação com o que você enviou é sua, não do sistema.
+      </div>
+      <div style="max-height:240px;overflow-y:auto">
+        <table style="font-size:12px;width:100%">
+          <thead><tr><th>Quando</th><th>Equipamento</th><th>Resposta</th></tr></thead>
+          <tbody>
+          <?php foreach ($offline as $o): ?>
+            <tr>
+              <td style="white-space:nowrap"><?= htmlspecialchars(fmt_brt_cmd($o['created_at'])) ?></td>
+              <td><?= htmlspecialchars($o['device_name']) ?></td>
+              <td>
+                <div style="display:flex;gap:6px;align-items:flex-start">
+                  <span class="res-dot dot-<?= htmlspecialchars($o['desfecho']['nivel']) ?>" style="margin-top:4px"></span>
+                  <span><?= htmlspecialchars($o['desfecho']['titulo']) ?></span>
+                </div>
+                <?php if ($o['desfecho']['detalhe'] !== ''): ?>
+                  <div class="res-msg" title="<?= htmlspecialchars($o['desfecho']['detalhe']) ?>"><?= htmlspecialchars($o['desfecho']['detalhe']) ?></div>
+                <?php endif; ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+    </details>
+    <?php endif; ?>
   </div>
 </div>
 
@@ -404,7 +638,9 @@ var DEVICES  = <?= $deviceJson ?>;
 var CATALOGO = <?= json_encode($catJs, JSON_UNESCAPED_UNICODE) ?>;
 var JTT      = <?= json_encode($jttCmds, JSON_UNESCAPED_UNICODE) ?>;
 var ROTCAT   = <?= json_encode($rotuloCat, JSON_UNESCAPED_UNICODE) ?>;
-var LINHAS   = <?= json_encode($linhas, JSON_UNESCAPED_UNICODE) ?>;
+// Só as linhas da PÁGINA: o modal abre a partir da tabela visível, e serializar
+// as 2000 do teto para dentro do HTML pesaria alguns MB por carregamento.
+var LINHAS   = <?= json_encode($linhasPagina, JSON_UNESCAPED_UNICODE) ?>;
 
 var cmdAtual = null;   // entrada do catálogo escolhida
 var proAtual = 128;
@@ -463,7 +699,33 @@ function aplicarTrava() {
     atualizarBotao();
 }
 
-function aoMarcarDevice() { montarListaComandos(); aplicarTrava(); }
+function aoMarcarDevice() { montarListaComandos(); aplicarTrava(); avisarFila(); }
+
+/**
+ * Avisa que há equipamento sem contato recente entre os marcados.
+ *
+ * ⚠️ Avisa e SÓ. O envio para equipamento offline é suportado de ponta a
+ * ponta: o IoT Hub responde "converted to an offline command", guarda o
+ * comando e entrega no reconecte. Desabilitar o botão aqui quebraria um fluxo
+ * legítimo — quem programa manutenção manda comando de madrugada justamente
+ * para o veículo que está com a ignição desligada.
+ */
+function avisarFila() {
+    var nota = document.getElementById('fila-note');
+    var fora = [];
+    document.querySelectorAll('.dev-chk:checked').forEach(function (c) {
+        var row = c.closest('.dev-row');
+        if (row.dataset.presenca !== 'ok') {
+            fora.push(row.querySelector('span').textContent.trim() + ' (' +
+                      row.querySelector('.dev-presenca').textContent.trim() + ')');
+        }
+    });
+    if (!fora.length) { nota.style.display = 'none'; return; }
+    nota.style.display = 'block';
+    nota.innerHTML = '<strong>' + fora.length + ' sem contato recente:</strong> ' + esc(fora.join(' · ')) +
+        '.<br>O envio continua liberado — o comando fica <strong>na fila</strong> e é entregue quando o equipamento reconectar. ' +
+        'A resposta só aparece no histórico depois disso.';
+}
 
 function marcarTodos(v) {
     document.querySelectorAll('.dev-chk').forEach(function (c) { if (!c.disabled) c.checked = v; });
@@ -487,14 +749,19 @@ function montarListaComandos() {
         if (mods.length && !x.u && !mods.some(function (m) { return x.m.indexOf(m) >= 0; })) return false;
         if (!busca) return true;
         return (x.n + ' ' + x.s + ' ' + x.c + ' ' + x.d).toLowerCase().indexOf(busca) >= 0;
-    }).map(function (x) { return { tipo: 'txt', k: x.k, rot: x.n + '  [' + x.s + ']', val: 'T:' + x.s, u: x.u }; });
+    }).map(function (x) {
+        return { tipo: 'txt', k: x.k, rot: x.n + '  [' + x.s + ']', val: 'T:' + x.s, u: x.u,
+                 nome: x.n, syn: x.s, desc: x.d };
+    });
 
     // JT/T estruturado só entra se todos os marcados forem JT/T
     var soJtt = mods.length > 0 && !protos['JIMI'];
     if (soJtt || mods.length === 0) {
         JTT.forEach(function (j) {
             if (busca && (j.n + ' ' + j.pro).toLowerCase().indexOf(busca) < 0) return;
-            itens.push({ tipo: 'jtt', k: j.k, rot: j.n + '  [proNo ' + j.pro + ']', val: 'J:' + j.pro, u: false });
+            itens.push({ tipo: 'jtt', k: j.k, rot: j.n + '  [proNo ' + j.pro + ']', val: 'J:' + j.pro, u: false,
+                         nome: j.n, syn: 'proNo ' + j.pro,
+                         desc: 'Comando estruturado JT/T 808 — o conteúdo é JSON.' });
         });
     }
 
@@ -518,9 +785,53 @@ function montarListaComandos() {
     });
     if (antes) sel.value = antes;
 
+    // Lista visível: mesma ordenação do <select>, com a sintaxe e a descrição
+    // que não cabem num <option>.
+    var lista = document.getElementById('cmd-lista');
+    lista.innerHTML = '';
+    Object.keys(porCat).sort().forEach(function (k) {
+        var cab = document.createElement('div');
+        cab.className = 'cmd-cat';
+        cab.textContent = ROTCAT[k] || k;
+        lista.appendChild(cab);
+        porCat[k].sort(function (a, b) { return a.rot.localeCompare(b.rot); }).forEach(function (i) {
+            var row = document.createElement('div');
+            row.className = 'cmd-item';
+            row.dataset.val = i.val;
+            row.onclick = function () { escolherDaLista(i.val); };
+            row.innerHTML =
+                '<div class="cmd-item-top">' +
+                  '<span class="cmd-item-nome">' + (i.u ? '★ ' : '') + esc(i.nome) + '</span>' +
+                  '<span class="cmd-item-syn">' + esc(i.syn) + '</span>' +
+                '</div>' +
+                (i.desc ? '<div class="cmd-item-desc">' + esc(i.desc) + '</div>' : '');
+            if (i.u) row.title = 'Universal — vale para todos os modelos (proNo 128)';
+            lista.appendChild(row);
+        });
+    });
+    marcarItemLista();
+
     document.getElementById('cmd-conta').textContent =
         itens.length + ' comando(s) disponível(is)' +
         (mods.length ? ' para ' + mods.join(', ') : '') + '. ★ = universal (proNo 128).';
+}
+
+/** Clique na lista: o <select> continua sendo a fonte da verdade. */
+function escolherDaLista(val) {
+    var sel = document.getElementById('cmd-sel');
+    sel.value = val;
+    aoEscolherComando();
+    marcarItemLista();
+}
+
+/** Espelha no visual a opção escolhida (por clique OU pelo teclado no select). */
+function marcarItemLista() {
+    var v = document.getElementById('cmd-sel').value;
+    document.querySelectorAll('#cmd-lista .cmd-item').forEach(function (r) {
+        var ativo = r.dataset.val === v;
+        r.classList.toggle('sel', ativo);
+        if (ativo) r.scrollIntoView({ block: 'nearest' });
+    });
 }
 
 function aoEscolherComando() {
@@ -692,6 +1003,10 @@ function enviarLote() {
     document.querySelectorAll('.dev-row').forEach(function (r) { nomes[r.dataset.imei] = r.querySelector('span').textContent.trim(); });
 
     var feitos = 0;
+    // Contador de trabalho em voo: sobe no despacho e só zera quando o
+    // acompanhamento de cada comando termina. É o que impede a atualização
+    // automática de recarregar a página no meio de um envio.
+    window.ENVIO_EM_CURSO = (window.ENVIO_EM_CURSO || 0) + imeis.length;
     imeis.forEach(function (imei) {
         var linha = document.createElement('div');
         linha.className = 'res-row';
@@ -714,10 +1029,12 @@ function enviarLote() {
             linha.lastChild.textContent = ok ? ('enfileirado' + (j.command_id ? ' #' + j.command_id : ''))
                                              : (j && j.msg ? j.msg : 'falhou');
             if (ok && j.command_id) acompanhar(j.command_id, linha);
+            else window.ENVIO_EM_CURSO--;   // sem acompanhamento, o trabalho acabou aqui
         })
         .catch(function (e) {
             linha.querySelector('.res-dot').className = 'res-dot dot-erro';
             linha.lastChild.textContent = 'erro de rede';
+            window.ENVIO_EM_CURSO--;
         })
         .finally(function () {
             if (++feitos !== imeis.length) return;
@@ -774,17 +1091,26 @@ function acompanhar(id, linha) {
                     // 'aguardando' não é desfecho: o equipamento ainda pode
                     // responder (offline entra em fila). Segue consultando até
                     // o orçamento acabar, mas já mostrando o que se sabe.
-                    if (c.nivel !== 'aguardando') return;
+                    if (c.nivel !== 'aguardando') { window.ENVIO_EM_CURSO--; return; }
                 }
                 if (++t < 12) { setTimeout(tick, t < 8 ? 3000 : 10000); return; }
+                window.ENVIO_EM_CURSO--;
                 if (!ultimo) {
                     pinta('aguardando', 'Sem resposta ainda',
-                          'o equipamento não respondeu; comando fica na fila até ele se conectar');
+                          'o equipamento não respondeu; o comando fica na fila até ele reconectar');
+                } else if (ultimo.nivel === 'aguardando') {
+                    // Fim do acompanhamento, não fim do comando: a entrega
+                    // continua pendente no gateway. Dizer "sem resposta" aqui
+                    // seria repetir a mentira que esta tela contava antes.
+                    pinta(ultimo.nivel, ultimo.titulo,
+                          (ultimo.response ? ultimo.response + ' · ' : '') +
+                          'na fila — a resposta aparece no histórico quando o equipamento reconectar');
                 }
             })
             .catch(function () {
-                if (++t < 12) setTimeout(tick, 5000);
-                else if (!ultimo) pinta('erro', 'Falha ao consultar o status', '');
+                if (++t < 12) { setTimeout(tick, 5000); return; }
+                window.ENVIO_EM_CURSO--;
+                if (!ultimo) pinta('erro', 'Falha ao consultar o status', '');
             });
     };
     setTimeout(tick, 3000);
@@ -860,8 +1186,98 @@ document.addEventListener('keydown', function (e) {
     if (m && m.style.display === 'flex') m.style.display = 'none';
 });
 
+/* ══════════ Auto-atualização (opcional, 30 s) ══════════
+ *
+ * Recarrega a página inteira, porque o histórico é renderizado no servidor —
+ * é o caminho honesto sem inventar um endpoint de fragmento só para isto.
+ *
+ * 🔴 As travas abaixo são o ponto todo. Recarregar por baixo de quem está
+ * digitando um comando, esperando o resultado de um envio ou lendo um detalhe
+ * destrói trabalho e faz a tela parecer possuída. Auto-atualização que atrapalha
+ * é pior do que nenhuma: o operador desliga e nunca mais liga.
+ */
+var AUTO_SEG = 30;
+var autoRestante = AUTO_SEG;
+var autoTimer = null;
+
+function autoBloqueado() {
+    if (window.ENVIO_EM_CURSO) return 'envio em curso';
+    var m = document.getElementById('detail-modal');
+    if (m && m.style.display === 'flex') return 'detalhe aberto';
+    var a = document.activeElement;
+    if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && a.id !== 'auto-atualiza') return 'digitando';
+    // Campo EDITADO, não campo existente. `defaultValue` é o atributo `value`
+    // do HTML, então isto compara contra o padrão do próprio parâmetro — pausar
+    // só porque há um comando escolhido deixaria a atualização em pausa
+    // permanente, que é o estado normal de quem está usando a tela.
+    var editados = Array.prototype.slice
+        .call(document.querySelectorAll('#p-params input, #p-manual'))
+        .some(function (i) { return i.value !== i.defaultValue; });
+    if (editados) return 'comando em edição';
+    return '';
+}
+
+/* A recarga não pode custar a seleção: sem isto, quem liga a atualização
+   automática perde equipamento marcado e comando escolhido a cada 30 s. */
+function salvarSelecao() {
+    try {
+        localStorage.setItem('cmd_sel_estado', JSON.stringify({
+            busca: document.getElementById('cmd-busca').value,
+            cmd:   document.getElementById('cmd-sel').value,
+            imeis: Array.prototype.slice.call(document.querySelectorAll('.dev-chk:checked')).map(function (c) { return c.value; })
+        }));
+    } catch (e) {}
+}
+
+function restaurarSelecao() {
+    var s;
+    try { s = JSON.parse(localStorage.getItem('cmd_sel_estado') || 'null'); } catch (e) { return; }
+    if (!s) return;
+    if (s.imeis && s.imeis.length) {
+        document.querySelectorAll('.dev-chk').forEach(function (c) {
+            if (s.imeis.indexOf(c.value) >= 0 && !c.disabled) c.checked = true;
+        });
+    }
+    if (s.busca) document.getElementById('cmd-busca').value = s.busca;
+    montarListaComandos();
+    aplicarTrava();
+    avisarFila();
+    if (s.cmd) {
+        var sel = document.getElementById('cmd-sel');
+        sel.value = s.cmd;
+        if (sel.value === s.cmd) { aoEscolherComando(); marcarItemLista(); }
+    }
+}
+
+function alternarAuto() {
+    var on = document.getElementById('auto-atualiza').checked;
+    try { localStorage.setItem('cmd_auto', on ? '1' : '0'); } catch (e) {}
+    if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    autoRestante = AUTO_SEG;
+    if (!on) { document.getElementById('auto-contador').textContent = ''; return; }
+    autoTimer = setInterval(function () {
+        var motivo = autoBloqueado();
+        if (motivo) {
+            autoRestante = AUTO_SEG;
+            document.getElementById('auto-contador').textContent = '(em pausa: ' + motivo + ')';
+            return;
+        }
+        if (--autoRestante <= 0) { salvarSelecao(); location.reload(); return; }
+        document.getElementById('auto-contador').textContent = '(em ' + autoRestante + 's)';
+    }, 1000);
+}
+
 montarListaComandos();
 atualizarBotao();
+avisarFila();
+try {
+    if (localStorage.getItem('cmd_auto') === '1') {
+        document.getElementById('auto-atualiza').checked = true;
+        restaurarSelecao();   // só faz sentido no modo automático — é ele que recarrega
+        atualizarBotao();
+        alternarAuto();
+    }
+} catch (e) {}
 </script>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

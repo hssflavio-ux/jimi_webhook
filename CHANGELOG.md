@@ -5,6 +5,23 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.21
+
+**A tela de comandos passa a dizer se o equipamento está online — sem impedir o envio para quem não está.** Comando para equipamento offline é fluxo suportado de ponta a ponta (o IoT Hub responde `converted to an offline command`, guarda e entrega no reconecte), então a presença **informa e só**: quem programa manutenção manda comando de madrugada justamente para o veículo desligado.
+
+### Added
+- **Presença por equipamento** na lista de envio, de `devices.last_communication` — conferido em produção contra `MAX(heartbeats.created_at)`, bate equipamento a equipamento. Online (≤15 min), "há N min/h/d" e "sem contato registrado", com o horário exato do último contato no `title`. Ao marcar um equipamento sem contato recente, a tela explica que **o comando entra na fila** — e o botão continua liberado.
+- **Marca "na fila"** nas linhas do histórico em que o gateway aceitou e a entrega segue pendente (`status='sent'` + desfecho de espera). Era lido como falha por quem opera.
+- 🔴 **Painel de respostas sem comando correlacionado.** `pushinstructresponse.php` grava toda resposta em `command_responses` e tenta casá-la com a linha de `commands`; quando falha, a resposta existe no banco e **some da interface**. Medido em produção: **14 de 23** respostas offline nunca chegaram a `commands`, incluindo conteúdo real de equipamento (`ext Battery:12.1V; GPRS:Link Up`, `Device busy`). O painel mostra o que existe **sem inventar correlação** — a associação é por equipamento e horário, e a tela diz isso com todas as letras.
+- **Filtro de período e paginação** no histórico (padrão: 7 dias, 25 por página). Antes era `LIMIT 200` fixo, sem recorte de data.
+  - ⚠️ A paginação **não** pode ir para o SQL: o filtro de desfecho depende de interpretar o payload em PHP, então um `LIMIT` no banco devolveria páginas de tamanho variável e contagens erradas nos chips. Lê-se a janela (teto de 2000, avisado na tela quando estoura), interpreta-se, pagina-se depois.
+- **Atualização automática opcional a cada 30 s**, desligada por padrão e lembrada entre sessões. As travas são o ponto: pausa com envio em curso, detalhe aberto, foco em campo ou **comando em edição** — e a seleção (equipamentos, busca, comando) é preservada na recarga. Auto-atualização que atrapalha é pior que nenhuma; o operador desliga e nunca mais liga.
+  - A trava de edição compara `input.value` com `input.defaultValue` — pausar só porque existe um comando escolhido deixaria a atualização em pausa permanente, que é o estado normal de quem usa a tela.
+
+### Changed
+- **O catálogo deixou de ser um `<select size="9">`.** Num `<option>` só o rótulo aparece: a sintaxe e a descrição — o que decide qual comando usar — ficavam invisíveis, e escolhia-se no escuro entre 119 itens. Virou lista com nome, sintaxe e descrição, categorias fixas no topo ao rolar. O `<select>` continua existindo fora da vista como **estado**: é o que `aoEscolherComando()` lê, o que dá controle nativo de teclado e leitor de tela, e o que a suíte Playwright manipula.
+- O fim do acompanhamento de um comando em fila deixa de dizer "sem resposta": agora diz que a entrega segue pendente e que a resposta aparece no histórico quando o equipamento reconectar. Dizer "sem resposta" ali repetiria a mentira que a tela contava antes da v4.9.20.
+
 ## [Unreleased] — 4.9.20
 
 **A tela de comandos mostrava o recibo do gateway no lugar da resposta do equipamento.** O operador via "Executado" e nada mais; o que o device respondeu — `OK!`, a leitura dos parâmetros, a linha de status com sinal e bateria — não aparecia em lugar nenhum da interface. Medido no histórico de produção: **168 comandos com resposta gravada, 120 (71%) mostravam texto errado ao operador**.
