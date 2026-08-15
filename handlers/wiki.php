@@ -1,22 +1,20 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.9.4
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.9.16
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
  * ações disponíveis e resultados esperados. Sem jargão técnico, sem caminhos
  * de URL e sem seções de integração/infra (webhooks, motor, segurança).
  *
- * Atualizada na v4.7.1 (Fase 5 de docs/PLANO_IMPLEMENTACAO_v4.4-v4.7.md) com o
- * que as quatro fases entregaram: notificações (sino/pop-up/som/e-mail),
- * geocercas, os cinco relatórios operacionais, agendamento de relatório por
- * e-mail e modelos de filtro salvos.
- *
- * Atualizada na v4.9.4 com o que as v4.8.x/v4.9.x mudaram para quem USA:
- * endereço no lugar de latitude/longitude, filtro de equipamento por PLACA,
- * coluna Mapa nos exports, o painel de informações do vídeo ao vivo e a
- * extração de gravação funcionando ponta a ponta. O remetente dos e-mails
- * passou a ser `bycamera` — a wiki diz isso porque é o que o destinatário lê.
+ * Atualizada na v4.9.16 com o que mudou desde a v4.7.1 para quem USA:
+ * - Endereço no lugar de latitude/longitude, filtro por PLACA, coluna Mapa.
+ * - Painel de informações do vídeo ao vivo, extração de gravação ponta a ponta.
+ * - Player de vídeo com snapshot no detalhe de ocorrência e coluna Vídeo nos alarmes.
+ * - Eventos de diagnóstico separados dos alarmes operacionais (modo admin).
+ * - Parâmetros: área de administrador reunindo leitura, relatório e perfis de
+ *   configuração remota das câmeras JT/T.
+ * - Remetente dos e-mails como `bycamera`.
  *
  * Duas regras de negócio que o usuário PRECISA entender e que só existem aqui:
  * o sistema notifica por OCORRÊNCIA e não por alarme (12 alarmes em rajada =
@@ -457,6 +455,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="#usuarios" style="padding-left:20px;font-size:12px">Usuários</a>
         <a href="#operacoes">Operações</a>
         <a href="#comandos" style="padding-left:20px;font-size:12px">Comandos</a>
+        <a href="#parametros" style="padding-left:20px;font-size:12px">Parâmetros</a>
         <a href="#exportar" style="padding-left:20px;font-size:12px">Exportar</a>
         <a href="#checklist" style="padding-left:20px;font-size:12px">Checklist</a>
     </nav>
@@ -739,13 +738,18 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <p>Ao clicar em uma ocorrência, abre-se a tela de detalhe com:</p>
 <ul style="font-size:13px;line-height:1.8;color:var(--body)">
     <li><strong>Player de vídeo</strong> do momento do evento, aberto num quadro do <em>meio</em>
-        do vídeo (o snapshot). O play roda na própria tela — baixar é opcional</li>
+        do vídeo (o snapshot). O play roda na própria tela — baixar é opcional.
+        Funciona com vídeos MP4 e com gravações em formato <code>.ts</code> das câmeras JT/T</li>
     <li><strong>Alarmes agrupados</strong> (todos os alarmes que compõem a ocorrência, com dados de GPS e velocidade)</li>
     <li><strong>Mini-mapa</strong> da localização do evento</li>
     <li><strong>Transições de status:</strong> Iniciar Tratativa → Resolver → Descartar</li>
     <li><strong>Campo de notas</strong> para o operador registrar observações</li>
     <li><strong>Marcação de Falso Positivo</strong> para sinalizar alarmes incorretos</li>
 </ul>
+
+<div class="callout tip">
+<strong>Ocorrência identificada pela placa.</strong> O cabeçalho do detalhe mostra a <strong>placa</strong> do veículo — não o IMEI. É a mesma placa cadastrada em <em>Cadastros › Equipamentos</em>. Se a placa exibida não estiver certa, o cadastro do equipamento é o lugar para corrigir.
+</div>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
@@ -1127,7 +1131,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </div>
 
 <h3 id="rel-alarmes">Alarmes</h3>
-<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa.</p>
+<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
@@ -1146,6 +1150,19 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <div class="callout info">
 <strong>Alarme sem nome, só com número.</strong> Raramente um alarme aparece como <span class="mono">Código 1234 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que ainda não está no catálogo do sistema — que mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos. Assim que o código é cadastrado, o nome aparece também nos alarmes antigos, sem precisar refazer nada. Hoje não há nenhum nesta situação: os dois últimos (<span class="mono">1047</span>, capotamento, e <span class="mono">146</span>, curva brusca) foram cadastrados.
+</div>
+
+<h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Eventos de diagnóstico <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h4>
+<p>O sistema distingue <strong>alarmes operacionais</strong> (o que o veículo diz ao operador — distração, celular, fadiga, excesso de velocidade) de <strong>eventos de diagnóstico</strong> (o que o equipamento diz ao sistema — defeito de câmera, perda de sinal de vídeo, falha de armazenamento, handshake de upload, entrada e saída de repouso).</p>
+
+<p>Por padrão a tela mostra apenas os alarmes operacionais — os que são relevantes para quem monitora a frota. Administradores têm, abaixo dos filtros, uma caixa <strong>"Eventos de diagnóstico"</strong> que troca a visão para os eventos técnicos; ela não aparece para outros perfis de usuário.</p>
+
+<div class="callout warn">
+<strong>Os dois modos nunca se misturam.</strong> Com a caixa marcada, a tela mostra <em>só</em> os diagnósticos; desmarcada, <em>só</em> os operacionais. Isso é proposital — um operador com centenas de "Falha de Câmera" na mesma lista de "Uso de Celular" perderia os eventos que precisa tratar no meio do ruído de infraestrutura.
+</div>
+
+<div class="callout info">
+<strong>Diagnóstico não gera ocorrência nem notificação.</strong> Eventos técnicos são internos ao equipamento e não representam comportamento do motorista. Eles não aparecem no Dashboard de Ocorrências, no Resumo, no BI nem nos filtros de alarme dos outros relatórios — ficam restritos ao modo de diagnóstico desta tela.
 </div>
 
 <h3 id="rel-ocorrencias">Ocorrências</h3>
@@ -1708,6 +1725,83 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <strong>Atalhos disponíveis:</strong> Status, Informações do Dispositivo, Reiniciar, Vídeo Ao Vivo, Reprodução de Vídeo, Envio de Vídeo e Configuração.
 </div>
 
+<div class="callout info">
+<strong>Comandos específicos de modelo.</strong> Alguns comandos só se aplicam a determinados modelos de câmera. A tela desabilita os equipamentos incompatíveis automaticamente — se um comando pedir parâmetros, os campos aparecem junto do atalho. Comandos universais (que funcionam em todos os modelos) não têm essa restrição.
+</div>
+
+<!-- ── Parâmetros ──────────────────────────────────── -->
+<h3 id="parametros">Parâmetros <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h3>
+<p><strong>Objetivo:</strong> Ler, comparar e alterar a configuração remota das câmeras JT/T (resolução de vídeo, sensibilidade de alarme, intervalos de envio, servidores, etc.) — tudo sem acesso físico ao equipamento. O menu <strong>Parâmetros</strong> fica logo abaixo de Comandos e reúne três funções que antes estavam espalhadas.</p>
+
+<div class="callout warn">
+<strong>Área de administrador.</strong> As três funções abaixo só aparecem no menu e só respondem para usuários com perfil de administrador. Operadores e visualizadores não veem o item no menu e recebem "acesso negado" ao tentar acessar diretamente.
+</div>
+
+<h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Leitura de Parâmetros</h4>
+<p>A tela principal do menu lista todos os equipamentos JT/T do cliente com o status de sincronização de cada um. Ao clicar em um equipamento, abre-se a aba de parâmetros com todos os valores lidos da câmera, organizados por categoria (vídeo, rede, alarme, etc.).</p>
+
+<div class="mockup">
+<div class="mockup-header">Parâmetros — Visão por Equipamento</div>
+<div class="mockup-body">
+    <table class="tbl-mock">
+    <tr><th>Equipamento</th><th>Modelo</th><th>Parâmetros lidos</th><th>Última leitura</th><th></th></tr>
+    <tr><td>FJR7B59</td><td>JC371</td><td class="mono">49</td><td>14/08 08:30</td>
+        <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Ver</span></td></tr>
+    <tr><td>RQP2A41</td><td>JC182</td><td class="mono">47</td><td>14/08 08:31</td>
+        <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Ver</span></td></tr>
+    <tr><td>GHT5C08</td><td>JC181</td><td class="mono">6</td><td>13/08 22:10</td>
+        <td><span class="btn-mock ghost" style="font-size:12px;padding:2px 8px">Ver</span></td></tr>
+    </table>
+</div>
+</div>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Ver</td><td>Abre a lista de parâmetros lidos da câmera, organizados por categoria. Cada linha mostra o número do parâmetro, o nome, o valor atual e a última leitura</td></tr>
+<tr><td>Solicitar Leitura</td><td>Manda o comando de leitura para a câmera. Se estiver online, os valores chegam em segundos; se estiver offline, a leitura é feita quando o equipamento voltar a se comunicar</td></tr>
+<tr><td>Alterar Parâmetro</td><td>Abre formulário para modificar o valor de um parâmetro específico. O sistema grava o valor anterior antes de enviar o novo — se der errado, você sabe o que restaurar</td></tr>
+</table>
+
+<div class="callout warn">
+<strong>Parâmetros de rede são bloqueados.</strong> Endereço do servidor principal e porta de comunicação não podem ser alterados pela tela — mudar esses valores desconectaria o equipamento do sistema. São mostrados para consulta, mas o botão de edição não aparece.
+</div>
+
+<div class="callout info">
+<strong>Cada modelo tem parâmetros diferentes.</strong> Um JC371 pode ter 49 parâmetros lidos, um JC182 ter 47 e um JC181 ter 6 — e isso é normal: modelos diferentes suportam conjuntos de configuração diferentes. Não compare os números entre modelos.
+</div>
+
+<h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Relatório de Parâmetros da Frota</h4>
+<p>Responde à pergunta: <strong>quais câmeras estão configuradas fora do padrão?</strong> Para cada modelo, o sistema calcula o valor mais comum de cada parâmetro na frota e destaca as câmeras que divergem.</p>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Gerar relatório</td><td>Mostra, agrupado por modelo, cada câmera que tem pelo menos um parâmetro diferente do que a maioria da frota usa</td></tr>
+<tr><td>Ver divergências</td><td>Cada câmera fora do padrão lista os parâmetros que diferem, com o valor do equipamento e o valor que a maioria usa</td></tr>
+</table>
+
+<div class="callout info">
+<strong>O padrão é a própria frota.</strong> O valor de referência é o mais comum entre os equipamentos do mesmo modelo — não um valor "ideal" cadastrado manualmente. Isso significa que o relatório já funciona sem nenhuma configuração prévia. Modelo com um único equipamento aparece separado, como "sem base de comparação".
+</div>
+
+<h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Perfis de Parâmetros</h4>
+<p>Permite criar conjuntos nomeados de configuração por modelo de câmera e compará-los com os equipamentos da frota. Útil para padronizar a configuração de vários equipamentos.</p>
+
+<table class="tbl-mock">
+<tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Criar perfil</td><td>Nome + modelo. Os parâmetros do perfil começam com os valores mais comuns da frota e podem ser ajustados</td></tr>
+<tr><td>Simular aplicação</td><td>Mostra quais equipamentos teriam parâmetros alterados e quais valores mudariam — <strong>sem enviar nada</strong></td></tr>
+<tr><td>Editar perfil</td><td>Alterar os valores de qualquer parâmetro do perfil</td></tr>
+<tr><td>Excluir perfil</td><td>Remove o perfil. Os equipamentos não são afetados</td></tr>
+</table>
+
+<div class="callout warn">
+<strong>A aplicação é por equipamento.</strong> O perfil serve para definir o padrão desejado e <em>ver quem diverge</em>. A escrita em câmera real acontece na tela de leitura, equipamento a equipamento — de propósito: escrever configuração em operação pede conferência individual.
+</div>
+
+<div class="callout tip">
+<strong>Só equipamentos JT/T aparecem aqui.</strong> Os comandos de parâmetro são do protocolo JT/T; câmeras JIMI não os entendem. Por isso a tela lista apenas os equipamentos cujo modelo é JT/T — mostrar os outros ofereceria uma ação que falharia sempre.
+</div>
+
 <h3 id="exportar">Exportar</h3>
 <p><strong>Objetivo:</strong> Fila de geração de relatórios grandes. O pedido entra na fila, é processado em segundo plano e fica disponível para download quando concluído. Formatos: CSV, Excel e PDF.</p>
 
@@ -1798,7 +1892,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">
-bycamera — Central de Ajuda — Última atualização: 09/08/2026
+bycamera — Central de Ajuda — Última atualização: 14/08/2026
 </p>
 
     </div><!-- /.wiki-content -->
