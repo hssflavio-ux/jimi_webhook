@@ -31,6 +31,7 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 
 - **Deploy** (idêntico nos dois): `ssh -t administrador@<ip> "cd /var/www/jimi_webhook && sudo ./scripts/deploy.sh"`. O `sudo` **pede senha** — daí o `-t`, senão a sessão morre sem prompt.
 - **Chave SSH**: a do Mac de dev está autorizada **em produção**; no homolog está instalada a da máquina **Windows**, então do Mac o homolog recusa (`Permission denied (publickey,password)`) — não é senha errada.
+- **Em produção a chave do GitHub é do `administrador`, não do root** — e o `deploy.sh` roda sob `sudo`. Sem `core.sshCommand` no `.git/config` apontando para `/home/administrador/.ssh/id_ed25519` (+ o `known_hosts` dele), a FASE 1 morre em `✗ FALHA: git fetch falhou` e a mensagem sugere criar uma chave nova, que é o conserto errado — o erro real é `Host key verification failed`. Configurado em 14/08/2026; **some se o repo for reclonado** (detalhe na §8 do `STATUS.md`).
 - **A versão anunciada mora no `.env.example`** (`SYSTEM_VERSION`), e o `deploy.sh` a propaga para o `.env` do servidor. Subir código sem subir esse número faz o `/ping` anunciar a versão antiga com o código novo no ar — foi o que as v4.9.18 e v4.9.19 fizeram.
 
 ## Commands

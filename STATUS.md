@@ -2579,6 +2579,13 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.1.0.sql # v4.1.0 (Excel/PDF +
 - **Path**: `/var/www/jimi_webhook`
 - **IoTHub**: 16 containers Docker no mesmo host
 - **Acesso**: `ssh administrador@186.248.143.197` (chave do Mac de dev autorizada); `sudo` pede senha → usar `ssh -t`
+- 🔴 **A chave do GitHub mora em `/home/administrador/.ssh/id_ed25519` — `/root/.ssh` está VAZIO** (só um `authorized_keys` de 0 byte). Como `deploy.sh` roda sob `sudo`, o `git fetch` da FASE 1 saía sem credencial e o deploy morria em `✗ FALHA: git fetch falhou`, cuja mensagem manda **criar uma chave nova** — conserto errado. O erro real só aparece rodando `git fetch origin` sem o `2>/dev/null` do script: `Host key verification failed` (root não tem nem `known_hosts`). Resolvido em 14/08/2026 apontando o repo de produção para a chave que já existe:
+  ```bash
+  sudo git -C /var/www/jimi_webhook config core.sshCommand \
+    "ssh -i /home/administrador/.ssh/id_ed25519 -o IdentitiesOnly=yes \
+     -o UserKnownHostsFile=/home/administrador/.ssh/known_hosts"
+  ```
+  Fica no `.git/config`, então vale para todo deploy seguinte — **mas some se o repo for reclonado**. (No homolog o arranjo é outro: chave própria do root em `/root/.ssh/github_hssflavio`.)
 
 ### Servidor homologação
 - **IP**: `189.22.240.43` (`http://189.22.240.43`, sem TLS)
