@@ -80,12 +80,57 @@ if command -v apache2ctl >/dev/null 2>&1; then
         || echo "  ⚠ AVISO: mod_rewrite ausente. Ative: sudo a2enmod rewrite && sudo systemctl reload apache2"
     apache2ctl -M 2>/dev/null | grep -qi headers && echo "  ✓ mod_headers" \
         || echo "  ⚠ AVISO: mod_headers ausente"
-    # Verificar AllowOverride
-    if apache2ctl -S 2>/dev/null | grep -qi "$APP_DIR"; then
-        echo "  ✓ VirtualHost detectado"
+    # VirtualHost + AllowOverride
+    #
+    # 🔴 `apache2ctl -S` NÃO informa o DocumentRoot dos vhosts. A saída traz
+    # ServerName, porta e o ARQUIVO de config de cada vhost, mais o
+    # "Main DocumentRoot" global (`/var/www/html` no Debian). Procurar
+    # $APP_DIR ali dentro falha SEMPRE que a aplicação não é o docroot
+    # principal — que é o caso normal. Até 15/08/2026 todo deploy de produção
+    # imprimia "Nenhum VirtualHost apontando para /var/www/jimi_webhook" com o
+    # vhost perfeitamente configurado; um aviso que aparece sempre é um aviso
+    # que se aprende a ignorar, e aí o dia em que ele for verdade passa batido.
+    # Agora lemos os arquivos de config que o próprio Apache diz estar usando.
+    #
+    # ⚠️ Tem de ser `grep -R`/lista explícita de arquivos, NUNCA `grep -r` num
+    # diretório: `sites-enabled/` é só symlink para `sites-available/`, e o
+    # `-r` minúsculo PULA symlink encontrado na recursão (só o `-R` segue).
+    # Com `-r` a varredura volta vazia e o falso aviso ressurge.
+    VHOSTS=$(apache2ctl -S 2>/dev/null | grep -oE '\(/[^()]+\.conf:[0-9]+\)' | tr -d '()' | cut -d: -f1 | sort -u || true)
+    if [ -z "$VHOSTS" ]; then
+        VHOSTS=$(find /etc/apache2/sites-enabled /etc/httpd/conf.d -name '*.conf' 2>/dev/null || true)
+    fi
+
+    DOCROOT_HIT=""
+    if [ -n "$VHOSTS" ]; then
+        DOCROOT_HIT=$(grep -lE "^[[:space:]]*DocumentRoot[[:space:]]+\"?${APP_DIR}/?\"?[[:space:]]*\$" $VHOSTS 2>/dev/null || true)
+    fi
+
+    if [ -n "$DOCROOT_HIT" ]; then
+        echo "  ✓ VirtualHost com DocumentRoot em $APP_DIR ($(echo "$DOCROOT_HIT" | xargs -n1 basename | tr '\n' ' '))"
+        # `AllowOverride All` é o que faz o .htaccess valer — e o .htaccess É o
+        # front controller. Sem ele o Apache serve só arquivo existente e TODA
+        # rota do dashboard vira 404. Procuramos também no config principal,
+        # porque a diretiva costuma morar num <Directory> global; não achar não
+        # é prova de ausência, então o tom aqui é de conferência, não de falha.
+        # ⚠️ `-q` é obrigatório aqui, e não é estilo: a lista inclui de
+        # propósito o config principal das duas distros, e o que não existir
+        # faz o GNU grep sair com **2 mesmo tendo casado** em outro arquivo.
+        # Com `>/dev/null` no lugar do `-q`, o `if` cai no else e o script
+        # nega um `AllowOverride All` que está lá — foi o que aconteceu no
+        # primeiro teste desta correção. Só o `-q` sai com 0 no primeiro match
+        # "even if an error was detected" (man grep).
+        if grep -qE '^[[:space:]]*AllowOverride[[:space:]]+All' $DOCROOT_HIT /etc/apache2/apache2.conf /etc/httpd/conf/httpd.conf 2>/dev/null; then
+            echo "  ✓ AllowOverride All presente"
+        else
+            echo "  ℹ AllowOverride All não localizado na config — se as rotas do dashboard derem 404, é aqui"
+        fi
+    elif [ -n "$VHOSTS" ]; then
+        echo "  ⚠ AVISO: nenhum vhost habilitado com DocumentRoot em $APP_DIR"
+        echo "          Conferidos: $(echo "$VHOSTS" | tr '\n' ' ')"
+        echo "          O smoke test de /ping na FASE 4 é a prova final — se ele passar, o site está sendo servido."
     else
-        echo "  ⚠ AVISO: Nenhum VirtualHost apontando para $APP_DIR"
-        echo "          Configure AllowOverride All para o diretório."
+        echo "  ℹ Config de vhost não localizada (layout fora do padrão Debian/RHEL) — checagem pulada; o /ping da FASE 4 é a prova"
     fi
 else
     echo "  ⚠ AVISO: Apache não detectado (pode ser Nginx — verifique rewrite manualmente)"
