@@ -119,11 +119,29 @@ function command_response_interpret(string $texto, string $codigo = '', string $
          'O equipamento confirmou o comando.'],
         ['device busy|previous command has not returned', 'aguardando', 'Equipamento ocupado',
          'Há um comando anterior sem resposta. Espere ele terminar e reenvie — mandar de novo agora costuma receber a mesma recusa.'],
+        // 🔴 `Time Out!` (com espaço) é o EQUIPAMENTO recusando, não o gateway.
+        // A regra abaixo procurava `timeout` colado e nunca casava com a forma
+        // que o JC371 usa — a resposta caía no balde `neutro` ("Resposta do
+        // equipamento") e chegava à tela em estilo de DADO. É a mesma família
+        // do defeito que a v4.9.20 corrigiu: recusa que parece execução.
+        //
+        // Medido em 16/08/2026: o JC371 devolve `Time Out!` exatamente para os
+        // comandos que ele não implementa (SPEED, FATIGUE, ACCREP, TIMER1) —
+        // daí a dica apontar para a lista por modelo. Fica ancorado no início
+        // para não engolir o `request timeout` do gateway, que é outra coisa e
+        // tem regra própria logo abaixo.
+        ['^time\s*out', 'erro', 'Equipamento não atendeu o comando',
+         'O equipamento respondeu, mas recusando: é assim que a linha JC371 devolve comando que ela não implementa. Confira a lista por modelo antes de reenviar.'],
         ['request timeout|failed to respond|timeout', 'erro', 'Sem resposta no prazo',
          'O equipamento não respondeu a tempo. Confira se ele está transmitindo; comando enviado com o device offline não é executado.'],
         ['media resource is empty|resource is empty', 'neutro', 'Nenhuma gravação no período',
          'O comando funcionou; o cartão não tem vídeo no intervalo pedido. Tente outro horário.'],
-        ['not support|unsupported|invalid command|unknown command', 'erro', 'Comando não suportado',
+        // `not recognized` é o quarto dialeto de "não suportado". São quatro,
+        // um por firmware, e conhecer só dois deixava metade das recusas
+        // passando como dado: `Not support!` (JC181) e `instruction error!`
+        // (JC182) casavam; `Time Out!` (JC371) e `<CMD#>Command was not
+        // recognized!` (JC371 JMBS) não.
+        ['not support|unsupported|invalid command|unknown command|not recognized', 'erro', 'Comando não suportado',
          'Este modelo não aceita o comando. Confira a lista por modelo — a tela só libera o que a documentação registra para o equipamento escolhido.'],
         ['param|parameter.*(error|invalid)|invalid param', 'erro', 'Parâmetro inválido',
          'A sintaxe foi recusada. Confira o formato aceito de cada parâmetro no painel do comando.'],

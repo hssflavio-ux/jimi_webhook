@@ -123,6 +123,10 @@ foreach ($catalogo as $syn => $d) {
         's' => $syn, 'c' => $d['cmd'], 'n' => $d['nome'],
         'd' => $d['desc'], 'k' => $d['categoria'],
         'm' => $d['modelos'], 'u' => (bool)$d['universal'], 't' => (bool)$d['template'],
+        // Forma de consulta (v4.9.25): `q` é o que enviar, `qm` os modelos em
+        // que ela é sabidamente aceita, `qr` a procedência (medido/wiki).
+        'q' => $d['consulta'] ?? null, 'qm' => $d['consulta_modelos'] ?? [],
+        'qr' => $d['consulta_ref'] ?? null,
         'p' => array_map(fn($p) => ['p' => $p['p'], 'd' => $p['desc'],
                                     'f' => $p['format'], 'v' => $p['default']], $d['params']),
         'e' => array_map(fn($e) => ['c' => $e['cmd'], 'd' => $e['desc']], $d['exemplos']),
@@ -505,6 +509,17 @@ include __DIR__ . '/../web/layout_base.php';
       <div id="p-params-wrap" style="display:none;margin-bottom:12px">
         <label style="display:block;margin-bottom:6px">Parâmetros</label>
         <div class="param-grid" id="p-params"></div>
+      </div>
+
+      <!-- Consultar valor atual: a forma NUA (`CMD#`) lê em vez de escrever.
+           Fica ANTES dos exemplos de propósito — perguntar é o passo natural
+           antes de mudar, e até a v4.9.24 a tela não sabia fazê-lo. -->
+      <div id="p-cons-wrap" style="display:none;margin-bottom:12px">
+        <label style="display:block;margin-bottom:4px">Ler o valor atual <span style="font-weight:400;color:var(--muted);font-size:11px">(não altera nada no equipamento)</span></label>
+        <div>
+          <span class="ex-chip" id="p-cons-chip" style="border-color:var(--brand);color:var(--brand)"></span>
+          <span id="p-cons-ref" style="font-size:11px;color:var(--muted);margin-left:6px"></span>
+        </div>
       </div>
 
       <div id="p-ex-wrap" style="display:none;margin-bottom:12px">
@@ -981,6 +996,7 @@ function aoEscolherComando() {
         document.getElementById('p-modelos').innerHTML = '<span class="badge badge-info">só modelos JT/T</span>';
         document.getElementById('p-params-wrap').style.display = 'none';
         document.getElementById('p-ex-wrap').style.display = 'none';
+        document.getElementById('p-cons-wrap').style.display = 'none';
         document.getElementById('p-livre').checked = true;
         alternarLivre();
         document.getElementById('p-manual').value = j.c;
@@ -1022,6 +1038,25 @@ function aoEscolherComando() {
         wrap.style.display = 'none';
     }
 
+    // Consulta: a forma nua do comando, que LÊ em vez de escrever.
+    var cw = document.getElementById('p-cons-wrap');
+    if (cmdAtual.q) {
+        var chip = document.getElementById('p-cons-chip');
+        chip.textContent = cmdAtual.q;
+        chip.onclick = function () { usarConsulta(cmdAtual.q); };
+        chip.tabIndex = 0;
+        chip.onkeydown = function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); usarConsulta(cmdAtual.q); }
+        };
+        // A procedência aparece porque `medido` e `wiki` não valem o mesmo:
+        // um foi conferido em câmera real, o outro é o que a página promete.
+        document.getElementById('p-cons-ref').textContent =
+            (cmdAtual.qm && cmdAtual.qm.length ? cmdAtual.qm.join(', ') : '') +
+            (cmdAtual.qr ? ' · ' + (cmdAtual.qr.indexOf('medido') === 0
+                 ? 'conferido em equipamento real' : 'conforme a documentação') : '');
+        cw.style.display = 'block';
+    } else { cw.style.display = 'none'; }
+
     // Exemplos clicáveis
     var exw = document.getElementById('p-ex-wrap'), exb = document.getElementById('p-ex');
     exb.innerHTML = '';
@@ -1054,6 +1089,21 @@ function usarExemplo(exemplo) {
     ins.forEach(function (inp, i) { inp.value = vals[i] !== undefined ? vals[i] : ''; });
     document.getElementById('p-livre').checked = false;
     alternarLivre();
+    atualizarPreview();
+}
+
+/**
+ * Carrega a forma de CONSULTA do comando (`CMD#`, sem parâmetros).
+ *
+ * Vai pelo modo livre porque a consulta não é o template: o template monta
+ * `APN,valor,valor#` a partir dos campos, e a consulta é justamente o comando
+ * SEM eles. Tentar expressá-la pelo template devolveria `APN,A,B#` com os
+ * placeholders crus, que o equipamento recusa.
+ */
+function usarConsulta(q) {
+    document.getElementById('p-livre').checked = true;
+    alternarLivre();
+    document.getElementById('p-manual').value = q;
     atualizarPreview();
 }
 

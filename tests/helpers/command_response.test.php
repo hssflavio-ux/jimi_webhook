@@ -99,6 +99,91 @@ $eVazio = command_response_extract(null);
 checa('payload nulo devolve vazio', '', $eVazio['texto']);
 checa('payload nulo devolve conteúdo vazio', '', $eVazio['conteudo']);
 
+// ── Os QUATRO dialetos de "não suportado" (v4.9.25) ────────────────────────
+//
+// 🔴 Cada firmware da linha JC recusa com uma frase diferente, e o
+// classificador conhecia só duas. As outras duas caíam em `neutro`
+// ("Resposta do equipamento") e chegavam à tela em estilo de DADO — a mesma
+// família do defeito que a v4.9.20 corrigiu, e do jeito mais enganoso: o
+// operador lê "Resposta do equipamento: Time Out!" e conclui que o comando
+// rodou. Medidos em câmera real, 16/08/2026.
+//
+// O `Time Out!` do EQUIPAMENTO precisa continuar distinto do `request timeout`
+// do GATEWAY: são causas diferentes e a dica que o operador precisa é outra.
+echo "\n── Dialetos de recusa (medidos em 4 câmeras, 16/08/2026) ──\n";
+$dialetos = [
+    ['Not support!',                        'JC181',        'erro', 'Comando não suportado'],
+    ['instruction error!',                  'JC182',        'erro', 'Recusado pelo equipamento'],
+    ['Time Out!',                           'JC371',        'erro', 'Equipamento não atendeu o comando'],
+    ['<SPEED#>Command was not recognized!', 'JC371 JMBS',   'erro', 'Comando não suportado'],
+    ['Error:Number of parameters errors!',  'todos',        'erro', 'Parâmetro inválido'],
+];
+foreach ($dialetos as [$resp, $quem, $nivel, $titulo]) {
+    $r = command_response_interpret('Command communication successful response', '100', $resp);
+    checa("[$quem] " . substr($resp, 0, 30) . ' → nível', $nivel, $r['nivel']);
+    checa("[$quem] " . substr($resp, 0, 30) . ' → título', $titulo, $r['titulo']);
+}
+
+// O timeout do GATEWAY não pode ser confundido com o do equipamento.
+$rg = command_response_interpret('The device is offline or timed out', '600', 'request timeout');
+checa('🔴 `request timeout` do gateway continua distinto', 'Sem resposta no prazo', $rg['titulo']);
+
+// E resposta de CONSULTA não pode virar recusa: é o dado que fomos buscar.
+foreach ([
+    'Currently use APN:allcombl.br,allcom,allcom,IP' => 'APN# no JC371',
+    'SPEED:OFF,0,110,10'                             => 'SPEED# no JC181',
+    'MILE#,0'                                        => 'MILE# no JC182',
+    'SERVER,0,186.248.143.197,21122,0'               => 'SERVER# no JC181',
+] as $resp => $quem) {
+    $r = command_response_interpret('Command communication successful response', '100', $resp);
+    checa("[$quem] consulta é dado, não recusa", 'ok', $r['nivel']);
+}
+
+// ── Invariantes do catálogo: a forma de consulta (v4.9.25) ─────────────────
+echo "\n── Catálogo: forma de consulta ──\n";
+$cat = require __DIR__ . '/../../includes/command_catalog.php';
+
+// 🔴 A trava que importa: comando DESTRUTIVO nunca pode ganhar um botão de
+// "ler valor atual". `REBOOT#`, `FORMAT#` e `RESET#` têm forma nua — ela
+// simplesmente não é uma pergunta. Um dia alguém regenera o catálogo da wiki
+// por script e essa distinção some sozinha se não estiver travada aqui.
+$destrutivos = ['REBOOT','RESTORE','RELAY','FORMAT','RESET','RESTART','UPDATE'];
+$violam = [];
+foreach ($cat as $syn => $d) {
+    if (!empty($d['consulta']) && in_array(strtoupper($d['cmd']), $destrutivos, true)) $violam[] = $d['cmd'];
+}
+checa('🔴 nenhum comando destrutivo oferece consulta', [], array_values(array_unique($violam)));
+
+// A consulta é sempre a forma NUA do próprio comando — nunca um setter.
+$formaErrada = [];
+foreach ($cat as $syn => $d) {
+    if (empty($d['consulta'])) continue;
+    if ($d['consulta'] !== strtoupper($d['cmd']) . '#') $formaErrada[] = $d['cmd'] . '=>' . $d['consulta'];
+}
+checa('consulta é sempre `CMD#`', [], $formaErrada);
+
+// Um comando com várias sintaxes (a família EVENTSET) não pode oferecer N
+// botões idênticos: só a primeira entrada carrega a consulta.
+$porCmd = [];
+foreach ($cat as $d) if (!empty($d['consulta'])) $porCmd[$d['cmd']] = ($porCmd[$d['cmd']] ?? 0) + 1;
+checa('nenhuma consulta duplicada por comando', [], array_keys(array_filter($porCmd, fn($n) => $n > 1)));
+
+// Toda consulta declara ONDE vale e DE ONDE veio — sem procedência, `medido`
+// e `wiki` viram a mesma coisa, e não são.
+$semProc = [];
+foreach ($cat as $d) {
+    if (empty($d['consulta'])) continue;
+    if (empty($d['consulta_modelos']) || empty($d['consulta_ref'])) $semProc[] = $d['cmd'];
+}
+checa('toda consulta tem modelos e procedência', [], $semProc);
+
+// Os quatro comandos que a sonda mediu respondendo têm de estar lá.
+foreach (['APN','SERVER','TIMER','ANGLEREP'] as $c) {
+    $tem = false;
+    foreach ($cat as $d) if ($d['cmd'] === $c && !empty($d['consulta'])) $tem = true;
+    checa("`$c#` catalogado como consulta", true, $tem);
+}
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

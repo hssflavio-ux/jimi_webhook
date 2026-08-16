@@ -14,6 +14,34 @@
  * onde não há senha de SMS. Mandar a forma de SMS pela plataforma faz o
  * device recusar.
  *
+ * ── `consulta`: a forma de PERGUNTAR (v4.9.25) ──────────────────────────────
+ *
+ * 🔑 Todo comando tem uma forma NUA — `CMD#`, sem parâmetros — que LÊ o valor
+ * atual em vez de escrever. Até a v4.9.24 este catálogo registrava só o setter
+ * (`APN,NOME,APN#`, `SERVER,A,B,C#`), e como a tela só oferece o que está aqui,
+ * **não havia como ler nada pelo canal JIMI — apenas escrever**. Das 27
+ * respostas de comando gravadas em produção até 15/08/2026, nenhuma era
+ * consulta. Foi por isso que a divergência do APN (o `33028` diz `cmnet`, o
+ * equipamento usa `allcombl.br`) sobreviveu sem ser notada: faltava o botão de
+ * perguntar. Ver `docs/COMANDOS_128_CONSULTA.md`.
+ *
+ *   `consulta`          — a string a enviar (`'APN#'`), ou null.
+ *   `consulta_modelos`  — modelos onde ela é sabidamente aceita.
+ *   `consulta_ref`      — `medido` (bateria em câmera real, 16/08/2026),
+ *                         `wiki` (a página do JC400 escreve `CMD#666666`),
+ *                         ou `medido+wiki`.
+ *
+ * A procedência importa porque `medido` e `wiki` não são a mesma confiança —
+ * é a disciplina do `doc_ref` do `device_param_catalog`, aplicada aqui.
+ *
+ * 🔴 Comando DESTRUTIVO nunca recebe `consulta`, mesmo que a forma nua exista:
+ * `REBOOT`, `RESTORE`, `RELAY`, `FORMAT`, `RESET`, `RESTART`, `UPDATE` são
+ * ação, não pergunta. O invariante está travado em `tests/helpers/`.
+ *
+ * ⚠️ Quando um comando tem várias sintaxes (a família `EVENTSET,*`), só a
+ * PRIMEIRA entrada carrega a consulta — senão a tela ofereceria vinte botões
+ * idênticos.
+ *
  * `modelos` = modelos cuja página documenta o comando. `universal` = presente
  * em >= 5 das 6 páginas; só esses NÃO travam a seleção de equipamentos, por
  * serem o núcleo comum do proNo 128.
@@ -21,8 +49,8 @@
  * `template` = a sintaxe traz placeholders (P1/A) e a tela monta um campo por
  * parâmetro. Sem template, a sintaxe já é um comando pronto.
  *
- * Total: 119 comandos (14 universais).
- * Por categoria: alarme=48, audio=2, ia=26, manutencao=4, outros=11, posicao=13, rede=9, video=6.
+ * Total: 147 comandos (14 universais), 67 com forma de consulta.
+ * Por categoria: alarme=52, audio=3, ia=26, manutencao=12, outros=13, posicao=17, rede=11, video=13.
  */
 
 return [
@@ -40,6 +68,9 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'ACC#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -57,6 +88,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'ACCREP#',
+    'consulta_modelos' => ['JC181', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -79,6 +113,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'ACCV#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -96,6 +133,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'ADAS#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'P1',
@@ -130,6 +170,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => 'ANGLEREP#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -166,7 +209,119 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'APN#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'ASETAPN,P1#' => [
+    'cmd' => 'ASETAPN',
+    'nome' => 'APN automática',
+    'desc' => 'Liga ou desliga a seleção automática de APN. P1: ON/OFF, padrão ON.',
+    'categoria' => 'rede',
+    'modelos' => [
+      0 => 'JC182',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'ASETAPN#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'BCD,P1#' => [
+    'cmd' => 'BCD',
+    'nome' => 'Formato do identificador',
+    'desc' => '0: BCD hexadecimal (Tracksolid Pro, JT/T 808-2013); 1: últimos 12 dígitos do IMEI. Padrão 0.',
+    'categoria' => 'rede',
+    'modelos' => [
+      0 => 'JC182',
+      1 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'BCD#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'CAMERA,TF#' => [
+    'cmd' => 'CAMERA',
+    'nome' => 'Espaço do cartão',
+    'desc' => 'Devolve espaço de memória total e livre.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC182',
+    ],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'CAMERA#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
+    'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'COLLIDE,P1,P2,P3,P4#' => [
+    'cmd' => 'COLLIDE',
+    'nome' => 'Colisão',
+    'desc' => 'Colisão do JC181. Abaixo do limiar o evento é tratado como alarme falso e o vídeo fica local, sem envio. Padrão do limiar: 5 km/h.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC181',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'COLLIDE#',
+    'consulta_modelos' => ['JC181'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
     ],
     'exemplos' => [
     ],
@@ -183,6 +338,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'CRASHALM#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -214,7 +372,34 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'DISCAMERA#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'DISK,P1#' => [
+    'cmd' => 'DISK',
+    'nome' => 'Modo disco (USB)',
+    'desc' => 'Ativa o modo de disco. Para desativar, P1=0 e reiniciar o equipamento.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'DISK#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
     ],
     'exemplos' => [
     ],
@@ -230,6 +415,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -286,6 +474,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMSSW#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
       0 => [
         'p' => 'P1',
@@ -326,6 +517,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMSVSP#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
       0 => [
         'p' => 'P1',
@@ -356,6 +550,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMS_ALERT_CUSTOM#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -408,6 +605,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMS_CONTINUITY#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -460,6 +660,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMS_SWITCH#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -494,6 +697,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -510,6 +716,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'DMS_VOICE_CUSTOM#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -561,6 +770,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -598,6 +810,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -639,6 +854,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -684,6 +902,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -725,6 +946,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -770,6 +994,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -811,6 +1038,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -852,6 +1082,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -889,6 +1122,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -926,6 +1162,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -967,6 +1206,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1008,6 +1250,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1049,6 +1294,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1086,6 +1334,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1123,6 +1374,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1160,6 +1414,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1197,6 +1454,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1234,6 +1494,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1275,6 +1538,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1316,6 +1582,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -1335,6 +1604,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1372,6 +1644,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1409,6 +1684,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1450,6 +1728,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1495,6 +1776,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1536,6 +1820,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1573,6 +1860,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -1593,6 +1883,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -1609,6 +1902,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1641,6 +1937,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1677,6 +1976,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1705,6 +2007,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1741,6 +2046,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1779,6 +2087,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1815,6 +2126,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1855,6 +2169,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1897,6 +2214,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1923,6 +2243,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -1965,6 +2288,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2013,6 +2339,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2035,6 +2364,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2061,6 +2393,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2087,6 +2422,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2119,6 +2457,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2145,6 +2486,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2181,6 +2525,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2217,6 +2564,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2253,6 +2603,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2285,6 +2638,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -2301,6 +2657,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2327,6 +2686,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2355,6 +2717,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2391,6 +2756,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2439,6 +2807,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2475,6 +2846,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -2525,6 +2899,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'EXDEVICESW#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2548,12 +2925,111 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'FATIGUE#',
+    'consulta_modelos' => ['JC181', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
         'desc' => 'ON/OFF',
         'format' => '',
         'default' => 'OFF Para consultar o valor atual, envie:',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'FILELIST,A#' => [
+    'cmd' => 'FILELIST',
+    'nome' => 'Lista de gravações do cartão (JIMI)',
+    'desc' => 'Manda a câmera subir, para a URL informada, um TXT com os nomes das gravações do cartão. Não aceita intervalo de datas: envia a lista inteira.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC400D',
+      1 => 'JC400AD',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'A',
+        'desc' => 'URL HTTP que recebe a lista (termine com o IMEI da câmera)',
+        'format' => 'http://<servidor>/filelist/<IMEI>',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+      0 => [
+        'cmd' => 'FILELIST,http://186.248.143.197/filelist/862798051583785',
+        'desc' => 'Pede à câmera a lista de gravações do cartão',
+      ],
+    ],
+  ],
+  'FILTER#' => [
+    'cmd' => 'FILTER',
+    'nome' => 'Intervalo de filtro de eventos',
+    'desc' => 'Intervalo em que eventos repetidos são suprimidos, por tipo de evento.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC400D',
+    ],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'FILTER#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'FORMAT,P1#' => [
+    'cmd' => 'FORMAT',
+    'nome' => 'Formatar cartão SD',
+    'desc' => '🔴 DESTRUTIVO. Apaga o cartão. Não desligar nem remover o cartão durante a formatação (~1 min).',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC182',
+      1 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'GPSDUP,A#' => [
+    'cmd' => 'GPSDUP',
+    'nome' => 'Duplicidade de GPS',
+    'desc' => 'A: ON/OFF.',
+    'categoria' => 'posicao',
+    'modelos' => [
+      0 => 'JC181',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'GPSDUP#',
+    'consulta_modelos' => ['JC181'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'A',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
       ],
     ],
     'exemplos' => [
@@ -2569,6 +3045,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'HDS#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -2584,6 +3063,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -2600,6 +3082,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'HTTPUPLOADLIMIT#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2612,6 +3097,42 @@ return [
         'desc' => '1 - 30 (Especifica o intervalo entre cada tentativa em minutos)',
         'format' => '',
         'default' => '5 B = 1 - 30 (Especifica o intervalo ent',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'KEYFUN,P1,P2,P3#' => [
+    'cmd' => 'KEYFUN',
+    'nome' => 'Função dos botões',
+    'desc' => 'Define o que clique curto e clique longo acionam.',
+    'categoria' => 'outros',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'KEYFUN#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
       ],
     ],
     'exemplos' => [
@@ -2630,6 +3151,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'LED#',
+    'consulta_modelos' => ['JC371', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2663,7 +3187,83 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'LIGHT#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'wiki',
     'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'LOGASW,P1#' => [
+    'cmd' => 'LOGASW',
+    'nome' => 'Recuperação de logs',
+    'desc' => 'Habilita a recuperação de logs do módulo de comunicação.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'LOGASW#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'MILE,P1#' => [
+    'cmd' => 'MILE',
+    'nome' => 'Unidade de velocidade',
+    'desc' => 'P1: 0 = km/h, 1 = mph. Padrão 0. ⚠️ NÃO é o hodômetro — esse é o MILEAGE.',
+    'categoria' => 'posicao',
+    'modelos' => [
+      0 => 'JC182',
+      1 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'MILE#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'MILEAGE,P1#' => [
+    'cmd' => 'MILEAGE',
+    'nome' => 'Hodômetro (ajuste manual)',
+    'desc' => 'Ajusta manualmente o valor atual do hodômetro.',
+    'categoria' => 'posicao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
     ],
     'exemplos' => [
     ],
@@ -2682,6 +3282,9 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'PARAM#',
+    'consulta_modelos' => ['JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -2689,6 +3292,84 @@ return [
         'cmd' => 'PARAM#',
         'desc' => 'Consulta parâmetros básicos do dispositivo.',
       ],
+    ],
+  ],
+  'PICRATE,P1,P2#' => [
+    'cmd' => 'PICRATE',
+    'nome' => 'Qualidade das fotos',
+    'desc' => 'Qualidade e compressão das fotos capturadas.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'PICTIMER,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'PICTIMER',
+    'nome' => 'Captura programada de fotos',
+    'desc' => 'Captura automática de fotos por tempo, com repetição por viagem e aviso de voz.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'PICTIMER#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
     ],
   ],
   'PICTURE#' => [
@@ -2701,6 +3382,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'PICTURE#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -2716,6 +3400,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -2731,6 +3418,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'Consultar lista de APNs ativos',
@@ -2772,6 +3462,30 @@ return [
       ],
     ],
   ],
+  'PWDSW,P1#' => [
+    'cmd' => 'PWDSW',
+    'nome' => 'Senha de comandos',
+    'desc' => 'Liga a exigência de senha nos comandos. Para desligar é preciso informar a senha atual.',
+    'categoria' => 'outros',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'PWDSW#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
   'RAPIDACC,A,B,C#' => [
     'cmd' => 'RAPIDACC',
     'nome' => 'Aceleração Brusca',
@@ -2784,6 +3498,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RAPIDACC#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2823,6 +3540,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RAPIDDEC#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2862,6 +3582,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RAPIDTURN#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2902,6 +3625,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RATATION#',
+    'consulta_modelos' => ['JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2941,6 +3667,9 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -2959,6 +3688,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RECORDAUDIO#',
+    'consulta_modelos' => ['JC182', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -2971,6 +3703,31 @@ return [
         'desc' => '0/1',
         'format' => '',
         'default' => '1 = Ativado Para consultar se o áudio es',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'RECORDAUDIO_SUB,A#' => [
+    'cmd' => 'RECORDAUDIO_SUB',
+    'nome' => 'Áudio no fluxo secundário',
+    'desc' => 'A: 0 desativado, 1 ativado. Padrão 1.',
+    'categoria' => 'audio',
+    'modelos' => [
+      0 => 'JC400D',
+      1 => 'JC400AD',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'RECORDAUDIO_SUB#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'A',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
       ],
     ],
     'exemplos' => [
@@ -2991,6 +3748,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => 'RECORDSW#',
+    'consulta_modelos' => ['JC182', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3003,6 +3763,36 @@ return [
         'desc' => '0/1',
         'format' => '',
         'default' => 'ON para os 2 canais Para consultar o sta',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'RECORDSW_SUB,P1,P2#' => [
+    'cmd' => 'RECORDSW_SUB',
+    'nome' => 'Gravação histórica por canal',
+    'desc' => 'Ativa ou desativa a gravação histórica de um canal.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
       ],
     ],
     'exemplos' => [
@@ -3022,6 +3812,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -3045,6 +3838,42 @@ return [
       ],
     ],
   ],
+  'RESET#' => [
+    'cmd' => 'RESET',
+    'nome' => 'Reiniciar (RESET)',
+    'desc' => '🔴 Reinicia o equipamento. Equivalente a REBOOT# e RESTART#.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'RESTART#' => [
+    'cmd' => 'RESTART',
+    'nome' => 'Reiniciar (RESTART)',
+    'desc' => '🔴 Reinicia o equipamento. Equivalente a REBOOT# e RESET#.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
   'RESTORE#' => [
     'cmd' => 'RESTORE',
     'nome' => 'Restaurar',
@@ -3058,6 +3887,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -3074,6 +3906,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'RSERVICE#',
+    'consulta_modelos' => ['JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3103,6 +3938,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'SENALM#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3134,6 +3972,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -3154,6 +3995,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => 'SERVER#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3181,6 +4025,36 @@ return [
       ],
     ],
   ],
+  'SF,P1,P2#' => [
+    'cmd' => 'SF',
+    'nome' => 'Filtro de deriva',
+    'desc' => 'Filtro de posição parada; a margem em metros define quando volta a rastrear. Recomendado 100.',
+    'categoria' => 'posicao',
+    'modelos' => [
+      0 => 'JC182',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SF#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
   'SOSALM,A,B#' => [
     'cmd' => 'SOSALM',
     'nome' => 'SOS',
@@ -3192,6 +4066,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'SOSALM#',
+    'consulta_modelos' => ['JC181', 'JC182'],
+    'consulta_ref' => 'medido',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3240,6 +4117,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'SPEED#',
+    'consulta_modelos' => ['JC181', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3269,6 +4149,54 @@ return [
     'exemplos' => [
     ],
   ],
+  'SPEEDCHECK,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'SPEEDCHECK',
+    'nome' => 'Frenagem brusca (detecção)',
+    'desc' => 'Queda de velocidade em km/h dentro de N segundos para caracterizar frenagem brusca. Padrão OFF,0,4,30,50.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC181',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SPEEDCHECK#',
+    'consulta_modelos' => ['JC181'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
   'SSID#' => [
     'cmd' => 'SSID',
     'nome' => 'SSID',
@@ -3284,6 +4212,9 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'SSID#',
+    'consulta_modelos' => ['JC182', 'JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -3304,7 +4235,82 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'STATUS#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'SWERVE,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'SWERVE',
+    'nome' => 'Curva brusca (detecção)',
+    'desc' => 'Tempo de detecção de 1 a 30 s para caracterizar curva brusca. Padrão OFF,0,30,60,3.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC181',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SWERVE#',
+    'consulta_modelos' => ['JC181'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'TFMODE,P1#' => [
+    'cmd' => 'TFMODE',
+    'nome' => 'Modo de memória',
+    'desc' => '1: cartão TF; 2: somente EMMC (sem alertas de ausência de cartão).',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'TFMODE#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
     ],
     'exemplos' => [
     ],
@@ -3323,6 +4329,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => 'TIMER#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -3339,6 +4348,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'TIMER1#',
+    'consulta_modelos' => ['JC181', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -3357,6 +4369,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'TIMESYNC#',
+    'consulta_modelos' => ['JC371', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3392,6 +4407,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'TIMEZONE#',
+    'consulta_modelos' => ['JC181', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3413,6 +4431,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'TLR#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -3428,6 +4449,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -3475,6 +4499,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'P1',
@@ -3506,6 +4533,30 @@ return [
       ],
     ],
   ],
+  'UPDATE,P1#' => [
+    'cmd' => 'UPDATE',
+    'nome' => 'Atualizar firmware',
+    'desc' => '🔴 Inicia atualização de firmware a partir de uma URL.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
   'UPFILESIZE#' => [
     'cmd' => 'UPFILESIZE',
     'nome' => 'Limite de Tamanho de Arquivo Enviado',
@@ -3516,6 +4567,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'UPFILESIZE#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
@@ -3531,42 +4585,12 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
-    ],
-  ],
-  // v4.9.18 — a listagem de gravações no protocolo JIMI. Ao contrário do JT/T,
-  // que responde a uma consulta com janela (`37381` → /pushresourcelist), aqui
-  // a câmera SOBE sozinha um TXT com a lista inteira para a URL informada, sem
-  // filtro de data. O receptor é /filelist/{imei} (handlers/filelist.php).
-  //
-  // ⚠️ A URL tem de ser HTTP simples e alcançável pela câmera na internet —
-  // ela não faz TLS, e o redirect 80→443 do site tem exceção para este caminho.
-  'FILELIST,A#' => [
-    'cmd' => 'FILELIST',
-    'nome' => 'Lista de gravações do cartão (JIMI)',
-    'desc' => 'Manda a câmera subir, para a URL informada, um TXT com os nomes das gravações do cartão. Não aceita intervalo de datas: envia a lista inteira.',
-    'categoria' => 'video',
-    'modelos' => [
-      0 => 'JC400D',
-      1 => 'JC400AD',
-    ],
-    'universal' => false,
-    'template' => true,
-    'params' => [
-      0 => [
-        'p' => 'A',
-        'desc' => 'URL HTTP que recebe a lista (termine com o IMEI da câmera)',
-        'format' => 'http://<servidor>/filelist/<IMEI>',
-        'default' => '',
-      ],
-    ],
-    'exemplos' => [
-      0 => [
-        'cmd' => 'FILELIST,http://186.248.143.197/filelist/862798051583785',
-        'desc' => 'Pede à câmera a lista de gravações do cartão',
-      ],
     ],
   ],
   'UPLOAD,A#' => [
@@ -3582,6 +4606,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'UPLOAD#',
+    'consulta_modelos' => ['JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3599,6 +4626,24 @@ return [
     'exemplos' => [
     ],
   ],
+  'UPLOADSW#' => [
+    'cmd' => 'UPLOADSW',
+    'nome' => 'Upload por tipo de evento',
+    'desc' => 'Liga o upload da gravação por tipo de evento.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC400D',
+    ],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'UPLOADSW#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
   'URLTYPE,1#' => [
     'cmd' => 'URLTYPE',
     'nome' => 'Tipo de servidor (HTTP, etc.)',
@@ -3612,6 +4657,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'URLTYPE#',
+    'consulta_modelos' => ['JC182', 'JC450'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -3630,6 +4678,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -3650,7 +4701,40 @@ return [
     ],
     'universal' => true,
     'template' => false,
+    'consulta' => 'VERSION#',
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'VIDEOPARAM,P1,P2#' => [
+    'cmd' => 'VIDEOPARAM',
+    'nome' => 'Duração dos clipes',
+    'desc' => 'Duração dos clipes normais e dos clipes de evento.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'VIDEOPARAM#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'wiki',
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
     ],
     'exemplos' => [
     ],
@@ -3665,6 +4749,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
       0 => [
         'p' => 'A',
@@ -3675,6 +4762,54 @@ return [
       1 => [
         'p' => 'A',
         'desc' => '0/1/2',
+        'format' => '',
+        'default' => '',
+      ],
+    ],
+    'exemplos' => [
+    ],
+  ],
+  'VIDEORSL,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'VIDEORSL',
+    'nome' => 'Gravação no cartão TF',
+    'desc' => 'Resolução e taxa de quadros da gravação no TF.',
+    'categoria' => 'video',
+    'modelos' => [
+      0 => 'JC371',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => '',
+        'format' => '',
+        'default' => '',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => '',
         'format' => '',
         'default' => '',
       ],
@@ -3693,6 +4828,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'VIDEOTIMEZONE#',
+    'consulta_modelos' => ['JC182', 'JC371'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
     'exemplos' => [
@@ -3708,6 +4846,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -3726,6 +4867,9 @@ return [
     ],
     'universal' => false,
     'template' => true,
+    'consulta' => 'VOICESW#',
+    'consulta_modelos' => ['JC400AD', 'JC400D'],
+    'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3752,6 +4896,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => 'VOLUME#',
+    'consulta_modelos' => ['JC182', 'JC400AD', 'JC400D'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'A',
@@ -3782,6 +4929,9 @@ return [
     ],
     'universal' => true,
     'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
     'params' => [
     ],
     'exemplos' => [
@@ -3799,6 +4949,9 @@ return [
     ],
     'universal' => false,
     'template' => false,
+    'consulta' => 'WIFIAPT#',
+    'consulta_modelos' => ['JC182', 'JC371'],
+    'consulta_ref' => 'medido',
     'params' => [
     ],
     'exemplos' => [
