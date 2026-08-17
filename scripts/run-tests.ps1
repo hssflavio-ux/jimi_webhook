@@ -10,7 +10,7 @@
 
 .EXAMPLE
     ./scripts/run-tests.ps1
-    ./scripts/run-tests.ps1 -BaseUrl http://189.22.240.43   # HOMOLOG (produção: https://bycamera.ia.br)
+    ./scripts/run-tests.ps1 -BaseUrl https://bycamera.ia.br  # PRODUÇÃO (186.248.143.197)
     ./scripts/run-tests.ps1 -- --grep "Login"           # args extras do Playwright
 
 .NOTES

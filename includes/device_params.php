@@ -389,7 +389,7 @@ function param_input_spec(array $catalogo, int $no): array
 
         case 'ip':
             return ['hint' => 'IP ou domínio, sem http:// e sem porta.',
-                    'placeholder' => 'ex.: 189.22.240.43',
+                    'placeholder' => 'ex.: 186.248.143.197',
                     'inputmode' => 'url', 'pattern' => null];
 
         case 'enum':
