@@ -13,6 +13,10 @@ require_login();
 $customer_id = get_customer_id();
 $db = Database::getInstance()->getConnection();
 
+$user      = get_jimi_user();
+$is_admin  = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+$customers = $is_admin ? report_customer_options($db) : [];
+
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY protocol, model_name")->fetchAll(PDO::FETCH_ASSOC);
 
 $error   = null;
@@ -28,8 +32,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $cameras     = (int)($_POST['camera_count'] ?? 1);
     $ativacao    = trim($_POST['activation_date'] ?? '');
 
+    // Dono do dispositivo — ver resolve_owner_customer_id(). Antes gravava
+    // `$customer_id` cru: sessão sem cliente virava dispositivo com customer_id
+    // NULL, salvo com "cadastrado com sucesso" e invisível em /ativos depois.
+    $owner_id = resolve_owner_customer_id($_POST['customer_id'] ?? null, $is_admin, $customer_id);
+
     if (!$nome || !$imei || !$modelo_id) {
         $error = 'Preencha todos os campos obrigatórios (Nome, IMEI e Modelo).';
+    } elseif ($owner_id === null) {
+        $error = 'Selecione o cliente do dispositivo. Sua sessão está sem cliente definido — salvar assim deixaria o dispositivo sem vínculo e invisível na lista de Ativos.';
     } elseif (!preg_match('/^\d{15,17}$/', $imei)) {
         $error = 'IMEI inválido. Deve conter 15 a 17 dígitos.';
     } elseif ($cameras < 1 || $cameras > 16) {
@@ -42,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $existsStmt->execute([$imei]);
         $existing = $existsStmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($existing && !is_null($existing['customer_id']) && (int)$existing['customer_id'] !== (int)$customer_id) {
+        if ($existing && !is_null($existing['customer_id']) && (int)$existing['customer_id'] !== (int)$owner_id) {
             // Multi-tenant: IMEI de outro cliente nunca é adotável por aqui
             $error = 'Este IMEI já está vinculado a outro cliente. Contate o administrador.';
         } elseif ($existing && !is_null($existing['customer_id']) && (int)$existing['is_active'] === 1) {
@@ -57,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $stmt->execute([
                 $nome,
-                $customer_id,
+                $owner_id,
                 $modelo_id,
                 $cameras,
                 $ativacao ?: null,
@@ -73,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([
                 $imei,
                 $nome,
-                $customer_id,
+                $owner_id,
                 $modelo_id,
                 $cameras,
                 $ativacao ?: null,
@@ -165,9 +176,24 @@ include __DIR__ . '/../web/layout_base.php';
                 <input type="number" id="camera_count" name="camera_count" value="1" min="1" max="16">
             </div>
         </div>
-        <div class="form-group">
-            <label for="activation_date">Data de Ativação</label>
-            <input type="date" id="activation_date" name="activation_date">
+        <div class="form-row">
+            <?php if ($is_admin): ?>
+            <div class="form-group">
+                <label for="customer_id">Cliente *</label>
+                <select id="customer_id" name="customer_id" required>
+                    <option value="">— Selecione o cliente —</option>
+                    <?php foreach ($customers as $c): ?>
+                    <option value="<?= $c['id'] ?>" <?= (string)$customer_id === (string)$c['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
+            <div class="form-group">
+                <label for="activation_date">Data de Ativação</label>
+                <input type="date" id="activation_date" name="activation_date">
+            </div>
         </div>
         <div class="flex-between mt-16">
             <a href="/ativos" class="btn btn-outline">Cancelar</a>

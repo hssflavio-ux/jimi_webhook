@@ -5,6 +5,30 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.26
+
+**O cadastro de equipamento gravava o cliente errado — ou nenhum — e dizia "cadastrado com sucesso".** Relatado do campo: uma câmera cadastrada em 17/08/2026 não vinculou ao cliente. A tela `/equipamentos` **não tinha seletor de cliente**: mostrava o cliente da sessão num campo `readonly` (que, por cima, lia `$editDevice['customer_name']` — coluna que o `SELECT *` da tela nunca trouxe, então exibia o cliente da sessão mesmo ao editar equipamento de outro) e gravava `customer_id = $sessao ?? 1`. Daí saíam três desfechos, os três com HTTP 200 e mensagem verde:
+
+| situação | o que era gravado | como aparecia |
+|---|---|---|
+| admin com a grade filtrada no cliente X | cliente da **sessão**, não o X | equipamento "sumiu" — está em outro cliente |
+| sessão sem cliente, via `/equipamentos` | **`1`** (fallback fixo) | equipamento no tenant errado |
+| sessão sem cliente, via `/ativos/novo` | **`NULL`** | órfão: invisível em toda tela com escopo |
+
+Sessão sem cliente não é hipótese: `login_user()` só chama `set_customer_context()` se `get_available_customers()` devolver algo, e devolve vazio para quem não é admin de plataforma e não tem vínculo em `customer_users`. E como `devices.customer_id` e `sim_cards.customer_id` são **nullable**, o `INSERT` do órfão passava sem reclamar — as colunas `NOT NULL` (`drivers`, `geofences`, `report_schedules`) escapavam da corrupção só porque o banco recusava, com uma `PDOException` crua na tela.
+
+O erro **não estava só nessa tela**: o mesmo `get_customer_id()` sem guarda alimentava `/ativos/novo`, `/chips`, `/motoristas` e a importação em lote.
+
+### Fixed
+- **`resolve_owner_customer_id()`** (`includes/functions.php`) — o espelho de **escrita** do `report_customer_scope()`, com a mesma semântica de escopo (`reseller_scope_ids()`), para não existirem duas respostas para "que clientes são dele". Devolve `null` quando não dá para resolver com segurança, e o chamador **recusa o cadastro**: nunca há id "de consolo". Aplicado a `/equipamentos` (avulso e lote), `/ativos/novo`, `/chips` e `/motoristas`.
+- **Seletor de cliente** em `/equipamentos` e `/ativos/novo` para admin/revendedor, pré-selecionado pelo dono atual → filtro da grade → sessão. O `<select>` sai de `report_customer_options()`, então revendedor só enxerga o próprio escopo. A importação em lote ganhou o mesmo seletor e vincula o arquivo inteiro ao cliente escolhido.
+- **O `UPDATE` de `/equipamentos` passa a gravar `customer_id`.** Sem isso não havia como consertar pela tela o equipamento que nascesse órfão ou no cliente errado — o dono era imutável depois do cadastro.
+- **Vazamento cross-tenant na edição de equipamento.** `SELECT * FROM devices WHERE imei` e `UPDATE … WHERE imei` não tinham escopo nenhum: qualquer usuário abria e **alterava** o equipamento de qualquer cliente sabendo o IMEI da URL. Agora o `WHERE` carrega o escopo (cliente da sessão para usuário comum, `IN (escopo)` para revendedor), e 0 linhas afetadas devolve "não encontrado no seu escopo" em vez de "atualizado".
+
+### Added
+- **Filtro "— Sem cliente (órfãos) —"** e aviso no topo de `/equipamentos` contando os equipamentos com `customer_id` NULL, com link para a lista. É como o admin acha o que o cadastro antigo deixou órfão — que, por definição, não aparece em nenhuma tela com escopo — para então vinculá-lo pela edição.
+- **`tests/equipamento_vinculo.spec.js`** — 4 casos: a estrutura (tem de ser `<select>`, não campo fixo, com guarda de não-vacuidade exigindo 2+ clientes), o cadastro num cliente **diferente** do da sessão, a coluna Cliente nunca vazia na grade, e a recusa do **servidor** com o `required` removido do HTML. Verificado que reprova no código anterior — os 4 casos passam depois da correção e o primeiro falha antes dela.
+
 ## [Unreleased] — 4.9.25
 
 **O catálogo de comandos só sabia escrever.** Todo comando `proNo 128` tem uma forma nua — `CMD#`, sem parâmetros — que **lê** o valor atual, e o `command_catalog.php` registrava apenas o setter (`APN,NOME,APN#`, `SERVER,A,B,C#`). Como a tela só oferece o que está no catálogo, nunca houve como perguntar nada ao equipamento pelo canal JIMI. Das 27 respostas de comando gravadas em produção até 15/08/2026, **nenhuma** era consulta — e foi por isso que a divergência de APN da v4.9.24 (o `33028` diz `cmnet`, o equipamento usa `allcombl.br`) sobreviveu sem ser notada: faltava o botão de perguntar. Levantado contra a wiki oficial da linha JC e medido em quatro câmeras de produção. Detalhe em `docs/COMANDOS_128_CONSULTA.md`.

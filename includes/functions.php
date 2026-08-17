@@ -472,6 +472,58 @@ function report_customer_options(PDO $db): array {
 }
 
 /**
+ * Cliente-dono a gravar num cadastro novo — o espelho de ESCRITA do
+ * `report_customer_scope()`.
+ *
+ * Devolve `null` quando não dá para resolver com segurança, e nesse caso o
+ * chamador **tem de recusar o cadastro**. Nunca devolve um id "de consolo":
+ * eram exatamente os dois consolos que corrompiam o cadastro de equipamento,
+ * os dois com HTTP 200 e mensagem de sucesso na tela —
+ *   - gravar `NULL` (as colunas `devices.customer_id` e `sim_cards.customer_id`
+ *     são nullable, então o INSERT passa) cria registro órfão, que some de toda
+ *     tela com escopo de cliente e nunca mais é achado pelo usuário;
+ *   - o fallback fixo `?? 1` gravava no cliente de **id 1**, quase sempre de
+ *     outro tenant.
+ * As colunas NOT NULL (`drivers`, `geofences`, `report_schedules`) escapavam da
+ * corrupção só porque o banco recusava — com um erro de SQL cru na tela.
+ *
+ * A semântica de quem pode gravar em quem é deliberadamente a MESMA de
+ * `report_customer_scope()`/`reseller_scope_ids()`, para não existirem duas
+ * respostas para "que clientes são dele":
+ *   - **não-admin**: sempre o cliente da sessão; o `$requested` do formulário é
+ *     ignorado, não validado (idem escopo de leitura);
+ *   - **revendedor**: `$requested` só vale dentro do escopo dele; senão cai no
+ *     cliente da sessão, e só se este também estiver no escopo;
+ *   - **admin de plataforma**: `$requested` vale; sem ele, o da sessão.
+ *
+ * Id inexistente escapa daqui e morre na FK (`fk_dev_customer`) — backstop de
+ * propósito: o `<select>` da tela já sai de `report_customer_options()`, então
+ * valor fora da lista é adulteração, não uso normal.
+ *
+ * @param mixed $requested         `customer_id` vindo do formulário ('' / null quando ausente)
+ * @param bool  $isAdmin           admin de plataforma OU revendedor
+ * @param mixed $sessionCustomerId contexto de cliente da sessão
+ * @returns int|null  id a gravar, ou null se o chamador deve RECUSAR o cadastro
+ */
+function resolve_owner_customer_id($requested, bool $isAdmin, $sessionCustomerId): ?int {
+    $req     = ($requested !== null && $requested !== '') ? (int)$requested : null;
+    $session = ($sessionCustomerId !== null && $sessionCustomerId !== '') ? (int)$sessionCustomerId : null;
+    if ($req !== null && $req <= 0)         $req = null;
+    if ($session !== null && $session <= 0) $session = null;
+
+    if (!$isAdmin) return $session;
+
+    $allowed = reseller_scope_ids();
+    if ($allowed === null) {
+        // Admin de plataforma: escolhe qualquer um; sem escolha, o da sessão.
+        return $req ?? $session;
+    }
+    if ($req !== null && in_array($req, $allowed, true))         return $req;
+    if ($session !== null && in_array($session, $allowed, true)) return $session;
+    return null;
+}
+
+/**
  * SQL que resolve o NOME do alarme na leitura — joins + expressão.
  *
  * `pushalarm.php` resolve o nome UMA vez, quando o webhook chega, e grava o

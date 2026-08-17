@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project
 
 > **Nome do produto: `bycamera`** (v4.8.3). O frontend inteiro — login, sidebar, `<title>`, setup, wiki, marca d'água do vídeo — usa essa marca. São **três artes**, uma por superfície, e trocar uma pela outra quebra a legibilidade: `web/assets/logo-login.png` (lockup completo **com o descritor** "videomonitoramento inteligente", só no login, onde há largura para lê-lo), `web/assets/logo-dark.png` (texto claro sobre transparente — sidebar e qualquer fundo escuro; a arte clara **some** no near-black) e `web/assets/logo-report.png` (sem descritor, fundo branco — cabeçalho do PDF dos relatórios, via `REPORT_LOGO_PATH`). Os originais ficam em `docs/imagens/`. Os **ícones do PWA/favicon** (`assets/icons/icon-*.png`, referenciados por `manifest.json`) são só o **símbolo** — num quadrado de 192 px o lockup seria ilegível.
@@ -29,10 +27,7 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 
 🔴 **`189.22.240.43` NÃO é produção.** Ele foi o ambiente único até 13/08/2026 e ficou gravado como "produção" em textos de julho (`.agents/memory/`, §8 do STATUS.md) — corrigido, mas o engano ressurge de qualquer doc velha. Produção é a que responde em `bycamera.ia.br`. Os dois `/ping` divergem **de propósito** (homolog costuma estar à frente ou atrás); comparar os dois é o jeito mais rápido de saber o que está no ar em cada um.
 
-- **Deploy** (idêntico nos dois): `ssh -t administrador@<ip> "cd /var/www/jimi_webhook && sudo ./scripts/deploy.sh"`. O `sudo` **pede senha** — daí o `-t`, senão a sessão morre sem prompt.
-- **Chave SSH**: a do Mac de dev está autorizada **em produção**; no homolog está instalada a da máquina **Windows**, então do Mac o homolog recusa (`Permission denied (publickey,password)`) — não é senha errada.
-- **Em produção a chave do GitHub é do `administrador`, não do root** — e o `deploy.sh` roda sob `sudo`. Sem `core.sshCommand` no `.git/config` apontando para `/home/administrador/.ssh/id_ed25519` (+ o `known_hosts` dele), a FASE 1 morre em `✗ FALHA: git fetch falhou` e a mensagem sugere criar uma chave nova, que é o conserto errado — o erro real é `Host key verification failed`. Configurado em 14/08/2026; **some se o repo for reclonado** (detalhe na §8 do `STATUS.md`).
-- **A versão anunciada mora no `.env.example`** (`SYSTEM_VERSION`), e o `deploy.sh` a propaga para o `.env` do servidor. Subir código sem subir esse número faz o `/ping` anunciar a versão antiga com o código novo no ar — foi o que as v4.9.18 e v4.9.19 fizeram.
+**Deploy** (comando com `sudo`, qual chave SSH vale de qual máquina, a chave do GitHub sob `sudo` em produção, o bump de `SYSTEM_VERSION`, flags e rollback) → skill `deploy` (`.claude/skills/deploy/SKILL.md`).
 
 ## Commands
 
@@ -70,17 +65,7 @@ Verification: `php -l` lint + `scripts/test_e2e.sh` (webhook replay with MySQL a
 
 ## Architecture
 
-```
-Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
-```
-
 **Front controller**: `.htaccess` rewrites every non-file request to `handlers/router.php`, which parses URL segments and `require`s the matching `handlers/*.php`. Path params (e.g. `/ativos/{imei}`, `/clientes/{id}`) are injected into `$_GET` before dispatch. Adding a route = add the segment to the relevant array in `router.php` AND create the handler file.
-
-**Two kinds of handlers share the `handlers/` directory:**
-
-1. **Webhook receivers** (`push*.php`) — each instantiates a subclass of `WebhookHandler` (`config/WebhookHandler.php`) and calls `handle()`. The base class enforces a fixed pipeline: validate token → log raw payload → send HTTP 200 early via `fastcgi_finish_request()` → **then** process in background → idempotency check → `beginTransaction` → `normalize_data()` + `processItem()` per item → `commit` → write metrics. Subclasses only implement `processItem()` (and optionally `validateData()`). Real work happens *after* the client already got its 200, so errors there are logged, never returned.
-
-2. **Dashboard pages + AJAX endpoints** — render via the layout shell in `web/` and call `require_login()` / `require_admin()` from `includes/auth.php`.
 
 ## Critical conventions & gotchas
 
@@ -96,6 +81,9 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
   - **`alarm_types.category` é a MESMA armadilha, numa segunda tabela.** `notification_rules.alarm_type` aceita nome **ou categoria**, e `notification_engine.php` casa por `at.category = nr.alarm_type`. No homolog as **6** regras casam por categoria e **nenhuma** por nome — então renomear categoria sem remapear a regra desliga a notificação em silêncio, exatamente como o caso acima. A v4.9.5 unificou as categorias (estavam em inglês nas linhas JIMI e em português nas JT/T) e precisou remapear `notification_rules` junto, com `UPDATE IGNORE` por causa da `UNIQUE KEY (customer_key, alarm_type)`. `DMS` e `ADAS` ficam intocados: são siglas, e `rel_alarmes.php` filtra por `category IN ('DMS','ADAS')`. A tradução para a tela é na **exibição**, por `alarm_category_label()` — nunca gravando o rótulo traduzido na coluna.
   - 🔴 **O código JT/T que chega aos motores é a BASE, não o do catálogo.** `pushalarm.php` passa `alarm_type = '264'`; `alarm_types.alarm_code` guarda `'264-4'` (o subtipo vive em coluna separada, `alarms.alarm_subtype`). Enquanto os dois motores compararam só a base, **nenhuma regra por CATEGORIA ou por CÓDIGO disparava para DMS/ADAS de JT/T** — o núcleo do produto — enquanto JIMI (códigos simples) e JT/T sem subtipo (`1027`) funcionavam. Sintoma: câmera JIMI notifica, câmera JT/T não, sem erro em log nem tela. Corrigido na v4.9.6 passando `alarm_subtype` adiante e casando também pelo composto. **Regra/parâmetro gravado por NOME sempre escapou disso** (é o ramo `= :aname`), e é por isso que o motor de ocorrências nunca exibiu o defeito: os parâmetros são por nome, as regras de notificação são por categoria.
   - ⚠️ **Conferência de "sobrou algo em inglês?" precisa de `BINARY`.** A collation é `utf8mb4_unicode_ci`: sem ele, `WHERE category IN ('Video','Sensor')` casa os valores **já corrigidos** (`video`, `sensor`) e a migração acusa erro onde não há.
+
+- 🔴 **`get_customer_id()` pode ser NULL, e gravar isso num cadastro é corrupção SILENCIOSA.** `login_user()` só chama `set_customer_context()` se `get_available_customers()` devolver algo — e devolve **vazio** para quem não é admin de plataforma e não tem vínculo em `customer_users`. Como `devices.customer_id` e `sim_cards.customer_id` são **nullable**, o `INSERT` passa: o registro nasce órfão, some de toda tela com escopo de cliente e o usuário vê "cadastrado com sucesso". As colunas `NOT NULL` (`drivers`, `geofences`, `report_schedules`) escapam só porque o banco recusa — com `PDOException` crua na tela. O fallback `?? 1`, que a v4.9.25 usava em `/equipamentos`, é pior que o NULL: grava no tenant de id 1 sem erro nenhum. **Todo cadastro novo resolve o dono por `resolve_owner_customer_id()`** (`includes/functions.php`) — o espelho de ESCRITA do `report_customer_scope()` — e **recusa** quando ela devolve NULL. Corrigido na v4.9.26; o filtro `?customer_id=none` em `/equipamentos` lista os órfãos que sobraram.
+  - ⚠️ **Tela de cadastro sem seletor de cliente grava no cliente da SESSÃO, não no que o usuário está vendo.** Era a causa-raiz: `/equipamentos` mostrava o dono num campo `readonly` e ignorava o filtro da grade, então o admin filtrava por um cliente, cadastrava, e o equipamento caía em outro. Campo readonly não é documentação do que será gravado — **se o valor é escolhível, tem de ser um `<select>` que o POST leia**.
 
 - **Tela nova entra em DOIS lugares, sempre**: `$screenByHandler` (`handlers/router.php`) **e** `$screens` (`handlers/grupos_permissao.php`). Só no router = tela impossível de conceder (o admin não tem o que marcar). Só na matriz = o `view` **não é verificado por ninguém** — as ações de escrita dão 403 e a tela abre para todo mundo, então negá-la ao grupo não faz nada. Já aconteceu quatro vezes: `checklist` e `wiki` (v4.8.5), `config-notificacoes` e `config-smtp` (v4.8.9).
 
@@ -128,13 +116,9 @@ Jimi IoT Hub --POST--> .htaccess --> handlers/router.php --> handlers/*.php
 - `handlers/router.php` — front controller / route table
 - `includes/download_token.php` + `handlers/download.php` — link de relatório **assinado com validade** (`/download?j=&exp=&sig=`). Único caminho de download: `storage/reports/` é negado no Apache. Sem login de propósito — a autorização é a assinatura, porque o link viaja por e-mail
 - `includes/functions.php` → **`report_customer_scope()`** — ponto único do escopo multi-tenant dos relatórios. Toda tela nova que aceite `?customer_id` **tem** de passar por ela: para não-admin o parâmetro é ignorado, não validado
-- `config/WebhookHandler.php` — abstract base for all `push*.php` receivers
 - `config/database.php` — PDO singleton + `.env` parser
-- `includes/auth.php` — `require_login()`, `require_admin()`, `get_jimi_user()`, `get_customer_id()`, `login_user()`, `set_customer_context()`
-- `includes/functions.php` — `get_webhook_data()`, `normalize_data()`
 - `core/Logger.php` — static logger (daily file naming, DEBUG→CRITICAL; level via `LOG_LEVEL` in `.env` — `DEBUG` enables raw webhook payloads; purge/rotation via cron `scripts/log_cleanup.php`, `LOG_RETENTION_DAYS`/`LOG_MAX_SIZE_MB`)
 - `web/layout_base.php` / `layout_ativo_sidebar.php` / `layout_base_close.php` — dashboard shell (sidebar + header + content)
-- `mysql/jimi_tracker.sql` + `migration_v2.0.0.sql` + `migration_v3.1.0.sql` — schema (22 tables; v3.1.0 added `customers`, `users`, `customer_users`, `sessions`, `device_models`)
 
 ## Code style
 

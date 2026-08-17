@@ -38,8 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $identifier     = trim($_POST['identifier'] ?? '') ?: null;
         $active         = isset($_POST['is_active']) ? 1 : 0;
 
+        // `drivers.customer_id` é NOT NULL: sem cliente resolvido o INSERT morria
+        // numa PDOException exibida crua na tela. Recusa antes, com texto legível.
+        $owner_id = resolve_owner_customer_id($_POST['customer_id'] ?? null, $is_admin, $customer_id);
+
         if (empty($name)) {
             $error = 'Nome do motorista é obrigatório.';
+        } elseif ($id === 0 && $owner_id === null) {
+            $error = 'Selecione o cliente do motorista. Sua sessão está sem cliente definido.';
         } else {
             try {
                 if ($id > 0) {
@@ -51,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = 'Motorista atualizado.';
                 } else {
                     $stmt = $db->prepare("INSERT INTO drivers (customer_id, name, birth_date, cnh_number, cnh_category, cnh_expires_at, tox_exam_expires_at, identifier, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$customer_id, $name, $birth_date, $cnh_number, $cnh_category, $cnh_expires, $tox_expires, $identifier, $active]);
+                    $stmt->execute([$owner_id, $name, $birth_date, $cnh_number, $cnh_category, $cnh_expires, $tox_expires, $identifier, $active]);
                     $success = 'Motorista criado com sucesso.';
                 }
             } catch (PDOException $e) {

@@ -31,8 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         csrf_verify();
         $devicesJson = $_POST['devices'] ?? '';
         $devicesData = json_decode($devicesJson, true);
+        // Dono resolvido UMA vez para o lote inteiro (ver resolve_owner_customer_id).
+        $importOwner = resolve_owner_customer_id($_POST['customer_id'] ?? null, $isAdmin, $customerId);
         if (!is_array($devicesData) || empty($devicesData)) {
             $message = 'Nenhum dispositivo válido no arquivo.';
+            $messageType = 'error';
+        } elseif ($importOwner === null) {
+            $message = 'Selecione o cliente antes de importar: sua sessão está sem cliente definido, e importar assim criaria equipamentos órfãos.';
             $messageType = 'error';
         } else {
             $imported = 0; $skipped = 0;
@@ -67,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $insertStmt->execute([
                     ':imei' => $imei,
                     ':name' => $name ?: $imei,
-                    ':cid'  => $customerId ?? 1,
+                    ':cid'  => $importOwner,
                     ':fw'   => trim($d['firmware'] ?? '') ?: null,
                     ':cam'  => $channels > 0 ? $channels : (int)($model['camera_count'] ?? 1),
                     ':mid'  => $model['id'] ?? null,
@@ -101,8 +106,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $isActive = !empty($_POST['is_active']) ? 1 : ((($_POST['action'] ?? '') === 'create') ? 1 : 0);
     $cameraCount = (int)($_POST['camera_count'] ?? 1);
 
+    // Dono do equipamento: o <select> da tela para admin/revendedor, o cliente da
+    // sessão para os demais. NULL = não dá para resolver → recusa (o cadastro
+    // seguia com `?? 1`, gravando no tenant errado, ou com NULL, criando órfão).
+    $ownerId = resolve_owner_customer_id($_POST['customer_id'] ?? null, $isAdmin, $customerId);
+
     if (empty($imei) || empty($deviceName)) {
         $message = 'IMEI e Nome do dispositivo são obrigatórios.';
+        $messageType = 'error';
+    } elseif ($ownerId === null) {
+        $message = 'Selecione o cliente do equipamento. Sua sessão está sem cliente definido — salvar assim deixaria o equipamento sem vínculo e invisível nas telas.';
         $messageType = 'error';
     } else {
         try {
@@ -121,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         VALUES (:imei, :name, :cid, :mid, :cc, :rot, :wm, :fw, :bid, :spd, :act, :per)
                     ");
                     $stmt->execute([
-                        ':imei' => $imei, ':name' => $deviceName, ':cid' => $customerId ?? 1,
+                        ':imei' => $imei, ':name' => $deviceName, ':cid' => $ownerId,
                         ':mid' => $modelId, ':cc' => $cameraCount, ':rot' => $rotation,
                         ':wm' => $watermark, ':fw' => $firmware ?: null, ':bid' => $branchId,
                         ':spd' => $speedLimit,
@@ -132,22 +145,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             } else {
                 $editImei = $_POST['edit_imei'] ?? $imei;
+                // O UPDATE não gravava `customer_id`: equipamento que nascesse órfão
+                // (ou no cliente errado) não tinha como ser consertado pela tela.
+                // O WHERE também não tinha escopo — qualquer usuário editava o
+                // equipamento de qualquer tenant sabendo o IMEI.
+                $scopeSql = '';
+                $scopeParams = [];
+                $allowedIds = reseller_scope_ids();
+                if (!$isAdmin) {
+                    $scopeSql = ' AND customer_id = :scope';
+                    $scopeParams[':scope'] = $customerId;
+                } elseif ($allowedIds !== null) {
+                    // Revendedor: só dentro do escopo dele. Escopo vazio = não edita nada.
+                    $in = implode(',', array_map('intval', $allowedIds));
+                    $scopeSql = $in !== '' ? " AND customer_id IN ($in)" : ' AND 1 = 0';
+                }
                 $stmt = $db->prepare("
-                    UPDATE devices SET device_name = :name, device_model_id = :mid, camera_count = :cc,
+                    UPDATE devices SET device_name = :name, customer_id = :cid, device_model_id = :mid, camera_count = :cc,
                         streaming_rotation = :rot, streaming_watermark = :wm,
                         firmware_version = :fw, branch_id = :bid, speed_limit_kmh = :spd,
                         is_active = :act, peripherals = :per
-                    WHERE imei = :imei
+                    WHERE imei = :imei" . $scopeSql . "
                 ");
-                $stmt->execute([
-                    ':name' => $deviceName, ':mid' => $modelId, ':cc' => $cameraCount,
+                $stmt->execute(array_merge([
+                    ':name' => $deviceName, ':cid' => $ownerId, ':mid' => $modelId, ':cc' => $cameraCount,
                     ':rot' => $rotation, ':wm' => $watermark, ':fw' => $firmware ?: null,
                     ':bid' => $branchId, ':spd' => $speedLimit,
                     ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
                     ':imei' => $editImei,
-                ]);
-                $message = 'Equipamento atualizado.';
-                $messageType = 'success';
+                ], $scopeParams));
+                if ($stmt->rowCount() === 0) {
+                    // 0 linhas = fora do escopo, ou nada mudou. Só o primeiro é erro,
+                    // mas confundir "não é seu" com "salvo" é pior que o falso alarme.
+                    $chk = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei" . $scopeSql);
+                    $chk->execute(array_merge([':imei' => $editImei], $scopeParams));
+                    if ((int)$chk->fetchColumn() === 0) {
+                        $message = 'Equipamento não encontrado no seu escopo de cliente.';
+                        $messageType = 'error';
+                    } else {
+                        $message = 'Equipamento atualizado.';
+                        $messageType = 'success';
+                    }
+                } else {
+                    $message = 'Equipamento atualizado.';
+                    $messageType = 'success';
+                }
             }
         } catch (Exception $e) {
             $message = 'Erro: ' . $e->getMessage();
@@ -170,10 +212,18 @@ $where = 'WHERE 1=1';
 $params = [];
 
 // Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
-$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
-if ($scopeCust !== null) {
-    $where .= ' AND d.customer_id = :cid';
-    $params[':cid'] = $scopeCust;
+// `customer_id=none` é o filtro dos ÓRFÃOS (equipamento sem cliente): só faz
+// sentido para quem enxerga além de um cliente, e é como o admin acha o que o
+// cadastro antigo deixou sem vínculo para então corrigir pela tela de edição.
+$semCliente = ($filterCust === 'none' && $isAdmin);
+if ($semCliente) {
+    $where .= ' AND d.customer_id IS NULL';
+} else {
+    $scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+    if ($scopeCust !== null) {
+        $where .= ' AND d.customer_id = :cid';
+        $params[':cid'] = $scopeCust;
+    }
 }
 if ($filterModel) {
     $where .= ' AND d.device_model_id = :mid';
@@ -289,6 +339,16 @@ try {
     $devices = $devicesStmt->fetchAll();
 }
 
+// Equipamentos que ficaram sem cliente — o rastro do cadastro que gravava
+// customer_id NULL. Some da grade de todo mundo que não seja admin, então sem
+// este aviso ninguém descobre que existem.
+$orfaos = 0;
+if ($isAdmin && reseller_scope_ids() === null) {
+    try {
+        $orfaos = (int)$db->query("SELECT COUNT(*) FROM devices WHERE customer_id IS NULL")->fetchColumn();
+    } catch (Exception $e) { $orfaos = 0; }
+}
+
 // Dropdowns
 $customers = report_customer_options($db);
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY model_name")->fetchAll();
@@ -302,8 +362,26 @@ $editDevice = null;
 $action = $_GET['action'] ?? '';
 $editImei = $_GET['imei'] ?? '';
 if ($action === 'editar' && $editImei) {
-    $stmt = $db->prepare("SELECT * FROM devices WHERE imei = :imei");
-    $stmt->execute([':imei' => $editImei]);
+    // `SELECT *` não traz customer_name (a coluna é de `customers`), então o campo
+    // "Cliente" do formulário caía sempre no cliente da SESSÃO — mostrando um dono
+    // que podia não ser o do equipamento. E sem escopo, qualquer usuário abria o
+    // equipamento de qualquer tenant pelo IMEI na URL.
+    $editScope = '';
+    $editParams = [':imei' => $editImei];
+    $allowedIds = reseller_scope_ids();
+    if (!$isAdmin) {
+        $editScope = ' AND d.customer_id = :scope';
+        $editParams[':scope'] = $customerId;
+    } elseif ($allowedIds !== null) {
+        $in = implode(',', array_map('intval', $allowedIds));
+        $editScope = $in !== '' ? " AND d.customer_id IN ($in)" : ' AND 1 = 0';
+    }
+    $stmt = $db->prepare("
+        SELECT d.*, c.name AS customer_name
+        FROM devices d
+        LEFT JOIN customers c ON c.id = d.customer_id
+        WHERE d.imei = :imei" . $editScope);
+    $stmt->execute($editParams);
     $editDevice = $stmt->fetch();
 }
 
@@ -444,9 +522,30 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <div class="form-row">
             <div class="form-group">
-                <label>Cliente</label>
+                <label>Cliente <?= $isAdmin ? '*' : '' ?></label>
+                <?php if ($isAdmin): ?>
+                <?php
+                // Pré-seleção: o dono atual (edição) → o filtro da grade → o da sessão.
+                // Sem seleção o POST é RECUSADO: era daqui que saía equipamento órfão.
+                $selOwner = $editDevice['customer_id'] ?? ($filterCust !== null && $filterCust !== '' ? (int)$filterCust : $customerId);
+                ?>
+                <select name="customer_id" required>
+                    <option value="">— Selecione o cliente —</option>
+                    <?php foreach ($customers as $c): ?>
+                    <option value="<?= $c['id'] ?>" <?= (string)$selOwner === (string)$c['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if (($editDevice['customer_id'] ?? null) === null && $editDevice): ?>
+                <small class="text-muted" style="font-size:11px;color:var(--error);">
+                    Este equipamento está <strong>sem cliente</strong>. Selecione o dono e salve para vinculá-lo.
+                </small>
+                <?php endif; ?>
+                <?php else: ?>
                 <input type="text" value="<?= htmlspecialchars($editDevice['customer_name'] ?? get_customer()['name'] ?? '—') ?>" readonly
                        style="background:var(--canvas-soft);">
+                <?php endif; ?>
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end;">
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
@@ -465,6 +564,13 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php else: ?>
 <!-- ═══════════ GRADE PRINCIPAL ═══════════ -->
+<?php if ($orfaos > 0 && $filterCust !== 'none'): ?>
+<div class="card mb-16" style="border-color:#fce4eb;background:#fef2f5;font-size:13px;">
+    <strong><?= $orfaos ?></strong> equipamento<?= $orfaos > 1 ? 's' : '' ?> sem cliente vinculado —
+    <?= $orfaos > 1 ? 'eles não aparecem' : 'ele não aparece' ?> em nenhuma tela com escopo de cliente.
+    <a href="?customer_id=none" style="font-weight:500;">Ver e vincular</a>
+</div>
+<?php endif; ?>
 <div class="flex-between mb-16" style="flex-wrap:wrap;gap:12px;">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">
         Equipamentos
@@ -488,8 +594,9 @@ require_once __DIR__ . '/../web/layout_base.php';
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
             <select name="customer_id" style="padding:6px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
+                <option value="none" <?= $filterCust === 'none' ? 'selected' : '' ?>>— Sem cliente (órfãos) —</option>
                 <?php foreach ($customers as $c): ?>
-                <option value="<?= $c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <option value="<?= $c['id'] ?>" <?= (string)$filterCust === (string)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -632,6 +739,20 @@ require_once __DIR__ . '/../web/layout_base.php';
         <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
             Faça upload de um arquivo CSV com as colunas: IMEI, Nome, Modelo, Canais, Firmware
         </p>
+        <?php if ($isAdmin): ?>
+        <div class="form-group">
+            <label>Cliente *</label>
+            <select id="import-customer" required>
+                <option value="">— Selecione o cliente —</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= $c['id'] ?>" <?= (string)$filterCust === (string)$c['id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($c['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <small class="text-muted" style="font-size:11px;">Todos os equipamentos do arquivo serão vinculados a este cliente.</small>
+        </div>
+        <?php endif; ?>
         <div class="form-group">
             <label>Arquivo CSV</label>
             <input type="file" id="import-file" accept=".csv">
@@ -683,6 +804,12 @@ function closeImportModal() { document.getElementById('import-modal').style.disp
 function submitImport() {
     var file = document.getElementById('import-file').files[0];
     if (!file) { alert('Selecione um arquivo CSV'); return; }
+    var custSel = document.getElementById('import-customer');
+    if (custSel && !custSel.value) {
+        document.getElementById('import-result').innerHTML =
+            '<div class="badge badge-error">Selecione o cliente antes de importar.</div>';
+        return;
+    }
     var reader = new FileReader();
     reader.onload = function(e) {
         var lines = e.target.result.split('\n');
@@ -710,6 +837,7 @@ function submitImport() {
         formData.append('_csrf_token', document.querySelector('input[name="_csrf_token"]').value);
         formData.append('action', 'import_batch');
         formData.append('devices', JSON.stringify(results));
+        if (custSel) formData.append('customer_id', custSel.value);
 
         fetch('', { method: 'POST', body: formData })
             .then(function(r) { return r.text(); })

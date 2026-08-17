@@ -34,8 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $imei    = trim($_POST['imei'] ?? '');
         $active  = isset($_POST['is_active']) ? 1 : 0;
 
+        // `sim_cards.customer_id` é nullable: sessão sem cliente gravava chip órfão
+        // com "criado com sucesso" — mesmo defeito do cadastro de equipamento.
+        $owner_id = resolve_owner_customer_id($_POST['customer_id'] ?? null, $is_admin, $customer_id);
+
         if (empty($carrier) && empty($msisdn) && empty($iccid)) {
             $error = 'Preencha ao menos um campo (Operadora, Número ou ICCID).';
+        } elseif ($id === 0 && $owner_id === null) {
+            $error = 'Selecione o cliente do chip. Sua sessão está sem cliente definido — salvar assim deixaria o chip sem vínculo e invisível na lista.';
         } else {
             try {
                 if ($id > 0) {
@@ -47,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = 'Chip atualizado.';
                 } else {
                     $stmt = $db->prepare("INSERT INTO sim_cards (customer_id, carrier, msisdn, iccid, imei, is_active) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$customer_id, $carrier, $msisdn, $iccid, $imei ?: null, $active]);
+                    $stmt->execute([$owner_id, $carrier, $msisdn, $iccid, $imei ?: null, $active]);
                     $success = 'Chip criado com sucesso.';
                 }
             } catch (PDOException $e) {
