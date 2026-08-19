@@ -260,6 +260,94 @@ foreach ($cat as $syn => $d) {
 }
 checa('Video mantém o parâmetro de duração', true, $videoTemTempo);
 
+
+// ── Invariantes do firmware (v4.9.32) ──────────────────────────────────────
+echo "\n── Catálogo: UPDATE e a leitura do firmware ──\n";
+require_once __DIR__ . '/../../includes/firmware.php';
+
+// 🔴 A trava do `UPDATE` em JC371 era artefato da FONTE, não do protocolo: só
+// a página do JC371 documenta o comando, e a derivação "universal = 5+ das 6
+// páginas" o deixava travado num modelo só. O comando vale para a linha JC
+// inteira — o que muda é a URL do pacote. Uma regeneração do catálogo a partir
+// da wiki desfaz isso em silêncio, e o sintoma é uma frota inteira que não
+// pode ser atualizada pela tela. Daí o invariante.
+$upd = null;
+foreach ($cat as $syn => $d) if ($d['cmd'] === 'UPDATE') { $upd = $d; break; }
+checa('UPDATE existe no catálogo', true, $upd !== null);
+checa('🔴 UPDATE não trava a seleção por modelo', true, (bool)($upd['universal'] ?? false));
+$modsUpd = $upd['modelos'] ?? [];
+sort($modsUpd);
+checa('UPDATE cobre a linha JC inteira',
+      ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'], $modsUpd);
+// P1 sem descrição deixava na tela um campo em branco que não dizia o que
+// espera — e o que ele espera é a URL do pacote DO MODELO.
+checa('UPDATE descreve o parâmetro P1', true,
+      trim($upd['params'][0]['desc'] ?? '') !== '');
+
+// A contagem do cabeçalho envelhecia em silêncio: dizia 219/143 quando o array
+// já tinha 220/144. Comentário que descreve o arquivo é conferível — confira.
+$distintos = [];
+$universais = [];
+foreach ($cat as $d) { $distintos[$d['cmd']] = 1; if ($d['universal']) $universais[$d['cmd']] = 1; }
+preg_match('/Total: (\d+) entradas \/ (\d+) comandos distintos \((\d+) universais\)/',
+           file_get_contents(__DIR__ . '/../../includes/command_catalog.php'), $m);
+checa('cabeçalho: total de entradas confere', count($cat), (int)($m[1] ?? -1));
+checa('cabeçalho: comandos distintos conferem', count($distintos), (int)($m[2] ?? -1));
+checa('cabeçalho: universais conferem', count($universais), (int)($m[3] ?? -1));
+
+// ── Leitura da versão de firmware ──────────────────────────────────────────
+//
+// O formato do retorno do `VERSION#` não é documentado em lugar nenhum — a
+// wiki lista o comando, não a resposta. As formas abaixo cobrem o que se sabe:
+// as versões observadas em produção (`V1.8.1.2_250904`, `V1.8.0.9_250807`) e o
+// eco do comando que alguns firmwares prefixam.
+foreach ([
+    'V1.8.1.2_250904'                => 'V1.8.1.2_250904',
+    '<VERSION#>V1.8.0.9_250807'      => 'V1.8.0.9_250807',
+    'Version:V1.8.1.2_250904'        => 'V1.8.1.2_250904',
+    'JC400AD_V1.8.1.2_250904'        => 'JC400AD_V1.8.1.2_250904',
+    'Firmware: 4.3.2; Hardware: 1.0' => '4.3.2',
+] as $resp => $esperado) {
+    checa("VERSION# devolve versão em [$resp]", $esperado, firmware_parse_version($resp));
+}
+checa('resposta sem número de versão não vira firmware', null, firmware_parse_version('OK!'));
+checa('eco puro do comando não vira firmware', null, firmware_parse_version('<VERSION#>'));
+
+// 🔴 Recusa NÃO é versão. São quatro dialetos, um por firmware, e é a
+// classificação do desfecho — não o formato — que barra os quatro.
+foreach (['Time Out!', 'Not support!', 'instruction error!',
+          '<VERSION#>Command was not recognized!'] as $recusa) {
+    $r = command_response_interpret('', '', $recusa);
+    checa("recusa [$recusa] classificada como erro", 'erro', $r['nivel']);
+}
+
+// ── A URL que vira `UPDATE,<url>#` ─────────────────────────────────────────
+//
+// 🔴 Vírgula e `#` são os separadores do proNo 128: uma URL que os contenha
+// chega ao equipamento partida, e ele tenta baixar um pedaço de endereço.
+checa('URL boa passa', null, firmware_url_problema('https://ota.exemplo.com/JC400AD_V1.8.1.2.bin'));
+checa('URL vazia é recusada', true, firmware_url_problema('') !== null);
+checa('🔴 URL com vírgula é recusada', true, firmware_url_problema('https://x.com/a,b.bin') !== null);
+checa('🔴 URL com # é recusada', true, firmware_url_problema('https://x.com/a.bin#v2') !== null);
+checa('URL sem esquema é recusada', true, firmware_url_problema('ota.exemplo.com/a.bin') !== null);
+checa('URL com espaço é recusada', true, firmware_url_problema('https://x.com/a b.bin') !== null);
+checa('comando montado', 'UPDATE,https://x.com/a.bin#', firmware_update_command('https://x.com/a.bin'));
+
+// A captura só vale para o comando VERSION — `STATUS#` responde
+// `Battery:12.1V`, que qualquer heurística de "parece versão" aceitaria.
+checa('VERSION# é leitura de firmware', true, firmware_is_version_command('VERSION#', 128));
+checa('VERSION sem # também', true, firmware_is_version_command('VERSION', 128));
+checa('STATUS# não é leitura de firmware', false, firmware_is_version_command('STATUS#', 128));
+checa('comando JT/T não é leitura de firmware', false, firmware_is_version_command('VERSION#', 33028));
+
+// ⚠️ Comparação por IGUALDADE, nunca por ordem: não há regra publicada que
+// ordene `V1.8.0.9_250807` contra `V4.3.2`.
+checa('mesma versão', 'igual', firmware_situacao('V1.8.1.2', 'V1.8.1.2')['estado']);
+checa('caixa diferente ainda é a mesma', 'igual', firmware_situacao('v1.8.1.2', 'V1.8.1.2')['estado']);
+checa('versão diferente', 'diferente', firmware_situacao('V1.8.0.9', 'V1.8.1.2')['estado']);
+checa('sem leitura do equipamento', 'sem_leitura', firmware_situacao(null, 'V1.8.1.2')['estado']);
+checa('sem release de referência', 'sem_release', firmware_situacao('V1.8.1.2', null)['estado']);
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);
