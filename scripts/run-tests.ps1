@@ -59,6 +59,20 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$($t.Name) falhou (exit $LASTEXITCODE)" }
     }
 
+    # ── Testes de helper em Node (v4.9.32) ──
+    #
+    # `player_snapshot.test.js` é script autônomo, não spec. Até a v4.9.32 ele
+    # rodava por ACIDENTE: o Playwright o coletava pelo testMatch padrão e a
+    # importação executava a IIFE — que terminava em `process.exit()` e matava
+    # a suíte inteira antes do primeiro spec, com exit 0. Corrigido o testMatch,
+    # ele precisa ser chamado explicitamente, como os de PHP.
+    $jsTests = Get-ChildItem (Join-Path $root 'tests/helpers') -Filter '*.test.js' -ErrorAction SilentlyContinue
+    foreach ($t in $jsTests) {
+        Write-Host "JS: $($t.Name)" -ForegroundColor Cyan
+        node $t.FullName
+        if ($LASTEXITCODE -ne 0) { throw "$($t.Name) falhou (exit $LASTEXITCODE)" }
+    }
+
     # ── Executa a suite ──
     $env:BASE_URL = $BaseUrl
     Write-Host "Rodando Playwright contra $BaseUrl ..." -ForegroundColor Cyan

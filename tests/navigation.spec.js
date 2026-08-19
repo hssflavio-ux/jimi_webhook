@@ -38,6 +38,10 @@ const ROUTES = [
     '/grupos-permissao',
     '/motoristas',
     '/config-ocorrencias',
+    // Telas de administrador. Ficam nesta lista porque o usuário de teste é
+    // admin — e é a rota que a sidebar oferece a ele.
+    '/parametros',
+    '/firmwares',
     '/usuarios',
     '/checklist',
     '/perfil',
