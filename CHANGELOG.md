@@ -5,6 +5,46 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.32
+
+**A trava do `UPDATE` estava errada, e por isso só um dos seis modelos podia ser atualizado pela tela.** O comando de atualização de firmware vale para a linha JC inteira — o que muda de um modelo para o outro é **só a URL do pacote**. Ele estava travado em JC371 porque `includes/command_catalog.php` deriva o campo `universal` da wiki ("presente em 5+ das 6 páginas") e **só a página do JC371 documenta o comando**. Era artefato da fonte, não do protocolo: com 9 dos 10 equipamentos do banco de teste desabilitados, a tela tornava impossível atualizar as JC400AD de produção — justamente onde a divergência de firmware custou caro na v4.9.31.
+
+Junto vieram as duas coisas que faltavam para o `UPDATE` ser utilizável: **o firmware atual gravado no banco** e **um cadastro de URLs por modelo**.
+
+### Fixed
+- 🔴 **`UPDATE,P1#` deixou de travar a seleção por modelo.** Passa a cobrir os seis modelos (`universal => true`), com `P1` finalmente descrito ("URL do pacote de firmware do MODELO deste equipamento") e um exemplo. Procedência: **informação do fornecedor + operação**, não a wiki — a planilha oficial `JC400 & JC261 Command List` sequer lista `UPDATE`. A exceção manual está documentada no cabeçalho do catálogo e travada em teste, porque uma regeneração do catálogo por script a desfaz em silêncio.
+- 🔴 **O botão FOTA de `/equipamentos` nunca atualizou firmware nenhum.** Ele mandava `proNo 33027` — que é **"Definir parâmetro"** do JT/T — com um payload inventado, `{"firmware_url":"…"}`. O gateway aceita, responde `code:0`, a tela diz "Comando de firmware enviado" e o equipamento ignora. Mesma família do defeito que a v4.9.12 corrigiu na família de parâmetros: comando aceito pelo gateway e ignorado pelo device. O botão agora leva para `/firmwares`, e a atualização sai como `UPDATE,<url>#` no proNo 128.
+- **`devices.firmware_version` aparece na grade de `/equipamentos`.** A coluna já saía no export e não existia na tela.
+- **A contagem no cabeçalho do catálogo estava errada desde a v4.9.27** — dizia 219 entradas / 143 comandos / video=29 quando o array já tinha 220 / 144 / 30. Corrigida, e agora **conferida por teste** contra o array de verdade.
+
+### Added
+- **`/firmwares`** (`handlers/firmwares.php`, só admin) — as duas metades da mesma pergunta:
+  - **Frota**: a versão que cada equipamento reportou, quando reportou, como se compara à de referência do modelo, e os botões **[Ler versão]** (dispara `VERSION#`) e **[Atualizar]** (monta o `UPDATE,<url>#` com a URL cadastrada já pré-selecionada).
+  - **URLs de atualização**: cadastro por **modelo**, com uma marcada como referência.
+- **`includes/firmware.php`** — ponto único de ler a versão da resposta, validar a URL e resolver qual pacote vale para um equipamento.
+- **A resposta do `VERSION#` passa a ser GRAVADA**, nos dois caminhos: o síncrono (`sendcommand.php`, device online) e o callback (`pushinstructresponse.php`, comando de fila offline). Cobrir só um deixaria sem leitura justamente a metade da frota que estava desligada quando alguém perguntou.
+- **`migration_v4.9.32.sql`** — `firmware_releases` (URLs por modelo) + `devices.firmware_checked_at` e `devices.firmware_source`.
+- **`tests/firmware.spec.js`** — 7 casos em navegador real, todos verificados **reprovando no código anterior** (com o catálogo antigo, 9 de 10 equipamentos ficavam desabilitados ao escolher `UPDATE`). E 30 checagens novas em `tests/helpers/command_response.test.php`.
+
+### Changed
+- 🔴 **`UPDATE` com mais de um modelo marcado bloqueia o envio em `/comandos`.** Soltar a trava de modelo sem isto seria trocar um erro por outro pior: o envio em lote manda a **mesma string** para todos os marcados, e a URL de um modelo aplicada em outro **não devolve erro nenhum** — o equipamento aceita, baixa e aplica. É o único comando do catálogo cujo *parâmetro* é específico do modelo.
+- **`/comandos` oferece os pacotes cadastrados** como chips clicáveis quando o `UPDATE` está escolhido, e avisa quando o modelo marcado não tem nenhum.
+- **Equipamento sem modelo cadastrado não recebe `UPDATE`** — o botão fica desabilitado com a razão no tooltip. Sem modelo não existe pacote certo para escolher, só um palpite que o equipamento aceitaria sem reclamar; em produção 1 dos 11 equipamentos está assim.
+
+### Fixed (achado durante a verificação, fora do escopo original)
+- 🔴 **A suíte Playwright inteira não rodava — e saía com exit 0.** `npx playwright test` sem argumento imprimia "Running 137 tests using 1 worker" e nada mais. Causa: o `testMatch` padrão do Playwright é `**/*.@(spec|test).?(c|m)[jt]s?(x)`, então ele coletava também `tests/helpers/player_snapshot.test.js` — que **não é um spec**, é um script Node autônomo cuja IIFE roda na importação e termina em `process.exit()`. Playwright importa todo arquivo coletado para descobrir os testes dele; a importação matava o processo antes do primeiro spec. O código de saída 0 é o que qualquer CI lê como "suíte verde".
+  - Passar um caminho (`npx playwright test tests/algum.spec.js`) sempre funcionou — é por isso que sobreviveu: quem depurava um spec específico via a suíte rodar normalmente.
+  - Corrigido com `testMatch: '**/*.spec.js'` no `playwright.config.js`. Os helpers `.test.js` passaram a ser chamados explicitamente pelo `scripts/run-tests.ps1`, ao lado dos `.test.php` — antes o `player_snapshot` rodava **por acidente**, como efeito colateral de envenenar a coleta.
+  - **Resultado da primeira execução real da suíte: 133 passaram, 0 falharam, 6 pulados** (rate limiting do login, que bloqueia o IP de propósito; 3 de multi-tenant, que exigem `TEST_EMAIL_B`; 1 de coerência entre relatórios; 1 de webhook→ocorrência, que exige `TEST_IMEI`). Os 6 são pendências anteriores, não regressões.
+- **`/parametros` e `/firmwares` entraram em `tests/navigation.spec.js`.** A lista de rotas cobria a sidebar de antes da v4.9.16 — as duas telas de administrador não eram exercitadas por ninguém.
+
+### Notes
+- ⚠️ **A migração foi registrada no `scripts/deploy.sh`** e o `SYSTEM_VERSION` do `.env.example` foi para `4.9.32`.
+- ⚠️ **Vírgula e `#` na URL partem o comando** (são os separadores do proNo 128) — o equipamento recebe um pedaço de endereço e não baixa nada. Recusado no cadastro e nas duas telas que montam o comando. O `/sendcommand` pega o `#`, a URL sem esquema, com espaço ou vazia — mas **não** a vírgula: quando a string chega lá, uma URL partida e um `UPDATE` de dois parâmetros são indistinguíveis, e recusar o segundo caso bloquearia uma variante que algum modelo pode aceitar. Está escrito no próprio arquivo, com o que ele pega e o que não pega.
+- ⚠️ **O que NENHUMA validação alcança é a URL do modelo ERRADO**: não há erro de comando, o equipamento baixa e aplica. Contra isso o que existe é o cadastro com o modelo na chave e a guarda de "um modelo por vez" — por isso a URL virou cadastro em vez de campo de texto.
+- ⚠️ **A comparação de versões é por IGUALDADE, nunca por ordem.** Não há regra publicada que ordene `V1.8.0.9_250807` contra `V4.3.2`; a tela diz "igual à de referência" / "diferente" / "não lido", e nunca "desatualizado".
+- **O formato da resposta do `VERSION#` não é documentado em lugar nenhum** — a wiki lista o comando, não o retorno. A leitura é tolerante (par `Version:` quando existe, senão o primeiro token com `\d+\.\d+`) e **recusa não vira versão**: os quatro dialetos de recusa da linha JC já são classificados por `command_response_interpret()`, e nível `erro` não grava nada.
+- **Pendência que isto NÃO fecha**: `UPDATE` continua sem verificação em câmera real (M.2.5). O que foi verificado é tudo o que não exige device — catálogo, parser, guardas, telas e o caminho de gravação contra o schema real.
 ## [Unreleased] — 4.9.31
 
 **O vídeo reenviado agora se religa ao alarme.** Quando o vídeo de um alarme não chega, dá para pedir de novo — mas o arquivo volta com **outro nome**, e `alarms.file_url` continua apontando para o antigo. O vídeo chegava ao servidor e não aparecia no relatório.

@@ -229,6 +229,8 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.9.5.sql   # categoria unifica
 
 **Principal**: `/` Resumo (`resumo.php`) · `/rastreamento` (`rastreamento.php`) · `/bi` (`bi.php`) · `/ocorrencias/dashboard` (`ocorrencias_dashboard.php`) · `/comandos` (mantido) · `/exportar` (`exportar.php`)
 
+**Só admin**: `/parametros` (v4.9.16) · `/firmwares` (`firmwares.php`, v4.9.32 — versão lida do `VERSION#` por equipamento + URLs de atualização **por modelo**, que é o que o `UPDATE,<url>#` precisa)
+
 **Vídeos**: `/video/aovivo` · `/video/playback` · `/video/downloads`
 
 **Relatórios**: `/relatorios/posicoes` · `/relatorios/deslocamento` · `/relatorios/desatualizados` · `/relatorios/alarmes` · `/relatorios/ocorrencias` · `/relatorios/geocercas` (v4.5.0) · `/relatorios/status-frota` · `/relatorios/paradas` · `/relatorios/ociosidade` · `/relatorios/ignicao` · `/relatorios/velocidade` (v4.6.0) · `/agendamentos` (v4.7.0)
@@ -245,7 +247,7 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.9.5.sql   # categoria unifica
 
 `branches`, `drivers`, `sim_cards`, `permission_groups`, `occurrence_configs`, `occurrence_config_params`, `occurrences`, `occurrence_events`, `trips`, `jobs`, `geocode_cache`, `impersonation_log`.
 
-**Alterações**: `users`(+user_type,+permission_group_id,+photo_url) · `customers`(+reseller_id,+brand_color,+logo_url,+occurrence_config_id,+faceid_enabled) · `devices`(+sim_card_id,+peripherals,+streaming_rotation,+streaming_watermark,+firmware_version,+branch_id) · `media_files`(+channel,+download_status).
+**Alterações**: `users`(+user_type,+permission_group_id,+photo_url) · `customers`(+reseller_id,+brand_color,+logo_url,+occurrence_config_id,+faceid_enabled) · `devices`(+sim_card_id,+peripherals,+streaming_rotation,+streaming_watermark,+firmware_version,+branch_id; +firmware_checked_at,+firmware_source na v4.9.32) · `media_files`(+channel,+download_status).
 
 ### Tabelas novas (v4.4.0 → v4.7.0)
 

@@ -1,5 +1,130 @@
-# STATUS.md — Jimi Webhook System v4.9.31 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.32 (YUV Parity)
 
+> ### 🔴 v4.9.32 — a trava do `UPDATE` desligava a atualização de 5 dos 6 modelos
+>
+> **`UPDATE,P1#` — atualização de firmware — estava travado em JC371.** A tela
+> de Comandos desabilita os equipamentos cujo modelo a documentação não cobre,
+> e o campo `universal` do catálogo é DERIVADO da wiki ("presente em 5+ das 6
+> páginas"). Como só a página do JC371 documenta o `UPDATE`, ele nasceu preso a
+> esse modelo. Só que o comando vale para a linha JC inteira — **o que muda de
+> um modelo para o outro é apenas a URL do pacote**. Era artefato da FONTE, não
+> do protocolo.
+>
+> Medido no banco de teste: com o catálogo anterior, escolher `UPDATE`
+> desabilitava **9 dos 10** equipamentos. Em produção isso significa que as
+> JC400AD não podiam ser atualizadas pela tela — exatamente a frota onde a
+> divergência de firmware custou caro na v4.9.31 (`V1.8.1.2_250904` aceita
+> `EVIDEO`, `V1.8.0.9_250807` recusa) e onde a pendência 5 pedia justamente uma
+> atualização.
+>
+> #### O segundo defeito, mais silencioso: o botão FOTA nunca atualizou nada
+>
+> `/equipamentos` tinha um modal "Atualização de Firmware (OTA)" que mandava
+> **`proNo 33027`** — que é **"Definir parâmetro"** do JT/T — com um payload
+> inventado, `{"firmware_url":"…"}`. O gateway aceita, devolve `code:0`, a tela
+> exibe "Comando de firmware enviado" e o equipamento ignora. É a mesma família
+> do defeito que a v4.9.12 corrigiu na parametrização: **comando aceito pelo
+> gateway e ignorado pelo device**, sem erro em lugar nenhum.
+>
+> #### O que entrou no lugar
+>
+> | | Antes | Agora |
+> |---|---|---|
+> | Trava do `UPDATE` | só JC371 | os 6 modelos (`universal`) |
+> | URL do pacote | texto livre digitado a cada envio | cadastro **por modelo** (`/firmwares`) |
+> | Firmware do equipamento | `NULL` em 100% da base | gravado da resposta do `VERSION#` |
+> | Envio | `proNo 33027` com payload inventado | `UPDATE,<url>#` no proNo 128 |
+>
+> - **`/firmwares`** (só admin) — frota com a versão lida, quando foi lida, e a
+>   comparação com a de referência do modelo; mais o cadastro de URLs. Botões
+>   [Ler versão] (`VERSION#`) e [Atualizar] (`UPDATE,<url>#`).
+> - **`includes/firmware.php`** — ponto único: lê a versão da resposta, valida a
+>   URL, resolve o pacote do modelo.
+> - **A resposta do `VERSION#` passa a ser gravada nos DOIS caminhos**, o
+>   síncrono (`sendcommand.php`) e o callback offline (`pushinstructresponse.php`).
+>   Cobrir só um deixaria sem leitura a metade da frota que estava desligada
+>   quando alguém perguntou.
+> - **`migration_v4.9.32.sql`** — `firmware_releases`, `devices.firmware_checked_at`,
+>   `devices.firmware_source`. Registrada no `scripts/deploy.sh`.
+>
+> #### 🔴 Soltar a trava exigia colocar outra no lugar
+>
+> O envio em lote de `/comandos` manda a **mesma string** para todos os
+> equipamentos marcados. Com `UPDATE` liberado para todos os modelos, marcar
+> dois modelos e enviar aplicaria o pacote de um no outro — e **isso não devolve
+> erro nenhum**: o equipamento aceita, baixa e aplica. Diferente de quase todo
+> defeito deste projeto, esse não aparece em callback nem em log; aparece numa
+> câmera que parou de funcionar.
+>
+> Por isso, três guardas, nesta ordem de força:
+>
+> 1. **`UPDATE` com mais de um modelo marcado bloqueia o botão de envio.** É o
+>    único comando do catálogo cujo *parâmetro* é específico do modelo.
+> 2. **A URL é cadastro com o modelo na chave**, e a de referência vem
+>    pré-selecionada. Digitar a cada envio é repetir a chance do erro.
+> 3. **Equipamento sem modelo cadastrado não recebe `UPDATE`** — sem modelo não
+>    há pacote certo, só um palpite. Em produção 1 dos 11 está assim.
+>
+> ⚠️ **Vírgula e `#` na URL partem o comando** (são os separadores do proNo
+> 128): o equipamento recebe um pedaço de endereço e não baixa nada. Recusado
+> no cadastro, nas duas telas e no `/sendcommand`.
+>
+> ⚠️ **O `/sendcommand` NÃO consegue barrar a vírgula.** Quando a string chega
+> lá, uma URL com vírgula e um `UPDATE` de dois parâmetros são indistinguíveis;
+> recusar o segundo bloquearia uma variante que algum modelo pode aceitar. O
+> guard do servidor pega URL sem esquema, com espaço ou vazia — a vírgula é
+> barrada antes, onde a URL ainda está separada do resto. Está escrito no
+> próprio arquivo, com o que ele pega e o que não pega.
+>
+> ⚠️ **Versões são comparadas por IGUALDADE, nunca por ordem.** Não há regra
+> publicada que ordene `V1.8.0.9_250807` contra `V4.3.2`. A tela diz "igual à de
+> referência", "diferente" ou "não lido" — e nunca "desatualizado", que exigiria
+> a ordem que não temos.
+>
+> #### Verificação
+>
+> - **7 casos em navegador real** (`tests/firmware.spec.js`), verificados
+>   **reprovando no código anterior**: com o catálogo antigo, 9 de 10
+>   equipamentos ficavam desabilitados ao escolher `UPDATE`.
+> - **30 checagens novas** em `tests/helpers/command_response.test.php` (80 no
+>   total), incluindo a contagem do cabeçalho do catálogo — que estava **errada
+>   desde a v4.9.27** (dizia 219/143, o array tinha 220/144) e agora é conferida.
+> - **Migração aplicada e reaplicada** no banco de desenvolvimento: idempotente.
+> - **Caminho de gravação exercitado contra o schema real** (sonda com rollback):
+>   a versão é gravada, a recusa não sobrescreve o valor lido, e a unicidade
+>   `(modelo, versão)` recusa duplicata.
+> - **Caminho do CALLBACK exercitado por webhook real** (`/pushinstructresponse`
+>   com a resposta de um `VERSION#` correlacionado): grava a versão; a resposta
+>   de `STATUS#` (`Battery:12.1V`, que tem cara de versão) **não** vira firmware;
+>   `Time Out!` não apaga o valor já lido.
+> - **Suíte completa: 133 passaram, 0 falharam, 6 pulados** — a primeira execução
+>   de verdade da suíte, pelo motivo abaixo.
+>
+> #### 🔴 Achado fora do escopo: a suíte Playwright nunca rodava
+>
+> `npx playwright test` sem argumento imprimia "Running 137 tests using 1 worker"
+> e **nada mais**, saindo com **código 0**. O `testMatch` padrão do Playwright
+> coleta `*.test.js` além de `*.spec.js`, e `tests/helpers/player_snapshot.test.js`
+> não é spec: é script Node com uma IIFE que roda na importação e termina em
+> `process.exit()`. Playwright importa todo arquivo coletado para descobrir os
+> testes dele — a importação matava o processo antes do primeiro spec.
+>
+> Exit 0 é o que um runner de CI lê como suíte verde. E passar um caminho
+> (`npx playwright test tests/x.spec.js`) sempre funcionou, então quem depurava
+> um spec específico via tudo normal — é por isso que sobreviveu.
+>
+> Corrigido com `testMatch: '**/*.spec.js'`. O `player_snapshot.test.js` passou a
+> ser chamado explicitamente pelo `scripts/run-tests.ps1` (antes rodava **por
+> acidente**, como efeito colateral de envenenar a coleta). Os 6 pulados são
+> pendências conhecidas — 3 de multi-tenant esperando `TEST_EMAIL_B`, o rate
+> limiting que bloqueia o IP de propósito, coerência entre relatórios e
+> webhook→ocorrência (`TEST_IMEI`).
+>
+> 🔴 **O que NÃO foi verificado**: o `UPDATE` em câmera real (M.2.5 segue
+> aberto). Não há como confirmar sem device, e ninguém deveria disparar o
+> primeiro `UPDATE` de verdade sem uma câmera sacrificável e o pacote correto do
+> fornecedor em mãos.
+>
 > ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.31 publicadas e verificadas
 >
 > Seis versões em sequência, todas no ar em produção (`bycamera.ia.br`). Quatro
@@ -279,12 +404,17 @@
 >    com o `NOW()` do MySQL, não há `date.timezone` nos php.ini nem
 >    `date_default_timezone_set()` no código. Registrado como observação, **não
 >    corrigido**.
-> 4. **`devices.firmware_version` está NULL em 100% da base.** A coluna existe e
->    ninguém a preenche; o `VERSION` responde na hora. Enquanto isso, decisões
->    por firmware têm de ser por tentativa (ver v4.9.31).
+> 4. ~~**`devices.firmware_version` está NULL em 100% da base.**~~ **Resolvido na
+>    v4.9.32**: a resposta do `VERSION#` passa a ser gravada, nos dois caminhos,
+>    e `/firmwares` tem o botão que dispara a leitura para a frota inteira.
+>    ⚠️ A coluna **continua NULL até alguém ler** — o mecanismo existe, a leitura
+>    é uma ação. Primeira coisa a fazer no próximo acesso a produção.
 > 5. **Atualizar o firmware da `400AD`** (`864993060429173`, `V1.8.0.9_250807`):
 >    é a única que recusa `EVIDEO`, e por isso cai no `HVIDEO`, de qualidade
->    menor. A `400AD_3` já está em `V1.8.1.2_250904`.
+>    menor. A `400AD_3` já está em `V1.8.1.2_250904`. **Destravado na v4.9.32** —
+>    o `UPDATE` deixou de estar preso ao JC371. Falta o que só o fornecedor tem:
+>    a **URL do pacote** da JC400AD, para cadastrar em `/firmwares`. Sem ela não
+>    há o que enviar, e inventar a URL é o erro que nenhuma validação pega.
 >
 > **Fechadas nesta rodada**: religar o vídeo reenviado (v4.9.31) e vincular a
 > `400AD_3` a Frota Principal — a base está com **zero equipamentos órfãos**.
@@ -2715,8 +2845,9 @@ Jimi IoT Hub ──POST──▶ .htaccess ──▶ handlers/router.php ──�
 | `/ativos/{imei}` | `ativo_detalhe.php` | 9 abas com sidebar lateral |
 | `/chips` | `chips.php` | CRUD SIM cards (operadora, MSISDN, ICCID, vínculo IMEI) |
 | `/clientes` | `clientes.php` | CRUD + occurrence_config + faceid + brand_color + impersonar |
-| `/equipamentos` | `equipamentos.php` | Grade + form (periféricos, rotação, watermark) + FOTA + import CSV |
-| `/grupos-permissao` | `grupos_permissao.php` | Matriz 18 telas × 5 ações JSON + contagem de usuários |
+| `/equipamentos` | `equipamentos.php` | Grade (com firmware) + form (periféricos, rotação, watermark) + import CSV; FOTA leva a `/firmwares` (v4.9.32) |
+| `/firmwares` | `firmwares.php` | **Só admin** — frota com a versão lida do `VERSION#` + cadastro de URLs de atualização por modelo (v4.9.32) |
+| `/grupos-permissao` | `grupos_permissao.php` | Matriz de telas × 5 ações JSON + contagem de usuários |
 | `/motoristas` | `motoristas.php` | CRUD + compliance (CNH, toxicológico, vencimentos com alerta) |
 | `/config-ocorrencias` | `config_ocorrencias.php` | Perfis de regras com rows dinâmicas de parâmetros |
 | `/usuarios` | `usuarios.php` | Abas Minha Empresa/Meus Clientes, user_type, permission_group, photo |
@@ -2763,7 +2894,8 @@ Jimi IoT Hub ──POST──▶ .htaccess ──▶ handlers/router.php ──�
 |---|---|
 | `users` | `user_type` (revendedor/cliente), `permission_group_id`, `photo_url` |
 | `customers` | `reseller_id`, `brand_color`, `logo_url`, `occurrence_config_id`, `checklist_config_id`, `faceid_enabled` |
-| `devices` | `sim_card_id`, `peripherals` (JSON), `streaming_rotation`, `streaming_watermark`, `firmware_version`, `branch_id` |
+| `devices` | `sim_card_id`, `peripherals` (JSON), `streaming_rotation`, `streaming_watermark`, `firmware_version`, `branch_id`, `firmware_checked_at` + `firmware_source` (v4.9.32) |
+| `firmware_releases` | tabela nova (v4.9.32) — URL do pacote **por modelo**, `is_current` marca a de referência |
 | `media_files` | `channel`, `download_status` (solicitado/disponivel/erro) |
 
 ### Índices críticos
@@ -2968,7 +3100,8 @@ jimi_webhook/
 │   ├── ativos.php / ativos_novo.php / ativo_detalhe.php
 │   ├── chips.php                 # CRUD SIM cards
 │   ├── clientes.php              # CRUD + impersonar + white-label
-│   ├── equipamentos.php          # CRUD + FOTA + import CSV
+│   ├── equipamentos.php          # CRUD + import CSV (FOTA → /firmwares)
+│   ├── firmwares.php             # Firmware da frota + URLs por modelo (v4.9.32, só admin)
 │   ├── grupos_permissao.php      # Matriz RBAC JSON
 │   ├── motoristas.php            # CRUD + compliance
 │   ├── config_ocorrencias.php    # Perfis de regras DMS
@@ -3037,7 +3170,7 @@ jimi_webhook/
 - [x] **Importação em lote**: POST real do CSV parseado — **Fase H**
 - [x] **White-label**: brand_color na sidebar — **Fase H**
 - [x] **Vídeo Playback**: envia proNo 34817 ao clicar Requisitar — **Fase L**
-- [ ] **OTA firmware**: testar proNo 33027 end-to-end com dispositivo real *(requer device — ver §11.4)*
+- [ ] **OTA firmware**: testar `UPDATE,<url>#` (proNo **128**) end-to-end com dispositivo real *(requer device — ver §11.4)*. ⚠️ O proNo 33027 desta linha estava errado — é "Definir parâmetro" do JT/T, não OTA; corrigido na v4.9.32.
 - [x] **Relatórios**: exportação Excel/PDF (CSV/XLSX/PDF, PHP puro) — **Fase M.1**
 - [x] **App mobile PWA**: manifest + ícones + off-canvas + touch targets — **Fase M.3**
 
@@ -3112,7 +3245,7 @@ Plano executado: [PLANO_PENDENCIAS_v4.md](PLANO_PENDENCIAS_v4.md). Decisões das
 - [x] **M.2.1** IoTHub verificado no servidor (09/07): `tracker-instruction-server` UP, `:10088` responde via localhost e `10.1.0.43`
 - [x] **M.2.2** Comando real proNo 128 (STATUS) → device `860112070347838` respondeu em ~1s com telemetria (`commands` id 18, `status=sent`)
 - [x] **M.2.3** Recepção de respostas **corrigida e validada com callback REAL** (v4.1.1): `offlineCmdPushURL` ganhou o path `/pushinstructresponse` no docker-compose + `WebhookHandler` aceita payload de objeto único (§2.4). Em 08/07 22:59 local o IoTHub entregou o callback real do comando VERSION (`POST /pushinstructresponse → 200`, origem `172.16.13.13`/okhttp, persistido em `command_responses` id 1) — ver §12.3
-- [ ] **M.2.5** OTA firmware proNo 33027 com device real
+- [ ] **M.2.5** OTA firmware `UPDATE,<url>#` (proNo 128) com device real — falta a URL do pacote, que só o fornecedor tem
 - [x] `test_e2e.sh` executado no servidor pelo operador ("ok em todos os testes")
 - [ ] Specs multi-tenant: exigem credenciais de um segundo cliente (`TEST_EMAIL_B`/`TEST_PASSWORD_B`)
 
@@ -3171,7 +3304,7 @@ Commits `75441a7`…`cd1af0f` (7 fixes + docs), todos implantados. CHANGELOG [4.
   - **Relatórios operacionais (Fase 3, já implementada)**: Parada, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota — incluindo a definição de cada estado (`movimento`/`ocioso`/`parado`/`offline`) e os limiares usados, que o usuário precisa entender para interpretar os números. Quatro pontos que geram dúvida e precisam estar escritos: (a) **Parada ≠ Ociosidade** — parada é ignição desligada, ociosidade é motor ligado com o veículo imóvel abaixo de 3 km/h; (b) **"Sem comunicação" ganha de qualquer estado anterior** depois de 30 min de silêncio, então o veículo que sumiu em movimento aparece como sem comunicação, não em movimento; (c) **a troca movimento↔ociosidade não é acionamento de ignição**, e períodos sem comunicação são ignorados na contagem de acionamentos; (d) **o limite de velocidade exibido é o vigente quando o evento foi apurado** — mudar o limite hoje não reescreve o histórico —, com a precedência equipamento → cliente → 80 km/h. Vale também dizer que os relatórios dependem de um **cron de 15 min**: dado do último quarto de hora pode ainda não estar segmentado.
   - **Agendamento (Fase 4, já implementada)**: `/agendamentos`, modelos de relatório salvos e o histórico de execuções. Pontos que precisam estar escritos: (a) **o relatório cobre o período FECHADO anterior** — o diário das 7h traz ontem inteiro, não as 7 horas de hoje; (b) a hora escolhida é **BRT** e o disparo é conferido de hora em hora, então o envio sai na hora cheia; (c) **3 falhas consecutivas desativam** o agendamento e notificam quem o criou, e editar/reativar zera o contador; (d) arquivo grande chega como **link**, não anexo; (e) `skip_if_empty` — por padrão o relatório vazio é enviado mesmo assim, porque "nada aconteceu" é informação; (f) os **modelos são por usuário** e só aparecem na tela que os criou.
   - **Transversal**: revisar a seção "O que vale para todos os relatórios" se as Fases 3–4 mudarem filtros, ordenação ou export.
-- [ ] **OTA firmware** (proNo 33027) com device real — M.2.5, único item remanescente da Fase M
+- [ ] **OTA firmware** (`UPDATE,<url>#`, proNo 128) com device real — M.2.5, único item remanescente da Fase M
 - [ ] **Specs multi-tenant** do Playwright: exigem credenciais de um segundo cliente (`TEST_EMAIL_B`/`TEST_PASSWORD_B`) — hoje há apenas 1 cliente ("Frota Principal")
 - [x] ~~**Arquivos untracked no servidor**: `handlers/pushterminalrealtimestatus.php`, `includes/config.php`~~ — resolvido em 28/07/2026: o handler foi **documentado e versionado** (endpoint de diagnóstico, alcançado por caminho direto fora do router); o `includes/config.php` foi **removido** do servidor (resquício legado com `DB_PASS` em texto puro apontando para um banco inexistente `jimi_webhook`)
 - [ ] **Correlação do callback offline**: heurística "comando pendente mais recente" — confiável agora que síncronos saem do pool, mas uma correlação por `requestId` seria mais robusta (melhoria futura)

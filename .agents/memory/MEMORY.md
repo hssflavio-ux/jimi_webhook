@@ -65,12 +65,15 @@
 - [reference] Relatórios (v4.3.0): teto GLOBAL de 31 dias via clamp_report_range() — todo relatório novo com filtro de data DEVE aplicá-lo; deslocamento tem 2 modalidades (viagens | fechamento diário GROUP BY dia BRT) + mapa de rota (/relatorios/deslocamento/rota, trip_id ou imei+dia); trips indexada por (customer_id, started_at) — queries por período dependem desse composto → tech-decisions.md
 - [reference] Deploy: scripts/deploy.sh aplica migrations até v4.1.0; deploy-v4.sh (--check/--migrate/--deploy/--verify) → tech-decisions.md
 - [reference] Router: `$renamedRoutes` para rotas com hífen (config-ocorrencias, grupos-permissao) — rota nova com hífen vai ali, não em $simpleRoutes → tech-decisions.md
-- [reference] Testes: npx playwright test (tests/, 40 testes; specs autenticados pulam sem TEST_EMAIL/TEST_PASSWORD); bash scripts/test_e2e.sh (replay webhooks) → tech-decisions.md
+- [reference] Testes: npx playwright test (tests/, 15 specs; autenticados pulam sem TEST_EMAIL/TEST_PASSWORD); helpers em tests/helpers rodam pelo scripts/run-tests.ps1 (5 .test.php + 1 .test.js); bash scripts/test_e2e.sh (replay webhooks) → tech-decisions.md
+- [project] 🔴 **A suíte Playwright NÃO rodava** (achado na v4.9.32): o `testMatch` padrão coleta `*.test.js`, e `tests/helpers/player_snapshot.test.js` é script Node autônomo que termina em `process.exit()`. A importação matava o processo do Playwright ANTES do primeiro spec, e a saída era "Running 137 tests" seguida de nada — **com exit 0**, que CI lê como verde. Corrigido com `testMatch: '**/*.spec.js'` no playwright.config.js. Passar um caminho (`npx playwright test tests/x.spec.js`) sempre funcionou, e é por isso que sobreviveu → tech-decisions.md
+
+- [project] **v4.9.32 — firmware**: `UPDATE,P1#` estava travado em JC371 porque `universal` no `command_catalog.php` é DERIVADO da wiki ("5+ das 6 páginas") e só a página do JC371 documenta o comando. Ele vale para a linha JC inteira; **o que muda é só a URL do pacote**. Escolher `UPDATE` desabilitava 9 de 10 equipamentos. Agora universal, com exceção manual documentada e travada em teste. Em troca: **um modelo por vez** no envio em lote (a URL errada não devolve erro — o device baixa e aplica), URL cadastrada **por modelo** em `/firmwares` (tabela `firmware_releases`), e a resposta do `VERSION#` gravada em `devices.firmware_version` nos dois caminhos (`sendcommand.php` síncrono + `pushinstructresponse.php` callback). O botão FOTA de `/equipamentos` mandava **proNo 33027** com payload inventado e nunca atualizou nada → tech-decisions.md
 
 ## Pendências (exigem produção/dispositivo — ver STATUS.md §11.4, §12.7 e §12.13)
 - Deploy do fix 37384 no homolog (sudo) + validar com eventos DMS reais da JC371 865478070003241 (vídeo deve chegar via /pushfileupload e aparecer na ocorrência)
 - [Extrair] do playback ainda usa 34818 (consulta) — precisa de 37382 + servidor FTP (infra) ou validar attachment server 21188 para esse fluxo
-- OTA firmware: testar proNo 33027 com dispositivo real
+- OTA firmware: testar `UPDATE,<url>#` (proNo **128**) com dispositivo real — falta a URL do pacote, que só o fornecedor tem. ⚠️ O "proNo 33027" desta linha estava ERRADO: 33027 é "Definir parâmetro" do JT/T, não OTA (v4.9.32)
 - Specs multi-tenant: exigem credenciais de segundo cliente (TEST_EMAIL_B/TEST_PASSWORD_B)
 - deploy.sh: mysqldump falha silenciosamente no homolog (backup de banco não sai) — investigar privilégios
 - Limpeza opcional no homolog: device teste 868120246598152 + usuário e2e@teste.local + ocorrências/mídias de teste
