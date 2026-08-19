@@ -40,6 +40,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/iothub_command.php';
 require_once __DIR__ . '/media.php';
+require_once __DIR__ . '/functions.php';   // is_diagnostic_alarm()
 
 /**
  * Janela de casamento, em segundos, relativa ao instante pedido.
@@ -211,10 +212,26 @@ function match_pending_video(string $imei, string $fileName): ?int
     // algum alarme, ele é a chegada NORMAL daquele evento — não a resposta ao
     // nosso pedido. Sem esta guarda, um alarme novo que caísse na janela de um
     // pedido pendente teria o vídeo religado no alarme errado.
-    $dono = $db->prepare("SELECT id FROM alarms WHERE file_url LIKE :like AND id <> :aid LIMIT 1");
-    $dono->execute([':like' => '%' . $arquivo . '%', ':aid' => (int)$req['alarm_id']]);
-    if ($dono->fetchColumn()) {
-        return null;
+    //
+    // ⚠️ EVENTO DE DIAGNÓSTICO NÃO É DONO DE VÍDEO, e ignorar isso desliga o
+    // religamento inteiro. Quem avisa o fim do upload é o `105 — Upload de
+    // Vídeo Concluído`, e essa linha é gravada com o MESMO nome de arquivo,
+    // logo antes desta função rodar. Sem excluir os diagnósticos, a guarda
+    // encontrava o próprio 105 e recusava TODOS os casamentos — medido em
+    // produção em 19/08/2026: arquivo no disco, pedido eternamente `pendente`.
+    $donos = $db->prepare("
+        SELECT id, alarm_type, alarm_subtype, msg_class
+          FROM alarms
+         WHERE file_url LIKE :like AND id <> :aid
+         LIMIT 20
+    ");
+    $donos->execute([':like' => '%' . $arquivo . '%', ':aid' => (int)$req['alarm_id']]);
+    foreach ($donos->fetchAll(PDO::FETCH_ASSOC) as $d) {
+        $composto = ($d['alarm_subtype'] !== null && $d['alarm_subtype'] !== '')
+            ? $d['alarm_type'] . '-' . $d['alarm_subtype'] : null;
+        if (!is_diagnostic_alarm($db, (string)$d['alarm_type'], $composto, (int)$d['msg_class'])) {
+            return null;   // alarme de verdade já usa este arquivo
+        }
     }
 
     $db->prepare("UPDATE alarms SET file_url = :f, file_type = 'video' WHERE id = :id")

@@ -96,6 +96,24 @@ $outro = novoAlarme($db, $IMEI, $BASE, $nome);   // já é anexo de OUTRO alarme
 checa('🔴 arquivo que já é anexo de outro alarme é recusado',
       null, match_pending_video($IMEI, $nome));
 
+
+echo "\n── Evento de DIAGNÓSTICO não é dono de vídeo ──\n";
+// 🔴 O caso que quase passou batido. Quem avisa o fim do upload é o
+// `105 — Upload de Vídeo Concluído`, gravado com o MESMO nome de arquivo logo
+// antes do casamento rodar. Se a guarda de "já é anexo de outro alarme" não
+// excluir os diagnósticos, ela encontra o próprio 105 e recusa TODOS os
+// casamentos — foi exatamente o que aconteceu em produção em 19/08/2026:
+// arquivo no disco, pedido eternamente `pendente`.
+limpa($db, $IMEI);
+$alvo = novoAlarme($db, $IMEI, $BASE);
+pedido($db, $alvo, $IMEI, $BASE);
+$nomeDiag = nomeCom($IMEI, $BASE, 0);
+$db->prepare("INSERT INTO alarms (imei, alarm_type, alarm_name, alarm_time, msg_class, file_url)
+              VALUES (:i, 105, 'Upload de Vídeo Concluído', UTC_TIMESTAMP(), 0, :f)")
+   ->execute([':i' => $IMEI, ':f' => $nomeDiag]);
+checa('🔴 o próprio aviso de upload não bloqueia o casamento',
+      $alvo, match_pending_video($IMEI, $nomeDiag));
+
 echo "\n── O pedido é fechado ao casar ──\n";
 limpa($db, $IMEI);
 $aid = novoAlarme($db, $IMEI, $BASE);
