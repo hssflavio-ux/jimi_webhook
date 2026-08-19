@@ -133,6 +133,28 @@ foreach ($catalogo as $syn => $d) {
     ];
 }
 
+// ── URLs de firmware cadastradas, por MODELO (v4.9.32) ─────────────────────
+//
+// O `UPDATE` deixou de travar a seleção em JC371: ele vale para a linha JC
+// inteira, e o que muda de um modelo para o outro é **só o pacote apontado pela
+// URL**. Soltar a trava sem trazer as URLs para cá deixaria o campo P1 como
+// texto livre — e a URL errada aqui não devolve erro de comando: o equipamento
+// baixa e aplica o firmware de outro modelo. Cadastro em `/firmwares`.
+$fwPorModelo = [];
+try {
+    require_once __DIR__ . '/../includes/firmware.php';
+    foreach (firmware_releases($db) as $r) {
+        $fwPorModelo[$r['model_name']][] = [
+            'v' => $r['version'], 'u' => $r['url'], 'c' => (int)$r['is_current'],
+        ];
+    }
+} catch (Throwable $e) {
+    // Banco anterior à migração v4.9.32 não tem `firmware_releases`. A tela
+    // continua funcionando: sem URLs, o campo P1 volta a ser texto livre e o
+    // aviso da tela diz que não há pacote cadastrado.
+    Logger::warning('comandos: firmware_releases indisponível', ['erro' => $e->getMessage()]);
+}
+
 // ── Comandos JT/T estruturados (proNo próprio, só para modelos JT/T) ───────
 $jttCmds = [
     ['pro' => 37121, 'n' => 'Vídeo ao vivo',       'k' => 'video',
@@ -511,6 +533,15 @@ include __DIR__ . '/../web/layout_base.php';
         <div class="param-grid" id="p-params"></div>
       </div>
 
+      <!-- Pacotes de firmware (v4.9.32): só aparece com o `UPDATE` escolhido.
+           A URL é POR MODELO e a escolha errada não devolve erro — o equipamento
+           baixa e aplica o pacote de outro modelo. Cadastro em /firmwares. -->
+      <div id="p-fw-wrap" style="display:none;margin-bottom:12px">
+        <label style="display:block;margin-bottom:4px">Pacote cadastrado <span style="font-weight:400;color:var(--muted);font-size:11px">(clique para preencher a URL)</span></label>
+        <div id="p-fw-chips"></div>
+        <div id="p-fw-aviso" class="lock-note" style="margin-top:8px;display:none"></div>
+      </div>
+
       <!-- Consultar valor atual: a forma NUA (`CMD#`) lê em vez de escrever.
            Fica ANTES dos exemplos de propósito — perguntar é o passo natural
            antes de mudar, e até a v4.9.24 a tela não sabia fazê-lo. -->
@@ -788,6 +819,7 @@ var ROTCAT   = <?= json_encode($rotuloCat, JSON_UNESCAPED_UNICODE) ?>;
 // Só as linhas da PÁGINA: o modal abre a partir da tabela visível, e serializar
 // as 2000 do teto para dentro do HTML pesaria alguns MB por carregamento.
 var LINHAS   = <?= json_encode($linhasPagina, JSON_UNESCAPED_UNICODE) ?>;
+var FWURLS   = <?= json_encode($fwPorModelo, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
 var cmdAtual = null;   // entrada do catálogo escolhida
 var proAtual = 128;
@@ -846,7 +878,7 @@ function aplicarTrava() {
     atualizarBotao();
 }
 
-function aoMarcarDevice() { montarListaComandos(); aplicarTrava(); avisarFila(); }
+function aoMarcarDevice() { montarListaComandos(); aplicarTrava(); avisarFila(); montarPacotesFirmware(); }
 
 /**
  * Avisa que há equipamento sem contato recente entre os marcados.
@@ -984,7 +1016,7 @@ function marcarItemLista() {
 function aoEscolherComando() {
     var v = document.getElementById('cmd-sel').value;
     var painel = document.getElementById('cmd-painel');
-    if (!v) { painel.style.display = 'none'; cmdAtual = null; aplicarTrava(); return; }
+    if (!v) { painel.style.display = 'none'; cmdAtual = null; aplicarTrava(); montarPacotesFirmware(); return; }
 
     if (v.charAt(0) === 'J') {
         var pro = parseInt(v.slice(2), 10);
@@ -1002,13 +1034,14 @@ function aoEscolherComando() {
         document.getElementById('p-manual').value = j.c;
         atualizarPreview();
         aplicarTrava();
+        montarPacotesFirmware();
         return;
     }
 
     var syn = v.slice(2);
     cmdAtual = CATALOGO.filter(function (x) { return x.s === syn; })[0];
     proAtual = 128;
-    if (!cmdAtual) { painel.style.display = 'none'; return; }
+    if (!cmdAtual) { painel.style.display = 'none'; montarPacotesFirmware(); return; }
 
     painel.style.display = 'block';
     document.getElementById('p-nome').textContent = cmdAtual.n + '  —  ' + cmdAtual.s;
@@ -1037,6 +1070,8 @@ function aoEscolherComando() {
     } else {
         wrap.style.display = 'none';
     }
+
+    montarPacotesFirmware();
 
     // Consulta: a forma nua do comando, que LÊ em vez de escrever.
     var cw = document.getElementById('p-cons-wrap');
@@ -1136,6 +1171,76 @@ function montarComando() {
     return saida.join(',') + '#';
 }
 
+/**
+ * Pacotes de firmware cadastrados para os modelos marcados (v4.9.32).
+ *
+ * Só aparece com o `UPDATE` escolhido. A trava de modelo desse comando foi
+ * REMOVIDA — ele vale para a linha JC inteira —, e o que sobra no lugar dela é
+ * esta lista: a URL é por modelo, e a errada não devolve erro de comando, o
+ * equipamento simplesmente baixa e aplica o pacote de outro modelo.
+ */
+function montarPacotesFirmware() {
+    var wrap  = document.getElementById('p-fw-wrap');
+    var chips = document.getElementById('p-fw-chips');
+    var aviso = document.getElementById('p-fw-aviso');
+    if (!cmdAtual || cmdAtual.c !== 'UPDATE') { wrap.style.display = 'none'; return; }
+
+    wrap.style.display = 'block';
+    chips.innerHTML = '';
+    var mods = modelosMarcados();
+    var achou = 0;
+
+    mods.forEach(function (m) {
+        (FWURLS[m] || []).forEach(function (r) {
+            achou++;
+            var c = document.createElement('span');
+            c.className = 'ex-chip';
+            c.textContent = m + ' · ' + r.v + (r.c ? ' (referência)' : '');
+            c.title = r.u;
+            c.onclick = function () { usarUrlFirmware(r.u); };
+            chips.appendChild(c);
+        });
+    });
+
+    if (!mods.length) {
+        aviso.style.display = 'block';
+        aviso.className = 'lock-note';
+        aviso.innerHTML = 'Marque o equipamento primeiro — os pacotes são listados pelo <strong>modelo</strong> dele.';
+    } else if (!achou) {
+        aviso.style.display = 'block';
+        aviso.className = 'lock-note';
+        aviso.innerHTML = 'Nenhum pacote cadastrado para ' + esc(mods.join(', ')) +
+            '. Cadastre a URL em <a href="/firmwares">Firmware</a> — digitá-la à mão aqui funciona, ' +
+            'mas é onde o pacote do modelo errado entra sem ninguém notar.';
+    } else if (mods.length > 1) {
+        // 🔴 O envio em lote manda a MESMA string para todos os marcados. Com
+        // modelos diferentes marcados, uma única URL serviria o pacote errado
+        // para todos menos um — e sem erro de comando para denunciar.
+        aviso.style.display = 'block';
+        aviso.className = 'lock-note';
+        aviso.innerHTML = '<strong>Um modelo por vez.</strong> Estão marcados ' + esc(mods.join(', ')) +
+            ', e o envio manda a mesma URL para todos — o pacote de um modelo aplicado no outro. ' +
+            'O botão de envio fica bloqueado até sobrar um modelo só.';
+    } else {
+        aviso.style.display = 'none';
+    }
+    atualizarBotao();
+}
+
+/** Preenche o P1 do UPDATE com a URL escolhida. */
+function usarUrlFirmware(url) {
+    var ins = document.querySelectorAll('.p-in');
+    if (ins.length) {
+        document.getElementById('p-livre').checked = false;
+        alternarLivre();
+        ins[0].value = url;
+    } else {
+        document.getElementById('p-livre').checked = true;
+        alternarLivre();
+        document.getElementById('p-manual').value = 'UPDATE,' + url + '#';
+    }
+    atualizarPreview();
+}
 function atualizarPreview() {
     var livre = document.getElementById('p-livre').checked;
     var txt = livre ? document.getElementById('p-manual').value : montarComando();
@@ -1148,8 +1253,14 @@ function atualizarBotao() {
     var n = imeisMarcados().length;
     var txt = document.getElementById('p-preview').textContent;
     var pronto = n > 0 && txt && txt !== '—';
+    // 🔴 v4.9.32 — `UPDATE` é o único comando cujo PARÂMETRO é específico do
+    // modelo. Soltar a trava de modelo (ele vale para a linha JC inteira) sem
+    // esta guarda deixaria o lote mandar a mesma URL para modelos diferentes.
+    var fwMisto = cmdAtual && cmdAtual.c === 'UPDATE' && modelosMarcados().length > 1;
+    if (fwMisto) pronto = false;
     b.disabled = !pronto;
-    b.textContent = !n ? 'Selecione equipamento e comando'
+    b.textContent = fwMisto ? 'UPDATE: marque um modelo por vez'
+                  : !n ? 'Selecione equipamento e comando'
                   : (!pronto ? 'Escolha um comando'
                   : 'Enviar para ' + n + ' equipamento' + (n > 1 ? 's' : ''));
 }

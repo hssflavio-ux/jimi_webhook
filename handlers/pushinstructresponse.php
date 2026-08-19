@@ -91,6 +91,13 @@ class PushInstructResponseHandler extends WebhookHandler {
             //    `last_communication` de segundos antes e caiu aqui.
             $this->capturarParametros($imei, $content, $commandId);
 
+            // 4. E se era um `VERSION#`, o `_content` é a versão de firmware.
+            //    Mesmo par de caminhos dos parâmetros: o síncrono está em
+            //    `sendcommand.php`, este é o do comando que virou fila offline.
+            //    Cobrir só um deixaria sem leitura justamente a metade da frota
+            //    que estava desligada quando alguém perguntou.
+            $this->capturarFirmware($imei, $content, $response, $commandId);
+
             Logger::info('InstructResponse registrado', [
                 'source' => $this->handlerName, 'imei' => $imei,
                 'status' => $status, 'msg_type' => $msgType
@@ -249,6 +256,59 @@ class PushInstructResponseHandler extends WebhookHandler {
             ]);
         } catch (Throwable $e) {
             Logger::error('InstructResponse: falha ao gravar parâmetros', [
+                'source' => $this->handlerName, 'imei' => $imei,
+                'erro'   => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Grava o firmware quando o callback responde a um `VERSION#` (v4.9.32).
+     *
+     * ⚠️ A DECISÃO É PELO COMANDO CORRELACIONADO, não pelo formato da resposta
+     * — mesma disciplina de `capturarParametros()`. Uma resposta de `STATUS#`
+     * traz `Battery:12.1V`, que casa com qualquer heurística de "parece
+     * versão"; sem olhar o que foi PEDIDO, a tensão da bateria viraria firmware
+     * do equipamento e ninguém desconfiaria depois.
+     *
+     * Sem comando correlacionado, não grava.
+     *
+     * @param  string      $imei
+     * @param  string|null $content   `_content` do callback (resposta do device)
+     * @param  mixed       $response  `_msg` do gateway
+     * @param  int|null    $commandId Linha de `commands` correlacionada
+     * @returns void
+     */
+    private function capturarFirmware($imei, $content, $response, $commandId) {
+        if ($commandId === null || $content === null || $content === '') return;
+
+        try {
+            $stmt = $this->db->prepare("SELECT pro_no, command_content FROM commands WHERE id = :id");
+            $stmt->execute([':id' => $commandId]);
+            $cmd = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$cmd) return;
+
+            require_once __DIR__ . '/../includes/firmware.php';
+            $proNo = $cmd['pro_no'] !== null ? (int)$cmd['pro_no'] : null;
+            if (!firmware_is_version_command((string)$cmd['command_content'], $proNo)) return;
+
+            $fw = firmware_capture(
+                $this->db, $imei, (string)$content,
+                is_string($response) ? $response : ''
+            );
+
+            if ($fw !== null) {
+                Logger::info('InstructResponse: firmware lido do equipamento', [
+                    'source' => $this->handlerName, 'imei' => $imei, 'firmware' => $fw,
+                ]);
+            } else {
+                Logger::warning('InstructResponse: resposta do VERSION# sem versão reconhecível', [
+                    'source' => $this->handlerName, 'imei' => $imei,
+                    'resposta' => substr((string)$content, 0, 120),
+                ]);
+            }
+        } catch (Throwable $e) {
+            Logger::error('InstructResponse: falha ao gravar firmware', [
                 'source' => $this->handlerName, 'imei' => $imei,
                 'erro'   => $e->getMessage(),
             ]);

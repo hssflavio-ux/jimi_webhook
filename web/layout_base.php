@@ -93,6 +93,13 @@ $navBottom = [
     ['route' => 'comandos',   'label' => 'Comandos',   'icon' => 'terminal', 'href' => '/comandos'],
     ['route' => 'parametros', 'label' => 'Parâmetros', 'icon' => 'sliders',  'href' => '/parametros',
      'admin_only' => true],
+    // v4.9.32 — vizinha de Parâmetros pela mesma razão que ela é vizinha de
+    // Comandos: as três mandam instrução para equipamento em operação. Entra em
+    // $navBottom, e não no grupo Cadastros, porque só $navBottom respeita
+    // `admin_only` — item de grupo é filtrado só por can(), que é permissivo por
+    // omissão e deixaria a tela à vista de todo usuário sem grupo.
+    ['route' => 'firmwares',  'label' => 'Firmware',   'icon' => 'gear',     'href' => '/firmwares',
+     'admin_only' => true],
     ['route' => 'exportar',   'label' => 'Exportar',   'icon' => 'download', 'href' => '/exportar'],
     ['route' => 'wiki',       'label' => 'Ajuda',      'icon' => 'book',     'href' => '/wiki'],
 ];

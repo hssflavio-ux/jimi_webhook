@@ -45,6 +45,8 @@ header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../includes/auth.php';
+// v4.9.32 — captura do firmware a partir da resposta síncrona do `VERSION#`.
+require_once __DIR__ . '/../includes/firmware.php';
 
 // ── Apenas POST ───────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -156,6 +158,48 @@ if (!in_array($proNo, $proNosConhecidos, true)) {
         'msg'  => 'proNo desconhecido: ' . $proNo . '. Permitidos: ' . implode(', ', $proNosConhecidos),
     ]);
     exit;
+}
+
+// ── Trava do UPDATE: a URL do firmware (v4.9.32) ────────────────────────────
+//
+// O `UPDATE,<url>#` deixou de travar a seleção em JC371 — ele vale para a linha
+// JC inteira, e o que muda de um modelo para o outro é só o pacote apontado
+// pela URL. A trava que sobra é sobre a URL, e ela mora AQUI e não só no
+// JavaScript: `/comandos` tem modo livre, e quem forja o POST passa por cima
+// de qualquer checagem de tela.
+//
+// ⚠️ O que esta trava PEGA e o que ela NÃO pega, explicitamente:
+//
+//   PEGA   — URL sem esquema, com espaço, ou vazia. São as formas em que o
+//            equipamento recebe algo que não é endereço e não baixa nada.
+//   NÃO PEGA — vírgula DENTRO da URL. Depois que a string chega aqui, uma URL
+//            com vírgula e um `UPDATE` de dois parâmetros são indistinguíveis;
+//            recusar o segundo caso bloquearia uma variante que algum modelo
+//            pode aceitar. Esse caso é barrado antes, nas DUAS telas que montam
+//            o comando (`/firmwares` e `/comandos`), onde a URL ainda está
+//            separada do resto.
+//   NÃO PEGA — a URL do MODELO ERRADO, que é o erro perigoso e que nenhuma
+//            validação de sintaxe alcança: o equipamento aceita, baixa e
+//            aplica. Contra ele o que existe é o cadastro por modelo em
+//            `/firmwares` e a guarda de "um modelo por vez" em `/comandos`.
+if ($proNo === 128 && preg_match('/^\s*UPDATE\s*,/i', (string)$cmdContent)) {
+    // Primeiro parâmetro, sem o `#` final: é onde a URL vive. Tomar só o
+    // primeiro token é o que torna a vírgula INVISÍVEL para esta trava — uma
+    // URL partida chega aqui como uma URL curta e plausível.
+    $partes = explode(',', rtrim(trim((string)$cmdContent), '#'), 2);
+    $urlFw  = isset($partes[1]) ? explode(',', $partes[1])[0] : '';
+    $probl  = firmware_url_problema($urlFw);
+    if ($probl !== null) {
+        http_response_code(400);
+        Logger::warning('sendcommand: UPDATE barrado por URL inválida', [
+            'imei' => $imei, 'url' => substr($urlFw, 0, 120), 'motivo' => $probl,
+        ]);
+        echo json_encode(['code' => 400,
+            'msg' => 'UPDATE recusado — ' . $probl
+                   . ' Cadastre o pacote do modelo em /firmwares e escolha por lá.'],
+            JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 // ── Família de parâmetros (33027/33028/33030): a forma é montada AQUI ────────
@@ -518,6 +562,33 @@ try {
             }
         } catch (Throwable $e) {
             Logger::error('sendcommand: falha ao gravar parâmetros', [
+                'imei' => $imei, 'erro' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    // ── Firmware: a resposta do VERSION# vira `devices.firmware_version` ─────
+    //
+    // v4.9.32 — o `VERSION#` sempre respondeu na hora e ninguém gravava o
+    // resultado; a coluna ficou NULL em 100% da base desde a v4.0.0. O custo
+    // apareceu na v4.9.31, quando duas câmeras divergiram de firmware e a
+    // escolha do comando teve de virar tentativa-e-erro contra o equipamento.
+    //
+    // Falha aqui não derruba o comando (o `rawResp` completo já está gravado),
+    // mas é LOGADA: `catch` silencioso neste arquivo foi o que escondeu o
+    // "Invalid JSON text" por meses (v4.8.9).
+    if ($proNo === 128 && !empty($syncContent) && firmware_is_version_command($cmdContent, $proNo)) {
+        try {
+            $fw = firmware_capture($db, $imei, (string)$syncContent, (string)$iothubMsg, (string)$iothubCode);
+            if ($fw !== null) {
+                Logger::info('sendcommand: firmware lido do equipamento', ['imei' => $imei, 'firmware' => $fw]);
+            } else {
+                Logger::warning('sendcommand: resposta do VERSION# sem versão reconhecível', [
+                    'imei' => $imei, 'resposta' => substr((string)$syncContent, 0, 120),
+                ]);
+            }
+        } catch (Throwable $e) {
+            Logger::error('sendcommand: falha ao gravar firmware', [
                 'imei' => $imei, 'erro' => $e->getMessage(),
             ]);
         }

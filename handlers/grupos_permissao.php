@@ -45,6 +45,9 @@ $screens = [
     // handlers de parâmetro exigem `require_admin()`, porque `can()` devolve
     // true para quem não tem grupo e isso escreve em equipamento em operação.
     'parametros'            => 'Parâmetros (só admin)',
+    // v4.9.32 — mesma trava e mesma razão: `require_admin()` no handler, porque
+    // esta tela dispara `UPDATE,<url>#` em equipamento em operação.
+    'firmwares'             => 'Firmware (só admin)',
     'usuarios'              => 'Usuários',
     'wiki'                  => 'Central de Ajuda',
 ];

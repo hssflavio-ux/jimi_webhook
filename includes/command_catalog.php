@@ -42,9 +42,29 @@
  * PRIMEIRA entrada carrega a consulta — senão a tela ofereceria vinte botões
  * idênticos.
  *
- * `modelos` = modelos cuja página documenta o comando. `universal` = presente
- * em >= 5 das 6 páginas; só esses NÃO travam a seleção de equipamentos, por
- * serem o núcleo comum do proNo 128.
+ * `modelos` = modelos cuja página documenta o comando. `universal` = o comando
+ * NÃO trava a seleção de equipamentos por modelo (`aplicarTrava()`,
+ * handlers/comandos.php). Normalmente é derivado: presente em >= 5 das 6
+ * páginas da wiki = núcleo comum do proNo 128.
+ *
+ * ⚠️ A derivação tem EXCEÇÕES MANUAIS, e elas precisam sobreviver a uma
+ * regeneração do catálogo por script. Hoje é uma:
+ *
+ *   `UPDATE,P1#` (v4.9.32) — só a página do JC371 documenta a atualização de
+ *   firmware, e por isso ele nascia travado nesse modelo. O comando é o mesmo
+ *   em toda a linha JC; **o que muda de um modelo para o outro é só a URL do
+ *   pacote**. Travado em JC371, a tela tornava impossível atualizar as outras
+ *   cinco — inclusive as JC400AD de produção, que é onde a divergência de
+ *   firmware custou caro (ver v4.9.31). A trava por modelo existe para impedir
+ *   "comando não suportado"; aqui ela impedia o comando suportado.
+ *   Procedência: informação do fornecedor + operação, **não** a wiki — a
+ *   planilha oficial `JC400 & JC261 Command List` sequer lista `UPDATE`.
+ *   O invariante está travado em `tests/helpers/command_response.test.php`.
+ *
+ * 🔴 `universal` NÃO significa "seguro em qualquer modelo": significa "a tela
+ * não escolhe o equipamento por você". No `UPDATE` a escolha errada é a da
+ * URL, não a do comando — e é `/firmwares` que a resolve, cadastrando o pacote
+ * com o modelo na chave.
  *
  * `template` = a sintaxe traz placeholders (P1/A) e a tela monta um campo por
  * parâmetro. Sem template, a sintaxe já é um comando pronto.
@@ -67,8 +87,13 @@
  *
  * `fonte` guarda a linha de origem na planilha (A007, G014…).
  *
- * Total: 219 entradas / 143 comandos distintos (14 universais), 67 com consulta.
- * Por categoria: alarme=70, audio=3, ia=36, manutencao=18, outros=22, posicao=22, rede=19, video=29.
+ * Total: 220 entradas / 144 comandos distintos (15 universais), 67 com consulta.
+ * Por categoria: alarme=70, audio=3, ia=36, manutencao=18, outros=22, posicao=22, rede=19, video=30.
+ *
+ * ⚠️ Estes números eram 219/143/video=29 e estavam ERRADOS desde a v4.9.27 — o
+ * arquivo já tinha 220/144/video=30 antes da v4.9.32. Contagem em comentário
+ * envelhece sem avisar; `tests/helpers/command_response.test.php` passou a
+ * conferi-la contra o array de verdade.
  */
 
 return [
@@ -4554,12 +4579,23 @@ return [
   'UPDATE,P1#' => [
     'cmd' => 'UPDATE',
     'nome' => 'Atualizar firmware',
-    'desc' => '🔴 Inicia atualização de firmware a partir de uma URL.',
+    'desc' => '🔴 Inicia a atualização de firmware baixando o pacote da URL informada. '
+            . 'O comando é o mesmo em toda a linha JC — o que muda de um modelo para o outro '
+            . 'é só o pacote apontado pela URL. Use a URL cadastrada em /firmwares para o modelo do equipamento.',
     'categoria' => 'manutencao',
+    // Exceção MANUAL à derivação por páginas da wiki — ver o cabeçalho deste
+    // arquivo. Só a página do JC371 documenta o comando; ele vale para a linha
+    // inteira, e travar em JC371 tornava a atualização das outras cinco
+    // impossível pela tela.
     'modelos' => [
       0 => 'JC371',
+      1 => 'JC450',
+      2 => 'JC182',
+      3 => 'JC181',
+      4 => 'JC400D',
+      5 => 'JC400AD',
     ],
-    'universal' => false,
+    'universal' => true,
     'template' => true,
     'consulta' => NULL,
     'consulta_modelos' => [],
@@ -4567,12 +4603,20 @@ return [
     'params' => [
       0 => [
         'p' => 'P1',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'URL do pacote de firmware do MODELO deste equipamento',
+        // 🔴 Vírgula e `#` são os separadores do proNo 128: uma URL que os
+        // contenha é partida em dois pelo próprio equipamento. `firmware_url_problema()`
+        // (includes/firmware.php) recusa as duas antes do envio.
+        'format' => 'http://… ou https://… — sem vírgula e sem #',
+        'default' => '—',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'UPDATE,http://servidor/firmware/JC400AD_V1.8.1.2_250904.bin#',
+        'desc' => 'A URL é POR MODELO. Mandar o pacote de outro modelo não devolve erro de comando — '
+                . 'o equipamento baixa e aplica o firmware errado.',
+      ],
     ],
   ],
   'UPFILESIZE#' => [

@@ -89,7 +89,7 @@ if (empty($segments)) {
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
-                     'midia','parametros'];
+                     'midia','parametros','firmwares'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -284,6 +284,11 @@ $screenByHandler = [
     // escondia o primeiro. Com a rota consertada, a trava passa a ser o que
     // impede a exposição. Ver PROJETO_PARAMETROS.md §3.4.
     'config_dispositivos.php'   => 'config-dispositivos',
+    // v4.9.32 — `/firmwares` entra aqui E em `$screens`
+    // (grupos_permissao.php). A trava efetiva é o `require_admin()` dentro do
+    // handler: `can()` é permissivo por omissão, e esta tela manda equipamento
+    // em operação trocar o próprio firmware.
+    'firmwares.php'             => 'firmwares',
     'config_parametros.php'     => 'config-parametros',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',

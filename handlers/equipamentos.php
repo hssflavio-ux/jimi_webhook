@@ -648,6 +648,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Chip</th>
                 <th>Último Heartbeat</th>
                 <th>Bateria</th>
+                <th>Firmware</th>
                 <th>Periféricos</th>
                 <th>Situação</th>
                 <th>Status</th>
@@ -656,7 +657,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($devices)): ?>
-            <tr><td colspan="11" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
+            <tr><td colspan="12" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
             <?php else: ?>
             <?php foreach ($devices as $d): ?>
             <tr>
@@ -674,6 +675,12 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?= $d['last_communication'] ? fmt_brt($d['last_communication']) : 'Nunca' ?>
                 </td>
                 <td class="text-mono" style="font-size:12px;"><?= $d['battery_level'] !== null ? (int)$d['battery_level'] . '%' : '—' ?></td>
+                <?php /* v4.9.32 — a coluna já saía no export e não aparecia na grade.
+                        Quem preenche agora é `firmware_capture()`, a partir da resposta
+                        do VERSION#; a leitura e o UPDATE ficam em /firmwares. */ ?>
+                <td class="text-mono" style="font-size:12px;">
+                    <?= $d['firmware_version'] !== null && $d['firmware_version'] !== '' ? htmlspecialchars($d['firmware_version']) : '—' ?>
+                </td>
                 <td>
                     <?php
                     $periphArr = $d['peripherals'] ? (array)json_decode($d['peripherals'], true) : [];
@@ -699,7 +706,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <div style="display:flex;gap:4px;justify-content:center;">
                         <a href="?action=editar&imei=<?= urlencode($d['imei']) ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
                         <?php if ($d['is_online']): ?>
-                        <button onclick="sendFirmware('<?= htmlspecialchars($d['imei']) ?>')" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">FOTA</button>
+                        <?php /* v4.9.32 — o FOTA mora em /firmwares, onde a URL do pacote é
+                                cadastro POR MODELO. Aqui ele era um campo de texto livre
+                                enviado com proNo 33027 ("Definir parâmetro" do JT/T), que
+                                nunca atualizou firmware nenhum. */ ?>
+                        <a href="/firmwares" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;" title="Atualização de firmware — URL cadastrada por modelo">FOTA</a>
                         <?php endif; ?>
                     </div>
                 </td>
@@ -711,26 +722,6 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?= report_pagination($page, $totalPages, $totalRows, 'equipamentos') ?>
 <?php endif; ?>
-
-<!-- Firmware Modal -->
-<div id="firmware-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;">
-    <div class="card" style="width:400px;">
-        <h3 style="font-size:16px;font-weight:600;margin-bottom:12px;">Atualização de Firmware (OTA)</h3>
-        <p class="text-muted" style="font-size:12px;margin-bottom:16px;">Envia comando de atualização de firmware para o dispositivo.</p>
-        <div class="form-group">
-            <label>IMEI do Dispositivo</label>
-            <input type="text" id="fota-imei" class="text-mono" style="font-family:'JetBrains Mono',monospace;" placeholder="IMEI">
-        </div>
-        <div class="form-group">
-            <label>URL do Firmware</label>
-            <input type="text" id="fota-url" placeholder="https://...">
-        </div>
-        <div style="display:flex;gap:8px;justify-content:flex-end;">
-            <button class="btn btn-outline btn-sm" onclick="closeFirmwareModal()">Cancelar</button>
-            <button class="btn btn-primary btn-sm" onclick="submitFirmware()">Enviar</button>
-        </div>
-    </div>
-</div>
 
 <!-- Import Modal -->
 <div id="import-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.4);z-index:999;align-items:center;justify-content:center;">
@@ -774,28 +765,6 @@ function onModelChange(sel) {
     var input = document.getElementById('camera_count');
     input.value = cam;
     input.max = cam;
-}
-
-function sendFirmware(imei) {
-    document.getElementById('fota-imei').value = imei;
-    showFirmwareModal();
-}
-
-function showFirmwareModal() { document.getElementById('firmware-modal').style.display = 'flex'; }
-function closeFirmwareModal() { document.getElementById('firmware-modal').style.display = 'none'; }
-
-function submitFirmware() {
-    var imei = document.getElementById('fota-imei').value;
-    var url = document.getElementById('fota-url').value;
-    if (!imei) { alert('Informe o IMEI'); return; }
-    fetch('/sendcommand', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
-        body: JSON.stringify({imei: imei, proNo: 33027, content: JSON.stringify({firmware_url: url || ''})})
-    }).then(function(r) { return r.json(); }).then(function(d) {
-        alert(d.code === 0 ? 'Comando de firmware enviado.' : 'Erro: ' + (d.msg || d.iothub_msg));
-        closeFirmwareModal();
-    }).catch(function() { alert('Erro de rede.'); });
 }
 
 function showImportModal() { document.getElementById('import-modal').style.display = 'flex'; }
