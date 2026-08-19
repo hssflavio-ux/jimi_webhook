@@ -50,6 +50,9 @@ $scopeSql    = $scopeCust !== null ? ' AND d.customer_id = :cid' : '';
 $scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
 $mostrarCliente = ($scopeCust === null);
 
+// 🔴 `is_active = 1` pelo mesmo motivo do vídeo ao vivo: playback também PEDE
+// gravação ao equipamento, então depende dele responder. Equipamento dado baixa
+// no cadastro não deve aparecer aqui.
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
@@ -57,7 +60,7 @@ $devices = $db->prepare("
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     LEFT JOIN customers cu ON cu.id = d.customer_id
-    WHERE 1=1 {$scopeSql}
+    WHERE d.is_active = 1 {$scopeSql}
     ORDER BY cu.name, d.device_name ASC
 ");
 $devices->execute($scopeParams);

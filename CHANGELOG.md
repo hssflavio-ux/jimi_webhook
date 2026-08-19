@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.29
+
+### Fixed
+- 🔴 **As telas de vídeo ofereciam equipamento DESATIVADO.** `video_aovivo.php` e `video_playback.php` montavam a lista com `WHERE 1=1`, sem filtro nenhum de `is_active`. O vídeo ao vivo ainda ordenava por `d.is_active DESC` — ou seja, o campo era conhecido e mesmo assim não filtrava: o equipamento dado baixa aparecia no seletor, só que por último. Baixa de equipamento é **soft delete** (`ativos.php` põe `is_active=0`), então a linha fica no banco para sempre e reaparece em toda tela que esquecer o filtro.
+  Toda tela **operacional** do sistema já filtrava assim — `comandos.php`, `rastreamento.php`, `camerasdata.php`, `hbdata.php`. Só o **cadastro** (`ativos.php`) mostra inativo, e lá com selo "Inativo" ao lado. As de vídeo eram a exceção.
+- **`/video/downloads` ficou de fora, de propósito.** Ali o `<select>` filtra uma lista de arquivos **já extraídos**, não pede nada ao equipamento: esconder o desativado apagaria da busca os downloads históricos dele. Se preferir uniformizar, é uma linha.
+
+### Added
+- **`tests/video_equipamento_inativo.spec.js`** — verifica as duas telas contra o par ativo/inativo do fixture. Verificado que **as duas reprovam** no código anterior.
+- **Par ativo/inativo em `tests/helpers/seed_tenants.php`** (`869900000000888` ativo, `869900000000777` inativo, ambos no cliente A). Sem o inativo, "não lista desativado" passa por vacuidade; sem o ativo, passa por lista vazia. O spec exige os dois antes de afirmar qualquer coisa.
+
 ## [Unreleased] — 4.9.28
 
 **A tela de vídeo ao vivo falava JT/T com câmera JIMI.** Ela sempre enviou `proNo 37121` (0x9101, o comando de vídeo do JT/T 1078) em **todo** equipamento, sem ramificar por protocolo — o arquivo nunca teve um ramo JIMI, desde a primeira versão. O banco de produção mostrava o defeito limpo: todo 37121 para JC400AD ficava `sent` (o device nunca respondeu), enquanto para JC371/JC181 ficava `executed`.

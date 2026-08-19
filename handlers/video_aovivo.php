@@ -44,6 +44,16 @@ require_once __DIR__ . '/../includes/fleet_state.php';   // OFFLINE_GAP_SECONDS
 //
 // ⚠️ `UTC_TIMESTAMP()` e não `NOW()`: a conexão do app força `time_zone='+00:00'`,
 // mas dizê-lo por extenso evita que a conta dependa dessa configuração.
+//
+// 🔴 `is_active = 1` NÃO é filtro cosmético. Equipamento desativado é baixa do
+// cadastro (`ativos.php` faz soft delete pondo `is_active=0`), e pedir vídeo
+// dele é gastar comando num aparelho que não deveria mais aparecer — pior, num
+// que pode ter sido devolvido ou trocado de cliente. Esta tela listava os
+// inativos e só os ORDENAVA por último (`ORDER BY d.is_active DESC`), o que
+// deixava claro que o campo era conhecido e mesmo assim não filtrado. Toda tela
+// OPERACIONAL do sistema filtra assim — `comandos.php`, `rastreamento.php`,
+// `camerasdata.php`, `hbdata.php`; só o CADASTRO (`ativos.php`) mostra inativo,
+// e lá com selo "Inativo" ao lado.
 $devices = $db->prepare("
     SELECT d.imei, d.device_name, dm.model_name, dm.protocol,
            COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
@@ -54,8 +64,8 @@ $devices = $db->prepare("
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
     LEFT JOIN device_statistics ds ON ds.imei = d.imei
     LEFT JOIN customers cu ON cu.id = d.customer_id
-    WHERE 1=1 {$scopeSql}
-    ORDER BY cu.name, d.is_active DESC, d.device_name ASC
+    WHERE d.is_active = 1 {$scopeSql}
+    ORDER BY cu.name, d.device_name ASC
 ");
 $devices->execute($scopeParams);
 $devices = $devices->fetchAll();

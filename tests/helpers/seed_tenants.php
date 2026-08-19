@@ -33,6 +33,11 @@ const EMAIL_B    = 'operador.b@teste.local';
 const IMEI_A     = '868120246598152';   // já existente no cliente A
 const IMEI_B     = '869999000000002';   // 15 dígitos, exigido pelo regex do spec
 const CLIENTE_B  = 'Cliente B TESTE';
+// Par ATIVO/INATIVO no mesmo cliente, para `video_equipamento_inativo.spec.js`.
+// Sem o INATIVO, "a tela não lista desativado" passa por vacuidade; sem o ATIVO,
+// passa por lista vazia. Os dois precisam existir para o teste provar algo.
+const IMEI_ATIVO   = '869900000000888';
+const IMEI_INATIVO = '869900000000777';
 
 function saida(array $d): void {
     echo json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), "\n";
@@ -98,6 +103,19 @@ try {
             } else {
                 $db->prepare("INSERT INTO devices (imei, customer_id, device_name, is_active) VALUES (?,?,?,1)")
                    ->execute([$imei, $cust, $nome]);
+            }
+        }
+
+        // ── Par ativo/inativo para o spec das telas de vídeo ──────────────
+        foreach ([[IMEI_ATIVO, 1, 'CAMERA ATIVA E2E'], [IMEI_INATIVO, 0, 'CAMERA DESATIVADA E2E']] as [$imei, $ativo, $nome]) {
+            $stmt = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = ?");
+            $stmt->execute([$imei]);
+            if ((int)$stmt->fetchColumn()) {
+                $db->prepare("UPDATE devices SET customer_id=?, is_active=?, device_name=? WHERE imei=?")
+                   ->execute([$custA, $ativo, $nome, $imei]);
+            } else {
+                $db->prepare("INSERT INTO devices (imei, customer_id, device_name, is_active) VALUES (?,?,?,?)")
+                   ->execute([$imei, $custA, $nome, $ativo]);
             }
         }
 
