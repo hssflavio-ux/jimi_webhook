@@ -1,4 +1,234 @@
-# STATUS.md — Jimi Webhook System v4.9.16 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.30 (YUV Parity)
+
+> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.30 publicadas e verificadas
+>
+> Cinco versões em sequência, todas no ar em produção (`bycamera.ia.br`). Quatro
+> nasceram de reclamação do campo; a quinta, de uma conferência contra a
+> documentação oficial da fabricante.
+>
+> | Versão | O que era | Onde estava |
+> |---|---|---|
+> | 4.9.26 | Cadastro gravava cliente errado — ou nenhum | `/equipamentos`, `/ativos/novo`, `/chips`, `/motoristas` |
+> | 4.9.27 | 72 comandos oficiais faltando; `FILELIST` pela metade | `command_catalog.php` |
+> | 4.9.28 | Vídeo ao vivo falava JT/T com câmera JIMI | `video_aovivo.php` |
+> | 4.9.29 | Telas de vídeo listavam equipamento desativado | `video_aovivo.php`, `video_playback.php` |
+> | 4.9.30 | Relatório oferecia vídeo de arquivo que nunca chegou | `rel_alarmes.php`, `includes/media.php` |
+>
+> **O fio que liga quatro delas**: a tela prometia algo que o sistema não podia
+> cumprir, e falhava **em silêncio** — HTTP 200, mensagem verde, e nada
+> acontecendo. Cadastro dizia "cadastrado com sucesso" e o equipamento ficava
+> órfão; o botão "Ver Vídeo" abria um player que nunca carregava; o comando de
+> vídeo ao vivo ficava `sent` para sempre. Em nenhum desses casos havia linha de
+> erro em log algum.
+>
+> #### 🔴 v4.9.26 — cadastro de equipamento e o cliente errado
+>
+> Relatado: uma câmera cadastrada em 17/08 não vinculou ao cliente. A tela
+> `/equipamentos` **não tinha seletor de cliente** — mostrava o da sessão num
+> campo `readonly` e gravava `customer_id = $sessao ?? 1`. Três desfechos, os
+> três com mensagem de sucesso:
+>
+> | Situação | Gravado | Como aparecia |
+> |---|---|---|
+> | Admin com a grade filtrada no cliente X | cliente da **sessão** | equipamento "sumiu" |
+> | Sessão sem cliente, via `/equipamentos` | **`1`** (fallback fixo) | foi para outro tenant |
+> | Sessão sem cliente, via `/ativos/novo` | **`NULL`** | órfão, invisível em toda tela |
+>
+> Sessão sem cliente **não é hipótese**: `login_user()` só chama
+> `set_customer_context()` se `get_available_customers()` devolver algo, e ela
+> devolve vazio para quem não é admin de plataforma e não tem vínculo em
+> `customer_users`. Como `devices.customer_id` e `sim_cards.customer_id` são
+> **nullable**, o INSERT do órfão passa sem reclamar — as colunas `NOT NULL`
+> (`drivers`, `geofences`, `report_schedules`) escapavam só porque o banco
+> recusava, com erro de SQL cru na tela.
+>
+> **Correção**: `resolve_owner_customer_id()` (`includes/functions.php`), o
+> espelho de **escrita** do `report_customer_scope()`. Devolve `null` quando não
+> dá para resolver, e o chamador **recusa** — nunca há id "de consolo". Seletor
+> de cliente nas duas telas de cadastro e no import em lote; o `UPDATE` passou a
+> gravar `customer_id` (sem isso não havia como consertar um órfão pela tela).
+>
+> ⚠️ **Vazamento cross-tenant encontrado de brinde**: `SELECT * FROM devices
+> WHERE imei` e `UPDATE … WHERE imei`, na edição de equipamento, não tinham
+> escopo nenhum — qualquer usuário **alterava** equipamento de qualquer cliente
+> sabendo o IMEI da URL.
+>
+> **Passivo em produção**: 1 equipamento órfão (a `400AD_3`). Filtro
+> `?customer_id=none` e aviso no topo de `/equipamentos` mostram quantos são —
+> por definição eles não aparecem em nenhuma tela com escopo.
+>
+> #### v4.9.27 — catálogo cruzado com a planilha oficial
+>
+> `docs/JC400 & JC261 Command List V5.0.3.20230626.xlsx` entrou no repo e o
+> catálogo foi cruzado com ela. **JC261 é a nossa JC400AD** — a planilha usa o
+> código de fábrica, e é por isso que os comandos "Only for JC261" nunca tinham
+> sido reconhecidos como nossos. Catálogo de 147 → 220 entradas, 90 → 144
+> comandos distintos, cada um com `fonte` apontando a linha de origem.
+>
+> 🔴 **A família ADAS inteira faltava** (`ADASSW`, `ADASSEP`, `ADASPI`, `ADASVI`,
+> `ADASSP`, `ADASSEN`, `ADASVSP` — G009 a G015). É o núcleo do produto.
+>
+> 🔴 **`FILELIST` tinha só metade, e isso tinha custo real.** `FILELIST,<A>`
+> (A006) apenas **configura** o endereço; quem manda o equipamento **subir** a
+> lista é a forma NUA `FILELIST` (A007), ausente do catálogo. Como a tela só
+> oferece o que está catalogado, era impossível disparar o upload: dez comandos
+> em 17–18/08, todos `executed`, nenhuma lista. Com a forma nua, as três
+> JC400AD responderam e chamaram `/filelist` em 1–3 s.
+>
+> **Lição de método**: o cruzamento passou a ser por **COMANDO:ARIDADE**, não por
+> nome. Comparar só o nome-base esconde variante faltante de comando que já
+> existe — foi assim que o `FILELIST` nu passou batido. A regra recuperou mais 15
+> variantes oficiais.
+>
+> ⚠️ **`Picture` e `Video` são sensíveis à CAIXA** — a planilha avisa em
+> A012/A013 ("the 'P' need uppercase letter and others need Lowercase letters").
+> São os dois únicos assim no proNo 128. Havia `PICTURE` maiúsculo e nenhum
+> `Video`. O `PICTURE#`/`PICTURE,1#` antigo **fica**: é da wiki do JC371, chama-se
+> "Parâmetros" e é outro comando — mesma base, mesma aridade, significado
+> diferente, e foi essa colisão que escondeu a falta.
+>
+> #### 🔴 v4.9.28 — vídeo ao vivo falava JT/T com câmera JIMI
+>
+> **Não foi o HTTPS.** O proxy `/stream` da v4.9.26 está instalado e funcionando —
+> a prova é que o 404 que volta de fora vem assinado `Server: JIMI-ZLMediaKit`,
+> ou seja, atravessa o Apache e chega ao media server. O TLS quebrou o vídeo das
+> câmeras **JT/T** (corrigido em 17/08); nas **JIMI o vídeo nunca funcionou** por
+> essa tela, desde a primeira versão do arquivo.
+>
+> A tela sempre mandou `proNo 37121` (JT/T 1078) em **todo** equipamento, sem
+> ramificar. O banco mostrava o defeito limpo:
+>
+> | Protocolo | Modelos | Status do 37121 |
+> |---|---|---|
+> | JTT | JC371, JC181 | `executed` |
+> | JIMI | **JC400AD** | `sent` (device nunca respondeu) |
+>
+> Na JIMI o vídeo ao vivo é **push RTMP**: `RTMP,ON,<CÂMERA>` (proNo 128,
+> `serverFlagId 1`), e o device publica no endereço gravado nele em `RSERVICE` —
+> as três câmeras respondem `rtmp://186.248.143.197:1936/live`.
+>
+> **A URL do player também diferia**, e a tela só sabia a do JT/T. Medido com a
+> câmera publicando:
+>
+> | Caminho | Resultado |
+> |---|---|
+> | `/live/0/<imei>.flv` (JIMI, base ZERO) | **200, 400 KB**, assinatura `FLV` |
+> | `/1/<imei>.flv` (o que a tela montava) | nada |
+>
+> **Mapeamento medido, não suposto**: `RTMP,ON,INOUT` registrou `live/0/<imei>` e
+> `live/1/<imei>`; `RTMP,ON,OUT` registrou só o `0`. Logo **CH1 = OUT (frontal)**
+> e **CH2 = IN (cabine)**. O device recusa o resto: `parameter B error.
+> options:[IN,OUT,INOUT,PIP]`.
+>
+> ⚠️ **`RTMP` não leva duração** — correção do operador. O `<C>` da planilha
+> existe, mas só em firmware V4.3+ e não governa o stream: o doc oficial de
+> *pull live stream* usa `RTMP,ON,INOUT`, e o stream cai sozinho ~20 s depois que
+> o último leitor sai. Quem tem tempo é `Video,<câmera>,<segundos>`, que é
+> **captura de clipe**. A v4.9.27 trocou os dois; a v4.9.28 desfez.
+>
+> Equipamento **sem modelo** passou a **recusar com explicação** em vez de
+> adivinhar: sem modelo não há protocolo, e o default silencioso `JTT` repetiria
+> o mesmo defeito ao contrário. São 1 de 11 equipamentos em produção.
+>
+> #### v4.9.29 — telas de vídeo listavam equipamento desativado
+>
+> `video_aovivo.php` e `video_playback.php` montavam a lista com `WHERE 1=1`. O
+> ao vivo ainda ordenava por `d.is_active DESC` — o campo era conhecido e mesmo
+> assim não filtrava. Baixa de equipamento é **soft delete**, então a linha fica
+> no banco para sempre e reaparece em toda tela que esquecer o filtro. Havia **3
+> desativados de 11** aparecendo.
+>
+> Toda tela **operacional** já filtrava (`comandos.php`, `rastreamento.php`,
+> `camerasdata.php`, `hbdata.php`); só o **cadastro** mostra inativo, e lá com
+> selo. As de vídeo eram a exceção.
+>
+> `/video/downloads` ficou **de fora de propósito**: ali o `<select>` filtra
+> arquivos **já extraídos** e não pede nada ao equipamento — esconder o
+> desativado apagaria da busca os downloads históricos dele.
+>
+> #### 🔴 v4.9.30 — "Ver Vídeo" para arquivo que nunca chegou
+>
+> Levantado do alarme `DMS: Motorista Bocejando` da `400AD_3` em 18/08 16:16:57,
+> que não abria o vídeo. Auditoria: **81 dos 106 alarmes com `file_url` — 76% —
+> apontavam para arquivo inexistente**, e a tela oferecia o botão nos 106. O
+> clique abria um player que nunca carregava.
+>
+> **Ter `file_url` não é ter o vídeo.** O nome é anunciado pela câmera no push do
+> alarme; o arquivo sobe depois, pelo container `dvr-upload` (porta 23010), e
+> pode não chegar. ⚠️ **O evento `105 — Upload de Vídeo Concluído` também não é
+> recibo**: é a câmera dizendo que *ela* concluiu, e 27 desses apontam para
+> arquivo ausente.
+>
+> A tela passou a distinguir três estados: sem vídeo, vídeo disponível, e **"Vídeo
+> não recebido"** com o nome do arquivo e a explicação no tooltip.
+> `media_available()` já existia para isso e era usada só pelo dashboard de
+> ocorrências.
+>
+> ⚠️ **`file_url` pode trazer DOIS arquivos** separados por vírgula
+> (`..._I_56.mp4,..._F_55.mp4` — interna e frontal), em 25 dos 106 alarmes.
+> `basename()` da string inteira não casa com arquivo nenhum: o par não seria
+> achado **nem estando no disco**. Novos `media_file_list()` e `media_pick()`.
+>
+> **Como recuperar vídeo de alarme antigo** (medido em câmera real, 18/08):
+>
+> | Comando | Resultado |
+> |---|---|
+> | **`EVIDEO,<AAAA-MM-DD HH:MM:SS>,<1=frontal\|2=interna>,<10–60s>`** | ✅ gera clipe NOVO do cartão e envia — chegou 3,8 MB |
+> | `UPLOADFILE,<nome do arquivo>` | ❌ `file not exist!` — clipe de evento não fica guardado |
+> | `HVIDEO,<AAAA_MM_DD_HH_MM_SS>,<1\|2>` | ⚠️ vídeo de memória, baixa qualidade, 1 min/arquivo (separador `_`, não `-`) |
+>
+> #### Estado dos equipamentos em produção (19/08/2026)
+>
+> - **11 equipamentos**: 5 JIMI (JC400AD), 5 JT/T, 1 sem modelo cadastrado.
+> - **3 JC400AD ativas e transmitindo**, todas com cartão: `TFcard 4,20–4,49 GB
+>   de 119 GB`, respondendo a `STATUS`, `RSERVICE#`, `UPLOAD#`, `RTMP` e
+>   `EVIDEO`.
+> - Cadeia de upload **saudável desde 18/08 17h**: 9 alarmes, 9 vídeos, zero
+>   falhas. As falhas de 18/08 entre 08h e 16h coincidem com a queda do servidor
+>   (17/08 20:09 → 18/08 16:22).
+>
+> #### Pendências abertas
+>
+> 1. 🔴 **Religar vídeo reenviado ao alarme.** O `EVIDEO` traz o arquivo com
+>    **outro nome** (`..._00000001_..._16_16_26_I_02.ts` contra
+>    `..._00000000_..._16_16_57_I_14.ts` gravado em `alarms.file_url`), então o
+>    vídeo fica no servidor sem aparecer no relatório. Exige regra de
+>    correspondência (IMEI + proximidade de horário) — **janela ainda não
+>    definida**, decisão de produto.
+> 2. **Recuperar os 81 alarmes sem vídeo** em lote, via `EVIDEO`. Não fazer antes
+>    do item 1: os arquivos chegariam e continuariam sem aparecer na tela.
+> 3. **Vincular a `400AD_3`** (IMEI `864993060392306`) a Frota Principal pela
+>    tela — único órfão da base.
+> 4. **`FILELIST` sobe com corpo VAZIO.** As três câmeras chamam de volta em
+>    1–3 s, com `Transfer-Encoding: chunked` e `corpo_bytes: 0`. Já descartados:
+>    infraestrutura (POST chunked entrega o corpo — medido com dois POSTs de
+>    controle, 17 e 28 bytes) e cartão vazio (`TFcard` com 4+ GB). Pista aberta:
+>    as duas estavam com **`ACC: OFF`**; repetir com veículo em operação.
+> 5. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
+>    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
+>    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
+>    cravadas, mesmo segundo — e a configuração inspecionada **não explica** o
+>    desvio: a conexão do app força `time_zone='+00:00'`, o `date()` do PHP bate
+>    com o `NOW()` do MySQL, não há `date.timezone` nos php.ini nem
+>    `date_default_timezone_set()` no código. Registrado como observação, **não
+>    corrigido**.
+>
+> #### Tooling
+>
+> Os **testes PHP de helper entraram no `scripts/run-tests.ps1`**. Existiam desde
+> a v4.9.x e **nunca rodavam pelo runner**, que só chamava o Playwright — cada um
+> dependia de alguém lembrar de executá-lo na mão. Agora são 4
+> (`command_response`, `device_params`, `diagnostico_guard`, `media`) e rodam
+> antes da suíte.
+>
+> **Cobertura nova desta rodada**, toda verificada reprovando no código anterior:
+> `equipamento_vinculo.spec.js` (4), `video_aovivo_protocolo.spec.js` (6),
+> `video_equipamento_inativo.spec.js` (2), `media.test.php` (22), mais 6
+> checagens em `command_response.test.php` (40 → 46). O par ativo/inativo de
+> equipamento entrou no `seed_tenants.php` — sem ele, "não lista desativado"
+> passaria por vacuidade.
+
+---
 
 > ### 📍 14/08/2026 — 🔴 O TLS derrubou o vídeo ao vivo (mixed content)
 >
