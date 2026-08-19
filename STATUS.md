@@ -1,8 +1,8 @@
-# STATUS.md — Jimi Webhook System v4.9.30 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.31 (YUV Parity)
 
-> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.30 publicadas e verificadas
+> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.31 publicadas e verificadas
 >
-> Cinco versões em sequência, todas no ar em produção (`bycamera.ia.br`). Quatro
+> Seis versões em sequência, todas no ar em produção (`bycamera.ia.br`). Quatro
 > nasceram de reclamação do campo; a quinta, de uma conferência contra a
 > documentação oficial da fabricante.
 >
@@ -13,6 +13,7 @@
 > | 4.9.28 | Vídeo ao vivo falava JT/T com câmera JIMI | `video_aovivo.php` |
 > | 4.9.29 | Telas de vídeo listavam equipamento desativado | `video_aovivo.php`, `video_playback.php` |
 > | 4.9.30 | Relatório oferecia vídeo de arquivo que nunca chegou | `rel_alarmes.php`, `includes/media.php` |
+> | 4.9.31 | Vídeo reenviado não voltava para o alarme | `alarm_video_request.php`, `solicitarvideo.php` |
 >
 > **O fio que liga quatro delas**: a tela prometia algo que o sistema não podia
 > cumprir, e falhava **em silêncio** — HTTP 200, mensagem verde, e nada
@@ -177,6 +178,78 @@
 > | `UPLOADFILE,<nome do arquivo>` | ❌ `file not exist!` — clipe de evento não fica guardado |
 > | `HVIDEO,<AAAA_MM_DD_HH_MM_SS>,<1\|2>` | ⚠️ vídeo de memória, baixa qualidade, 1 min/arquivo (separador `_`, não `-`) |
 >
+> #### v4.9.31 — o vídeo reenviado se religa ao alarme
+>
+> Fecha a pendência nº 1. Quando o vídeo de um alarme não chega, dá para pedir de
+> novo — mas o arquivo volta com **outro nome**, e `alarms.file_url` continua
+> apontando para o antigo. O vídeo chegava ao servidor e não aparecia no
+> relatório.
+>
+> Na tela, o selo "Vídeo não recebido" da v4.9.30 virou botão **"↻ Pedir vídeo"**.
+> O endpoint `POST /solicitarvideo` exige login, CSRF **e escopo de cliente** —
+> sem ele qualquer usuário dispararia comando na câmera de outro tenant
+> informando um `alarm_id`, e isso é comando em equipamento real, não leitura de
+> tela.
+>
+> 🔴 **Casar por "alarme mais próximo no tempo" colaria o vídeo no alarme
+> ERRADO.** O DMS dispara várias vezes no mesmo minuto e nada no nome do arquivo
+> diz de qual evento ele é. Como somos NÓS que pedimos o reenvio, sabemos para
+> qual alarme: o pedido fica em `alarm_video_requests` e o casamento é contra
+> ELE. A janela passa a servir só para absorver o deslocamento do clipe.
+>
+> **A janela é −90 s a +15 s, e a assimetria é medida, não estética.** O
+> timestamp do nome é o **início do clipe**, então o desvio é sempre para trás:
+>
+> | Origem do arquivo | Delta |
+> |---|---|
+> | Chegada natural | 0 s |
+> | `EVIDEO` sem duração | 0 s |
+> | `EVIDEO` com duração (15 s) | −31 s |
+> | `HVIDEO` (bloco de 1 min) | −44 s (até −59) |
+>
+> Simétrico em ±15 s — a primeira proposta — perderia os dois últimos.
+>
+> ⚠️ **O comando é escolhido por TENTATIVA, não por versão de firmware.** As duas
+> câmeras de produção divergem: `V1.8.1.2_250904` responde `EVIDEO:OK!`, e
+> `V1.8.0.9_250807` recusa **todas** as formas testadas (`command length error.
+> support length [3, 4]`, mesmo enviando 4 elementos). Como
+> `devices.firmware_version` está **NULL em 100% da base** e a resposta do
+> equipamento é **síncrona**, o código tenta `EVIDEO` e cai em `HVIDEO` quando a
+> recusa é de sintaxe — e só nesse caso: device offline não se resolve trocando
+> de comando. Adapta-se a firmware que ainda não existe, sem tabela para manter.
+>
+> ⚠️ `EVIDEO` vai **sem** o parâmetro de duração de propósito: com ele o clipe
+> volta deslocado; sem ele o nome bate exatamente com o instante pedido.
+>
+> #### 🔴 O defeito que só o teste em produção pegou
+>
+> A primeira versão **não religava nada** — os 16 casos de teste passavam, o
+> arquivo chegava ao disco, e o pedido ficava `pendente` para sempre.
+>
+> A causa era a própria guarda de "não roubar vídeo de outro alarme". Quem avisa
+> o fim do upload é o evento **`105 — Upload de Vídeo Concluído`**, e essa linha é
+> gravada com o **mesmo nome de arquivo** logo antes do casamento rodar. A guarda
+> encontrava esse 105, concluía que o arquivo já tinha dono, e recusava **todos**
+> os casamentos.
+>
+> Corrigido com `is_diagnostic_alarm()`, o helper que já existe para essa
+> distinção: **evento de diagnóstico não é dono de vídeo**. O teste ganhou o caso
+> (17 checagens) — grava o 105 com o mesmo arquivo e exige o casamento mesmo
+> assim.
+>
+> **Lição que generaliza**: a suíte cobria a lógica e não cobria o AMBIENTE. O
+> 105 não aparecia em teste nenhum porque os fixtures criavam só o alarme e o
+> pedido — a linha que o webhook grava no caminho real ficava de fora.
+>
+> ⚠️ **A migração foi registrada no `scripts/deploy.sh`.** Elas são listadas
+> **explicitamente** ali; uma migração nova fora dessa lista faz o deploy passar
+> verde com a tabela inexistente, e a funcionalidade quebra só em produção.
+>
+> **Verificado ponta a ponta com dado real**: pedido para o alarme 8754
+> (`DMS: Piscadas Frequentes`, 18/08 09:44:13), `EVIDEO:OK!`, arquivo
+> `..._00000001_..._09_44_13_I_21.ts` chegou com delta 0, pedido marcado
+> `atendido` e o alarme apontando para arquivo que **existe no disco**.
+>
 > #### Estado dos equipamentos em produção (19/08/2026)
 >
 > - **11 equipamentos**: 5 JIMI (JC400AD), 5 JT/T, 1 sem modelo cadastrado.
@@ -189,22 +262,16 @@
 >
 > #### Pendências abertas
 >
-> 1. 🔴 **Religar vídeo reenviado ao alarme.** O `EVIDEO` traz o arquivo com
->    **outro nome** (`..._00000001_..._16_16_26_I_02.ts` contra
->    `..._00000000_..._16_16_57_I_14.ts` gravado em `alarms.file_url`), então o
->    vídeo fica no servidor sem aparecer no relatório. Exige regra de
->    correspondência (IMEI + proximidade de horário) — **janela ainda não
->    definida**, decisão de produto.
-> 2. **Recuperar os 81 alarmes sem vídeo** em lote, via `EVIDEO`. Não fazer antes
->    do item 1: os arquivos chegariam e continuariam sem aparecer na tela.
-> 3. **Vincular a `400AD_3`** (IMEI `864993060392306`) a Frota Principal pela
->    tela — único órfão da base.
-> 4. **`FILELIST` sobe com corpo VAZIO.** As três câmeras chamam de volta em
+> 1. **Recuperar os 81 alarmes sem vídeo** em lote, via o reenvio da v4.9.31.
+>    Destravado agora que o religamento funciona. Sugestão: começar por um dia
+>    só, conferir a taxa de religamento, e só então rodar o resto — com intervalo
+>    entre os disparos, para não afogar a câmera nem a franquia do SIM.
+> 2. **`FILELIST` sobe com corpo VAZIO.** As três câmeras chamam de volta em
 >    1–3 s, com `Transfer-Encoding: chunked` e `corpo_bytes: 0`. Já descartados:
 >    infraestrutura (POST chunked entrega o corpo — medido com dois POSTs de
 >    controle, 17 e 28 bytes) e cartão vazio (`TFcard` com 4+ GB). Pista aberta:
 >    as duas estavam com **`ACC: OFF`**; repetir com veículo em operação.
-> 5. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
+> 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
 >    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
 >    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
 >    cravadas, mesmo segundo — e a configuração inspecionada **não explica** o
@@ -212,18 +279,28 @@
 >    com o `NOW()` do MySQL, não há `date.timezone` nos php.ini nem
 >    `date_default_timezone_set()` no código. Registrado como observação, **não
 >    corrigido**.
+> 4. **`devices.firmware_version` está NULL em 100% da base.** A coluna existe e
+>    ninguém a preenche; o `VERSION` responde na hora. Enquanto isso, decisões
+>    por firmware têm de ser por tentativa (ver v4.9.31).
+> 5. **Atualizar o firmware da `400AD`** (`864993060429173`, `V1.8.0.9_250807`):
+>    é a única que recusa `EVIDEO`, e por isso cai no `HVIDEO`, de qualidade
+>    menor. A `400AD_3` já está em `V1.8.1.2_250904`.
+>
+> **Fechadas nesta rodada**: religar o vídeo reenviado (v4.9.31) e vincular a
+> `400AD_3` a Frota Principal — a base está com **zero equipamentos órfãos**.
 >
 > #### Tooling
 >
 > Os **testes PHP de helper entraram no `scripts/run-tests.ps1`**. Existiam desde
 > a v4.9.x e **nunca rodavam pelo runner**, que só chamava o Playwright — cada um
-> dependia de alguém lembrar de executá-lo na mão. Agora são 4
-> (`command_response`, `device_params`, `diagnostico_guard`, `media`) e rodam
-> antes da suíte.
+> dependia de alguém lembrar de executá-lo na mão. Agora são 5
+> (`command_response`, `device_params`, `diagnostico_guard`, `media`,
+> `alarm_video_match`) e rodam antes da suíte.
 >
 > **Cobertura nova desta rodada**, toda verificada reprovando no código anterior:
 > `equipamento_vinculo.spec.js` (4), `video_aovivo_protocolo.spec.js` (6),
-> `video_equipamento_inativo.spec.js` (2), `media.test.php` (22), mais 6
+> `video_equipamento_inativo.spec.js` (2), `media.test.php` (22),
+> `alarm_video_match.test.php` (17), mais 6
 > checagens em `command_response.test.php` (40 → 46). O par ativo/inativo de
 > equipamento entrou no `seed_tenants.php` — sem ele, "não lista desativado"
 > passaria por vacuidade.
