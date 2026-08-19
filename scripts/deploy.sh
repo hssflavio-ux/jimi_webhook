@@ -443,6 +443,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.17" "mysql/migration_v4.9.17.sql" "validade de 30 min na lista de gravacoes"
     run_migration "4.9.24" "mysql/migration_v4.9.24.sql" "catalogo completo do JT/T 808 (86 IDs) + tipo composite"
     run_migration "4.9.25" "mysql/migration_v4.9.25.sql" "APN (16/17/18) sai da escrita: valor do 33028 e falso"
+    run_migration "4.9.31" "mysql/migration_v4.9.31.sql" "reenvio de video de alarme religa ao alarme certo"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

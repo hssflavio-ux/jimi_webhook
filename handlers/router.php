@@ -47,6 +47,7 @@
  *   /perfil                           → perfil.php
  *   /camerasdata ...                  → AJAX endpoints
  *   /ocorrenciasdata                  → ocorrenciasdata.php (AJAX)
+ *   /solicitarvideo                   → solicitarvideo.php (AJAX, POST)
  *   /exportardata                     → exportardata.php (AJAX)
  *   /pushgps, /pushhb, ...            → webhook receivers
  *   /ping                             → ping.php
@@ -70,7 +71,7 @@ if (empty($segments)) {
     $third = $segments[2] ?? null;
 
     $ajaxRoutes = ['camerasdata','commandstatus','sendcommand','mediadata','trackdata','hbdata','devicemodels',
-                   'ocorrenciasdata','exportardata','notificacoesdata'];
+                   'ocorrenciasdata','exportardata','notificacoesdata','solicitarvideo'];
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
                       'pushevent'];
@@ -239,6 +240,9 @@ $screenByHandler = [
     'rel_deslocamento_rota.php' => 'relatorios',
     'rel_desatualizados.php'    => 'relatorios',
     'rel_alarmes.php'           => 'relatorios',
+    // Ação do relatório de alarmes (reenvio de vídeo), não tela nova: herda a
+    // mesma chave, e por isso NÃO entra na matriz de grupos_permissao.php.
+    'solicitarvideo.php'        => 'relatorios',
     'rel_ocorrencias.php'       => 'relatorios',
     'rel_geocercas.php'         => 'relatorios',
     'rel_paradas.php'           => 'relatorios',

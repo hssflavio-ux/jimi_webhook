@@ -445,10 +445,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                         &#9654; Ver Vídeo
                     </button>
                     <?php elseif ($temVideo): ?>
-                    <span class="badge" style="cursor:help;"
-                          title="A câmera anunciou o arquivo &quot;<?= htmlspecialchars(basename(media_pick($r['file_url']))) ?>&quot; neste alarme, mas ele não chegou ao servidor. O envio do vídeo é feito pela câmera depois do alarme e pode falhar por falta de sinal, cartão ou reinício do equipamento.">
-                        Vídeo não recebido
-                    </span>
+                    <button type="button" class="badge" style="border:0;cursor:pointer;"
+                            id="rv-<?= (int)$r['id'] ?>" onclick="pedirVideo(<?= (int)$r['id'] ?>)"
+                            title="A câmera anunciou o arquivo &quot;<?= htmlspecialchars(basename(media_pick($r['file_url']))) ?>&quot; neste alarme, mas ele não chegou ao servidor. Clique para pedir o vídeo de novo — a câmera regenera o trecho a partir do cartão.">
+                        &#8635; Pedir vídeo
+                    </button>
                     <?php else: echo '—'; endif; ?>
                 </td>
             </tr>
@@ -502,6 +503,46 @@ function fecharVideo() {
     bcPlayer.destruir(m.querySelector('.bc-player'));
     document.getElementById('video-modal-player').innerHTML = '';
     m.style.display = 'none';
+}
+
+/**
+ * Pede à câmera o vídeo de um alarme que ficou sem ele.
+ *
+ * O reenvio NÃO é instantâneo: a câmera regenera o trecho a partir do cartão e
+ * sobe depois. Quem religa o arquivo ao alarme é o `match_pending_video()`, no
+ * webhook do "Upload de Vídeo Concluído" — por isso a tela só confirma o pedido
+ * e pede para recarregar mais tarde, em vez de fingir que já tem o vídeo.
+ */
+function pedirVideo(alarmId) {
+    var btn = document.getElementById('rv-' + alarmId);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var antes = btn.innerHTML;
+    btn.innerHTML = 'Pedindo...';
+
+    fetch('/solicitarvideo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
+        body: JSON.stringify({alarm_id: alarmId})
+    }).then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+      .then(function (res) {
+        if (res.d && res.d.ok) {
+            btn.className = 'badge badge-success';
+            btn.innerHTML = 'Solicitado';
+            btn.title = res.d.msg || 'Vídeo solicitado.';
+        } else {
+            btn.className = 'badge badge-error';
+            btn.innerHTML = 'Não deu';
+            btn.title = (res.d && res.d.msg) ? res.d.msg : 'Falha ao solicitar.';
+            btn.disabled = false;
+            setTimeout(function () { btn.className = 'badge'; btn.innerHTML = antes; }, 6000);
+        }
+      }).catch(function () {
+        btn.className = 'badge badge-error';
+        btn.innerHTML = 'Erro de rede';
+        btn.disabled = false;
+        setTimeout(function () { btn.className = 'badge'; btn.innerHTML = antes; }, 6000);
+      });
 }
 
 document.getElementById('video-modal').addEventListener('click', function (e) {

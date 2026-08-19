@@ -5,6 +5,36 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.31
+
+**O vídeo reenviado agora se religa ao alarme.** Quando o vídeo de um alarme não chega, dá para pedir de novo — mas o arquivo volta com **outro nome**, e `alarms.file_url` continua apontando para o antigo. O vídeo chegava ao servidor e não aparecia no relatório.
+
+### Added
+- **Botão "Pedir vídeo"** no relatório de alarmes, no lugar do selo "Vídeo não recebido" da v4.9.30. Dispara o reenvio e confirma o pedido; o vídeo aparece quando a câmera termina de subir.
+- **`POST /solicitarvideo`** (`handlers/solicitarvideo.php`) — exige login, CSRF e **escopo de cliente**: sem ele qualquer usuário dispararia comando na câmera de outro tenant informando um `alarm_id`. Responde 404 (e não 403) fora do escopo, mesma postura do `filelist.php`.
+- **`alarm_video_requests`** (`migration_v4.9.31.sql`) — o pedido pendente, com `alarm_id`, IMEI e o instante pedido.
+
+### Fixed
+- 🔴 **Casar por "alarme mais próximo no tempo" colaria o vídeo no alarme ERRADO.** O DMS dispara várias vezes no mesmo minuto e nada no nome do arquivo diz de qual evento ele é. Como somos nós que pedimos o reenvio, sabemos para qual alarme: o casamento é contra o **pedido registrado**, não contra proximidade. Há ainda a guarda de não roubar arquivo que já é anexo de outro alarme.
+- **Janela de −90 s a +15 s, medida em câmera real** (18–19/08/2026). O timestamp do nome é o **início do clipe**, então o desvio é sempre para trás:
+
+  | Origem do arquivo | Delta |
+  |---|---|
+  | Chegada natural | 0 s |
+  | `EVIDEO` sem duração | 0 s |
+  | `EVIDEO` com duração (15 s) | −31 s |
+  | `HVIDEO` (bloco de 1 min) | −44 s (até −59) |
+
+  Daí a assimetria: ±15 s perderia os dois últimos; ±90 s gastaria tolerância num lado onde nada acontece.
+
+### Changed
+- **A escolha do comando é por tentativa, não por versão de firmware.** `EVIDEO` dá o vídeo bom, mas nem todo firmware aceita — medido nas duas câmeras de produção: `V1.8.1.2_250904` responde `EVIDEO:OK!`, e `V1.8.0.9_250807` recusa **todas** as formas testadas (`command length error. support length [3, 4]`, mesmo enviando 4 elementos). Como `devices.firmware_version` está NULL em 100% da base e a resposta do equipamento é **síncrona**, o código tenta `EVIDEO` e cai em `HVIDEO` quando o device recusa por sintaxe — e só nesse caso: falha de rede ou device offline não se resolve trocando de comando.
+- ⚠️ **`EVIDEO` vai SEM o parâmetro de duração**, de propósito: com ele o clipe volta deslocado (−31 s medidos); sem ele o nome bate exatamente com o instante pedido.
+
+### Notes
+- ⚠️ **A migração foi registrada no `scripts/deploy.sh`.** As migrações são listadas **explicitamente** ali — uma migração nova que não entre nessa lista faz o deploy passar verde com a tabela inexistente, e a funcionalidade quebra só em produção.
+- `tests/helpers/alarm_video_match.test.php` — 16 checagens, incluindo os dois limites da janela (−90 casa, −91 não; +15 casa, +16 não), o arquivo sem pedido, e a guarda contra roubar anexo de outro alarme.
+
 ## [Unreleased] — 4.9.30
 
 **O relatório de alarmes oferecia "Ver Vídeo" para arquivo que nunca chegou.** Levantado do campo a partir do alarme `DMS: Motorista Bocejando` da 400AD_3 em 18/08/2026 16:16:57, que não abria o vídeo. Auditoria em produção: **81 dos 106 alarmes com `file_url` — 76% — apontavam para arquivo inexistente no disco**, e a tela oferecia o botão nos 106. O clique abria um player que nunca carregava: sem mensagem, sem erro, nada.

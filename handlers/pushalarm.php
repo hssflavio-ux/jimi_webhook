@@ -349,6 +349,37 @@ class PushAlarmHandler extends WebhookHandler {
                 }
             }
 
+            // ── Reenvio de vídeo: religa o arquivo ao alarme certo ──────────
+            //
+            // O equipamento avisa o fim do upload com o evento `105 — Upload de
+            // Vídeo Concluído`, trazendo o NOME do arquivo. Quando esse arquivo
+            // é a resposta a um pedido nosso (`alarm_video_requests`), ele volta
+            // com nome diferente do que está gravado no alarme original — sem
+            // religar, o vídeo chega ao servidor e não aparece no relatório.
+            //
+            // Fora do try/catch do INSERT de propósito: falhar aqui não pode
+            // desfazer o alarme, que já está gravado e é o dado que importa.
+            if ($fileUrl) {
+                try {
+                    require_once __DIR__ . '/../includes/alarm_video_request.php';
+                    foreach (explode(',', (string)$fileUrl) as $umArquivo) {
+                        $religado = match_pending_video((string)$imei, $umArquivo);
+                        if ($religado !== null) {
+                            Logger::info('Vídeo reenviado religado ao alarme', [
+                                'source'   => $this->handlerName,
+                                'imei'     => $imei,
+                                'alarm_id' => $religado,
+                                'arquivo'  => basename(trim($umArquivo)),
+                            ]);
+                        }
+                    }
+                } catch (Throwable $e) {
+                    Logger::error('Falha ao religar vídeo reenviado: ' . $e->getMessage(), [
+                        'source' => $this->handlerName, 'imei' => $imei,
+                    ]);
+                }
+            }
+
             Logger::info("Alarme Gravado: $alarmName", [
                 'source'   => $this->handlerName,
                 'imei'     => $imei, 
