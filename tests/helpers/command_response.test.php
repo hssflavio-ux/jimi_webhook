@@ -241,6 +241,25 @@ checa('família ADASxx presente para a JC400AD',
       ['ADASPI', 'ADASSEN', 'ADASSEP', 'ADASSP', 'ADASSW', 'ADASVI', 'ADASVSP'], $adas);
 
 
+
+// 🔴 `RTMP` não leva duração. O `<C>` da planilha (A014) só existe em firmware
+// V4.3+ e não governa o stream: o doc oficial de "pull live stream" manda
+// `RTMP,ON,INOUT` e o stream cai sozinho ~20 s após o último leitor sair. Quem
+// tem tempo é `Video,<câmera>,<segundos>` — CAPTURA de clipe. A v4.9.27 trocou
+// os dois, e a tela de vídeo ao vivo depende dessa forma de 2 parâmetros.
+$formasRtmp = [];
+foreach ($cat as $syn => $d) {
+    if (strcasecmp($d['cmd'], 'RTMP') === 0) $formasRtmp[] = $syn;
+}
+checa('🔴 RTMP é ON/OFF + câmera, sem duração', ['RTMP,A,B#'], $formasRtmp);
+
+// `Video` continua com o tempo — é o par que se confundiu.
+$videoTemTempo = false;
+foreach ($cat as $syn => $d) {
+    if ($d['cmd'] === 'Video' && count($d['params']) === 2) $videoTemTempo = true;
+}
+checa('Video mantém o parâmetro de duração', true, $videoTemTempo);
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

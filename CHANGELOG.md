@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.28
+
+**A tela de vídeo ao vivo falava JT/T com câmera JIMI.** Ela sempre enviou `proNo 37121` (0x9101, o comando de vídeo do JT/T 1078) em **todo** equipamento, sem ramificar por protocolo — o arquivo nunca teve um ramo JIMI, desde a primeira versão. O banco de produção mostrava o defeito limpo: todo 37121 para JC400AD ficava `sent` (o device nunca respondeu), enquanto para JC371/JC181 ficava `executed`.
+
+Não foi o HTTPS. O proxy `/stream` (v4.9.26, `docs/apache/bycamera-stream.conf`) está instalado e funcionando — a prova é que o 404 que volta de fora vem assinado `Server: JIMI-ZLMediaKit`, ou seja, a requisição atravessa o Apache e chega ao media server. O TLS quebrou o vídeo das câmeras **JT/T**, e isso já estava corrigido; nas JIMI o vídeo nunca funcionou por esta tela.
+
+### Fixed
+- 🔴 **Ramificação por protocolo no vídeo ao vivo** (`handlers/video_aovivo.php`):
+  - **JIMI** → comando de texto `RTMP,ON,<CÂMERA>` (proNo 128, `serverFlagId 1`). O device faz **push RTMP** para o endereço já gravado nele em `RSERVICE` — as três câmeras de produção respondem `rtmp://186.248.143.197:1936/live` quando consultadas.
+  - **JT/T** → segue com 37121 (`serverFlagId 0`), inalterado.
+- 🔴 **A URL do player também diferia, e a tela só sabia a do JT/T.** JIMI publica em `live/<canal>/<imei>`, com o canal em **base zero**; JT/T em `<canal>/<imei>`, base um. Medido com a câmera publicando: `/live/0/<imei>.flv` devolveu 200 com assinatura `FLV`, e `/1/<imei>.flv` não devolveu nada.
+- **Mapeamento de câmera medido, não suposto.** `RTMP,ON,INOUT` registrou `live/0/<imei>` **e** `live/1/<imei>` no media server; `RTMP,ON,OUT` registrou só o `0`. Logo **CH1 = OUT (frontal)** e **CH2 = IN (cabine)**. O device recusa o resto: `RTMP,parameter B error. options:[IN,OUT,INOUT,PIP]`.
+- **`RTMP,OFF` ao parar.** Fica no botão Parar, e não em `stopPlayer()`, porque este também roda no início do `startLive()` e na troca de equipamento — ali um OFF desligaria o que acabou de ser pedido, ou o equipamento errado.
+- **Equipamento sem modelo agora RECUSA em vez de adivinhar.** Sem modelo não há protocolo, e o default silencioso `JTT` repetiria o mesmo defeito ao contrário. A tela explica o que falta. São 1 de 11 equipamentos em produção (18/08/2026).
+
+### Changed
+- **`RTMP` no catálogo perdeu o parâmetro de duração** (`RTMP,A,B,C#` → `RTMP,A,B#`). Correção apontada pelo operador: o `<C>` da planilha (A014) existe, mas só em firmware V4.3+ e **não** governa a transmissão — o doc oficial de *pull live stream* usa `RTMP,ON,INOUT`, e o stream cai sozinho ~20 s depois que o último leitor sai. Quem tem tempo é `Video,<câmera>,<segundos>`, que é **captura de clipe**, não streaming. A v4.9.27 trocou os dois.
+
+### Added
+- **`tests/video_aovivo_protocolo.spec.js`** — 6 casos travando a decisão da tela (qual comando, qual URL, o mapeamento CH↔câmera e a recusa sem protocolo), sem depender de câmera real: o `/sendcommand` é interceptado. Verificado que os **6 reprovam** no código anterior.
+- Duas travas em `command_response.test.php` (44 → 46): `RTMP` é ON/OFF + câmera sem duração, e `Video` mantém a sua.
+
+### Notes
+- Diagnóstico do `FILELIST` avançou e **não é o cartão**: `STATUS` (B020) devolveu `TFcard: 4.49GB/119.05GB` e `4.20GB/119.05GB` — cartões presentes e com gravações. Também não é infraestrutura (POST chunked entrega o corpo normalmente). As duas câmeras estavam com `ACC: OFF`; repetir com o veículo em operação é o próximo teste. `DISK` não serve para diagnosticar aqui — é comando do JC371 e a JC400AD responde `DISK,command header error`.
+
 ## [Unreleased] — 4.9.27
 
 **A tela de Comandos só sabia CONFIGURAR o envio da lista de gravações, nunca PEDIR o envio — e mais 71 comandos oficiais não existiam.** Cruzando o catálogo com `docs/JC400 & JC261 Command List V5.0.3.20230626.xlsx`, a lista oficial da fabricante, apareceram três defeitos de naturezas diferentes. **JC261 é a nossa JC400AD** — a planilha nomeia pelo código de fábrica, e é por isso que os comandos marcados "Only for JC261" nunca tinham sido reconhecidos como nossos.

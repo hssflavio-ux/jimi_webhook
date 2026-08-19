@@ -139,6 +139,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                       // acompanhar a troca de equipamento, e antes não acompanhava. ?>
                 <option value="<?= $d['imei'] ?>"
                         data-cam="<?= (int)($d['camera_count'] ?? 1) ?>"
+                        data-proto="<?= htmlspecialchars((string)($d['protocol'] ?? ''), ENT_QUOTES) ?>"
                         data-rotation="<?= (int)($d['streaming_rotation'] ?? 0) ?>"
                         data-watermark="<?= (int)($d['streaming_watermark'] ?? 0) ?>"
                         data-placa="<?= htmlspecialchars($d['device_name'] ?: $d['imei'], ENT_QUOTES) ?>"
@@ -158,7 +159,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             <div id="chan-sel" style="display:flex;gap:4px;"></div>
 
             <button class="btn btn-primary btn-sm" id="btn-start" onclick="startLive()">&#9654; Iniciar Transmissão</button>
-            <button class="btn btn-outline btn-sm" id="btn-stop" style="display:none;" onclick="stopPlayer()">&#9632; Parar</button>
+            <button class="btn btn-outline btn-sm" id="btn-stop" style="display:none;" onclick="pararAoVivo()">&#9632; Parar</button>
         </div>
     </div>
 
@@ -192,6 +193,9 @@ var ingestIp = <?= json_encode($vsc['ingest_ip']) ?>;
 var ingestPort = <?= json_encode($vsc['ingest_port']) ?>;
 var selImei = <?= json_encode($selectedImei) ?>;
 var selCh = 1;
+// 🔴 JIMI e JT/T pedem vídeo ao vivo de formas DIFERENTES, e a tela mandava só
+// a do JT/T em todo equipamento. Ver startLive()/urlDoStream().
+var selProto = <?= json_encode(strtoupper((string)($devices[0]['protocol'] ?? ''))) ?>;
 var curPlayer = null;
 var maxCams = 1;
 var rotation = 0;
@@ -211,6 +215,7 @@ function onDeviceChange() {
     selImei = sel.value;
     var opt = sel.options[sel.selectedIndex];
     maxCams = parseInt(opt.dataset.cam) || 1;
+    selProto = (opt.dataset.proto || '').toUpperCase();
     rotation = parseInt(opt.dataset.rotation) || 0;
     watermark = parseInt(opt.dataset.watermark) || 0;
     renderChannels();
@@ -261,6 +266,50 @@ function selChannel(ch) {
     });
 }
 
+/**
+ * Câmera JIMI do canal escolhido. Medido em 18/08/2026 numa JC400AD:
+ * `RTMP,ON,INOUT` registra `live/0/<imei>` E `live/1/<imei>`, e `RTMP,ON,OUT`
+ * registra só o `0` — logo CH1=OUT (frontal) e CH2=IN (cabine). O device
+ * recusa outra coisa: "parameter B error. options:[IN,OUT,INOUT,PIP]".
+ */
+function cameraJimi(ch) { return ch >= 2 ? 'IN' : 'OUT'; }
+
+/**
+ * URL HTTP-FLV do stream, que também difere por protocolo.
+ *
+ * JIMI publica em `live/<canal>/<imei>`, com o canal em base ZERO — o que a
+ * tela chama de CH1 é o canal 0. JT/T publica em `<canal>/<imei>`, base um.
+ * Medido: com a câmera publicando, `/live/0/<imei>.flv` devolveu 200 com
+ * assinatura FLV e `/1/<imei>.flv` não devolveu nada.
+ */
+function urlDoStream() {
+    return selProto === 'JIMI'
+        ? streamUrl + '/live/' + (selCh - 1) + '/' + selImei + '.flv'
+        : streamUrl + '/' + selCh + '/' + selImei + '.flv';
+}
+
+/** `RTMP,OFF` encerra o push da JIMI — sem isso ele só cai pelo timeout. */
+function pararStreamJimi(imei) {
+    if (selProto !== 'JIMI' || !imei) return;
+    fetch('/sendcommand', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
+        body: JSON.stringify({imei: imei, proNo: 128, serverFlagId: 1, content: 'RTMP,OFF'})
+    }).catch(function () {});
+}
+
+/**
+ * Parada pedida pelo usuário: além de desmontar o player, avisa a câmera JIMI.
+ *
+ * Não fica dentro de `stopPlayer()` porque ele também roda no começo do
+ * `startLive()` e na troca de equipamento — ali um `RTMP,OFF` desligaria o que
+ * acabou de ser pedido, ou o equipamento errado.
+ */
+function pararAoVivo() {
+    pararStreamJimi(selImei);
+    stopPlayer();
+}
+
 function destroyFlv() {
     if (curPlayer) {
         try { curPlayer.unload(); curPlayer.detachMediaElement(); } catch(e) {}
@@ -299,25 +348,48 @@ function startLive() {
     bar.className = 'stream-bar sending';
     txt.innerHTML = '<span class="spinner"></span> Enviando comando de streaming ao dispositivo...';
 
-    // proNo 37121 (0x9101): manda o device publicar o RTP no media server
-    // do IoTHub (ingest 10002). videoIP/porta vêm do servidor (.env), pois é
-    // o DEVICE quem precisa alcançar esse endereço, não o navegador.
-    fetch('/sendcommand', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
-        body: JSON.stringify({
-            imei: selImei,
-            proNo: 37121,
-            serverFlagId: 0,
-            content: JSON.stringify({
+    // 🔴 CADA PROTOCOLO PEDE O VÍDEO DE UM JEITO. Até a v4.9.28 esta tela
+    // mandava `37121` em TODO equipamento — inclusive nas JIMI, que não
+    // entendem esse comando: no banco, todo 37121 para JC400AD ficava `sent`
+    // (device não respondeu), enquanto nas JC371/JC181 ficava `executed`.
+    //
+    //   JT/T 1078 → proNo 37121 (0x9101), serverFlagId 0: o device publica RTP
+    //               no ingest do media server (10002).
+    //   JIMI      → comando de texto `RTMP,ON,<CÂMERA>` (proNo 128,
+    //               serverFlagId 1): o device faz PUSH RTMP para o endereço já
+    //               gravado nele em `RSERVICE` (rtmp://<ip>:1936/live).
+    //
+    // Não há duração no `RTMP,ON`: o `<C>` da planilha só existe em firmware
+    // V4.3+ e não é o tempo do stream — tempo é do `Video,<cam>,<seg>`, que é
+    // captura de clipe. Sem leitor o media server derruba em ~20 s, e é assim
+    // que a transmissão termina sozinha.
+    // 🔴 Sem MODELO cadastrado não há protocolo, e sem protocolo não dá para
+    // escolher o comando. O default silencioso 'JTT' seria repetir o defeito que
+    // esta ramificação corrige — só que ao contrário. Melhor recusar e dizer o
+    // que falta: são 1 de 11 equipamentos em produção (18/08/2026).
+    if (selProto !== 'JIMI' && selProto !== 'JTT') {
+        bar.className = 'stream-bar error';
+        txt.textContent = 'Equipamento sem modelo cadastrado: não dá para saber se ele fala JIMI ou JT/T, '
+                        + 'e cada um pede o vídeo de um jeito. Defina o modelo em Equipamentos e tente de novo.';
+        return;
+    }
+
+    var reqCmd = selProto === 'JIMI'
+        ? {imei: selImei, proNo: 128, serverFlagId: 1, content: 'RTMP,ON,' + cameraJimi(selCh)}
+        : {imei: selImei, proNo: 37121, serverFlagId: 0,
+           content: JSON.stringify({
                 dataType: 0,
                 codeStreamType: 0,
                 channel: String(selCh),
                 videoIP: ingestIp,
                 videoTCPPort: ingestPort,
                 videoUDPPort: 0
-            })
-        })
+           })};
+
+    fetch('/sendcommand', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
+        body: JSON.stringify(reqCmd)
     }).then(function(r) { return r.json(); }).then(function(d) {
         if (playSession !== mySession) return;
         if (d.offline_queued) {
@@ -338,7 +410,7 @@ function startLive() {
 
 function connectAttempt(mySession, attempt) {
     if (playSession !== mySession) return;
-    var url = streamUrl + '/' + selCh + '/' + selImei + '.flv';
+    var url = urlDoStream();
     var bar = document.getElementById('stream-bar');
     var txt = document.getElementById('stream-bar-text');
     var v = document.getElementById('vid-player');
@@ -408,6 +480,10 @@ function connectAttempt(mySession, attempt) {
         maxCams = parseInt(sel.options[sel.selectedIndex].dataset.cam) || 1;
         rotation = parseInt(sel.options[sel.selectedIndex].dataset.rotation) || 0;
         watermark = parseInt(sel.options[sel.selectedIndex].dataset.watermark) || 0;
+        // O protocolo entra aqui junto dos demais: a inicialização em PHP olha
+        // o PRIMEIRO equipamento da lista, que não é necessariamente o
+        // selecionado quando a tela abre com `?imei=`.
+        selProto = (sel.options[sel.selectedIndex].dataset.proto || '').toUpperCase();
     }
     renderChannels();
     atualizarInfoDispositivo();

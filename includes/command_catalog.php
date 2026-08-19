@@ -5251,10 +5251,19 @@ return [
       ],
     ],
   ],
-  'RTMP,A,B,C#' => [
+  // 🔴 A FORMA DO STREAM É `RTMP,ON,<CÂMERA>` — SEM tempo. O `<C>` da planilha
+  // (A014) existe, mas só em firmware V4.3+ e não governa a transmissão: o doc
+  // oficial de "pull live stream" (docs.jimicloud.com/test/test.html) usa
+  // `RTMP,ON,INOUT` e diz que o stream cai sozinho ~20 s depois que o último
+  // leitor sai. Quem tem tempo é `Video,<câmera>,<segundos>`, que é CAPTURA de
+  // clipe, não streaming — confundir os dois foi engano nosso na v4.9.27,
+  // corrigido pelo operador.
+  //
+  // O device recusa o resto: "RTMP,parameter B error. options:[IN,OUT,INOUT,PIP]".
+  'RTMP,A,B#' => [
     'cmd' => 'RTMP',
     'nome' => 'Transmissão ao vivo (RTMP)',
-    'desc' => 'Request live streaming',
+    'desc' => 'Request live streaming. O device faz PUSH para o endereço gravado em RSERVICE.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5265,31 +5274,29 @@ return [
     'consulta' => NULL,
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
-    'fonte' => 'planilha JIMI V5.0.3 A014',
+    'fonte' => 'planilha JIMI V5.0.3 A014 + docs.jimicloud.com (pull live stream)',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF. ON means to enable RTMP streaming; OFF means to stop RTMP streaming. B: IN/OUT/INOUT. IN is inward camera, OUT is front camera, INOUT is both C is the pushing duration, unit is minutes, range is 2 ~ 180, Defau...',
+        'desc' => 'ON liga a transmissão; OFF encerra',
         'format' => '',
-        'default' => '',
+        'default' => 'ON',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '',
+        'desc' => 'câmera: IN (cabine), OUT (frontal), INOUT (as duas) ou PIP',
         'format' => '',
-        'default' => '',
-      ],
-      2 => [
-        'p' => 'C',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'default' => 'OUT',
       ],
     ],
     'exemplos' => [
       0 => [
-        'cmd' => 'RTMP,ON,OUT,30',
-        'desc' => 'exemplo oficial (A014)',
+        'cmd' => 'RTMP,ON,INOUT',
+        'desc' => 'exemplo oficial do doc de live stream — publica CH0 (OUT) e CH1 (IN)',
+      ],
+      1 => [
+        'cmd' => 'RTMP,OFF',
+        'desc' => 'encerra a transmissão (medido: device responde RTMP:OK!)',
       ],
     ],
   ],
