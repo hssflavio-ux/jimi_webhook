@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.30
+
+**O relatório de alarmes oferecia "Ver Vídeo" para arquivo que nunca chegou.** Levantado do campo a partir do alarme `DMS: Motorista Bocejando` da 400AD_3 em 18/08/2026 16:16:57, que não abria o vídeo. Auditoria em produção: **81 dos 106 alarmes com `file_url` — 76% — apontavam para arquivo inexistente no disco**, e a tela oferecia o botão nos 106. O clique abria um player que nunca carregava: sem mensagem, sem erro, nada.
+
+Ter `file_url` **não é** ter o vídeo. O nome do arquivo é anunciado pela câmera no próprio push do alarme; o arquivo sobe depois, por outro caminho (o container `dvr-upload`, porta 23010), e pode não chegar. O evento de diagnóstico `105 — Upload de Vídeo Concluído` também não é recibo: é a câmera dizendo que *ela* concluiu, e 27 desses apontam para arquivo ausente.
+
+### Fixed
+- 🔴 **A tela passa a distinguir três estados**: sem vídeo (`—`), **vídeo disponível** (botão) e **"Vídeo não recebido"** (selo neutro, com o nome do arquivo e a explicação no tooltip). `media_available()` já existia exatamente para isso e era usada só pelo dashboard de ocorrências.
+- 🔴 **`file_url` com DOIS arquivos nunca era encontrado.** A câmera anuncia as duas câmeras num campo só, separadas por vírgula: `EVENT_..._I_56.mp4,EVENT_..._F_55.mp4` (I = interna, F = frontal) — 25 dos 106 alarmes. `basename()` sobre a string inteira devolve `..._I_56.mp4,EVENT_..._F_55.mp4`, que não casa com arquivo nenhum, então o par não seria achado nem estando no disco. Novos `media_file_list()` e `media_pick()` resolvem a lista e escolhem o primeiro que existe; `media_play_url()`, `media_available()` e a detecção de `.ts` passam por eles.
+
+### Added
+- **`tests/helpers/media.test.php`** — 22 checagens sobre os dois defeitos acima, com diretório de mídia controlado (não depende do servidor). Verificado que não passam nos helpers anteriores.
+- **Os testes PHP de helper entraram no `scripts/run-tests.ps1`.** Eles existiam desde a v4.9.x e **nunca rodavam pelo runner**, que só chamava o Playwright — cada um dependia de alguém lembrar de executá-lo na mão. Agora são 4 (`command_response`, `device_params`, `diagnostico_guard`, `media`) e rodam antes da suíte, porque são rápidos e falham cedo.
+
+### Notes
+- **Como recuperar o vídeo de um alarme antigo** (medido nas câmeras reais em 18/08/2026):
+  - **`EVIDEO,<AAAA-MM-DD HH:MM:SS>,<1=frontal|2=interna>,<10–60 s>`** é o que funciona: gera um clipe NOVO a partir do cartão TF e envia. Testado no alarme das 16:16:57 — chegou arquivo de 3,8 MB.
+  - `UPLOADFILE,<nome do arquivo>` pede o arquivo exato pelo nome, mas a câmera respondeu **`file not exist!`**: o clipe de evento não fica guardado. Serve para reenvio recente, não para histórico.
+  - `HVIDEO,<AAAA_MM_DD_HH_MM_SS>,<1|2>` (separador `_`, não `-`) traz o vídeo de memória — baixa qualidade, 1 min por arquivo.
+- ⚠️ **O reenvio NÃO se religa ao alarme.** O arquivo regenerado volta com outro nome (`..._00000001_..._16_16_26_I_02.ts` contra `..._00000000_..._16_16_57_I_14.ts` gravado em `alarms.file_url`), então o vídeo fica no servidor sem aparecer no relatório. Religar exige uma regra de correspondência (IMEI + proximidade de horário) — **não implementado**, decisão de produto pendente.
+- As falhas de 18/08 entre 08h e 16h coincidem com a queda do servidor (17/08 20:09 → 18/08 16:22); depois que voltou foram 9 alarmes e 9 vídeos, sem falha. As três câmeras respondem `http://186.248.143.197:23010/upload` ao `UPLOAD#` — destino correto.
+
 ## [Unreleased] — 4.9.29
 
 ### Fixed

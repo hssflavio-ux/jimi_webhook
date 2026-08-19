@@ -46,6 +46,19 @@ try {
     npx playwright install chromium
     if ($LASTEXITCODE -ne 0) { throw "playwright install falhou" }
 
+    # ── Testes PHP de helper (sem banco, sem navegador) ──
+    #
+    # Eles existem desde a v4.9.x e NUNCA rodavam por aqui: o runner só chamava
+    # o Playwright, então cada um dependia de alguém lembrar de executá-lo na
+    # mão. Teste que ninguém roda é decoração — entram antes da suite porque são
+    # rápidos e falham cedo.
+    $phpTests = Get-ChildItem (Join-Path $root 'tests/helpers') -Filter '*.test.php' -ErrorAction SilentlyContinue
+    foreach ($t in $phpTests) {
+        Write-Host "PHP: $($t.Name)" -ForegroundColor Cyan
+        php $t.FullName
+        if ($LASTEXITCODE -ne 0) { throw "$($t.Name) falhou (exit $LASTEXITCODE)" }
+    }
+
     # ── Executa a suite ──
     $env:BASE_URL = $BaseUrl
     Write-Host "Rodando Playwright contra $BaseUrl ..." -ForegroundColor Cyan

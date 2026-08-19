@@ -32,6 +32,48 @@ function media_base_dir(): string
 }
 
 /**
+ * Os nomes de arquivo de um `file_url` — que pode trazer MAIS DE UM.
+ *
+ * 🔴 A câmera JIMI anuncia as duas câmeras num campo só, separadas por vírgula:
+ * `EVENT_..._I_56.mp4,EVENT_..._F_55.mp4` (I = interna, F = frontal). São 25 dos
+ * 106 alarmes com vídeo em produção (18/08/2026). `basename()` sobre a string
+ * inteira devolve `..._I_56.mp4,EVENT_..._F_55.mp4`, que não casa com arquivo
+ * nenhum — então o par nunca seria encontrado no disco mesmo estando lá.
+ *
+ * @param string|null $fileUrl Conteúdo cru da coluna
+ * @returns string[] Nomes individuais, já sem espaços e sem vazios
+ */
+function media_file_list(?string $fileUrl): array
+{
+    $parts = array_map('trim', explode(',', (string)$fileUrl));
+    return array_values(array_filter($parts, static fn($p) => $p !== ''));
+}
+
+/**
+ * O arquivo a usar: o PRIMEIRO que existe no disco; se nenhum existe (ou não dá
+ * para conferir), o primeiro da lista.
+ *
+ * @param string|null $fileUrl Conteúdo cru da coluna
+ * @returns string Nome único, ou '' quando não há nada
+ */
+function media_pick(?string $fileUrl): string
+{
+    $lista = media_file_list($fileUrl);
+    if (!$lista) {
+        return '';
+    }
+    $dir = media_base_dir();
+    if (is_dir($dir)) {
+        foreach ($lista as $f) {
+            if (preg_match('#^https?://#i', $f) || is_file($dir . '/' . basename($f))) {
+                return $f;
+            }
+        }
+    }
+    return $lista[0];
+}
+
+/**
  * URL pela qual o arquivo pode ser TOCADO na página.
  *
  * `media_files.file_url` e `alarms.file_url` guardam só o nome do arquivo
@@ -43,7 +85,7 @@ function media_base_dir(): string
  */
 function media_play_url(?string $fileUrl): string
 {
-    $f = trim((string)$fileUrl);
+    $f = media_pick($fileUrl);
     if ($f === '') {
         return '';
     }
@@ -108,16 +150,21 @@ function media_is_ts(?string $fileUrl): bool
  */
 function media_available(?string $fileUrl): bool
 {
-    $f = trim((string)$fileUrl);
-    if ($f === '') {
+    $lista = media_file_list($fileUrl);
+    if (!$lista) {
         return false;
-    }
-    if (preg_match('#^https?://#i', $f)) {
-        return true;   // origem externa: não há disco local para conferir
     }
     $dir = media_base_dir();
     if (!is_dir($dir)) {
         return true;   // sem como conferir — ver o bloco acima
     }
-    return is_file($dir . '/' . basename($f));
+    foreach ($lista as $f) {
+        if (preg_match('#^https?://#i', $f)) {
+            return true;   // origem externa: não há disco local para conferir
+        }
+        if (is_file($dir . '/' . basename($f))) {
+            return true;
+        }
+    }
+    return false;
 }

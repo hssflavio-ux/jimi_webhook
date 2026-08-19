@@ -255,7 +255,10 @@ try {
 // todo anexo `.ts` gravado antes desta versão (ver includes/media.php).
 $temTs = false;
 foreach ($rows as $r) {
-    if (!empty($r['file_url']) && media_is_ts($r['file_url'])) { $temTs = true; break; }
+    // media_pick(): com dois arquivos no campo, a extensão tem de sair do
+    // arquivo que será REALMENTE tocado, não da string inteira.
+    if (!empty($r['file_url']) && media_available($r['file_url'])
+        && media_is_ts(media_pick($r['file_url']))) { $temTs = true; break; }
 }
 
 $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -395,7 +398,19 @@ require_once __DIR__ . '/../web/layout_base.php';
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
+                // 🔴 TER `file_url` NÃO É TER O VÍDEO. O nome do arquivo é anunciado
+                // pela câmera no push do alarme; o arquivo em si sobe depois, por
+                // outro caminho (attachment server / FTP), e pode simplesmente não
+                // chegar. Em produção, 81 dos 106 alarmes com `file_url` — 76% —
+                // apontavam para arquivo inexistente (18/08/2026). A tela oferecia
+                // "Ver Vídeo" nos 106, e nos 81 o clique abria um player que nunca
+                // carregava: nenhuma mensagem, nenhum erro, nada.
+                //
+                // `media_available()` já existia para exatamente isto e era usada
+                // só pelo dashboard de ocorrências. Agora o relatório distingue os
+                // três estados: sem vídeo, vídeo disponível, vídeo não recebido.
                 $temVideo  = !empty($r['file_url']) && media_kind($r['file_url'], $r['file_type']) === 'video';
+                $videoOk   = $temVideo && media_available($r['file_url']);
             ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
@@ -419,15 +434,21 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php else: echo '—'; endif; ?>
                 </td>
                 <td>
-                    <?php if ($temVideo): ?>
+                    <?php if ($videoOk): ?>
+                    <?php $arq = media_pick($r['file_url']); ?>
                     <button type="button" class="badge badge-primary" style="border:0;cursor:pointer;"
                             onclick="abrirVideo(this)"
                             data-url="<?= htmlspecialchars(media_play_url($r['file_url'])) ?>"
-                            data-ts="<?= media_is_ts($r['file_url']) ? '1' : '0' ?>"
-                            data-nome="<?= htmlspecialchars(basename((string)$r['file_url'])) ?>"
+                            data-ts="<?= media_is_ts($arq) ? '1' : '0' ?>"
+                            data-nome="<?= htmlspecialchars(basename($arq)) ?>"
                             data-titulo="<?= htmlspecialchars(($r['device_name'] ?? '') . ' · ' . ($r['alarm_label'] ?: '—') . ' · ' . fmt_brt($r['alarm_time'], 'd/m/Y H:i:s')) ?>">
                         &#9654; Ver Vídeo
                     </button>
+                    <?php elseif ($temVideo): ?>
+                    <span class="badge" style="cursor:help;"
+                          title="A câmera anunciou o arquivo &quot;<?= htmlspecialchars(basename(media_pick($r['file_url']))) ?>&quot; neste alarme, mas ele não chegou ao servidor. O envio do vídeo é feito pela câmera depois do alarme e pode falhar por falta de sinal, cartão ou reinício do equipamento.">
+                        Vídeo não recebido
+                    </span>
                     <?php else: echo '—'; endif; ?>
                 </td>
             </tr>
