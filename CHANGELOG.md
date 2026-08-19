@@ -5,6 +5,28 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.27
+
+**A tela de Comandos só sabia CONFIGURAR o envio da lista de gravações, nunca PEDIR o envio — e mais 71 comandos oficiais não existiam.** Cruzando o catálogo com `docs/JC400 & JC261 Command List V5.0.3.20230626.xlsx`, a lista oficial da fabricante, apareceram três defeitos de naturezas diferentes. **JC261 é a nossa JC400AD** — a planilha nomeia pelo código de fábrica, e é por isso que os comandos marcados "Only for JC261" nunca tinham sido reconhecidos como nossos.
+
+### Fixed
+- 🔴 **`FILELIST` tinha só metade.** `FILELIST,<A>` (A006) apenas **configura** o endereço para onde a câmera mandará a lista; quem manda o equipamento **subir** a lista é a forma NUA `FILELIST` (A007), que não estava no catálogo. Como a tela só oferece o que está catalogado, era impossível disparar o upload: dez comandos foram enviados em 17–18/08/2026 e nenhuma lista chegou, todos marcados `executed`. Com a forma nua, as **três** JC400AD responderam (`FILELIST:OK!` em duas, `failed!` na terceira) e as três chamaram `/filelist` em 1–3 s. O corpo ainda chega vazio, mas isso é problema do device, não nosso: testes de controle no próprio servidor provaram que POST chunked e POST com `Content-Length` entregam o corpo normalmente.
+- 🔴 **`Picture` e `Video` são sensíveis à CAIXA.** A planilha avisa nas duas linhas (A012/A013): *"the 'P' need uppercase letter and others need Lowercase letters"*. São os dois únicos comandos assim no proNo 128 — todo o resto é maiúsculo. Tínhamos `PICTURE` maiúsculo (e nenhum `Video`), forma que o equipamento recusa. O `PICTURE#`/`PICTURE,1#` antigo **fica**: é da wiki do JC371, chama-se "Parâmetros" e é outro comando — mesma base, mesma aridade, significado diferente. Foi justamente essa colisão que escondeu a falta.
+- **O cruzamento passou a ser por COMANDO:ARIDADE, não por nome.** Comparar só o nome-base esconde variante faltante de comando que já existe — foi como o `FILELIST` nu passou despercebido. A regra recuperou mais 15 variantes oficiais (`APN` de 14 campos, `SSID,<A>,<B>,<C>`, `RAPIDACC,<A>`, `REPLAYLIST,OFF`, `TIMERPICRAM,DEL`, `FORMAT` nu…).
+
+### Added
+- **72 comandos/variantes da planilha oficial** (catálogo de 147 → 220 entradas, 90 → 144 comandos distintos), com `fonte` guardando a linha de origem (A007, G014…) — a mesma disciplina de procedência do `consulta_ref`.
+  - **A família ADAS inteira** (`ADASSW`, `ADASSEP`, `ADASPI`, `ADASVI`, `ADASSP`, `ADASSEN`, `ADASVSP` — G009 a G015), que é o **núcleo do produto** e não existia: são "Only for JC261 & JC261P", ou seja, exatamente a JC400AD. Sem elas não havia como ligar, calibrar sensibilidade ou definir velocidade mínima do ADAS pela tela.
+  - Eventos (`DEFENSE`, `SHOCK`, `SENSOR`, `RAPIDTEST`, `EXBATALM`, `NOSDCARDALM`, `ALARMTONE`…), vídeo (`RTMP`, `HVIDEO`, `EVIDEO`, `UPLOADFILE`, `CAR`, `MIRROR`), acessórios (`OILPARAM`, `TEMPCOLLECTINTERVAL`, `CARDREADER`, `UART`) e manutenção (`PING`, `LOG`, `GCALIBRAT`).
+  - `ENCRYPT` (modelo 228) e `FACERECOGNITION` (518) ficaram **de fora**: são de outra linha de produto.
+- **Quatro travas novas** em `tests/helpers/command_response.test.php` (40 → 44 checagens): `Picture`/`Video` preservam a caixa exata; a sintaxe começa pelo comando na caixa correta; `FILELIST` tem as duas formas; a família ADASxx está presente. As três primeiras existem porque cada uma corresponde a um defeito real desta rodada.
+
+### Notes
+- O `#` final deixou de ser automático. Ele **tem função**: a guarda de "placeholder não preenchido" da tela (`/(,P\d+|,[A-Z])(,|#)/`) só enxerga o último parâmetro porque existe `,` ou `#` depois dele. Em comando **sem** parâmetro não cumpre esse papel, e aí vale a forma da planilha — que para `FILELIST` é a nua, sem `#`, a mesma medida em três câmeras reais.
+- `SOS` e `PASSWORD` entraram como comando **livre** (sem template): em `SOS,A,<A>,<B>,<C>` o primeiro `A` é literal ("Add") e o detector da tela não distingue literal de placeholder; `PASSWORD,<A><B>` não tem separador. O template montaria string errada, então os dois vão com os exemplos oficiais.
+- Sete comandos da planilha são marcados `Private` (`UPLOADFILE`, `WIFIKIT`, `RAPIDSW`, `RAPIDACC`, `RAPIDDEC`, `RAPIDTURN`, `ALARMTONE`); o `fonte` registra isso.
+- ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta** (`sendcommand.php:459`, `':rtime' => date(...)` dentro do INSERT). Além disso, 140 das 183 linhas com resposta têm exatamente 10800 s de intervalo — 3 h cravadas, mesmo segundo —, e a configuração inspecionada não explica o desvio (a conexão do app força `time_zone='+00:00'`, o `date()` do PHP bate com o `NOW()` do MySQL, não há `date.timezone` nos php.ini nem `date_default_timezone_set()` no código). Registrado como observação, **não corrigido**.
+
 ## [Unreleased] — 4.9.26
 
 **O cadastro de equipamento gravava o cliente errado — ou nenhum — e dizia "cadastrado com sucesso".** Relatado do campo: uma câmera cadastrada em 17/08/2026 não vinculou ao cliente. A tela `/equipamentos` **não tinha seletor de cliente**: mostrava o cliente da sessão num campo `readonly` (que, por cima, lia `$editDevice['customer_name']` — coluna que o `SELECT *` da tela nunca trouxe, então exibia o cliente da sessão mesmo ao editar equipamento de outro) e gravava `customer_id = $sessao ?? 1`. Daí saíam três desfechos, os três com HTTP 200 e mensagem verde:

@@ -184,6 +184,63 @@ foreach (['APN','SERVER','TIMER','ANGLEREP'] as $c) {
     checa("`$c#` catalogado como consulta", true, $tem);
 }
 
+
+// ── Invariantes vindos da planilha oficial JIMI (v4.9.27) ──────────────────
+echo "\n── Catálogo: planilha JIMI JC400/JC261 ──\n";
+
+// 🔴 `Picture` e `Video` são os DOIS comandos do proNo 128 em que a CAIXA
+// importa: a planilha (A012/A013) avisa, nas duas linhas, "the 'P' need
+// uppercase letter and others need Lowercase letters". Todo o resto do catálogo
+// é maiúsculo, então um `strtoupper()` distraído — ou uma regeneração por
+// script — normaliza estes dois junto, e o equipamento passa a recusar sem
+// nenhum erro do nosso lado.
+$caixaExata  = ['Picture', 'Video'];
+$caixaErrada = [];
+foreach ($cat as $syn => $d) {
+    foreach ($caixaExata as $exato) {
+        if (strcasecmp($d['cmd'], $exato) === 0 && $d['cmd'] !== $exato
+            && array_intersect($d['modelos'], ['JC400AD', 'JC400D'])) {
+            $caixaErrada[] = $syn . ' (cmd=' . $d['cmd'] . ', esperado ' . $exato . ')';
+        }
+    }
+}
+checa('🔴 Picture/Video preservam a caixa exata da planilha', [], $caixaErrada);
+
+// A sintaxe gravada também não pode ter subido para maiúsculas.
+$sintaxeErrada = [];
+foreach ($cat as $syn => $d) {
+    if (in_array($d['cmd'], $caixaExata, true) && strpos($syn, $d['cmd']) !== 0) {
+        $sintaxeErrada[] = $syn;
+    }
+}
+checa('🔴 a sintaxe começa pelo comando na caixa correta', [], $sintaxeErrada);
+
+// 🔴 `FILELIST` precisa das DUAS formas, e é a lição mais cara desta rodada.
+// `FILELIST,<A>` (A006) apenas CONFIGURA o endereço de destino; quem manda o
+// equipamento subir a lista é a forma NUA `FILELIST` (A007). Enquanto o
+// catálogo teve só a primeira, a tela só sabia configurar: dez comandos foram
+// disparados em 17–18/08/2026 e nenhuma lista subiu. Com a forma nua, as três
+// câmeras responderam e chamaram de volta em segundos.
+$formasFilelist = [];
+foreach ($cat as $syn => $d) {
+    if (strcasecmp($d['cmd'], 'FILELIST') === 0) $formasFilelist[] = $syn;
+}
+sort($formasFilelist);
+checa('🔴 FILELIST tem a forma de configurar E a de disparar',
+      ['FILELIST', 'FILELIST,A#'], $formasFilelist);
+
+// A família ADAS é o núcleo do produto e vive na JC400AD — a "JC261" da
+// planilha. Faltava inteira até a v4.9.27 porque o nome de fábrica não bate com
+// o nosso, e o cruzamento por nome de modelo não a alcançava.
+$adas = [];
+foreach ($cat as $syn => $d) {
+    if (preg_match('/^ADAS(SW|SEP|PI|VI|SP|SEN|VSP)$/', $d['cmd'])) $adas[] = $d['cmd'];
+}
+sort($adas);
+checa('família ADASxx presente para a JC400AD',
+      ['ADASPI', 'ADASSEN', 'ADASSEP', 'ADASSP', 'ADASSW', 'ADASVI', 'ADASVSP'], $adas);
+
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);
