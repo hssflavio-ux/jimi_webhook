@@ -197,7 +197,12 @@ Logger::info('filelist: captura recebida', [
 // que manteve esta investigação parada.
 http_response_code(200);
 header('Content-Type: application/json; charset=utf-8');
-echo json_encode(['code' => 0, 'message' => 'success'], JSON_UNESCAPED_UNICODE) . "\n";
+// ⚠️ O CORPO DA RESPOSTA É ESPECIFICADO (docs.jimicloud.com §1.3.5): a doc
+// exige `{"code":0,"ok":true}`. Estávamos devolvendo `message:"success"`, e
+// funcionava — este firmware não confere. Alinhado mesmo assim: depender de o
+// device ser tolerante é apostar que o próximo firmware também será, e este
+// projeto já perdeu essa aposta antes.
+echo json_encode(['code' => 0, 'ok' => true], JSON_UNESCAPED_UNICODE) . "\n";
 
 if (function_exists('fastcgi_finish_request')) {
     fastcgi_finish_request();

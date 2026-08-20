@@ -114,6 +114,38 @@ checa('só espaços vira (sem placa)', '(sem placa) 864993060182939', placa_do_d
 checa('🔴 device_name JÁ COALESCIDO para o imei vira (sem placa)',
       '(sem placa) 864993060182939', placa_do_device('864993060182939', '864993060182939'));
 
+echo "
+── qual pedido pendente o arquivo que chegou fecha
+";
+// 🔴 A parte que erra em SILÊNCIO: um anexo de alarme comum que roubasse
+// o pedido faria a fila dizer "pronto" apontando para o vídeo ERRADO, e o
+// pedido de verdade ficaria pendente para sempre. O DMS dispara várias vezes
+// no mesmo minuto, então instante sozinho não basta — o canal entra na conta.
+$pend = [
+    ['id' => 10, 'event_time' => '2026-08-19 15:43:45', 'channel' => 1],
+    ['id' => 11, 'event_time' => '2026-08-19 09:00:00', 'channel' => 2],
+];
+$imei = '864993060182939';
+checa('o arquivo pedido fecha o pedido certo', 10,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_1_2026_08_19_12_43_45_F_01.ts")['id']);
+checa('🔴 mesmo minuto, OUTRO canal, não rouba', null,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_0_2026_08_19_12_43_45_I_02.ts"));
+checa('instante distante não casa', null,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_0_2026_08_19_09_00_00_F_01.ts"));
+checa('o do canal 2 casa com o pedido do canal 2', 11,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_0_2026_08_19_06_00_00_I_02.ts")['id']);
+checa('dentro da folga de 90 s ainda casa', 10,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_1_2026_08_19_12_43_00_F_01.ts")['id']);
+checa('fora da folga não casa', null,
+      media_pedido_correspondente($pend, "EVENT_{$imei}_1_2026_08_19_12_41_00_F_01.ts"));
+checa('nome sem carimbo nunca fecha pedido', null,
+      media_pedido_correspondente($pend, '869058070151343_A1B2C3D4E5F60718_11.mp4'));
+checa('sem pedidos pendentes, nada a fechar', null,
+      media_pedido_correspondente([], "EVENT_{$imei}_1_2026_08_19_12_43_45_F_01.ts"));
+checa('canal do nome: _F_ e frontal', 1, media_canal_do_nome('EVENT_x_2026_08_19_12_43_45_F_01.ts'));
+checa('canal do nome: _I_ e interna', 2, media_canal_do_nome('EVENT_x_2026_08_19_12_43_45_I_02.ts'));
+checa('nome sem canal declarado', null, media_canal_do_nome('2026_08_19_12_43_45_01.ts'));
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

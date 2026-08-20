@@ -18,6 +18,7 @@
  */
 
 require_once __DIR__ . '/functions.php';   // detect_media_type()
+require_once __DIR__ . '/filelist.php';    // filelist_ts_do_nome_utc()
 
 /**
  * Diretório onde o FTP da câmera e o attachment server depositam os arquivos.
@@ -170,6 +171,61 @@ function media_available(?string $fileUrl): bool
 }
 
 /**
+ * Canal que o NOME do arquivo declara: `_F_` = frontal (1), `_I_` = interna (2).
+ *
+ * É a mesma convenção que o reenvio de vídeo de alarme usa para escolher a
+ * câmera no `EVIDEO`/`HVIDEO`.
+ *
+ * @param string $fileUrl Nome do arquivo
+ * @returns int|null 1, 2, ou null quando o nome não declara
+ */
+function media_canal_do_nome(string $fileUrl): ?int
+{
+    if (!preg_match('/_([FI])_/i', basename($fileUrl), $m)) return null;
+    return strtoupper($m[1]) === 'F' ? 1 : 2;
+}
+
+/**
+ * Qual pedido pendente este arquivo está fechando — se algum.
+ *
+ * 🔴 A DECISÃO É ESTREITA DE PROPÓSITO, e a razão é a mesma da v4.9.31: o DMS
+ * dispara várias vezes no mesmo minuto, e o anexo de um alarme comum que caísse
+ * na janela ROUBARIA o pedido de um trecho que o usuário pediu — a fila
+ * mostraria "pronto" apontando para o vídeo errado, e o pedido de verdade
+ * ficaria pendente para sempre. Por isso casa por instante E por canal.
+ *
+ * Pura de propósito: é a parte que erra silencioso, então é a parte que precisa
+ * de teste sem banco.
+ *
+ * @param array  $pendentes Linhas `solicitado` do MESMO imei: cada uma com
+ *                          `id`, `event_time` (UTC) e `channel`
+ * @param string $fileUrl   Nome do arquivo que chegou
+ * @param int    $janela    Tolerância em segundos
+ * @returns array|null A linha escolhida, ou null quando nenhuma corresponde
+ */
+function media_pedido_correspondente(array $pendentes, string $fileUrl, int $janela = 90): ?array
+{
+    $instante = filelist_ts_do_nome_utc(basename($fileUrl));
+    if ($instante === null) return null;          // sem carimbo não há como casar
+    $t = strtotime($instante . ' UTC');
+    $canal = media_canal_do_nome($fileUrl);
+
+    $melhor = null; $menor = PHP_INT_MAX;
+    foreach ($pendentes as $p) {
+        if (empty($p['event_time'])) continue;
+        $pt = strtotime($p['event_time'] . ' UTC');
+        if ($pt === false) continue;
+        $dist = abs($t - $pt);
+        if ($dist > $janela) continue;
+        // Canal declarado dos dois lados e diferente = não é este pedido.
+        $pc = isset($p['channel']) && $p['channel'] !== null ? (int)$p['channel'] : null;
+        if ($canal !== null && $pc !== null && $canal !== $pc) continue;
+        if ($dist < $menor) { $menor = $dist; $melhor = $p; }
+    }
+    return $melhor;
+}
+
+/**
  * Garante que existe linha em `media_files` para um arquivo anunciado por um
  * alarme, e devolve o id.
  *
@@ -211,6 +267,51 @@ function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $ev
     $id = $st->fetchColumn();
     if ($id) {
         return (int)$id;
+    }
+
+    // ── Fecha o pedido que estava esperando por ESTE arquivo (v4.9.39) ──────
+    //
+    // Quando o usuário pede um trecho (`HVIDEO`/`EVIDEO` ou o 37382 do JT/T), o
+    // despacho grava uma linha `solicitado` sem nome — o nome só existe quando
+    // a câmera termina de subir. Chegando o arquivo, essa linha é PROMOVIDA em
+    // vez de nascer uma segunda: assim a fila mostra um pedido só, do "aguardando
+    // câmera" ao "pronto", e não um par de linhas fantasma.
+    //
+    // 🔴 A janela é apertada e o CANAL entra na conta, pela mesma razão da
+    // v4.9.31: o DMS dispara várias vezes no mesmo minuto, e um anexo de alarme
+    // que caísse solto na janela roubaria o pedido de outro trecho. O carimbo do
+    // nome é o instante da gravação — o mesmo que foi pedido (medido: o `HVIDEO`
+    // devolve exatamente o carimbo solicitado).
+    // A ESCOLHA é de `media_pedido_correspondente()` — pura e testada sem banco.
+    // Aqui só se busca o conjunto de candidatos.
+    if (filelist_ts_do_nome_utc(basename($fileUrl)) !== null) {
+        $st = $db->prepare(
+            "SELECT id, event_time, channel FROM media_files
+              WHERE imei = :i AND download_status = 'solicitado' AND event_time IS NOT NULL
+              ORDER BY id DESC LIMIT 20"
+        );
+        $st->execute([':i' => $imei]);
+        $escolhido = media_pedido_correspondente($st->fetchAll(PDO::FETCH_ASSOC), $fileUrl);
+        if ($escolhido) {
+            $pendente = $escolhido['id'];
+            $db->prepare(
+                "UPDATE media_files
+                    SET file_name = :n, file_url = :u, file_type = :t,
+                        download_status = 'disponivel'
+                  WHERE id = :id"
+            )->execute([
+                ':n'  => basename($fileUrl),
+                ':u'  => $fileUrl,
+                ':t'  => detect_media_type($fileUrl),
+                ':id' => (int)$pendente,
+            ]);
+            if (class_exists('Logger')) {
+                Logger::info('media: pedido pendente fechado pelo arquivo que chegou', [
+                    'imei' => $imei, 'media_id' => (int)$pendente, 'file' => $fileUrl,
+                ]);
+            }
+            return (int)$pendente;
+        }
     }
 
     try {

@@ -626,6 +626,57 @@ try {
     //
     // `event_time` recebe o INÍCIO da janela pedida (BCD yyMMddHHmmss em GMT-0,
     // como o device fala).
+    // ── A MESMA FILA PARA O JIMI (v4.9.39) ──────────────────────────────────
+    //
+    // 🔴 O JT/T ganhava linha "solicitado" ao despachar o 37382, e o JIMI não
+    // ganhava NADA ao despachar o `HVIDEO`. Entre o clique e a chegada do
+    // arquivo — que levou ~15 s nas medições, mas depende da câmera e da rede —
+    // a tela de Downloads não tinha o que mostrar, e o usuário concluía que o
+    // pedido não foi registrado. Relatado do campo em 20/08/2026: "não listam
+    // na tela de downloads, seja como pendente ou pronto".
+    //
+    // Quem fecha esta linha é o evento `105`: `media_register_file()` grava o
+    // arquivo REAL com o nome que a câmera deu, e esta linha de espera é
+    // encerrada por `imei` + janela, já que o nome só existe depois.
+    if ($proNo === 128 && $dbStatus !== 'failed'
+        && preg_match('/^(HVIDEO|EVIDEO),(\d{4}[_-]\d{2}[_-]\d{2}[_ ]\d{2}[:_]\d{2}[:_]\d{2}),(\d+)/i', trim($cmdContent), $mv)) {
+        try {
+            // O carimbo do comando é a hora LOCAL da câmera (UTC−3) — a mesma
+            // convenção do nome do arquivo. `event_time` é UTC, como toda
+            // coluna de tempo deste banco.
+            $localTs = str_replace(['-', ' ', ':'], ['_', '_', '_'], $mv[2]);
+            $partes  = explode('_', $localTs);
+            $etime   = null;
+            if (count($partes) === 6) {
+                require_once __DIR__ . '/../includes/filelist.php';
+                $etime = gmdate('Y-m-d H:i:s', gmmktime(
+                    (int)$partes[3], (int)$partes[4], (int)$partes[5],
+                    (int)$partes[1], (int)$partes[2], (int)$partes[0]
+                ) + FILELIST_OFFSET_SEGUNDOS);
+            }
+            $db->prepare("
+                INSERT INTO media_files
+                    (imei, file_name, file_type, file_size, file_url, source_type,
+                     event_time, channel, download_status, raw_data)
+                VALUES (:imei, :fname, 'video', 0, NULL, :origem,
+                        :etime, :ch, 'solicitado', :raw)
+            ")->execute([
+                ':imei'   => $imei,
+                ':fname'  => strtoupper($mv[1]) . ' CH' . (int)$mv[3] . ' — aguardando a câmera [' . $mv[2] . ']',
+                ':origem' => 'extracao_' . strtolower($mv[1]),
+                ':etime'  => $etime,
+                ':ch'     => (int)$mv[3] ?: null,
+                ':raw'    => $cmdParaGravar,
+            ]);
+        } catch (Throwable $e) {
+            // A fila é conforto de tela: o comando já saiu, e falhar aqui não
+            // pode transformar uma extração bem-sucedida em erro para o usuário.
+            Logger::warning('sendcommand: HVIDEO sem linha na fila', [
+                'imei' => $imei, 'cmd' => $cmdContent, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     if ($proNo === 37382 && $dbStatus !== 'failed') {
         try {
             $c   = json_decode($cmdContent, true) ?: [];

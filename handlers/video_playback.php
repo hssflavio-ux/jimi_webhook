@@ -878,12 +878,24 @@ function fmtCompactUTC(d) {
  * servidor RTMP — o MESMO caminho do vídeo ao vivo, que já está provado.
  * JT/T: `37377` (0x9201), o playback do JT/T 1078, para o mesmo media server.
  *
- * ⚠️ O CAMINHO DE PUBLICAÇÃO DO PLAYBACK NÃO FOI MEDIDO EM CÂMERA REAL. Para o
- * ao vivo ele é `live/<canal-base-0>/<imei>.flv` (JIMI) e `<canal>/<imei>.flv`
- * (JT/T), medidos em 18/08/2026; supor que o playback publica no mesmo lugar é
- * a hipótese mais provável, não um fato. Por isso existe o timeout abaixo com
- * mensagem explícita: se o stream não vier, a tela DIZ, em vez de deixar um
- * player preto — que é o modo de falhar que este módulo passou semanas caçando.
+ * 🔴 O CAMINHO DO PLAYBACK NÃO É O DO AO VIVO, e supor que fosse era o defeito
+ * (v4.9.39). A doc oficial (docs.jimicloud.com §1.3.5, "Pull history stream")
+ * publica o histórico SEM canal no caminho:
+ *
+ *     RTMP  rtmp://<ip>:1936/live/<IMEI>
+ *     FLV   http://<ip>:8881/live/<IMEI>.flv
+ *     HLS   http://<ip>:8881/live/<IMEI>/hls.m3u8
+ *
+ * O AO VIVO, esse sim, publica em `live/<canal-base-0>/<imei>.flv` (medido em
+ * 18/08/2026). A diferença tem lógica: no playback o canal já está escolhido
+ * pelo NOME do arquivo que se manda no `REPLAYLIST` — não há o que separar por
+ * caminho. Eu havia reaproveitado a URL do ao vivo, e o stream nunca chegava.
+ *
+ * ⚠️ `REPLAYLIST` aceita até OITO nomes separados por vírgula (§1.3.5), o que
+ * permitiria emendar trechos numa reprodução só. Mandamos um — o bloco pedido.
+ *
+ * O timeout com mensagem explícita FICA: se o stream não vier, a tela diz, em
+ * vez de deixar um player preto.
  */
 function pbVerNaCamera(t, dur, canal) {
     pbFecharAcoes();
@@ -923,12 +935,28 @@ function pbVerNaCamera(t, dur, canal) {
                 + 'A câmera recusou o pedido.<br><span style="font-size:12px;">' + (msg || 'sem resposta') + '</span></div>';
             return;
         }
+        // 🔴 SEM O CANAL no caminho — ver a nota acima. O canal do playback
+        // está no nome do arquivo, não na URL do stream.
         var url = ehJimi
-            ? streamBase + '/live/' + (canal - 1) + '/' + selImei + '.flv'
+            ? streamBase + '/live/' + selImei + '.flv'
             : streamBase + '/' + canal + '/' + selImei + '.flv';
         pbAbrirStream(url, ph, v, msg);
     });
 }
+
+/**
+ * Encerra o push de histórico da câmera (§1.3.6: `REPLAYLIST,OFF`).
+ *
+ * Sem isto o equipamento continua empurrando vídeo até o timeout de 20 s do
+ * media server — gastando franquia do SIM por um stream que ninguém assiste.
+ * É o mesmo cuidado que o vídeo ao vivo tem com o `RTMP,OFF`.
+ */
+function pbPararStream() {
+    if (!pbStreamAtivo) return;
+    pbStreamAtivo = false;
+    if (selProtoOf(selImei) === 'JIMI') pbSendCmd(selImei, 128, 'REPLAYLIST,OFF');
+}
+var pbStreamAtivo = false;
 
 /** Abre o stream no player, com prazo — sem prazo, falha vira tela preta. */
 function pbAbrirStream(url, ph, v, msgDevice) {
@@ -937,6 +965,7 @@ function pbAbrirStream(url, ph, v, msgDevice) {
         return;
     }
     var chegou = false;
+    pbStreamAtivo = true;
     pbPlayer = mpegts.createPlayer({ type: 'flv', isLive: true, url: url });
     pbPlayer.attachMediaElement(v);
     pbPlayer.load();
@@ -993,6 +1022,7 @@ var pbPlayer = null;
 
 /** Encerra o player, se houver. Sem isto cada clique vaza uma instância. */
 function pbDestroyPlayer() {
+    pbPararStream();
     if (!pbPlayer) return;
     try { pbPlayer.pause(); pbPlayer.unload(); pbPlayer.detachMediaElement(); pbPlayer.destroy(); }
     catch (e) { /* já desmontado */ }
