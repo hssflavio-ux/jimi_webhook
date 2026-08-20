@@ -2985,7 +2985,14 @@ return [
   'FILELIST,A#' => [
     'cmd' => 'FILELIST',
     'nome' => 'Lista de gravações do cartão (JIMI)',
-    'desc' => 'Manda a câmera subir, para a URL informada, um TXT com os nomes das gravações do cartão. Não aceita intervalo de datas: envia a lista inteira.',
+    // 🔴 CORRIGIDO na v4.9.38. A descrição anterior dizia que este comando
+    // "manda a câmera subir a lista", e ele NÃO faz isso — é a descrição do
+    // `FILELIST` nu (A007) colada na entrada errada. O texto oficial da planilha
+    // é inequívoco: "Modify the server address to receive the playback video
+    // namelist file." Esta forma só GRAVA o endereço; quem pede o upload é a
+    // forma sem parâmetro. A confusão custou uma tela que reconfigurava o
+    // equipamento a cada consulta de gravações.
+    'desc' => 'CONFIGURA o endereço para onde a câmera envia a lista de gravações (grava no equipamento; não pede a lista). Quem pede o upload é o comando FILELIST sem parâmetro.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400D',
@@ -5106,7 +5113,10 @@ return [
   'FILELIST' => [
     'cmd' => 'FILELIST',
     'nome' => 'Lista de gravações do cartão (JIMI)',
-    'desc' => 'Let the device to upload the playback video namelist file to the server.',
+    // Este é o comando que PEDE a lista. O endereço de destino vem da
+    // configuração gravada antes por `FILELIST,<url>` (A006) — sem endereço
+    // válido o device responde `failed!`, medido em campo.
+    'desc' => 'PEDE à câmera que envie a lista de gravações do cartão para o endereço já configurado nela. Não aceita intervalo de datas: envia a lista inteira.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',

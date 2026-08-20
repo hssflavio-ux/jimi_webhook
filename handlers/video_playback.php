@@ -1076,29 +1076,73 @@ function utcDaySegments(fromDay, toDay) {
 }
 
 /**
- * Pede a lista do cartão a uma câmera JIMI.
+ * Pede a lista do cartão a uma câmera JIMI — SÓ O `FILELIST` NU.
  *
- * 🔴 SÃO DOIS COMANDOS. `FILELIST,<url>` (A006) apenas GRAVA o endereço; quem
- * dispara o upload é a forma NUA `FILELIST` (A007). Está nos dados de produção:
- * sete comandos com URL sem uma única captura; o nu produziu a captura no mesmo
- * segundo. Em sequência, e o segundo não sai se o primeiro for recusado.
+ * 🔴 SÃO DOIS COMANDOS DIFERENTES, E SÓ UM DELES É PEDIDO. A planilha oficial
+ * (JIMI V5.0.3) não deixa margem:
+ *
+ *   A006  `FILELIST,<A>`  "Modify the server address to receive the playback
+ *                          video namelist file."   → CONFIGURAÇÃO
+ *   A007  `FILELIST`      "Let the device to upload the playback video namelist
+ *                          file to the server."    → PEDIDO
+ *
+ * ⚠️ Até a v4.9.38 esta tela mandava OS DOIS a cada clique em Requisitar, e é
+ * um defeito de natureza: `FILELIST,<url>` é ESCRITA na configuração do
+ * equipamento. Uma ação de LEITURA reconfigurava o device toda vez — e com
+ * `VIDEO_INGEST_IP` errado no `.env`, cada consulta gravava um endereço ruim na
+ * câmera, para aparecer só depois, como upload que não chega.
+ *
+ * O endereço é SETUP: grava-se uma vez, deliberadamente. Se a câmera recusar o
+ * pedido por não ter endereço válido, a tela OFERECE a configuração como ação
+ * separada — ver pbConfigurarEndereco().
  */
 function pbRequestJimi(imei, cb) {
+    pbSendCmd(imei, 128, 'FILELIST', function (ok, msg) {
+        // O device responde `failed!` quando não alcança o endereço gravado —
+        // medido em campo, com uma URL inválida de propósito.
+        if (!ok) pbOferecerConfig(imei, msg);
+        if (cb) cb(ok, msg);
+    });
+}
+
+/**
+ * Grava NESTA câmera o endereço que recebe a lista (A006).
+ * É ESCRITA na configuração do equipamento, por isso só acontece a pedido.
+ */
+function pbConfigurarEndereco(imei) {
     if (!filelistBase) {
-        alert('Não há endereço configurado para a câmera enviar a lista. '
-            + 'Defina VIDEO_INGEST_IP (ou FILELIST_URL) no .env do servidor: '
-            + 'precisa ser um IP que o EQUIPAMENTO alcance, nunca localhost.');
-        if (cb) cb(false, 'sem VIDEO_INGEST_IP');
+        alert('Não há endereço para configurar. Defina VIDEO_INGEST_IP (ou '
+            + 'FILELIST_URL) no .env do servidor: precisa ser um IP que o '
+            + 'EQUIPAMENTO alcance, nunca localhost.');
         return;
     }
     pbSendCmd(imei, 128, 'FILELIST,' + filelistBase + imei, function (ok, msg) {
-        if (!ok) {
-            alert('A câmera não aceitou o endereço da lista: ' + (msg || 'sem resposta.'));
-            if (cb) cb(false, msg);
-            return;
-        }
-        pbSendCmd(imei, 128, 'FILELIST', function (ok2, msg2) { if (cb) cb(ok2, msg2); });
+        alert(ok
+            ? 'Endereço gravado na câmera. Clique em Requisitar Gravações de novo.'
+            : 'A câmera não aceitou o endereço: ' + (msg || 'sem resposta.'));
     });
+}
+
+/** Explica a recusa e oferece a configuração — sem executá-la por conta. */
+function pbOferecerConfig(imei, msg) {
+    // A lista só existe depois de um período pedido; antes disso o aviso vai
+    // logo abaixo do formulário, que é onde o usuário está olhando.
+    var alvo = document.getElementById('pb-lista') || document.getElementById('pb-recusa');
+    if (!alvo) {
+        var form = document.getElementById('playback-form');
+        if (!form) { alert('A câmera recusou o pedido da lista: ' + (msg || 'sem resposta.')); return; }
+        alvo = document.createElement('div');
+        alvo.id = 'pb-recusa';
+        form.parentNode.appendChild(alvo);
+    }
+    alvo.innerHTML = '<div class="callout" style="font-size:11px;margin:8px 0;background:#fdf6e3;'
+        + 'border-left:3px solid #b45309;color:#7c4a03">'
+        + 'A câmera recusou o pedido da lista' + (msg ? ' (“' + msg + '”)' : '') + '.<br>'
+        + 'Isso costuma ser <strong>endereço de upload não configurado</strong> neste equipamento: '
+        + 'ele é gravado uma vez e diz para onde a câmera envia a lista.'
+        + '<div style="margin-top:8px"><button type="button" class="btn btn-outline btn-sm" '
+        + 'onclick="pbConfigurarEndereco(&quot;' + imei + '&quot;)">Configurar endereço nesta câmera</button></div>'
+        + '</div>';
 }
 
 function onSubmitRequest(e) {
@@ -1108,7 +1152,20 @@ function onSubmitRequest(e) {
     if (!imei || !from || !to) return true;
 
     if (selProtoOf(imei) === 'JIMI') {
-        pbRequestJimi(imei);
+        // 🔴 ESPERA A RESPOSTA ANTES DE NAVEGAR. O formulário é GET: deixar a
+        // navegação acontecer destrói o contexto JS, e o callback do comando
+        // nunca roda — a recusa da câmera ficava invisível, e o usuário caía
+        // numa tela que fica atualizando à espera de uma lista que não vem.
+        // O `keepalive` garante que a REQUISIÇÃO chega ao servidor mesmo assim;
+        // não garante que alguém leia a resposta.
+        e.preventDefault();
+        var bt = document.querySelector('#playback-form button[type=submit]');
+        if (bt) { bt.disabled = true; bt.innerHTML = '&#8230; Pedindo à câmera'; }
+        pbRequestJimi(imei, function (ok) {
+            if (ok) { document.getElementById('playback-form').submit(); return; }
+            if (bt) { bt.disabled = false; bt.innerHTML = '&#128269; Requisitar Gravações'; }
+        });
+        return false;
     } else {
         // 37381 (0x9205): uma consulta por canal e por dia UTC. O laço é aqui
         // porque o comando não aceita "todos" — mas a TELA não pede canal.

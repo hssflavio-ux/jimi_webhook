@@ -5,15 +5,25 @@
  *
  * O QUE É. No protocolo JIMI a listagem de gravações do cartão funciona ao
  * contrário do JT/T. No JT/T pedimos uma janela (`37381`) e o IoT Hub devolve
- * a lista estruturada por webhook. No JIMI mandamos `FILELIST,<url>` para
- * CONFIGURAR o destino e, depois, o `FILELIST` NU para disparar — e a CÂMERA
- * sobe sozinha a lista inteira, sem filtro de data, para a URL configurada.
+ * a lista estruturada por webhook. No JIMI a CÂMERA sobe sozinha a lista
+ * inteira, sem filtro de data, para um endereço que ela tem GRAVADO.
  *
- * 🔴 **`FILELIST,<url>` sozinho não sobe nada.** Ele só grava o endereço no
- * equipamento. Está provado nos dados de produção: sete comandos com URL entre
- * 14:54 e 15:22 de 19/08 — nenhuma captura; o `FILELIST` nu de 15:00:19
- * produziu a captura de 15:00:19, no mesmo segundo. É a metade que faltava no
- * catálogo até a v4.9.27, e a tela de playback mandava só a primeira.
+ * 🔴 SÃO DOIS COMANDOS COM NATUREZAS DIFERENTES, e confundi-los custou caro nos
+ * dois sentidos. A planilha oficial (JIMI V5.0.3) é inequívoca:
+ *
+ *   A006  `FILELIST,<url>`  "Modify the server address to receive the playback
+ *                            video namelist file."  → CONFIGURAÇÃO (escrita)
+ *   A007  `FILELIST`        "Let the device to upload the playback video
+ *                            namelist file to the server."  → PEDIDO (leitura)
+ *
+ * Os dados de produção mostram a diferença: sete `FILELIST,<url>` entre 14:54 e
+ * 15:22 de 19/08 — nenhuma captura; o `FILELIST` nu de 15:00:19 produziu a
+ * captura de 15:00:19, no mesmo segundo.
+ *
+ * ⚠️ O ERRO SIMÉTRICO, corrigido na v4.9.38: a tela de playback passou a mandar
+ * OS DOIS a cada clique em Requisitar. Como o primeiro é ESCRITA, uma ação de
+ * leitura reconfigurava o equipamento toda vez. O endereço é setup — grava-se
+ * uma vez, de propósito.
  *
  * O LAYOUT FOI MEDIDO em 19–20/08/2026 (400AD_3, `tcpdump` na porta 80 e
  * captura crua). Não é TXT: é **JSON**, e a lista vem numa string única

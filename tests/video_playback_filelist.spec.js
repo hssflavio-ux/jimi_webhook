@@ -6,11 +6,15 @@
  * IoT Hub responde `code:0`, a tela diz algo verde, e nada acontece. Nenhum
  * deles aparece em log.
  *
- *   1. **A listagem precisa de DOIS comandos.** `FILELIST,<url>` só grava o
- *      endereço no equipamento (planilha A006); quem manda subir é o `FILELIST`
- *      NU (A007). Nos dados de produção: sete `FILELIST,<url>` entre 14:54 e
- *      15:22 de 19/08/2026, zero capturas; o nu de 15:00:19 produziu a captura
- *      de 15:00:19.
+ *   1. **Requisitar manda o `FILELIST` NU, e SÓ ele.** São dois comandos de
+ *      naturezas diferentes (planilha JIMI V5.0.3): `FILELIST,<url>` (A006) é
+ *      *"Modify the server address to receive the playback video namelist
+ *      file"* — CONFIGURAÇÃO, escrita no equipamento; `FILELIST` nu (A007) é
+ *      *"Let the device to upload..."* — o pedido. O erro já foi cometido nos
+ *      DOIS sentidos: primeiro a tela mandava só o de configuração (sete em
+ *      produção, zero capturas), depois passou a mandar os dois a cada clique,
+ *      e aí uma ação de LEITURA reescrevia a configuração do device a cada
+ *      consulta.
  *
  *   2. **Comando do protocolo errado.** O [Extrair] mandava `37382` (JT/T) para
  *      câmera JIMI, que não o conhece. Cada família tem o seu dialeto, e o
@@ -90,6 +94,8 @@ test.describe('Playback — despacho de comandos', () => {
             // @ts-ignore
             tocar: typeof pbTocar, acoes: typeof pbAbrirAcoes, enviar: typeof pbSendCmd,
             // @ts-ignore
+            configurar: typeof pbConfigurarEndereco,
+            // @ts-ignore
             base: typeof filelistBase === 'string' && filelistBase.indexOf('/filelist/') > -1,
         }));
         Object.keys(existem).forEach(function (k) {
@@ -107,7 +113,7 @@ test.describe('Playback — despacho de comandos', () => {
         await expect(authedPage.locator('#playback-form select[name="imei"]')).toHaveCount(1);
     });
 
-    test('🔴 requisitar manda os DOIS comandos, e o nu por ÚLTIMO', async ({ authedPage }) => {
+    test('🔴 requisitar manda SÓ o FILELIST nu — nunca reconfigura o device', async ({ authedPage }) => {
         const enviados = await capturarEnvios(authedPage);
         await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 2);
 
@@ -116,14 +122,20 @@ test.describe('Playback — despacho de comandos', () => {
             pbRequestJimi(imei, () => ok(true));
         }), IMEI_FAKE);
 
-        expect(enviados, 'dois comandos: configurar o endereço e disparar').toHaveLength(2);
+        expect(enviados, 'consultar é UM comando').toHaveLength(1);
         expect(enviados[0].proNo, 'comando de texto = proNo 128').toBe(128);
         expect(enviados[0].serverFlagId, 'gateway JIMI = serverFlagId 1').toBe(1);
-        expect(enviados[0].content).toMatch(/^FILELIST,https?:\/\/.+\/filelist\/860000000000009$/);
-        expect(enviados[1].content, 'a forma NUA é o que dispara o upload').toBe('FILELIST');
+        expect(enviados[0].content, 'a forma NUA é o pedido').toBe('FILELIST');
+
+        // 🔴 O NÚCLEO DESTE TESTE. `FILELIST,<url>` é ESCRITA na configuração do
+        // equipamento: mandá-lo junto faz uma ação de leitura reconfigurar a
+        // câmera a cada consulta — e com VIDEO_INGEST_IP errado no .env, grava
+        // endereço ruim no device sem ninguém pedir.
+        expect(enviados.some((e) => String(e.content).indexOf('FILELIST,') === 0),
+            'consultar NÃO pode reescrever o endereço gravado na câmera').toBeFalsy();
     });
 
-    test('endereço recusado NÃO dispara o upload', async ({ authedPage }) => {
+    test('recusa da câmera oferece a configuração, sem executá-la', async ({ authedPage }) => {
         const enviados = await capturarEnvios(authedPage, { aceitar: false });
         await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 2);
 
@@ -132,9 +144,32 @@ test.describe('Playback — despacho de comandos', () => {
             pbRequestJimi(imei, () => ok(true));
         }), IMEI_FAKE);
 
-        expect(enviados, 'só a tentativa de configurar o endereço').toHaveLength(1);
-        expect(enviados.some((e) => e.content === 'FILELIST'),
-            'sem endereço aceito, mandar a câmera subir 78 KB é subir para lugar nenhum').toBeFalsy();
+        expect(enviados, 'só o pedido saiu').toHaveLength(1);
+        expect(enviados[0].content).toBe('FILELIST');
+        // A tela EXPLICA e oferece o botão — quem escreve na câmera é o
+        // usuário, clicando. O aviso cai na lista quando já há período pedido,
+        // ou logo abaixo do formulário quando ainda não há.
+        const aviso = authedPage.locator('#pb-lista, #pb-recusa');
+        await expect(aviso).toContainText(/endereço de upload/i);
+        await expect(aviso.locator('button')).toContainText(/configurar endereço/i);
+
+        // 🔴 E o botão de Requisitar volta a funcionar: travá-lo em "Pedindo à
+        // câmera" depois de uma recusa deixaria a tela sem saída.
+        const bt = authedPage.locator('#playback-form button[type=submit]');
+        await expect(bt).toBeEnabled();
+        await expect(bt).toContainText(/requisitar/i);
+    });
+
+    test('🔴 configurar o endereço é ação SEPARADA e explícita', async ({ authedPage }) => {
+        const enviados = await capturarEnvios(authedPage);
+        await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 2);
+
+        await authedPage.evaluate((imei) => pbConfigurarEndereco(imei), IMEI_FAKE);
+        await expect.poll(() => enviados.length).toBe(1);
+
+        expect(enviados[0].proNo).toBe(128);
+        expect(enviados[0].content, 'a forma com URL é a CONFIGURAÇÃO (A006)')
+            .toMatch(/^FILELIST,https?:\/\/.+\/filelist\/860000000000009$/);
     });
 
     test('JT/T: uma requisição cobre TODOS os canais, sem FILELIST', async ({ authedPage }) => {
