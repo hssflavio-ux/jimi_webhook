@@ -9,7 +9,15 @@
  * `FILELIST,http://<servidor>/filelist/<imei>` e a CÂMERA sobe sozinha um
  * arquivo TXT com os nomes — sem filtro de data, a lista inteira.
  *
- * 🔴 POR QUE ESTA VERSÃO SÓ CAPTURA. **Ninguém publica o layout desse TXT.**
+ * ✅ O LAYOUT FOI MEDIDO em 19/08/2026 (400AD_3, `tcpdump` na porta 80). Não é
+ * TXT: é **JSON**, e a lista vem numa string única separada por vírgula —
+ *
+ *     {"imei":"864993060392306","fileNameList":"2026_08_16_05_33_58_01.ts,…"}
+ *
+ * O sufixo `_01`/`_02` do nome é a câmera (frontal/interna), o mesmo par que o
+ * `EVIDEO`/`HVIDEO` usa. O parser da FASE 1 já tem contra o que ser escrito.
+ *
+ * 🔴 POR QUE ESTA VERSÃO AINDA SÓ CAPTURA. **O corpo não chega ao PHP.**
  * Escrever o parser por suposição é exatamente como o `34818` entrou no
  * projeto: aceito pelo IoT Hub, marcado `executed`, e nunca produziu um
  * arquivo — 18 tentativas até alguém desconfiar. A mesma disciplina da §2 do
@@ -137,15 +145,20 @@ Logger::info('filelist: captura recebida', [
 
 // ── 3. Resposta ─────────────────────────────────────────────────────────────
 //
-// 🔴 JSON, e não texto. A câmera manda `Content-Type: application/json` com
-// `Transfer-Encoding: chunked` e corpo VAZIO — três vezes seguidas, medido em
-// 14/08/2026. O padrão é de HANDSHAKE: ela anuncia, espera a resposta, e só
-// então envia. Respondendo `ok` em texto puro ela desistia e o corpo nunca
-// vinha.
+// 🔴 A EXPLICAÇÃO ANTERIOR DESTE BLOCO ESTAVA ERRADA, e fica registrada porque
+// o erro é instrutivo. Ela dizia que o corpo vazio era um HANDSHAKE — a câmera
+// anunciando e esperando a resposta antes de enviar — e que responder `ok` em
+// texto puro a fazia desistir. Era teoria construída sobre a AUSÊNCIA de dado.
 //
-// O envelope segue o mesmo dos receptores de webhook deste projeto
-// (`{"code":0,...}`), que é o que o ecossistema Jimi usa e a câmera
-// presumivelmente espera.
+// O `tcpdump` de 19/08/2026 (400AD_3) desmentiu: a câmera manda a lista INTEIRA,
+// de uma vez, logo depois dos cabeçalhos. Quem perde o corpo somos nós — corpo
+// `chunked` acima de **16 KB** é descartado entre o Apache e o PHP-FPM (busca
+// binária no servidor: 16.293 B chegam, 16.699 B viram zero, sem erro em log
+// nenhum). Ver a pendência 2 do STATUS.md.
+//
+// O envelope JSON FICA: é o mesmo dos outros receptores deste projeto, e não
+// custa nada. Mas ele não é o que faz o corpo chegar — acreditar que era é o
+// que manteve esta investigação parada.
 http_response_code(200);
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode(['code' => 0, 'message' => 'success'], JSON_UNESCAPED_UNICODE) . "\n";

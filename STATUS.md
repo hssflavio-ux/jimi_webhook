@@ -391,11 +391,57 @@
 >    Destravado agora que o religamento funciona. Sugestão: começar por um dia
 >    só, conferir a taxa de religamento, e só então rodar o resto — com intervalo
 >    entre os disparos, para não afogar a câmera nem a franquia do SIM.
-> 2. **`FILELIST` sobe com corpo VAZIO.** As três câmeras chamam de volta em
->    1–3 s, com `Transfer-Encoding: chunked` e `corpo_bytes: 0`. Já descartados:
->    infraestrutura (POST chunked entrega o corpo — medido com dois POSTs de
->    controle, 17 e 28 bytes) e cartão vazio (`TFcard` com 4+ GB). Pista aberta:
->    as duas estavam com **`ACC: OFF`**; repetir com veículo em operação.
+> 2. 🔴 **`FILELIST`: RESOLVIDO O DIAGNÓSTICO em 19/08/2026 — a câmera manda a
+>    lista inteira, e nós é que perdemos.** Medido na 400AD_3
+>    (`864993060392306`) com `tcpdump` na porta 80 enquanto o comando era
+>    disparado. O que ela transmite:
+>
+>    ```
+>    POST /filelist/864993060392306 HTTP/1.1
+>    Content-Type: application/json
+>    Transfer-Encoding: chunked
+>    2000                                  ← 0x2000 = 8192, tamanho do chunk
+>    {"imei":"864993060392306","fileNameList":"2026_08_16_05_33_58_01.ts,…"}
+>    ```
+>
+>    **O formato é JSON com `imei` e `fileNameList`** (nomes `.ts` separados por
+>    vírgula, sufixo `_01`/`_02` = câmera frontal/interna) — layout que ninguém
+>    publica e que agora está medido, não suposto.
+>
+>    **A causa: corpo `chunked` acima de 16 KB é descartado em silêncio entre o
+>    Apache e o PHP-FPM.** Busca binária no próprio servidor:
+>
+>    | corpo enviado | chegou ao `php://input` |
+>    |---|---|
+>    | 13.043 B | 13.043 ✓ |
+>    | 16.293 B | 16.293 ✓ |
+>    | 16.699 B | **0** 🔴 |
+>    | 39.043 B | **0** 🔴 |
+>
+>    Fronteira cravada em **16.384 (16 K)** — número de buffer, não de
+>    protocolo. Sem erro no `error.log`, HTTP 200 normal, `LimitRequestBody`
+>    ausente e `post_max_size = 8M` (folgadíssimo). A lista real da 400AD_3 tem
+>    milhares de nomes e passa MUITO dos 16 K, então cai sempre.
+>
+>    ⚠️ **A conclusão anterior ("infraestrutura descartada") estava errada, e o
+>    motivo é instrutivo**: os POSTs de controle tinham 17 e 28 bytes. O teste
+>    reproduziu o *protocolo* e não o *tamanho* — e o tamanho era a variável. A
+>    pista do `ACC: OFF` também não era: a captura acima foi feita com `ACC: OFF`
+>    e a câmera transmitiu a lista completa assim mesmo.
+>
+>    **Assinatura para reconhecer o defeito**: nas capturas de campo sobra
+>    `HTTP_TRANSFER_ENCODING: chunked` e falta `CONTENT_LENGTH`. Quando o Apache
+>    processa chunked de verdade é o inverso — ele consome o `Transfer-Encoding`
+>    e injeta o `Content-Length` (conferido: um POST chunked de 54 bytes chega
+>    com `CONTENT_LENGTH=54` e sem `Transfer-Encoding`).
+>
+>    **Correção proposta, NÃO aplicada** (mexe na config do Apache em produção e
+>    precisa de autorização): forçar o Apache a bufferizar o corpo desta rota e
+>    entregá-lo com `Content-Length`, escopado só em `/filelist` —
+>    `SetEnv proxy-sendcl 1` e/ou `mod_buffer` (`SetInputFilter BUFFER`).
+>    Precisa ser MEDIDO depois de aplicado: a mesma busca binária tem de passar
+>    acima de 16 K. Enquanto não for aplicada, o `FILELIST` continua inútil — o
+>    parser da FASE 1 não tem o que parsear.
 > 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
 >    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
 >    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
