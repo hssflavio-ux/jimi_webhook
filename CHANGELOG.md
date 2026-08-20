@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.36
+
+**A linha da lista de gravações, refeita.** O sintoma relatado era o botão *Extrair* passando por cima do texto; a causa era `white-space:nowrap` sem `overflow` — o texto transbordava do flex e era pintado sob o botão. Mas o texto que transbordava era justamente o que não precisava estar ali.
+
+### Fixed
+- 🔴 **Texto sobre o botão.** `.tl-meta` ganhou `min-width:0` + `overflow:hidden` + `text-overflow:ellipsis`; a hora e a ação ganharam `flex:0 0 auto`. **Quem encolhe é a descrição** — a chave de leitura e a ação nunca somem para caber texto.
+- 🔴 **Vídeo extraído aparecia no bloco ERRADO.** A tolerância de ±120 s da unificação vinha do JT/T, onde a gravação dura minutos; no JIMI o bloco tem **um minuto**, e ±120 s abrange **cinco blocos**. Visto na tela: um arquivo de `22:00:46` renderizado na linha das `22:02:46`. Agora são duas passadas — primeiro contenção EXATA (o caso do `HVIDEO`, cujo nome traz o início do bloco), e só o que sobra disputa a folga antiga.
+
+### Changed
+- **A linha diz o que varia, e só isso.** Saíram: `Gravação CH1` e `· CH1` (a mesma informação, duas vezes, já fixada no filtro de canal — 500 repetições de um dado constante); a data completa em toda linha (virou **separador de dia**, sticky, dito uma vez); e o nome do arquivo (`EVENT_…_I_02.ts`), que é identificação técnica e foi para o `title`. Ficou `● 22:06:46 · 1 min · 4,2 MB`, com a hora em `tabular-nums` para as colunas alinharem na vertical — é o que torna 500 linhas varríveis com o olho.
+- **Badge só no estado excepcional.** `NO CARTÃO` aparecia em 500 linhas de 500 e comia um quarto da largura da coluna, esmagando a duração até `1 …`. Quem não tem badge tem o botão *Extrair*, que já diz o que a linha é; o estado continua no `title`, para leitor de tela e para o mouse.
+- **`cursor:pointer` só onde o clique faz algo** — a lista inteira fingia ser clicável.
+
+### Notes
+- ⚠️ **A guarda contra a sobreposição precisou de um teste que FALHASSE primeiro.** A primeira versão media o conteúdo real (`1 min`), que é curto demais para transbordar: passava com o defeito no lugar. O teste agora **força um texto absurdo** e mede as caixas — foi verificado removendo a correção de propósito (falha) e recolocando (passa). Geometria, não marcação: `nowrap` sem `overflow` produz HTML perfeitamente válido.
+
 ## [Unreleased] — 4.9.35
 
 **O vídeo chegava ao servidor e o sistema não sabia.** Achado durante o teste da v4.9.34 nas câmeras reais: o `[Extrair]` do playback disse "Solicitado", a câmera subiu o arquivo, o `105 — Upload de Vídeo Concluído` chegou com o nome certo — e o item continuou "No cartão". O arquivo estava íntegro no disco.

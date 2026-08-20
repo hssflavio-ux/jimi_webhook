@@ -144,6 +144,7 @@
 > | 4.9.33 | Apache descartava o corpo do `FILELIST` acima de 16 KB | `docs/apache/filelist-chunked.conf` |
 > | 4.9.34 | A lista do `FILELIST` chegava e ninguém a lia; playback falava JT/T com câmera JIMI | `includes/filelist.php`, `video_playback.php` |
 > | 4.9.35 | Vídeo chegava ao servidor e o sistema não sabia; 3.021 blocos de 1 min viravam lista ilegível | `includes/media.php`, `pushalarm.php`, `video_playback.php` |
+> | 4.9.36 | Botão por cima do texto; e vídeo extraído caía no bloco errado (±120 s = 5 blocos) | `video_playback.php` |
 >
 > **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
 > falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
@@ -632,6 +633,27 @@
 >    `/filelist/{imei}`, o endpoint real). Sem isso ele dependia de dado que
 >    vence em 30 min: passava hoje e pulava amanhã, sem ninguém perceber que a
 >    barra deixou de ser verificada.
+>
+> 12. ✅ **A linha da lista, refeita — v4.9.36.** Relatado como "o botão passa
+>    por cima do texto"; a causa era `white-space:nowrap` sem `overflow`. Mas o
+>    texto que transbordava era o que não precisava existir: `Gravação CH1` e
+>    `· CH1` diziam a mesma coisa duas vezes (e o canal já está no filtro), a
+>    data se repetia em 500 linhas, e o nome do arquivo é identificação técnica.
+>    Sobrou `● 22:06:46 · 1 min · 4,2 MB`, com separador de dia e hora em
+>    `tabular-nums`. O badge `NO CARTÃO`, que aparecia em 500 linhas de 500 e
+>    comia um quarto da coluna, saiu — ficou só o excepcional (`Disponível`).
+>
+>    🔴 **E a tela revelou um segundo defeito, este de dado**: o vídeo extraído
+>    aparecia no bloco ERRADO. A folga de ±120 s da unificação vinha do JT/T,
+>    onde a gravação dura minutos; no JIMI o bloco tem UM MINUTO e ±120 s
+>    abrange CINCO. Um arquivo de `22:00:46` renderizava na linha das
+>    `22:02:46`. Agora a contenção exata casa primeiro.
+>
+>    ⚠️ **A guarda contra a sobreposição só virou guarda de verdade na segunda
+>    tentativa.** A primeira media o texto REAL (`1 min`), curto demais para
+>    transbordar — passava com o defeito no lugar. Ela agora força um texto
+>    absurdo e mede as caixas; verificado removendo a correção (falha) e
+>    recolocando (passa).
 > 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
 >    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
 >    apontar. Depende do fornecedor (item 5).

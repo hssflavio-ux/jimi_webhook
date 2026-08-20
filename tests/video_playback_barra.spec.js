@@ -16,6 +16,11 @@
  * O resto trava o que a barra promete: uma faixa por canal, segmentos que são
  * SESSÕES (não os 3.021 blocos de um minuto, que virariam uma mancha sólida
  * mentindo "gravou o tempo todo") e o clique que leva à lista.
+ *
+ * O segundo bloco cobre a LISTA, pelo mesmo motivo de método: o botão
+ * [Extrair] passava por cima do texto e nenhuma verificação de HTML pegava —
+ * o HTML estava correto, a GEOMETRIA é que não. Por isso a asserção é de
+ * caixas, não de marcação.
  */
 const { test, expect, hasCreds } = require('./fixtures/auth');
 
@@ -188,5 +193,63 @@ test.describe('Playback — barra do período', () => {
         expect(await authedPage.locator('.timeline-item.alvo').count()).toBe(0);
         await authedPage.locator('rect.pb-sessao').first().click();
         await expect(authedPage.locator('.timeline-item.alvo')).toHaveCount(1);
+    });
+});
+
+test.describe('Playback — lista de gravações', () => {
+    test('🔴 o texto da linha nunca invade o botão', async ({ authedPage }) => {
+        test.setTimeout(150000);
+        await authedPage.goto('/video/playback');
+        const { imei } = await abrirComSessoes(authedPage, authedPage.request);
+        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
+
+        const linhas = authedPage.locator('.timeline-item');
+        expect(await linhas.count(), 'a lista precisa ter linhas').toBeGreaterThan(0);
+
+        // ⚠️ O TEXTO REAL É CURTO ("1 min"), e com ele a colisão não acontece
+        // nem sem a correção — um teste que só medisse o conteúdo atual PASSA
+        // com o defeito no lugar, e vira decoração. O contrato a travar é o do
+        // LAYOUT: por mais longo que o texto fique, ele encolhe, e a ação não.
+        // Então o teste força um texto absurdo e mede.
+        const medida = await linhas.first().evaluate((it) => {
+            const meta = it.querySelector('.tl-meta');
+            const acao = it.querySelector('.pb-extract') || it.querySelector('.pb-badge');
+            if (!meta || !acao) return null;
+            const original = meta.textContent;
+            meta.textContent = 'descrição deliberadamente longa '.repeat(12);
+            const a = meta.getBoundingClientRect(), b = acao.getBoundingClientRect();
+            const r = {
+                invade: a.right > b.left + 0.5,
+                acaoVisivel: b.width > 1,
+                truncou: meta.scrollWidth > meta.clientWidth,
+            };
+            meta.textContent = original;
+            return r;
+        });
+        expect(medida, 'a linha precisa ter texto e ação').not.toBeNull();
+        expect(medida.invade, 'texto longo NÃO pode ser pintado sobre a ação').toBeFalsy();
+        expect(medida.acaoVisivel, 'a ação não pode ser espremida a zero').toBeTruthy();
+        expect(medida.truncou, 'o texto que não cabe tem de ser truncado, não transbordar').toBeTruthy();
+
+        // Com o conteúdo REAL, nada pode estar cortado: se a duração aparece
+        // como "1 …", o layout perdeu a briga por espaço.
+        const cortados = await linhas.locator('.tl-meta').evaluateAll((ms) =>
+            ms.slice(0, 30).filter((m) => m.scrollWidth > m.clientWidth + 1).length);
+        expect(cortados, 'a duração não pode ser cortada na largura padrão').toBe(0);
+    });
+
+    test('a data é dita uma vez por dia, não em toda linha', async ({ authedPage }) => {
+        test.setTimeout(150000);
+        await authedPage.goto('/video/playback');
+        const { imei } = await abrirComSessoes(authedPage, authedPage.request);
+        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
+
+        const dias = await authedPage.locator('.tl-dia').allTextContents();
+        expect(dias.length, 'a lista precisa de separador de dia').toBeGreaterThan(0);
+        expect(new Set(dias).size, 'cada dia aparece uma única vez').toBe(dias.length);
+
+        // A hora fica na linha; a data, não — era ela que se repetia 500 vezes.
+        const horas = await authedPage.locator('.tl-hora').first().textContent();
+        expect((horas || '').trim()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     });
 });

@@ -251,22 +251,44 @@ if ($requested && $selImei) {
         return $toTs($doNome ?: ($m['event_time'] ?? null));
     };
 
+    // 🔴 DUAS PASSADAS, e a primeira é sem tolerância nenhuma (v4.9.36).
+    //
+    // A folga de ±120 s vinha do JT/T, onde uma gravação dura minutos e o
+    // instante do arquivo é aproximado. No JIMI o bloco tem UM MINUTO: ±120 s
+    // abrange CINCO blocos, e o vídeo extraído grudava no bloco vizinho — visto
+    // na tela, um arquivo de 22:00:46 aparecendo na linha das 22:02:46. Errado
+    // em silêncio, que é o pior jeito: a linha existe, tem vídeo, e é o minuto
+    // errado.
+    //
+    // Agora o arquivo cujo instante cai DENTRO da janela da gravação casa
+    // primeiro — é o caso do `HVIDEO`, cujo nome traz exatamente o início do
+    // bloco. Só o que sobrar disputa a folga antiga.
+    $instantes = [];
+    foreach ($mediaFiles as $mi => $m) $instantes[$mi] = $instanteDoArquivo($m);
+
     $mediaUsed = [];
-    foreach ($resources as $r) {
-        $rs = $toTs($r['start_time']);
-        $re = $toTs($r['end_time']) ?: $rs;
-        $match = null;
-        if ($rs !== null) {
-            foreach ($mediaFiles as $mi => $m) {
-                if (isset($mediaUsed[$mi])) continue;
-                $mt = $instanteDoArquivo($m);
-                if ($mt !== null && $mt >= $rs - 120 && $mt <= $re + 120) {
-                    $match = $m;
+    $casamento = [];
+    foreach ([0, 120] as $tolerancia) {
+        foreach ($resources as $ri => $r) {
+            if (isset($casamento[$ri])) continue;
+            $rs = $toTs($r['start_time']);
+            if ($rs === null) continue;
+            $re = $toTs($r['end_time']) ?: $rs;
+            foreach ($instantes as $mi => $mt) {
+                if ($mt === null || isset($mediaUsed[$mi])) continue;
+                if ($mt >= $rs - $tolerancia && $mt <= $re + $tolerancia) {
+                    $casamento[$ri] = $mediaFiles[$mi];
                     $mediaUsed[$mi] = true;
                     break;
                 }
             }
         }
+    }
+
+    foreach ($resources as $ri => $r) {
+        $rs = $toTs($r['start_time']);
+        $re = $toTs($r['end_time']) ?: $rs;
+        $match = $casamento[$ri] ?? null;
         $recordings[] = [
             'kind'       => $match ? 'available' : 'device',
             'media'      => $match,
@@ -364,16 +386,30 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mp
 <style>
 .vid-bg{background:#0a0b0d;border-radius:var(--radius-lg);overflow:hidden;min-height:360px;display:flex;align-items:center;justify-content:center;}
 .vid-bg video{width:100%;display:block;max-height:460px;}
-.timeline-item{cursor:pointer;padding:10px 14px;border-bottom:1px solid var(--hairline-soft);display:flex;align-items:center;gap:12px;transition:background .1s;}
+/* ── Item da linha do tempo ──────────────────────────────────────────────
+   🔴 `min-width:0` + `overflow:hidden` no .tl-meta é a correção do defeito:
+   sem eles, um texto `nowrap` transborda do flex e é pintado POR BAIXO do
+   botão. Quem encolhe é o texto; o botão e a hora nunca (`flex:0 0 auto`) —
+   a ação e a chave de leitura não podem sumir para caber descrição. */
+.timeline-item{padding:9px 14px;border-bottom:1px solid var(--hairline-soft);display:flex;align-items:center;gap:10px;transition:background .1s;}
+.timeline-item.clicavel{cursor:pointer;}   /* só é ponteiro o que faz algo ao clicar */
 .timeline-item:hover{background:var(--canvas-soft);}
-.timeline-item.selected{background:var(--primary-soft);border-left:3px solid var(--primary);}
-.timeline-time{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);white-space:nowrap;}
+.timeline-item.selected{background:var(--primary-soft);box-shadow:inset 3px 0 0 var(--primary);}
+.tl-hora{flex:0 0 auto;font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--ink);
+         font-variant-numeric:tabular-nums;letter-spacing:-.2px;}
+.tl-meta{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+         font-size:11px;color:var(--muted);}
+/* Separador de dia: a data é dita UMA vez, e continua visível ao rolar. */
+.tl-dia{position:sticky;top:0;z-index:1;background:var(--canvas);padding:6px 14px 4px;
+        font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+        color:var(--muted);border-bottom:1px solid var(--hairline);}
+.tl-dia + .timeline-item{border-top:0;}
 .timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--primary);flex-shrink:0;}
 .timeline-dot.on-device{background:var(--muted-soft);}
-.pb-badge{font-size:10px;font-weight:600;text-transform:uppercase;padding:2px 8px;border-radius:100px;white-space:nowrap;}
+.pb-badge{flex:0 0 auto;font-size:10px;font-weight:600;text-transform:uppercase;padding:2px 8px;border-radius:100px;white-space:nowrap;}
 .pb-badge.available{background:var(--primary-soft);color:var(--primary);}
 .pb-badge.on-device{background:var(--canvas-soft);color:var(--muted);border:1px solid var(--hairline);}
-.pb-extract{font-size:11px;padding:4px 10px;white-space:nowrap;}
+.pb-extract{flex:0 0 auto;font-size:11px;padding:4px 10px;white-space:nowrap;}
 /* ── Barra do período (v4.9.35) ─────────────────────────────────────────── */
 .pb-barra svg{overflow:visible;}
 .pb-trilho{fill:var(--canvas-soft);stroke:var(--hairline);stroke-width:.6;}
@@ -671,6 +707,29 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
             </div>
             <?php else: ?>
+            <?php
+            // ── Item da linha do tempo (v4.9.36) ───────────────────────────
+            //
+            // 🔴 O defeito visível era o botão [Extrair] passando por cima do
+            // texto: `.timeline-time` tinha `white-space:nowrap` e NENHUM
+            // `overflow`, então transbordava do pai e era pintado sob o botão.
+            // Clipar resolveria o sintoma — mas o texto que transbordava era
+            // justamente o que NÃO precisava estar ali:
+            //
+            //   • `Gravação CH1` e `· CH1` diziam a MESMA coisa, duas vezes, e
+            //     o canal já está fixado no filtro logo acima: em 500 linhas,
+            //     500 repetições de um dado que não varia.
+            //   • `19/08/2026` se repetia em toda linha; o que varia é a hora.
+            //     Vira separador de dia, dito UMA vez.
+            //   • O nome do arquivo (`EVENT_..._I_02.ts`) é identificação
+            //     técnica, não informação de leitura: foi para o `title`, onde
+            //     quem precisa acha e quem não precisa não tropeça.
+            //
+            // O que sobra é o que o operador procura: HORA, duração, tamanho.
+            // A hora ganha `tabular-nums` para as colunas alinharem na vertical
+            // — é o que torna uma lista de 500 linhas varrível com o olho.
+            $diaAnterior = null;
+            ?>
             <?php foreach ($recordings as $rec): ?>
             <?php
                 $isAvailable = $rec['kind'] === 'available';
@@ -679,41 +738,55 @@ require_once __DIR__ . '/../web/layout_base.php';
                 if ($rec['time_start'] && $rec['time_end']) {
                     $durSecs = strtotime($rec['time_end']) - strtotime($rec['time_start']);
                     if ($durSecs > 0) {
-                        $durTxt = $durSecs >= 60 ? floor($durSecs / 60) . 'min' . ($durSecs % 60 ? str_pad($durSecs % 60, 2, '0', STR_PAD_LEFT) . 's' : '') : $durSecs . 's';
+                        $durTxt = $durSecs >= 60
+                            ? floor($durSecs / 60) . ' min' . ($durSecs % 60 ? ' ' . ($durSecs % 60) . ' s' : '')
+                            : $durSecs . ' s';
                     }
                 }
+                $meta = array_filter([
+                    $durTxt,
+                    $rec['file_size'] ? number_format($rec['file_size'] / 1024 / 1024, 1, ',', '.') . ' MB' : '',
+                ]);
+                // Nome do arquivo no `title`: é o que liga a linha ao arquivo no
+                // disco quando alguém precisa investigar, sem poluir a leitura.
+                $titulo = $isAvailable
+                    ? ($rec['file_name'] ?? 'Gravação disponível no servidor')
+                    : 'Gravação no cartão · CH' . $rec['channel'];
+                $dia = $rec['time_start'] ? fmt_brt($rec['time_start'], 'd/m/Y') : '—';
             ?>
-            <div class="timeline-item" data-ts="<?= htmlspecialchars((string)$rec['time_start']) ?>" <?= $isAvailable ? 'onclick="selectRecording(this, ' . htmlspecialchars(json_encode($media)) . ')"' : '' ?>>
-                <div class="timeline-dot <?= $isAvailable ? '' : 'on-device' ?>"></div>
-                <div style="flex:1;min-width:0;">
-                    <div style="font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;">
-                        <span class="pb-badge <?= $isAvailable ? 'available' : 'on-device' ?>"><?= $isAvailable ? 'Disponível' : 'No cartão' ?></span>
-                        <span style="overflow:hidden;text-overflow:ellipsis;"><?= htmlspecialchars($isAvailable ? ($rec['file_name'] ?? 'Gravação') : 'Gravação CH' . $rec['channel']) ?></span>
-                    </div>
-                    <div class="timeline-time">
-                        <?= fmt_brt($rec['time_start'], 'd/m/Y H:i:s') ?>
-                        <?php if ($durTxt): ?>
-                        · <?= $durTxt ?>
-                        <?php endif; ?>
-                        <?php if ($rec['file_size']): ?>
-                        · <?= number_format($rec['file_size']/1024/1024, 1) ?> MB
-                        <?php endif; ?>
-                        <?php if ($rec['channel']): ?>
-                        · CH<?= $rec['channel'] ?>
-                        <?php endif; ?>
-                    </div>
-                </div>
+            <?php if ($dia !== $diaAnterior): $diaAnterior = $dia; ?>
+            <div class="tl-dia"><?= $dia ?></div>
+            <?php endif; ?>
+            <div class="timeline-item<?= $isAvailable ? ' clicavel' : '' ?>"
+                 data-ts="<?= htmlspecialchars((string)$rec['time_start']) ?>"
+                 title="<?= htmlspecialchars($titulo) ?>"
+                 <?= $isAvailable ? 'onclick="selectRecording(this, ' . htmlspecialchars(json_encode($media)) . ')"' : '' ?>>
+                <span class="timeline-dot <?= $isAvailable ? '' : 'on-device' ?>"></span>
+                <span class="tl-hora"><?= $rec['time_start'] ? fmt_brt($rec['time_start'], 'H:i:s') : '--:--:--' ?></span>
+                <span class="tl-meta"><?= htmlspecialchars(implode(' · ', $meta)) ?></span>
+                <?php /* Badge só no estado EXCEPCIONAL. "No cartão" é o estado
+                         de 500 linhas em 500: repeti-lo custava um quarto da
+                         largura da coluna e esmagava a duração até "1 …" — o
+                         mesmo erro de repetir o que não varia. Quem não tem
+                         badge tem o botão [Extrair], que já diz o que a linha
+                         é; e o estado continua no `title` da linha, para leitor
+                         de tela e para quem passa o mouse. */ ?>
+                <?php if ($isAvailable): ?>
+                <span class="pb-badge available">Disponível</span>
+                <?php endif; ?>
                 <?php if (!$isAvailable && $selProtocol === 'JIMI' && $rec['hvideo']): ?>
                 <?php /* JIMI: `HVIDEO,<carimbo>,<câmera>` — o mesmo comando que
                          o reenvio de vídeo de alarme usa em produção. Não é o
                          37382: aquele é JT/T, e mandá-lo para uma câmera JIMI
                          é o "enviado com sucesso" que nunca produz arquivo. */ ?>
                 <button class="btn btn-outline btn-sm pb-extract"
+                        title="Pedir este minuto à câmera"
                         onclick="requestExtractJimi(event, this, '<?= htmlspecialchars($rec['hvideo'], ENT_QUOTES) ?>')">
                     &#8681; Extrair
                 </button>
                 <?php elseif (!$isAvailable && $selProtocol !== 'JIMI' && $rec['begin_c']): ?>
                 <button class="btn btn-outline btn-sm pb-extract"
+                        title="Pedir esta gravação à câmera"
                         onclick="requestExtract(event, this, <?= $rec['channel'] ?>, '<?= $rec['begin_c'] ?>', '<?= $rec['end_c'] ?>')">
                     &#8681; Extrair
                 </button>
