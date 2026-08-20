@@ -1145,6 +1145,31 @@ function pbOferecerConfig(imei, msg) {
         + '</div>';
 }
 
+/**
+ * Submete o formulário do playback a partir do JavaScript.
+ *
+ * 🔴 `form.submit()` NÃO INCLUI O BOTÃO QUE SUBMETEU. O `request=1` mora no
+ * próprio botão (`<button type="submit" name="request" value="1">`), e ele só
+ * entra na query quando o envio parte de um CLIQUE. Submetendo por script, a
+ * página recarregava sem `request`, `$requested` ficava falso e a tela voltava
+ * ao estado inicial: sem barra e sem lista. O sintoma — "requisitei e a barra
+ * não apareceu" — não tinha nada a ver com a câmera, que tinha respondido e
+ * subido a lista inteira; era esta linha.
+ *
+ * Nasceu com a espera pela resposta do equipamento (v4.9.38): antes disso o
+ * envio era um clique de verdade e o parâmetro vinha junto.
+ */
+function pbSubmeterForm() {
+    var form = document.getElementById('playback-form');
+    if (!form) return;
+    if (!form.querySelector('input[name="request"]')) {
+        var h = document.createElement('input');
+        h.type = 'hidden'; h.name = 'request'; h.value = '1';
+        form.appendChild(h);
+    }
+    form.submit();
+}
+
 function onSubmitRequest(e) {
     var imei = document.getElementById('pb-imei').value;
     var from = document.querySelector('input[name=date_from]').value;
@@ -1162,7 +1187,7 @@ function onSubmitRequest(e) {
         var bt = document.querySelector('#playback-form button[type=submit]');
         if (bt) { bt.disabled = true; bt.innerHTML = '&#8230; Pedindo à câmera'; }
         pbRequestJimi(imei, function (ok) {
-            if (ok) { document.getElementById('playback-form').submit(); return; }
+            if (ok) { pbSubmeterForm(); return; }
             if (bt) { bt.disabled = false; bt.innerHTML = '&#128269; Requisitar Gravações'; }
         });
         return false;

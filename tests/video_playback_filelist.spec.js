@@ -160,6 +160,34 @@ test.describe('Playback — despacho de comandos', () => {
         await expect(bt).toContainText(/requisitar/i);
     });
 
+    test('🔴 requisitar pelo BOTÃO leva `request=1` — senão a tela volta vazia', async ({ authedPage }) => {
+        // 🔴 O TESTE QUE FALTAVA, e o defeito que ele existe para pegar foi
+        // relatado do campo: "requisitei das 3 câmeras e não apareceu a barra".
+        // A câmera tinha respondido e subido a lista inteira; o problema era
+        // que `form.submit()` chamado por script NÃO inclui o botão que
+        // submeteu — e o `request=1` mora no botão. A página recarregava sem
+        // ele, `$requested` ficava falso, e a tela voltava ao estado inicial.
+        //
+        // Os outros testes chamavam `pbRequestJimi()` direto e nunca passavam
+        // pelo formulário: por isso todos passavam com o defeito no lugar.
+        await capturarEnvios(authedPage);
+        await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 2);
+        await authedPage.evaluate(() => {
+            document.querySelector('input[name=date_from]').value = '2026-08-19';
+            document.querySelector('input[name=date_to]').value = '2026-08-19';
+        });
+
+        await Promise.all([
+            authedPage.waitForURL(/[?&]request=1/, { timeout: 20000 }),
+            authedPage.locator('#playback-form button[type=submit]').click(),
+        ]);
+
+        const url = new URL(authedPage.url());
+        expect(url.searchParams.get('request'), 'sem request=1 a tela renderiza vazia').toBe('1');
+        expect(url.searchParams.get('imei'), 'o equipamento tem de viajar junto').toBe(IMEI_FAKE);
+        expect(url.searchParams.get('date_from'), 'e o período também').toBe('2026-08-19');
+    });
+
     test('🔴 configurar o endereço é ação SEPARADA e explícita', async ({ authedPage }) => {
         const enviados = await capturarEnvios(authedPage);
         await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 2);
