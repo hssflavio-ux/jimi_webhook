@@ -360,6 +360,35 @@ class PushAlarmHandler extends WebhookHandler {
             // Fora do try/catch do INSERT de propósito: falhar aqui não pode
             // desfazer o alarme, que já está gravado e é o dado que importa.
             if ($fileUrl) {
+                // ── Registrar o anexo, gere ocorrência ou não (v4.9.35) ─────
+                //
+                // 🔴 Até aqui o único caminho que criava linha em `media_files`
+                // era o motor de ocorrências — então o arquivo só ficava
+                // visível se o alarme gerasse ocorrência. Evento de
+                // DIAGNÓSTICO não gera: e o `105 — Upload de Vídeo Concluído`,
+                // que é exatamente quem anuncia vídeo EXTRAÍDO a pedido, é
+                // diagnóstico. Medido em produção em 20/08/2026: 7 dos 12
+                // eventos `105` das últimas 48 h tinham o arquivo no disco e
+                // nenhuma linha em `media_files`.
+                //
+                // Roda ANTES do religamento: se o arquivo for a resposta a um
+                // pedido, a linha já existe quando o alarme dono o adota.
+                // ⚠️ Grava `file_url` COMO O DEVICE O ANUNCIOU, inclusive quando
+                // ele traz DOIS arquivos separados por vírgula (a JIMI anuncia
+                // as duas câmeras num campo só). Partir aqui criaria linhas que
+                // o `link_media_to_occurrence()` não reconheceria — ele casa
+                // pela string inteira —, e o mesmo alarme acabaria com três
+                // linhas em vez de uma. Quem separa na hora de tocar é o
+                // `media_pick()`.
+                try {
+                    require_once __DIR__ . '/../includes/media.php';
+                    media_register_file($this->db, (string)$imei, (string)$fileUrl, $alarmTime);
+                } catch (Throwable $e) {
+                    Logger::error('Falha ao registrar anexo do alarme: ' . $e->getMessage(), [
+                        'source' => $this->handlerName, 'imei' => $imei, 'file' => $fileUrl,
+                    ]);
+                }
+
                 try {
                     require_once __DIR__ . '/../includes/alarm_video_request.php';
                     foreach (explode(',', (string)$fileUrl) as $umArquivo) {

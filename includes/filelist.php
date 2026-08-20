@@ -365,3 +365,85 @@ function filelist_persistir(PDO $db, string $imei, array $entradas, ?string $cap
 
     return ['gravados' => $gravados, 'erros' => $erros, 'captura' => $capturaEm];
 }
+
+/**
+ * Folga máxima entre um bloco e o seguinte para que continuem na MESMA sessão.
+ *
+ * Duas vezes o bloco nominal: até dois minutos sem gravar ainda é a mesma
+ * "vez que o veículo rodou". O número não é chute — foi calibrado na captura
+ * real da 400AD_3, e o critério foi a CONCORDÂNCIA ENTRE OS CANAIS, já que as
+ * duas câmeras gravam juntas e têm de produzir o mesmo número de sessões:
+ *
+ *     gap  30 s → CH1 48, CH2 54   ← discordam
+ *     gap  60 s → CH1 48, CH2 48
+ *     gap 120 s → CH1 47, CH2 47   ← escolhido
+ *     gap 180 s → CH1 45, CH2 46   ← discordam
+ */
+const FILELIST_SESSAO_GAP_SEGUNDOS = 120;
+
+/**
+ * Funde blocos contíguos em SESSÕES de gravação, por canal.
+ *
+ * 🔴 POR QUE ISTO EXISTE. O cartão é picado em blocos de um minuto: a 400AD_3
+ * tem 3.021 deles em 3,7 dias. Como lista, são 3.021 linhas idênticas; como
+ * informação, são **47 sessões** por canal, de 32 min em média, somando 25 h
+ * gravadas — ou seja, dois terços do período NÃO existem no cartão. Nenhuma
+ * lista comunica isso, e desenhar 3.021 traços numa barra de 900 px produz uma
+ * mancha sólida que **mente**, dizendo "gravou o tempo todo".
+ *
+ * Aceita tanto a saída de `filelist_parse()` quanto linhas cruas de
+ * `resource_lists` — as duas descrevem a mesma coisa com nomes diferentes de
+ * coluna, e exigir conversão no chamador só criaria lugar para errar.
+ *
+ * @param array $blocos Cada item com canal (`channel`|`channel_id`), início
+ *                      (`start_utc`|`start_time`) e, opcionalmente, fim
+ *                      (`end_utc`|`end_time`; ausente = início + um bloco)
+ * @param int   $gap    Folga máxima, em segundos, entre fim e próximo início
+ * @returns array<int, array<int, array{inicio:string, fim:string, blocos:int, segundos:int}>>
+ *          canal => sessões em ordem cronológica; instantes em UTC
+ */
+function filelist_sessoes(array $blocos, int $gap = FILELIST_SESSAO_GAP_SEGUNDOS): array
+{
+    $porCanal = [];
+    foreach ($blocos as $b) {
+        $canal = (int)($b['channel'] ?? $b['channel_id'] ?? 0);
+        $ini   = (string)($b['start_utc'] ?? $b['start_time'] ?? '');
+        if ($ini === '') continue;
+        $fim = (string)($b['end_utc'] ?? $b['end_time'] ?? '');
+
+        $tIni = strtotime($ini . ' UTC');
+        if ($tIni === false) continue;
+        $tFim = $fim !== '' ? strtotime($fim . ' UTC') : false;
+        // Sem fim declarado, vale o bloco nominal — e um fim ANTES do início
+        // (dado corrompido) não pode encolher a sessão para trás.
+        if ($tFim === false || $tFim < $tIni) $tFim = $tIni + FILELIST_BLOCO_SEGUNDOS;
+
+        $porCanal[$canal][] = [$tIni, $tFim];
+    }
+
+    $saida = [];
+    foreach ($porCanal as $canal => $lista) {
+        usort($lista, fn($a, $b) => $a[0] <=> $b[0]);
+        $sessoes = [];
+        $ini = $lista[0][0];
+        $fim = $lista[0][1];
+        $n   = 1;
+        for ($i = 1; $i < count($lista); $i++) {
+            [$bi, $bf] = $lista[$i];
+            if ($bi - $fim > $gap) {
+                $sessoes[] = ['inicio' => gmdate('Y-m-d H:i:s', $ini), 'fim' => gmdate('Y-m-d H:i:s', $fim),
+                              'blocos' => $n, 'segundos' => $fim - $ini];
+                $ini = $bi; $fim = $bf; $n = 1;
+                continue;
+            }
+            $fim = max($fim, $bf);   // blocos podem se sobrepor
+            $n++;
+        }
+        $sessoes[] = ['inicio' => gmdate('Y-m-d H:i:s', $ini), 'fim' => gmdate('Y-m-d H:i:s', $fim),
+                      'blocos' => $n, 'segundos' => $fim - $ini];
+        $saida[$canal] = $sessoes;
+    }
+
+    ksort($saida);
+    return $saida;
+}

@@ -5,6 +5,26 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.35
+
+**O vídeo chegava ao servidor e o sistema não sabia.** Achado durante o teste da v4.9.34 nas câmeras reais: o `[Extrair]` do playback disse "Solicitado", a câmera subiu o arquivo, o `105 — Upload de Vídeo Concluído` chegou com o nome certo — e o item continuou "No cartão". O arquivo estava íntegro no disco.
+
+### Fixed
+- 🔴 **Anexo de alarme só era registrado quando o alarme gerava OCORRÊNCIA.** O único caminho que inseria em `media_files` era `link_media_to_occurrence()`, dentro do motor de ocorrências. Quem não gera ocorrência ficava invisível: evento de **diagnóstico** — e o `105`, que é justamente quem anuncia vídeo extraído a pedido, é diagnóstico — e alarme sem parâmetro em `occurrence_config_params`. Medido em produção em 20/08/2026: **7 dos 12** eventos `105` das últimas 48 h tinham o arquivo no disco e **nenhuma** linha em `media_files`. Invisíveis para o playback, para a fila de downloads e para a galeria.
+  - O registro passou para `media_register_file()` (`includes/media.php`), ponto **único**, chamado pelo `pushalarm.php` para **todo** alarme com anexo. `link_media_to_occurrence()` delega para ela e continua sendo quem LIGA o anexo à ocorrência — as duas são idempotentes por `file_url`, então a ordem entre elas não importa.
+  - ⚠️ O `file_url` é gravado **como o device o anunciou**, inclusive quando traz DOIS arquivos separados por vírgula (a JIMI anuncia as duas câmeras num campo só). Partir aqui criaria linhas que o motor de ocorrências não reconheceria — ele casa pela string inteira — e o mesmo alarme acabaria com três linhas. Quem separa na hora de tocar é o `media_pick()`.
+
+### Added
+- **Barra do período no playback** — uma faixa horizontal por canal, no mesmo eixo, com as gravações do cartão marcadas. 🔴 Os segmentos são **SESSÕES contíguas**, não os blocos de um minuto: a 400AD_3 tem 3.021 blocos que são **47 sessões** por canal, e desenhar 3.021 traços numa faixa de ~900 px produz uma mancha sólida que **mente**, dizendo "gravou o tempo todo" exatamente onde há buracos. A fusão é `filelist_sessoes()` (`includes/filelist.php`), com folga de 120 s calibrada pela **concordância entre os canais** — as duas câmeras gravam juntas, então têm de dar o mesmo número de sessões (30 s → 48 e 54; 120 s → 47 e 47; 180 s → 45 e 46).
+  - A barra cobre o **período pedido**, não o intervalo gravado: é assim que o vazio fica visível. Na 400AD_3 são 3,7 dias de janela para 25 h gravadas — dois terços do período não existem no cartão, e nenhuma lista comunica isso.
+  - Marcas verdes para o que **já está no servidor**, tooltip nativo do SVG com início/fim/duração em cada sessão, e clique que leva até a sessão na lista (canal diferente recarrega, porque a lista é de um canal só). SVG inline, sem biblioteca — o projeto não tem build step.
+  - Resolve de quebra o teto de 500 itens: com sessões, o período inteiro cabe mesmo quando a lista está truncada.
+
+### Notes
+- **A cadeia do `[Extrair]` foi fechada em câmera real** (400AD e 400AD_3, 20/08/2026): `HVIDEO,<carimbo>,<câmera>` → `HVIDEO:OK!` → a câmera sobe → `105` com `EVENT_…_2026_08_20_10_06_52_F_01.ts`, **o carimbo exato que foi pedido** → linha em `media_files` → o item vira "Disponível" no minuto certo da linha do tempo.
+- ⚠️ **Passivo**: os arquivos que já chegaram antes desta versão continuam sem linha. Eles estão no disco e a correção não os alcança retroativamente — precisa de um backfill, que **não** foi executado.
+- ⚠️ **`filelist_url_base()` devolve `localhost` quando o `.env` não foi carregado**, e `localhost` é um endereço que a câmera *aceita* e nunca alcança. Só o construtor do `Database` lê o `.env` (`config/database.php`), então script CLI que não instancie a conexão antes recebe o fallback. Custou um disparo perdido no teste de campo: a câmera respondeu `FILELIST:OK!` ao endereço e `failed!` ao upload. O `failed!` do comando nu é, aliás, um sinal útil — é o device dizendo que não alcançou o destino.
+
 ## [Unreleased] — 4.9.34
 
 **A lista de gravações do cartão passou a ser LIDA.** A v4.9.33 fez o corpo chegar; ele ia inteiro para `logs/filelist/` e ninguém o abria. Agora o `/filelist` interpreta os nomes e grava em `resource_lists` — a mesma tabela do JT/T —, e a tela de playback trata os dois protocolos pelo mesmo caminho. Verificado contra a captura real da 400AD_3 (78.590 bytes): **3.021 nomes, 3.021 linhas gravadas, zero descartados**.

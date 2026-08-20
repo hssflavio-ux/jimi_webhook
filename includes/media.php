@@ -168,3 +168,78 @@ function media_available(?string $fileUrl): bool
     }
     return false;
 }
+
+/**
+ * Garante que existe linha em `media_files` para um arquivo anunciado por um
+ * alarme, e devolve o id.
+ *
+ * 🔴 POR QUE ISTO EXISTE (v4.9.35). Até aqui o ÚNICO caminho que registrava
+ * anexo de alarme era `link_media_to_occurrence()`, dentro do motor de
+ * ocorrências — ou seja, **o arquivo só ficava visível se o alarme gerasse
+ * ocorrência**. Quem não gera some: evento de diagnóstico (`105 — Upload de
+ * Vídeo Concluído`, que é justamente o que anuncia vídeo EXTRAÍDO a pedido) e
+ * alarme sem parâmetro em `occurrence_config_params`. Medido em produção em
+ * 20/08/2026: **7 dos 12** eventos `105` das últimas 48 h tinham o arquivo no
+ * disco e NENHUMA linha em `media_files` — invisíveis para o playback, para a
+ * fila de downloads e para a galeria, com o vídeo íntegro no servidor.
+ *
+ * O sintoma pelo lado do usuário é o de sempre neste projeto: o `[Extrair]` do
+ * playback diz "Solicitado", a câmera sobe o arquivo, e o item continua "No
+ * cartão" para sempre.
+ *
+ * Idempotente por `file_url`: chamar de novo devolve o id existente. É por isso
+ * que ela pode ser chamada tanto no caminho do alarme quanto no do motor de
+ * ocorrências sem risco de duplicar.
+ *
+ * @param PDO         $db        Conexão ativa
+ * @param string      $imei      Equipamento
+ * @param string      $fileUrl   Nome do arquivo como o device o anunciou
+ * @param string|null $eventTime Instante a gravar (UTC); default: agora
+ * @param string      $origem    `media_files.source_type`
+ * @returns int|null id da linha, ou null quando não há arquivo ou o INSERT falha
+ */
+function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $eventTime = null,
+                             string $origem = 'pushalarm'): ?int
+{
+    $fileUrl = trim($fileUrl);
+    if ($fileUrl === '') {
+        return null;
+    }
+
+    $st = $db->prepare("SELECT id FROM media_files WHERE imei = :i AND file_url = :u LIMIT 1");
+    $st->execute([':i' => $imei, ':u' => $fileUrl]);
+    $id = $st->fetchColumn();
+    if ($id) {
+        return (int)$id;
+    }
+
+    try {
+        // `download_status` nasce 'disponivel' porque o device só anuncia o
+        // arquivo depois de subi-lo; e o tipo sai da EXTENSÃO, não de um campo
+        // do alarme — `file_type` é ENUM e não aceita palpite (v4.9.8).
+        $ins = $db->prepare(
+            "INSERT INTO media_files
+                (imei, file_name, file_type, file_size, file_url, source_type,
+                 event_time, download_status)
+             VALUES (:i, :n, :t, 0, :u, :s, :e, 'disponivel')"
+        );
+        $ins->execute([
+            ':i' => $imei,
+            ':n' => basename($fileUrl),
+            ':t' => detect_media_type($fileUrl),
+            ':u' => $fileUrl,
+            ':s' => $origem,
+            ':e' => $eventTime ?: gmdate('Y-m-d H:i:s'),
+        ]);
+        return (int)$db->lastInsertId() ?: null;
+    } catch (Throwable $e) {
+        // Nunca derrubar o webhook por causa da mídia: sem a linha o alarme
+        // ainda é gravado, só o arquivo fica invisível — que é o estado antigo.
+        if (class_exists('Logger')) {
+            Logger::error('media_register_file: falha ao registrar anexo', [
+                'imei' => $imei, 'file' => $fileUrl, 'erro' => $e->getMessage(),
+            ]);
+        }
+        return null;
+    }
+}

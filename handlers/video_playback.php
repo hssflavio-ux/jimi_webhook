@@ -111,6 +111,10 @@ const PB_LIMITE_CARTAO = 500;
 
 $recordings = [];
 $cartaoTruncado = false;
+$sessoes = [];       // canal => sessões de gravação (barra do período)
+$marcas  = [];       // instantes já baixados, marcados sobre a barra
+$barraIni = null;    // janela da barra, em epoch UTC
+$barraFim = null;
 // Defaults ANTES do bloco condicional: o template renderiza sob `$requested`,
 // mas a consulta só roda com `$requested && $selImei`. Sem isto, pedir a tela
 // sem equipamento selecionado usaria variável indefinida.
@@ -159,6 +163,37 @@ if ($requested && $selImei) {
     if ($cartaoTruncado) {
         $resources = array_slice($resources, 0, PB_LIMITE_CARTAO);
     }
+
+    // ── Sessões para a barra do período (v4.9.35) ──────────────────────────
+    //
+    // Consulta PRÓPRIA, de propósito, e diferente da lista acima em dois
+    // pontos: pega TODOS os canais (a barra compara um com o outro — dois
+    // canais que gravam juntos e aparecem desalinhados são sintoma) e NÃO tem
+    // teto, porque a agregação em sessões acontece aqui no servidor e o que vai
+    // para o HTML são dezenas de segmentos, não milhares de blocos. É o que faz
+    // a barra mostrar o período inteiro mesmo quando a lista está truncada.
+    //
+    // Só as colunas do desenho: 3.000 linhas de 3 colunas é barato; as mesmas
+    // 3.000 com nome de arquivo e resto seria desperdício.
+    $stmtSes = $db->prepare("
+        SELECT channel_id, start_time, end_time
+        FROM resource_lists
+        WHERE imei = :imei
+          AND start_time <= :dt
+          AND COALESCE(end_time, start_time) >= :df
+          AND captured_at IS NOT NULL
+          AND captured_at >= (NOW() - INTERVAL {$ttl} MINUTE)
+        ORDER BY channel_id, start_time
+    ");
+    $stmtSes->execute([':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo]);
+    $sessoes = filelist_sessoes($stmtSes->fetchAll());
+
+    // A barra cobre o PERÍODO PEDIDO, não o intervalo gravado: é assim que o
+    // vazio fica visível. Uma barra que se ajustasse às gravações mostraria
+    // sempre "cheia" e esconderia justamente o que se quer ver — que dois
+    // terços do período não existem no cartão.
+    $barraIni = $toTs($utcFrom);
+    $barraFim = $toTs($utcTo);
 
     // Idade da ÚLTIMA listagem deste equipamento, mesmo vencida — é o que
     // permite distinguir "nunca listado" de "listado há 3 h", que para o
@@ -281,6 +316,36 @@ if ($requested && $selImei) {
             'hvideo'     => null,
         ];
     }
+    // Arquivos já no servidor viram MARCAS na barra — o operador vê de relance
+    // o que já foi baixado sem precisar caçar na lista.
+    //
+    // ⚠️ Consulta PRÓPRIA, e não o `$mediaFiles` acima, porque aquele é filtrado
+    // pelo canal SELECIONADO — reaproveitá-lo marcaria só uma das faixas e a
+    // outra pareceria "nada baixado". E não dá para simplesmente alargar o de
+    // cima: ele alimenta a unificação com as gravações, e um arquivo do CH2
+    // casaria com uma gravação do CH1 dentro da janela de ±120 s.
+    //
+    // Instante pelo NOME, pela mesma razão da unificação: `event_time` de um
+    // bloco extraído é a hora do upload, não a da gravação — daí a margem.
+    $stmtMarcas = $db->prepare("
+        SELECT file_name, event_time, channel
+        FROM media_files
+        WHERE imei = :imei
+          AND event_time BETWEEN :df AND :dt
+        ORDER BY event_time DESC
+        LIMIT 400
+    ");
+    $stmtMarcas->execute([
+        ':imei' => $selImei,
+        ':df'   => gmdate('Y-m-d H:i:s', strtotime($utcFrom . ' UTC') - $margem),
+        ':dt'   => gmdate('Y-m-d H:i:s', strtotime($utcTo . ' UTC') + $margem),
+    ]);
+    foreach ($stmtMarcas->fetchAll() as $m) {
+        $t = $instanteDoArquivo($m);
+        if ($t === null || $t < $barraIni || $t > $barraFim) continue;
+        $marcas[] = ['t' => gmdate('Y-m-d H:i:s', $t), 'canal' => (int)($m['channel'] ?: $selChannel)];
+    }
+
     usort($recordings, function ($a, $b) {
         return strcmp($b['time_start'] ?? '', $a['time_start'] ?? '');
     });
@@ -309,6 +374,21 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mp
 .pb-badge.available{background:var(--primary-soft);color:var(--primary);}
 .pb-badge.on-device{background:var(--canvas-soft);color:var(--muted);border:1px solid var(--hairline);}
 .pb-extract{font-size:11px;padding:4px 10px;white-space:nowrap;}
+/* ── Barra do período (v4.9.35) ─────────────────────────────────────────── */
+.pb-barra svg{overflow:visible;}
+.pb-trilho{fill:var(--canvas-soft);stroke:var(--hairline);stroke-width:.6;}
+.pb-trilho.atual{stroke:var(--primary);stroke-opacity:.35;}
+.pb-sessao{fill:var(--primary);fill-opacity:.72;cursor:pointer;transition:fill-opacity .1s;}
+.pb-sessao:hover{fill-opacity:1;}
+.pb-baixado{fill:#0f9d58;}
+.pb-grid{stroke:var(--hairline);stroke-width:.6;stroke-dasharray:2 3;}
+.pb-eixo{font-family:"JetBrains Mono",monospace;font-size:9px;fill:var(--muted);}
+.pb-canal{font-size:9.5px;fill:var(--muted);}
+.pb-canal.atual{fill:var(--ink);font-weight:600;}
+.pb-leg{display:inline-block;width:9px;height:9px;border-radius:2px;vertical-align:-1px;margin-right:3px;}
+.pb-leg-sessao{background:var(--primary);opacity:.72;}
+.pb-leg-baixado{background:#0f9d58;}
+.timeline-item.alvo{outline:2px solid var(--primary);outline-offset:-2px;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -330,6 +410,133 @@ require_once __DIR__ . '/../web/layout_base.php';
                 &#8681; Baixar arquivo
             </a>
         </div>
+
+    <?php if ($requested && $barraIni !== null && $barraFim > $barraIni): ?>
+    <?php
+    // ═══ Barra do período (v4.9.35) ═══════════════════════════════════════
+    //
+    // 🔴 POR QUE ELA EXISTE. A lista tem 3.021 linhas; a INFORMAÇÃO são ~47
+    // sessões por canal. Medido na 400AD_3: 3,7 dias de cartão, 25 h gravadas —
+    // ou seja, dois terços do período NÃO existem, e nenhuma lista comunica
+    // isso. A barra responde de relance a pergunta que a lista não responde:
+    // "a câmera estava gravando às 14h de terça?".
+    //
+    // ⚠️ SESSÕES, NÃO MINUTOS. Desenhar os 3.021 blocos individuais numa faixa
+    // de ~900 px produz uma mancha sólida que MENTE — diria "gravou o tempo
+    // todo" exatamente onde há buracos. A fusão é `filelist_sessoes()`.
+    //
+    // Os dois canais no MESMO eixo de propósito: eles gravam juntos, então
+    // desalinhamento entre as duas faixas é sintoma de câmera com problema.
+    //
+    // SVG inline, sem biblioteca: o projeto não tem build step, e isto é
+    // geometria simples. As coordenadas são calculadas aqui, no servidor, num
+    // espaço de 1000 unidades que escala com o container.
+    $bx0 = 54.0;    $bx1 = 992.0;   $blarg = $bx1 - $bx0;
+    $bAlturaLinha = 26; $bGap = 8; $bTopo = 22;   // $bTopo abre espaço para o triângulo da 1ª faixa
+    $bCanais = [];
+    for ($c = 1; $c <= max(1, $selCam); $c++) $bCanais[] = $c;
+    foreach (array_keys($sessoes) as $c) if ($c > 0 && !in_array($c, $bCanais, true)) $bCanais[] = $c;
+    sort($bCanais);
+    $bAltura = $bTopo + count($bCanais) * ($bAlturaLinha + $bGap) + 22;
+    $bSpan   = max(1, $barraFim - $barraIni);
+    /** epoch para coordenada X no espaco do SVG */
+    $bx = function (int $t) use ($bx0, $blarg, $barraIni, $bSpan) {
+        $p = ($t - $barraIni) / $bSpan;
+        return $bx0 + max(0.0, min(1.0, $p)) * $blarg;
+    };
+    // Rótulos de dia: cada meia-noite BRT dentro da janela
+    $bDias = [];
+    $diaCursor = strtotime(fmt_brt(gmdate('Y-m-d H:i:s', $barraIni), 'Y-m-d') . ' 00:00:00 -03:00');
+    while ($diaCursor <= $barraFim) {
+        if ($diaCursor >= $barraIni) $bDias[] = $diaCursor;
+        $diaCursor = strtotime('+1 day', $diaCursor);
+        if (count($bDias) > 40) break;   // janela absurda não vira 400 linhas
+    }
+    $bTotalSessoes = array_sum(array_map('count', $sessoes));
+    $bGravado = 0;
+    foreach ($sessoes as $ss) { foreach ($ss as $x) { $bGravado += $x['segundos']; } }
+    ?>
+    <div class="card pb-barra" style="margin-top:12px;padding:12px 14px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px;">
+            <div style="font-size:12px;font-weight:600;color:var(--ink);">Gravações no cartão</div>
+            <div style="font-size:11px;color:var(--muted);">
+                <?php if ($bTotalSessoes): ?>
+                    <?= (int)$bTotalSessoes ?> sessõe<?= $bTotalSessoes === 1 ? '' : 's' ?>
+                    · <?= number_format($bGravado / 3600, 1, ',', '.') ?> h gravadas no período
+                <?php else: ?>
+                    nada listado neste período
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <svg viewBox="0 0 1000 <?= (int)$bAltura ?>" style="width:100%;height:auto;display:block;"
+             role="img" aria-label="Linha do tempo das gravações no cartão, por canal">
+            <?php foreach ($bDias as $d): $x = $bx($d); ?>
+            <line x1="<?= round($x, 1) ?>" y1="<?= $bTopo - 10 ?>" x2="<?= round($x, 1) ?>"
+                  y2="<?= $bAltura - 20 ?>" class="pb-grid" />
+            <?php /* `fmt_brt`, não `date()`: o PHP roda em UTC e o rótulo é do dia BRT.
+                     Hoje os dois coincidem (meia-noite BRT é 03:00 UTC do MESMO
+                     dia), mas depender dessa coincidência é como o resto das
+                     datas deste projeto já quebrou antes. */ ?>
+            <text x="<?= round($x + 3, 1) ?>" y="<?= $bTopo - 4 ?>" class="pb-eixo"><?= fmt_brt(gmdate('Y-m-d H:i:s', $d), 'd/m') ?></text>
+            <?php endforeach; ?>
+
+            <?php foreach ($bCanais as $i => $canal): ?>
+            <?php
+                $y = $bTopo + $i * ($bAlturaLinha + $bGap);
+                $ehAtual = ($canal === $selChannel);
+                // CH1 = frontal (OUT), CH2 = interna (IN) — mesmo par do
+                // `EVIDEO`/`HVIDEO` e do vídeo ao vivo.
+                $rotulo = $canal === 1 ? 'CH1 frontal' : ($canal === 2 ? 'CH2 interna' : 'CH' . $canal);
+            ?>
+            <text x="0" y="<?= $y + 17 ?>" class="pb-canal <?= $ehAtual ? 'atual' : '' ?>"><?= $rotulo ?></text>
+            <rect x="<?= $bx0 ?>" y="<?= $y ?>" width="<?= $blarg ?>" height="<?= $bAlturaLinha ?>"
+                  rx="3" class="pb-trilho <?= $ehAtual ? 'atual' : '' ?>" />
+
+            <?php foreach ($sessoes[$canal] ?? [] as $ses): ?>
+            <?php
+                $t0 = strtotime($ses['inicio'] . ' UTC');
+                $t1 = strtotime($ses['fim'] . ' UTC');
+                $x0 = $bx($t0);
+                // ⚠️ Largura MÍNIMA de propósito: numa janela de 2 dias, um
+                // bloco de 1 min mede 0,3 unidade e simplesmente não aparece.
+                // Um traço fino visível é mais honesto que uma gravação
+                // invisível — a duração exata está no tooltip e na lista.
+                $larg = max(1.6, $bx($t1) - $x0);
+                $mins = (int)round($ses['segundos'] / 60);
+            ?>
+            <rect x="<?= round($x0, 2) ?>" y="<?= $y + 3 ?>" width="<?= round($larg, 2) ?>"
+                  height="<?= $bAlturaLinha - 6 ?>" rx="1.5" class="pb-sessao"
+                  onclick="pbIrParaSessao('<?= $ses['inicio'] ?>', <?= $canal ?>)">
+                <title><?= fmt_brt($ses['inicio'], 'd/m H:i') ?> — <?= fmt_brt($ses['fim'], 'H:i') ?> · <?= $mins ?> min · <?= (int)$ses['blocos'] ?> bloco<?= $ses['blocos'] === 1 ? '' : 's' ?></title>
+            </rect>
+            <?php endforeach; ?>
+
+            <?php foreach ($marcas as $mc): ?>
+            <?php if ((int)$mc['canal'] !== $canal) continue; ?>
+            <?php $xm = round($bx(strtotime($mc['t'] . ' UTC')), 2); ?>
+            <?php /* Triângulo apontando para baixo, e não um traço: num período
+                     de dias um instante isolado tem largura ZERO na escala, e o
+                     que comunica não é o tamanho da marca e sim para onde ela
+                     aponta. */ ?>
+            <polygon points="<?= $xm - 3.5 ?>,<?= $y - 6 ?> <?= $xm + 3.5 ?>,<?= $y - 6 ?> <?= $xm ?>,<?= $y + 1 ?>"
+                     class="pb-baixado">
+                <title>Já no servidor · <?= fmt_brt($mc['t'], 'd/m H:i:s') ?></title>
+            </polygon>
+            <?php endforeach; ?>
+            <?php endforeach; ?>
+
+            <text x="<?= $bx0 ?>" y="<?= $bAltura - 6 ?>" class="pb-eixo"><?= fmt_brt(gmdate('Y-m-d H:i:s', $barraIni), 'd/m H:i') ?></text>
+            <text x="<?= $bx1 ?>" y="<?= $bAltura - 6 ?>" class="pb-eixo" text-anchor="end"><?= fmt_brt(gmdate('Y-m-d H:i:s', $barraFim), 'd/m H:i') ?></text>
+        </svg>
+
+        <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-top:4px;">
+            <span><span class="pb-leg pb-leg-sessao"></span> gravação no cartão</span>
+            <span><span class="pb-leg pb-leg-baixado"></span> já no servidor</span>
+            <span>clique numa faixa para ir até ela na lista</span>
+        </div>
+    </div>
+    <?php endif; ?>
     </div>
 
     <!-- Filters + Timeline -->
@@ -476,7 +683,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     }
                 }
             ?>
-            <div class="timeline-item" <?= $isAvailable ? 'onclick="selectRecording(this, ' . htmlspecialchars(json_encode($media)) . ')"' : '' ?>>
+            <div class="timeline-item" data-ts="<?= htmlspecialchars((string)$rec['time_start']) ?>" <?= $isAvailable ? 'onclick="selectRecording(this, ' . htmlspecialchars(json_encode($media)) . ')"' : '' ?>>
                 <div class="timeline-dot <?= $isAvailable ? '' : 'on-device' ?>"></div>
                 <div style="flex:1;min-width:0;">
                     <div style="font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px;">
@@ -680,6 +887,49 @@ function utcDaySegments(fromDay, toDay) {
 }
 
 /**
+ * Clique numa faixa da barra do período.
+ *
+ * Mesmo canal → rola a lista até o primeiro bloco daquela sessão e o destaca.
+ * Canal DIFERENTE → recarrega com aquele canal, preservando o resto do filtro:
+ * a lista é de um canal só, e fingir que dá para navegar sem trocar seria pior
+ * que recarregar.
+ *
+ * @param {string} inicioUtc Início da sessão, `Y-m-d H:i:s` em UTC
+ * @param {number} canal     Canal da faixa clicada
+ */
+function pbIrParaSessao(inicioUtc, canal) {
+    if (canal !== selChannel) {
+        var p = new URLSearchParams(location.search);
+        p.set('channel', String(canal));
+        p.set('request', '1');
+        p.delete('poll');            // a troca é ação do usuário, não do poll
+        location.href = location.pathname + '?' + p.toString();
+        return;
+    }
+    // Interação do usuário cancela o auto-refresh — o mesmo que selectRecording
+    // faz, e pela mesma razão: recarregar por baixo de quem está lendo é hostil.
+    if (window.__pbPoll) { clearTimeout(window.__pbPoll); window.__pbPoll = null; }
+
+    var itens = document.querySelectorAll('.timeline-item[data-ts]');
+    var alvo = null;
+    // A lista está em ordem decrescente; o alvo é o item mais ANTIGO que ainda
+    // é >= o início da sessão, ou seja, o primeiro bloco dela.
+    for (var i = 0; i < itens.length; i++) {
+        if ((itens[i].dataset.ts || '') >= inicioUtc) alvo = itens[i];
+    }
+    if (!alvo) {
+        // Sessão fora do que a lista carregou (teto de itens): dizer, em vez de
+        // não fazer nada e parecer que o clique quebrou.
+        alert('Esta sessão está fora das gravações carregadas na lista. '
+            + 'Estreite o período para alcançá-la.');
+        return;
+    }
+    document.querySelectorAll('.timeline-item.alvo').forEach(function (t) { t.classList.remove('alvo'); });
+    alvo.classList.add('alvo');
+    alvo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/**
  * Pede a lista do cartão a uma câmera JIMI.
  *
  * 🔴 SÃO DOIS COMANDOS, e mandar só o primeiro não sobe lista nenhuma.
@@ -700,6 +950,17 @@ function utcDaySegments(fromDay, toDay) {
  * @param {function(boolean,string=):void} [cb] Chamado ao fim (para teste)
  */
 function pbRequestJimi(imei, cb) {
+    // 🔴 Sem endereço alcançavel pelo EQUIPAMENTO não se manda nada. O que
+    // existia antes era pior que o erro: `filelist_url_base()` caía em
+    // `localhost`, a câmera respondia `FILELIST:OK!`, guardava o endereço — e
+    // o upload morria com `failed!` sem ninguém ligar uma coisa à outra.
+    if (!filelistBase) {
+        alert('Não há endereço configurado para a câmera enviar a lista. '
+            + 'Defina VIDEO_INGEST_IP (ou FILELIST_URL) no .env do servidor: '
+            + 'precisa ser um IP que o EQUIPAMENTO alcance, nunca localhost.');
+        if (cb) cb(false, 'sem VIDEO_INGEST_IP');
+        return;
+    }
     pbSendCmd(imei, 128, 'FILELIST,' + filelistBase + imei, function (ok, msg) {
         if (!ok) {
             alert('A câmera não aceitou o endereço da lista: ' + (msg || 'sem resposta.'));

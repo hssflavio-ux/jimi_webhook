@@ -1106,7 +1106,16 @@ function report_has_query(): bool {
  * resolvem DNS: com um nome, aceitam o comando e nunca conectam. É a mesma
  * razão pela qual o `UPLOAD` das câmeras sempre foi configurado por IP.
  *
- * @returns string URL base com barra final
+ * 🔴 **DEVOLVE VAZIO EM VEZ DE `localhost`** (v4.9.35). O fallback anterior era
+ * `localhost`, e `localhost` para a câmera é *ela mesma*: o equipamento aceita
+ * o comando (`FILELIST:OK!`), guarda o endereço e nunca alcança nada. Aconteceu
+ * de verdade num teste de campo — só o construtor do `Database` carrega o
+ * `.env` (`config/database.php`), então qualquer chamador que não tenha
+ * instanciado a conexão antes recebia o fallback e envenenava a configuração do
+ * device em silêncio. Vazio obriga o chamador a recusar, com motivo na tela.
+ *
+ * @returns string URL base com barra final, ou '' quando não há endereço que o
+ *                 EQUIPAMENTO consiga alcançar
  */
 function filelist_url_base(): string
 {
@@ -1116,7 +1125,12 @@ function filelist_url_base(): string
     }
     $host = trim((string)getenv('VIDEO_INGEST_IP'));
     if ($host === '') {
-        $host = parse_url((string)(getenv('STREAM_URL') ?: ''), PHP_URL_HOST) ?: 'localhost';
+        $host = (string)(parse_url((string)(getenv('STREAM_URL') ?: ''), PHP_URL_HOST) ?: '');
+    }
+    // Endereço de loopback nunca é alcançável pelo equipamento — é o mesmo
+    // motivo pelo qual esta função existe em vez de um literal no template.
+    if ($host === '' || in_array(strtolower($host), ['localhost', '127.0.0.1', '::1', '0.0.0.0'], true)) {
+        return '';
     }
     return 'http://' . $host . '/filelist/';
 }

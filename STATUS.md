@@ -143,6 +143,7 @@
 > | 4.9.32 | `UPDATE` travado em 1 dos 6 modelos; firmware NULL na base | `command_catalog.php`, `/firmwares` (tela nova) |
 > | 4.9.33 | Apache descartava o corpo do `FILELIST` acima de 16 KB | `docs/apache/filelist-chunked.conf` |
 > | 4.9.34 | A lista do `FILELIST` chegava e ninguém a lia; playback falava JT/T com câmera JIMI | `includes/filelist.php`, `video_playback.php` |
+> | 4.9.35 | Vídeo chegava ao servidor e o sistema não sabia; 3.021 blocos de 1 min viravam lista ilegível | `includes/media.php`, `pushalarm.php`, `video_playback.php` |
 >
 > **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
 > falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
@@ -558,9 +559,79 @@
 >    nenhum bloco foi puxado de uma 400AD ainda. É o próximo clique em produção,
 >    junto com a leitura de firmware do item 8.
 >
->    ⚠️ **Ainda NÃO publicado.** `SYSTEM_VERSION` já está em 4.9.34 no
->    `.env.example`; **não há migração** (o `resource_lists` já tinha todas as
->    colunas), então o `deploy.sh` não precisa de entrada nova.
+>    ✅ **PUBLICADO em 20/08/2026** (`9854779`, `/ping` 4.9.34) e **testado nas
+>    duas câmeras reais**:
+>
+>    | | 400AD (`…429173`) | 400AD_3 (`…392306`) |
+>    |---|---|---|
+>    | nomes na lista | 2.625 | 2.795 |
+>    | linhas gravadas | **2.625** | **2.795** |
+>    | descartados | 0 | 0 |
+>    | janela do cartão | 12/08 → 20/08 | 16/08 → 20/08 |
+>    | tela (`/video/playback`) | 79 itens CH2 | 149 itens CH1 |
+>    | botões `37382` (JT/T) | **0** | **0** |
+>
+>    🔴 **A prova do fuso veio ao vivo**: o bloco mais recente da 400AD é
+>    `2026_08_20_10_09_52_01.ts`, gravado como UTC `13:09:52`, e a captura
+>    chegou às `13:22:27` UTC — 12 minutos depois. Lido como GMT 0, o mais
+>    recente apareceria 3 h no passado e a linha do tempo teria um buraco de
+>    três horas no lado do "agora", numa câmera que estava gravando naquele
+>    instante.
+>
+>    **O `[Extrair]` fechou o ciclo nas duas**: `HVIDEO,<carimbo>,<câmera>` →
+>    `HVIDEO:OK!` (inclusive na 400AD, que recusa `EVIDEO`) → a câmera subiu →
+>    `105` com `EVENT_…_2026_08_20_10_06_52_F_01.ts`, **o carimbo exato pedido**.
+>
+>    ⚠️ **E foi aí que apareceu a v4.9.35** — o arquivo chegava e não virava
+>    linha em `media_files`. Ver o item 10.
+>
+> 10. ✅ **`media_files` só nascia quando havia OCORRÊNCIA — v4.9.35.** O único
+>    caminho que registrava anexo era `link_media_to_occurrence()`, dentro do
+>    motor de ocorrências. Evento de **diagnóstico** não passa por lá, e o
+>    `105 — Upload de Vídeo Concluído` — justamente quem anuncia o vídeo pedido
+>    por `HVIDEO`/`EVIDEO` — é diagnóstico. Medido em produção: **7 dos 12**
+>    eventos `105` das últimas 48 h com o arquivo no disco e **zero** linhas.
+>    Invisíveis no playback, na fila de downloads e na galeria.
+>
+>    Corrigido com `media_register_file()` (`includes/media.php`), ponto único,
+>    chamado pelo `pushalarm.php` para **todo** alarme com anexo;
+>    `link_media_to_occurrence()` delega para ela. Provado por replay local de um
+>    `105`: 1 linha, idempotente no reenvio, e o item vira "Disponível" no minuto
+>    certo da linha do tempo.
+>
+>    ⚠️ **Passivo NÃO tratado**: os arquivos que chegaram ANTES desta versão
+>    continuam sem linha. Estão no disco; a correção não é retroativa. Um
+>    backfill resolveria — **não foi executado**, é decisão do dono do produto.
+>
+>    ⚠️ **`filelist_url_base()` devolvia `localhost`** quando o `.env` não tinha
+>    sido carregado (só o construtor do `Database` o lê), e `localhost` para a
+>    câmera é ELA MESMA: o device aceita o endereço com `FILELIST:OK!` e o
+>    upload morre com `failed!`. Custou um disparo no teste de campo. Agora a
+>    função devolve **vazio** para loopback e a tela recusa com o motivo.
+>
+> 11. ✅ **Barra do período no playback — v4.9.35.** A lista tem 3.021 linhas; a
+>    INFORMAÇÃO são **47 sessões** por canal, de 32 min em média, somando 25 h
+>    num cartão de 3,7 dias — ou seja, dois terços do período não existem, e
+>    nenhuma lista comunica isso. A barra responde de relance a pergunta que a
+>    lista não responde: "a câmera estava gravando às 14h de terça?".
+>
+>    ⚠️ **Sessões, não minutos.** 3.021 traços numa faixa de ~900 px viram uma
+>    mancha sólida que MENTE. A folga de 120 s foi calibrada pela concordância
+>    entre os canais (as duas câmeras gravam juntas): 30 s dá 48 e 54, 180 s dá
+>    45 e 46, **120 s dá 47 e 47**.
+>
+>    🔴 **E foi o navegador que pegou o defeito que o HTML escondia**: duas
+>    `alert()` com quebra de linha literal dentro da string derrubavam o
+>    `<script>` inteiro da tela com `Invalid or unexpected token` — página
+>    bonita, HTML correto, e NENHUMA função da página existindo. Nem
+>    `pbRequestJimi`, nem `requestExtractJimi`, nem `selectRecording`. Nenhuma
+>    conferência de HTML pegaria. O spec novo abre a tela e falha se o console
+>    tiver um erro sequer.
+>
+>    ⚠️ **E o spec da barra SEMEIA a própria listagem** (`TEST_IMEI` +
+>    `/filelist/{imei}`, o endpoint real). Sem isso ele dependia de dado que
+>    vence em 30 min: passava hoje e pulava amanhã, sem ninguém perceber que a
+>    barra deixou de ser verificada.
 > 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
 >    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
 >    apontar. Depende do fornecedor (item 5).

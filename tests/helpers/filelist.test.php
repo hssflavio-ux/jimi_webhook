@@ -27,6 +27,7 @@
  */
 
 require_once __DIR__ . '/../../includes/filelist.php';
+require_once __DIR__ . '/../../includes/functions.php';   // filelist_url_base()
 
 $falhas = 0;
 $total  = 0;
@@ -135,6 +136,62 @@ checa('o corte respeita o teto', true, $patologico['vazios'] <= FILELIST_MAX_NOM
 echo "\n── nome repetido na mesma lista não vira duas gravações\n";
 $rep = filelist_parse('{"imei":"1","fileNameList":"2026_08_16_05_33_58_01.ts,2026_08_16_05_33_58_01.ts"}');
 checa('colapsa em uma entrada', 1, $rep['validos']);
+
+echo "\n── sessões: 3.021 blocos de 1 min são 47 vezes que o veículo rodou\n";
+// Trecho REAL do início da lista: 27 blocos contíguos, depois um buraco de
+// 1 h 11 min (a 400AD_3 parou às 05:59 e voltou às 07:11, hora local).
+$corrida = filelist_parse('{"imei":"1","fileNameList":"'
+    . '2026_08_16_05_57_58_01.ts,2026_08_16_05_58_58_01.ts,2026_08_16_05_59_58_01.ts,'
+    . '2026_08_16_07_11_12_01.ts,2026_08_16_07_12_03_01.ts"}');
+$ses = filelist_sessoes($corrida['entradas']);
+checa('o buraco parte em duas sessões', 2, count($ses[1]));
+checa('a primeira termina no fim do último bloco dela',
+      '2026-08-16 09:00:58', $ses[1][0]['fim']);
+checa('e conta os blocos que a formaram', 3, $ses[1][0]['blocos']);
+checa('a segunda começa no bloco depois do buraco',
+      '2026-08-16 10:11:12', $ses[1][1]['inicio']);
+
+// Blocos separados por MENOS que a folga continuam na mesma sessão — é o caso
+// dos cortes de 14 s e 18 s que a câmera faz ao trocar de estado.
+$semCorte = filelist_sessoes(filelist_parse('{"imei":"1","fileNameList":"' . $curtos . '"}')['entradas']);
+checa('corte curto NÃO abre sessão nova', 1, count($semCorte[1]));
+
+echo "\n── sessões: um canal não contamina o outro\n";
+$doisCanais = filelist_sessoes(filelist_parse(
+    '{"imei":"1","fileNameList":"2026_08_16_10_00_00_01.ts,2026_08_16_18_00_00_02.ts"}')['entradas']);
+checa('cada canal tem a sua', [1, 1], [count($doisCanais[1]), count($doisCanais[2])]);
+checa('e nas horas certas', '2026-08-16 21:00:00', $doisCanais[2][0]['inicio']);
+
+echo "\n── sessões: linha crua de resource_lists é aceita igual\n";
+// A tela passa as colunas do banco direto; exigir conversão no chamador só
+// criaria lugar para errar.
+$doBanco = filelist_sessoes([
+    ['channel_id' => 1, 'start_time' => '2026-08-16 08:33:58', 'end_time' => '2026-08-16 08:34:58'],
+    ['channel_id' => 1, 'start_time' => '2026-08-16 08:34:58', 'end_time' => '2026-08-16 08:35:58'],
+]);
+checa('funde os dois blocos', 1, count($doBanco[1]));
+checa('fim = fim do segundo', '2026-08-16 08:35:58', $doBanco[1][0]['fim']);
+$semFim = filelist_sessoes([['channel_id' => 2, 'start_time' => '2026-08-16 08:33:58']]);
+checa('sem end_time vale o bloco nominal de 60 s',
+      '2026-08-16 08:34:58', $semFim[2][0]['fim']);
+$fimTorto = filelist_sessoes([['channel_id' => 2, 'start_time' => '2026-08-16 08:33:58',
+                              'end_time' => '2026-08-16 07:00:00']]);
+checa('fim ANTES do início não encolhe a sessão para trás',
+      '2026-08-16 08:34:58', $fimTorto[2][0]['fim']);
+
+echo "\n── 🔴 endereço de upload: loopback nunca serve\n";
+// `localhost` para a câmera é ELA MESMA. O fallback antigo devolvia isso, o
+// device respondia FILELIST:OK! e o upload morria com `failed!` — medido em
+// campo em 20/08/2026. Vazio obriga a tela a recusar, com motivo.
+putenv('FILELIST_URL'); putenv('STREAM_URL');
+putenv('VIDEO_INGEST_IP=localhost');
+checa('localhost é recusado', '', filelist_url_base());
+putenv('VIDEO_INGEST_IP=127.0.0.1');
+checa('127.0.0.1 é recusado', '', filelist_url_base());
+putenv('VIDEO_INGEST_IP');
+checa('sem configuração nenhuma é recusado', '', filelist_url_base());
+putenv('VIDEO_INGEST_IP=186.248.143.197');
+checa('IP alcançável passa', 'http://186.248.143.197/filelist/', filelist_url_base());
 
 echo "\n── HVIDEO: o carimbo volta ao equipamento como ele o mandou\n";
 checa('canal 1 → parâmetro B = 1 (Front camera)',
