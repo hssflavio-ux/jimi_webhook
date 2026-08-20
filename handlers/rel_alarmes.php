@@ -318,14 +318,15 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <?php endif; ?>
-        <div style="flex-basis:100%;">
+        <div>
             <?php
-            $chips_id = 'alarmtypes';
-            $chips_label = 'Tipos de Alarme';
-            $chips_param = 'alarm_types';
-            $chips_options = array_column($types, 'alarm_name');
-            $chips_selected = $filterTypes;
-            include __DIR__ . '/../web/components/chips_multiselect.php';
+            $msel_id = 'alarmtypes';
+            $msel_label = 'Tipos de Alarme';
+            $msel_param = 'alarm_types';
+            $msel_options = array_column($types, 'alarm_name');
+            $msel_selected = $filterTypes;
+            $msel_vazio = 'Todos os tipos';
+            include __DIR__ . '/../web/components/select_multi.php';
             ?>
         </div>
         <div>

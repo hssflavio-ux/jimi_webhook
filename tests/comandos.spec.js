@@ -99,6 +99,45 @@ test.describe('Comandos — lista sensível ao modelo', () => {
         expect(preview).toMatch(/P\d|[A-Z](,|#)/);             // placeholder permanece visível
     });
 
+    test('🔴 os filtros do histórico seguem o padrão visual do sistema', async ({ authedPage }) => {
+        // O defeito relatado: as listas suspensas do histórico ficavam com a
+        // borda PADRÃO DO NAVEGADOR — cinza, raio próprio, diferente do
+        // hairline do sistema e diferente entre Chrome e Firefox. A causa era
+        // um estilo inline que definia padding e fonte e ESQUECIA a borda.
+        //
+        // Comparar cada campo contra o vizinho é o que pega isso: um valor fixo
+        // de cor no teste envelheceria junto com o tema, mas "todos iguais" vale
+        // para sempre.
+        await authedPage.goto('/comandos');
+        await expect(authedPage.locator('#hist-imei')).toBeVisible();
+
+        const estilos = await authedPage.evaluate(() =>
+            ['#hist-cust', '#hist-imei', '#hist-desf', '#hist-de', '#hist-ate']
+                .map((sel) => {
+                    const el = document.querySelector(sel);
+                    if (!el) return sel + ': AUSENTE';
+                    const cs = getComputedStyle(el);
+                    return [cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor,
+                            cs.borderTopLeftRadius].join(' ');
+                }));
+
+        expect(estilos.filter((e) => String(e).indexOf('AUSENTE') > -1),
+            'todo campo do filtro tem de existir').toEqual([]);
+        expect(new Set(estilos).size,
+            'todos os campos do filtro compartilham a MESMA borda — `' + estilos.join(' | ') + '`').toBe(1);
+        expect(estilos[0], 'e a borda não pode ser a de nenhum lado zerada').not.toMatch(/^0px|none/);
+    });
+
+    test('o equipamento é escolhido por lista suspensa, não por botões', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        // A nuvem de chips oferecia multisseleção que ninguém pediu, em um
+        // controle que não se parecia com nenhum outro filtro da tela.
+        await expect(authedPage.locator('select#hist-imei')).toHaveCount(1);
+        await expect(authedPage.locator('#cmddev, [id^="cmddev"]')).toHaveCount(0);
+        // O parâmetro da URL não mudou: link antigo continua filtrando.
+        expect(await authedPage.locator('#hist-imei').getAttribute('name')).toBe('imei');
+    });
+
     test('histórico traz desfecho interpretado, não o status cru', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const linhas = await authedPage.evaluate(() => window.LINHAS || []);

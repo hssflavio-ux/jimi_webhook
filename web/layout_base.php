@@ -791,6 +791,34 @@ tbody tr:hover { background: var(--canvas-soft); }
 .date-filter input[type="date"]:focus { outline: none; border-color: var(--primary); }
 .date-filter-label { font-size: 12px; color: var(--muted); font-weight: 500; }
 
+/* ── Campo de barra de filtro (v4.9.38) ───────────────
+   🔴 POR QUE ESTA CLASSE EXISTE. O design system só vestia campo dentro de
+   `.form-group` — formulário de cadastro. As BARRAS DE FILTRO das telas de
+   listagem usavam `<select>` cru com estilo inline que definia padding e
+   tamanho de fonte e **esquecia a borda**, então cada uma herdava a borda
+   padrão do navegador: cinza, com raio próprio, diferente do hairline do
+   sistema e diferente entre Chrome e Firefox. O sintoma é o que o dono do
+   produto viu — "as listas suspensas estão fora do padrão".
+   Um lugar só para o filtro inteiro (select, input de data, busca). */
+.filtro-campo {
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: 'Inter', sans-serif;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    background: var(--canvas);
+    line-height: 1.5;
+    transition: border-color .15s, box-shadow .15s;
+}
+.filtro-campo:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.filtro-campo:disabled { background: var(--canvas-soft); color: var(--muted); }
+/* `select` fica com a seta nativa de propósito: é ela que diz "isto abre uma
+   lista", e trocá-la por um ícone nosso custaria acessibilidade de teclado. */
+select.filtro-campo { padding-right: 6px; }
+.filtro-rotulo { font-size: 10px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: .4px; color: var(--muted); display: block; margin-bottom: 3px; }
+
 /* ── Sidebar Accordion Groups (v4.0.0) ──────────────── */
 .sidebar-accordion { }
 .sidebar-accordion-header {

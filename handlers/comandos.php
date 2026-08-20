@@ -601,41 +601,67 @@ include __DIR__ . '/../web/layout_base.php';
                  report_customer_options() e o FILTRO de report_customer_scope():
                  restringir um sem o outro deixaria o revendedor lendo os nomes
                  de clientes que não são dele num seletor sem efeito. */ ?>
-        <select name="customer_id" style="min-width:150px;font-size:12px;padding:6px 8px" title="Cliente">
-          <option value="">Todos os clientes</option>
-          <?php foreach ($customers as $c): ?>
-          <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
-            <?= htmlspecialchars($c['name']) ?>
+        <div>
+          <label class="filtro-rotulo" for="hist-cust">Cliente</label>
+          <select id="hist-cust" name="customer_id" class="filtro-campo" style="min-width:150px" title="Cliente">
+            <option value="">Todos os clientes</option>
+            <?php foreach ($customers as $c): ?>
+            <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+              <?= htmlspecialchars($c['name']) ?>
+            </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      <?php endif; ?>
+
+      <?php /* 🔴 LISTA SUSPENSA, e não a nuvem de chips que estava aqui. Eram
+               15 botões ocupando três linhas para oferecer multisseleção que
+               ninguém pediu, e num controle que não se parecia com nenhum outro
+               filtro do sistema. Um link antigo com vários IMEIs separados por
+               vírgula CONTINUA filtrando (a leitura do parâmetro não mudou);
+               o seletor só reflete o caso de um equipamento, que é o uso real. */ ?>
+      <div>
+        <?php /* ⚠️ O usuário escolhe PLACA; o valor continua sendo o IMEI porque
+                 é por ele que as consultas casam — duas placas iguais no
+                 cadastro se confundiriam num filtro por nome. Placa vazia é
+                 dita como tal: um IMEI cru numa lista de placas faz o operador
+                 procurar um veículo que não existe. */ ?>
+        <label class="filtro-rotulo" for="hist-imei">Placa</label>
+        <select id="hist-imei" name="imei" class="filtro-campo" style="min-width:180px" title="Placa do veículo">
+          <option value="">Todas as placas</option>
+          <?php foreach ($devices as $dv): ?>
+          <option value="<?= htmlspecialchars($dv['imei']) ?>" <?= (count($filtroImeis) === 1 && $filtroImeis[0] === $dv['imei']) ? 'selected' : '' ?>>
+            <?= htmlspecialchars($dv['device_name'] ?: '(sem placa) ' . $dv['imei']) ?>
           </option>
           <?php endforeach; ?>
         </select>
-      <?php endif; ?>
+      </div>
+
       <?php /* Datas são dias BRT; a conversão para a janela UTC do banco é
                feita por brt_day_range_to_utc(), nunca comparando direto. */ ?>
-      <input type="date" name="de"  value="<?= htmlspecialchars($filtroDe) ?>"  style="font-size:12px;padding:5px 8px" title="De (dia BRT)">
-      <input type="date" name="ate" value="<?= htmlspecialchars($filtroAte) ?>" style="font-size:12px;padding:5px 8px" title="Até (dia BRT)">
-      <select name="desfecho" style="min-width:120px;font-size:12px;padding:6px 8px">
-        <option value="">Todos os desfechos</option>
-        <option value="ok"         <?= $filtroDesf==='ok'?'selected':'' ?>>Executado</option>
-        <option value="aguardando" <?= $filtroDesf==='aguardando'?'selected':'' ?>>Aguardando</option>
-        <option value="erro"       <?= $filtroDesf==='erro'?'selected':'' ?>>Com erro</option>
-        <option value="neutro"     <?= $filtroDesf==='neutro'?'selected':'' ?>>Informativo</option>
-      </select>
+      <?php /* O par de datas anda junto: quebrar a linha entre "De" e "Até"
+               separa dois campos que só fazem sentido lidos como intervalo. */ ?>
+      <div style="display:flex;gap:6px">
+        <div>
+          <label class="filtro-rotulo" for="hist-de">De</label>
+          <input type="date" id="hist-de" name="de" class="filtro-campo" value="<?= htmlspecialchars($filtroDe) ?>" title="De (dia BRT)">
+        </div>
+        <div>
+          <label class="filtro-rotulo" for="hist-ate">Até</label>
+          <input type="date" id="hist-ate" name="ate" class="filtro-campo" value="<?= htmlspecialchars($filtroAte) ?>" title="Até (dia BRT)">
+        </div>
+      </div>
+      <div>
+        <label class="filtro-rotulo" for="hist-desf">Desfecho</label>
+        <select id="hist-desf" name="desfecho" class="filtro-campo" style="min-width:130px">
+          <option value="">Todos os desfechos</option>
+          <option value="ok"         <?= $filtroDesf==='ok'?'selected':'' ?>>Executado</option>
+          <option value="aguardando" <?= $filtroDesf==='aguardando'?'selected':'' ?>>Aguardando</option>
+          <option value="erro"       <?= $filtroDesf==='erro'?'selected':'' ?>>Com erro</option>
+          <option value="neutro"     <?= $filtroDesf==='neutro'?'selected':'' ?>>Informativo</option>
+        </select>
+      </div>
       <button class="btn btn-outline btn-sm" type="submit">Filtrar</button>
-
-      <?php
-      /* Equipamentos em multisseleção. Fica DENTRO do mesmo form: o hidden do
-         componente carrega os IMEIs separados por vírgula no `imei`, que é o
-         mesmo parâmetro de antes — link antigo com um IMEI só continua valendo. */
-      $chips_id       = 'cmddev';
-      $chips_label    = 'Equipamentos (nenhum = todos)';
-      $chips_param    = 'imei';
-      $chips_options  = array_column($devices, 'imei');
-      $chips_labels   = array_column($devices, 'device_name', 'imei');
-      $chips_selected = $filtroImeis;
-      $chips_visible  = 12;
-      include __DIR__ . '/../web/components/chips_multiselect.php';
-      ?>
     </form>
 
     <?php /* Exportação sensível ao filtro: os mesmos parâmetros da URL atual,

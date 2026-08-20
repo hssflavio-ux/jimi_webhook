@@ -231,8 +231,8 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
 <form method="get" class="flex" style="gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
     <?php if ($isAdmin): ?>
     <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-        <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:160px;">
+        <label class="filtro-rotulo" for="dl-cust">Cliente</label>
+        <select id="dl-cust" name="customer_id" class="filtro-campo" style="min-width:160px">
             <option value="">Todos os clientes</option>
             <?php foreach ($customers as $c): ?>
             <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
@@ -249,19 +249,19 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
              ninguém pediu; e com vários equipamentos a grade precisa repetir
              placa/IMEI/modelo em toda linha só para dizer de quem é o arquivo. */ ?>
     <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
-        <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:200px;">
-            <option value="">Todos os equipamentos</option>
+        <label class="filtro-rotulo" for="dl-imei">Placa</label>
+        <select id="dl-imei" name="imei" class="filtro-campo" style="min-width:200px" title="Placa do veículo">
+            <option value="">Todas as placas</option>
             <?php foreach ($devicesFiltro as $dv): ?>
             <option value="<?= htmlspecialchars($dv['imei']) ?>" <?= (count($filtroImeis) === 1 && $filtroImeis[0] === $dv['imei']) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($dv['device_name']) ?>
+                <?= htmlspecialchars($dv['device_name'] === $dv['imei'] ? '(sem placa) ' . $dv['imei'] : $dv['device_name']) ?>
             </option>
             <?php endforeach; ?>
         </select>
     </div>
     <div>
-        <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>
-        <select name="status" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+        <label class="filtro-rotulo" for="dl-status">Status</label>
+        <select id="dl-status" name="status" class="filtro-campo">
             <option value="">Todos</option>
             <option value="pronto"   <?= $selStatus==='pronto'?'selected':'' ?>>Pronto para baixar</option>
             <option value="baixado"  <?= $selStatus==='baixado'?'selected':'' ?>>Já baixado</option>

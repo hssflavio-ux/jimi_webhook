@@ -146,6 +146,7 @@
 > | 4.9.35 | Vídeo chegava ao servidor e o sistema não sabia; 3.021 blocos de 1 min viravam lista ilegível | `includes/media.php`, `pushalarm.php`, `video_playback.php` |
 > | 4.9.36 | Botão por cima do texto; e vídeo extraído caía no bloco errado (±120 s = 5 blocos) | `video_playback.php` |
 > | 4.9.37 | Playback refeito na barra com zoom; canal fora da requisição; download vira estado | `video_playback.php`, `video_downloads.php`, `midia.php` |
+> | 4.9.38 | Barras de filtro sem borda do sistema; chips de equipamento fora do padrão | `web/layout_base.php`, `comandos.php` |
 >
 > **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
 > falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
@@ -682,6 +683,35 @@
 >    ⚠️ **`setPointerCapture` troca o alvo do clique** — com a captura ativa
 >    (necessária para o arrasto), o `click` chega com `target` = o `<svg>`, e o
 >    clique no bloco não fazia nada. Só o navegador pega isso.
+>
+> 14. ✅ **Barras de filtro no padrão do sistema — v4.9.38.** Relatado em
+>    `/comandos`: "as listas suspensas estão fora do padrão". A causa não era da
+>    tela — **o design system não tinha estilo para barra de filtro**. O
+>    `.form-group` veste campo de cadastro; as barras de listagem usavam
+>    `<select>` cru com estilo inline que definia padding e fonte e **esquecia a
+>    borda**, então cada select herdava a borda padrão do navegador ao lado de
+>    um `input[type=date]` que trazia o hairline certo. Criada a classe
+>    `.filtro-campo` (`web/layout_base.php`) e aplicada nos cinco campos do
+>    histórico; o par De/Até deixou de quebrar linha no meio.
+>
+>    Os chips de equipamento viraram lista suspensa. ⚠️ **O parâmetro da URL não
+>    mudou** (`imei`, lista por vírgula), então link antigo continua filtrando.
+>
+>    **O teste compara os campos ENTRE SI**, não contra uma cor fixa: valor
+>    cravado envelhece com o tema; "todos têm a mesma borda" vale sempre.
+>
+>    **A multisseleção virou lista suspensa também** (`select_multi.php`): um
+>    dropdown com caixas de seleção, busca, *marcar todos* / *limpar* e resumo
+>    no botão. Substituiu os chips em `/relatorios/alarmes` e `/bi`, onde o
+>    filtro é de **tipos de alarme** e chega a 33 opções. Mantém o contrato de
+>    saída (hidden por vírgula), então consulta, link e export não souberam da
+>    troca; `chips_multiselect.php` ficou órfão e foi removido.
+>
+>    🔴 **O filtro de veículo é por PLACA em toda parte.** O VALOR continua
+>    sendo o IMEI (é por ele que as consultas casam; duas placas iguais no
+>    cadastro se confundiriam num filtro por nome), mas o que se lê e escolhe é
+>    a placa. Sem placa cadastrada aparece `(sem placa) <imei>` — um número cru
+>    numa lista de placas faz procurar um veículo que não existe.
 > 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
 >    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
 >    apontar. Depende do fornecedor (item 5).

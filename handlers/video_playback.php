@@ -376,8 +376,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                              da carteira anterior não existe na nova, e mantê-lo
                              deixaria o formulário apontando para um device que a
                              lista não oferece mais. */ ?>
-                    <select id="pb-cust" onchange="location.href='?customer_id='+this.value"
-                            style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <select id="pb-cust" class="filtro-campo" style="width:100%"
+                            onchange="location.href='?customer_id='+this.value">
                         <option value="">Todos os clientes</option>
                         <?php foreach ($customers as $c): ?>
                         <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
@@ -389,11 +389,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
 
                 <div>
-                    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Equipamento</label>
-                    <select name="imei" id="pb-imei" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                    <?php /* O modelo fica junto da placa de propósito: é ele que
+                             decide o protocolo, e portanto quais comandos a tela
+                             vai despachar para este veículo. */ ?>
+                    <label class="filtro-rotulo" for="pb-imei">Placa</label>
+                    <select name="imei" id="pb-imei" class="filtro-campo" style="width:100%">
                         <?php foreach ($devices as $d): ?>
                         <option value="<?= $d['imei'] ?>" data-cam="<?= $d['camera_count']??1 ?>" data-proto="<?= htmlspecialchars($d['protocol'] ?? 'JTT') ?>" <?= $selImei===$d['imei']?'selected':'' ?>>
-                            <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
+                            <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars($d['device_name'] ?: '(sem placa) ' . $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
                         </option>
                         <?php endforeach; ?>
                     </select>
@@ -412,11 +415,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <div style="display:flex;gap:6px;">
                     <div style="flex:1;">
                         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">De</label>
-                        <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                        <input type="date" name="date_from" class="filtro-campo" style="width:100%" value="<?= htmlspecialchars($dateFrom) ?>">
                     </div>
                     <div style="flex:1;">
                         <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Até</label>
-                        <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                        <input type="date" name="date_to" class="filtro-campo" style="width:100%" value="<?= htmlspecialchars($dateTo) ?>">
                     </div>
                 </div>
 

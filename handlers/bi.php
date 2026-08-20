@@ -258,12 +258,13 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <?php
         // Multiselect de eventos — mesmo componente do Relatório de Alarmes.
-        $chips_id       = 'bialarmtypes';
-        $chips_label    = 'Tipos de Evento';
-        $chips_param    = 'alarm_types';
-        $chips_options  = $allAlarmTypes;
-        $chips_selected = $filterAlarmes;
-        include __DIR__ . '/../web/components/chips_multiselect.php';
+        $msel_id       = 'bialarmtypes';
+        $msel_label    = 'Tipos de Evento';
+        $msel_param    = 'alarm_types';
+        $msel_options  = $allAlarmTypes;
+        $msel_selected = $filterAlarmes;
+        $msel_vazio    = 'Todos os tipos';
+        include __DIR__ . '/../web/components/select_multi.php';
         ?>
     </form>
 </div>

@@ -5,6 +5,23 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.38
+
+**As barras de filtro ganharam o padrão visual que nunca tiveram.**
+
+### Fixed
+- 🔴 **Listas suspensas com a borda do NAVEGADOR, não a do sistema.** O design system só vestia campo dentro de `.form-group` — formulário de cadastro. As barras de filtro das telas de listagem usavam `<select>` cru com estilo inline que definia padding e tamanho de fonte e **esquecia a borda**: cada campo herdava a borda padrão do navegador (cinza, raio próprio, diferente entre Chrome e Firefox) ao lado de um `input[type=date]` que trazia o hairline correto. Agora existe `.filtro-campo` (`web/layout_base.php`), um lugar só para select, data e busca de barra de filtro.
+- **`/comandos`, histórico de envios**: os cinco campos passaram a usar a classe, com rótulo em cima (`.filtro-rotulo`), e o par De/Até deixou de quebrar linha no meio — dois campos que só fazem sentido lidos como intervalo.
+
+### Changed
+- **O equipamento vira lista suspensa**, como os outros filtros. Eram 15 botões-chip ocupando três linhas, oferecendo multisseleção que ninguém pediu, num controle que não se parecia com nenhum outro filtro da tela. ⚠️ **O parâmetro da URL não mudou**: link antigo com vários IMEIs separados por vírgula continua filtrando; o seletor reflete o caso de um equipamento, que é o uso real.
+- 🔴 **A multisseleção também virou lista suspensa** — `web/components/select_multi.php`, um dropdown que abre com caixas de seleção, busca (a partir de 8 opções), *marcar todos* / *limpar*, e resumo no botão fechado ("Todos" · o nome do único · "N selecionados"). Substitui `chips_multiselect.php` em `/relatorios/alarmes` e `/bi`, onde o filtro é de **tipos de alarme/evento** e chega a 33 opções — como chips, o controle mudava de altura conforme o cadastro do cliente e precisava de um "+N" para caber. ⚠️ **Mantém o contrato de saída** (hidden com valores por vírgula, mesmo parâmetro GET): nenhuma consulta, link ou export precisou mudar. `chips_multiselect.php` ficou sem uso e foi removido.
+- 🔴 **O filtro de veículo é por PLACA em toda parte**, não por equipamento/IMEI: `/comandos`, `/video/downloads` e `/video/playback` passam a rotular e listar **placa**. ⚠️ O **valor** continua sendo o IMEI — é por ele que as consultas casam, e duas placas iguais no cadastro se confundiriam num filtro por nome. Veículo sem placa cadastrada aparece como `(sem placa) <imei>`, e não como um número cru numa lista de placas: quem lê procuraria um veículo que não existe.
+
+### Notes
+- **Os testes comparam os campos ENTRE SI, não contra uma cor fixa.** Um valor cravado no teste envelheceria junto com o tema; "todos os campos do filtro têm a mesma borda" vale para sempre — e é exatamente o que estava quebrado.
+- ⚠️ **`marcar todos` respeita a busca em curso** — senão marcaria opções que a pessoa não está vendo, e ela só descobriria pelo resultado do relatório. Há teste para isso.
+
 ## [Unreleased] — 4.9.37
 
 **O playback foi refeito em torno da barra.** Cinco apontamentos do dono do produto, e o segundo era um diagnóstico que não batia com o que o dado dizia — a gravação contínua *estava* sendo capturada.
