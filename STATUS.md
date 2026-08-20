@@ -602,9 +602,16 @@
 >    `105`: 1 linha, idempotente no reenvio, e o item vira "Disponível" no minuto
 >    certo da linha do tempo.
 >
->    ⚠️ **Passivo NÃO tratado**: os arquivos que chegaram ANTES desta versão
->    continuam sem linha. Estão no disco; a correção não é retroativa. Um
->    backfill resolveria — **não foi executado**, é decisão do dono do produto.
+>    ⚠️ **Passivo ENCERRADO SEM AÇÃO** (decisão do dono do produto, 20/08/2026):
+>    os arquivos que chegaram ANTES desta versão continuam sem linha em
+>    `media_files` e assim vão ficar. São **29 vídeos distintos** ainda no disco
+>    (113 alarmes sem linha, 53 com arquivo presente), invisíveis no playback,
+>    na fila de downloads e na galeria. O backfill chegou a ser escrito e rodado
+>    em dry-run; **não será aplicado**.
+>
+>    ⚠️ Isto NÃO é pendência — é decisão. Quem reencontrar esses arquivos no
+>    disco e achar que faltou algo: não faltou. A correção da v4.9.35 vale do
+>    momento dela em diante, e o passado ficou como está.
 >
 >    ⚠️ **`filelist_url_base()` devolvia `localhost`** quando o `.env` não tinha
 >    sido carregado (só o construtor do `Database` o lê), e `localhost` para a

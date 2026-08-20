@@ -132,7 +132,7 @@ include __DIR__ . '/../web/layout_base.php';
 
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Dispositivo</th><th>IMEI</th><th>Modelo</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
+        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
         <tbody>
             <?php foreach ($devices as $dev):
                 $off = !$dev['is_active'];
@@ -142,7 +142,10 @@ include __DIR__ . '/../web/layout_base.php';
             ?>
             <tr id="row-<?= $dev['imei'] ?>" style="<?= $off ? 'opacity:.5' : '' ?>">
                 <td style="font-weight:500;color:var(--ink)">
-                    <span class="view-name-<?= $dev['imei'] ?>"><?= htmlspecialchars($dev['device_name'] ?? 'Sem Nome') ?></span>
+                    <?php /* Mesmo texto de vazio do resto do sistema: "Sem Nome" aqui e
+                             "(sem placa)" nas telas de operação eram dois nomes para o
+                             mesmo estado do mesmo campo. */ ?>
+                    <span class="view-name-<?= $dev['imei'] ?>"><?= htmlspecialchars(placa_do_device($dev['device_name'], $dev['imei'])) ?></span>
                 </td>
                 <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
                 <td><span class="view-model-<?= $dev['imei'] ?>"><?= htmlspecialchars($dev['model_display']) ?></span></td>

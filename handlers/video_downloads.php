@@ -254,7 +254,7 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
             <option value="">Todas as placas</option>
             <?php foreach ($devicesFiltro as $dv): ?>
             <option value="<?= htmlspecialchars($dv['imei']) ?>" <?= (count($filtroImeis) === 1 && $filtroImeis[0] === $dv['imei']) ? 'selected' : '' ?>>
-                <?= htmlspecialchars($dv['device_name'] === $dv['imei'] ? '(sem placa) ' . $dv['imei'] : $dv['device_name']) ?>
+                <?= htmlspecialchars(placa_do_device($dv['device_name'], $dv['imei'])) ?>
             </option>
             <?php endforeach; ?>
         </select>

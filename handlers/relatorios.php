@@ -87,7 +87,7 @@ if ($reportType === 'alarmes') {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
-    $columns = ['Data/Hora', 'Dispositivo', 'Alarme', 'Protocolo', 'Severidade', 'Velocidade', 'Mapa'];
+    $columns = ['Data/Hora', 'Placa', 'Alarme', 'Protocolo', 'Severidade', 'Velocidade', 'Mapa'];
 
 } elseif ($reportType === 'trajetos') {
     $where = "d.customer_id = :cid";
@@ -106,7 +106,7 @@ if ($reportType === 'alarmes') {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
-    $columns = ['Data/Hora', 'Dispositivo', 'Endereço', 'Velocidade', 'Direção', 'Mapa'];
+    $columns = ['Data/Hora', 'Placa', 'Endereço', 'Velocidade', 'Direção', 'Mapa'];
     // Endereços da página em um lote (v4.8.0) — substitui as colunas de coordenada
     $geoPagina = geocode_map_rows($rows);
 
@@ -127,7 +127,7 @@ if ($reportType === 'alarmes') {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $total = count($rows);
-    $columns = ['Data/Hora', 'Dispositivo', 'Comando', 'Status', 'Resposta'];
+    $columns = ['Data/Hora', 'Placa', 'Comando', 'Status', 'Resposta'];
 }
 
 // Crescente (mais antigo no topo) sem trocar a amostra dos 200 mais recentes
@@ -156,12 +156,12 @@ include __DIR__ . '/../web/layout_base.php';
     <form method="get" class="flex flex-gap" style="flex-wrap:wrap;align-items:end">
         <input type="hidden" name="tipo" value="<?= $reportType ?>">
         <div>
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Dispositivo</label>
-            <select name="imei" style="padding:6px 10px;font-size:13px;font-family:'Inter',sans-serif;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--surface);min-width:180px">
-                <option value="">Todos os dispositivos</option>
+            <label class="filtro-rotulo" for="rel-imei">Placa</label>
+            <select name="imei" id="rel-imei" class="filtro-campo" style="min-width:180px">
+                <option value="">Todas as placas</option>
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= $d['imei'] ?>" <?= $imeiFilter === $d['imei'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?>
+                    <?= htmlspecialchars(placa_do_device($d['device_name'], $d['imei'])) ?>
                 </option>
                 <?php endforeach; ?>
             </select>

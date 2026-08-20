@@ -303,7 +303,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <option value="">Todas</option>
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $filterImei === $d['imei'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?></option>
+                    <?= htmlspecialchars(placa_do_device($d['device_name'], $d['imei'])) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>

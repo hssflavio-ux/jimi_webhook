@@ -21,6 +21,7 @@
  */
 
 require_once __DIR__ . '/../../includes/media.php';
+require_once __DIR__ . '/../../includes/functions.php';   // placa_do_device()
 
 $falhas = 0;
 $total  = 0;
@@ -91,6 +92,27 @@ checa('não afirma ausência quando não dá para conferir', true, media_availab
 
 @unlink($tmp . '/' . $PRESENTE);
 @rmdir($tmp);
+
+echo "
+── rótulo de PLACA (nunca um IMEI cru numa lista de placas)
+";
+// CONVENÇÃO: "placa" é o que estiver cadastrado no campo do dispositivo, e é
+// TEXTO LIVRE — não precisa parecer uma placa. Por isso não há teste de
+// formato aqui: haveria se o sistema validasse, e ele não deve validar.
+//
+// 🔴 A armadilha é dupla: várias consultas trazem
+// `COALESCE(NULLIF(device_name,''), imei)`, então o campo vazio chega como o
+// PRÓPRIO IMEI e nunca como vazio — um `?:` no template não dispara e o número
+// passa como identificação. Aconteceu em três telas ao mesmo tempo.
+checa('placa de verdade passa', 'ABC1D23', placa_do_device('ABC1D23', '864993060182939'));
+checa('nome de frota passa igual', 'Frota 07', placa_do_device('Frota 07', '864993060182939'));
+checa('descrição livre passa igual', 'Câmera Frontal Ônibus 12',
+      placa_do_device('Câmera Frontal Ônibus 12', '864993060182939'));
+checa('vazio vira (sem placa)', '(sem placa) 864993060182939', placa_do_device('', '864993060182939'));
+checa('null vira (sem placa)', '(sem placa) 864993060182939', placa_do_device(null, '864993060182939'));
+checa('só espaços vira (sem placa)', '(sem placa) 864993060182939', placa_do_device('   ', '864993060182939'));
+checa('🔴 device_name JÁ COALESCIDO para o imei vira (sem placa)',
+      '(sem placa) 864993060182939', placa_do_device('864993060182939', '864993060182939'));
 
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);

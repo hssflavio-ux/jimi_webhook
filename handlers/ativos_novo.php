@@ -138,9 +138,13 @@ include __DIR__ . '/../web/layout_base.php';
         <?= csrf_field() ?>
         <div class="form-row">
             <div class="form-group">
-                <label for="device_name">Nome do Dispositivo *</label>
+                <label for="device_name">Placa *</label>
                 <input type="text" id="device_name" name="device_name" required
-                       placeholder="Ex: Câmera Veículo 01">
+                       placeholder="Ex: ABC1D23, Frota 07, Câmera Veículo 01">
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Texto livre: placa, número de frota ou apelido — o sistema não exige formato.
+                    É por este texto que o veículo aparece em todas as telas.
+                </small>
             </div>
             <div class="form-group">
                 <label for="imei">IMEI *</label>

@@ -425,9 +425,13 @@ require_once __DIR__ . '/../web/layout_base.php';
                        class="text-mono" style="font-family:'JetBrains Mono',monospace;">
             </div>
             <div class="form-group">
-                <label>Nome do Dispositivo *</label>
+                <label>Placa *</label>
                 <input type="text" name="device_name" value="<?= htmlspecialchars($editDevice['device_name'] ?? '') ?>" required
-                       placeholder="Ex: Câmera Frontal Ônibus 12">
+                       placeholder="Ex: ABC1D23, Frota 07, Câmera Frontal Ônibus 12">
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Texto livre: placa, número de frota ou apelido — o sistema não exige formato.
+                    É por este texto que o veículo aparece em todas as telas.
+                </small>
             </div>
         </div>
 

@@ -631,7 +631,7 @@ include __DIR__ . '/../web/layout_base.php';
           <option value="">Todas as placas</option>
           <?php foreach ($devices as $dv): ?>
           <option value="<?= htmlspecialchars($dv['imei']) ?>" <?= (count($filtroImeis) === 1 && $filtroImeis[0] === $dv['imei']) ? 'selected' : '' ?>>
-            <?= htmlspecialchars($dv['device_name'] ?: '(sem placa) ' . $dv['imei']) ?>
+            <?= htmlspecialchars(placa_do_device($dv['device_name'], $dv['imei'])) ?>
           </option>
           <?php endforeach; ?>
         </select>

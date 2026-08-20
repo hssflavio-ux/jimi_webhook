@@ -396,7 +396,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <select name="imei" id="pb-imei" class="filtro-campo" style="width:100%">
                         <?php foreach ($devices as $d): ?>
                         <option value="<?= $d['imei'] ?>" data-cam="<?= $d['camera_count']??1 ?>" data-proto="<?= htmlspecialchars($d['protocol'] ?? 'JTT') ?>" <?= $selImei===$d['imei']?'selected':'' ?>>
-                            <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars($d['device_name'] ?: '(sem placa) ' . $d['imei']) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
+                            <?= $mostrarCliente ? htmlspecialchars($d['customer_name']) . ' · ' : '' ?><?= htmlspecialchars(placa_do_device($d['device_name'], $d['imei'])) ?> (<?= htmlspecialchars($d['model_name']??'?') ?>)
                         </option>
                         <?php endforeach; ?>
                     </select>

@@ -1093,6 +1093,43 @@ function report_has_query(): bool {
  * @return array{flv_base:string, ingest_ip:string, ingest_port:string, playback_port:string}
  */
 /**
+ * Rótulo do veículo nas telas de operação — o que este projeto chama de PLACA.
+ *
+ * ── A CONVENÇÃO (decisão do dono do produto, 20/08/2026) ────────────────────
+ * **"Placa" é o que estiver cadastrado em `devices.device_name`, e pronto.** É
+ * texto LIVRE: não é validado, não é normalizado e **não precisa parecer uma
+ * placa**. `ABC1D23`, `Câmera Frontal Ônibus 12` e `Frota 07` são todos válidos
+ * — o campo identifica o veículo do jeito que o cliente identifica, e o sistema
+ * não tem opinião sobre isso.
+ *
+ * ⚠️ Não escreva validação de formato aqui nem em cadastro: recusar
+ * `Ônibus 12` porque "não é placa" quebraria clientes que nomeiam a frota assim.
+ * O campo se chama **Placa** em toda tela — cadastro, grade, filtro, coluna de
+ * relatório e export. Ele já teve três nomes ("Nome do Dispositivo",
+ * "Dispositivo", "Placa"), o que fazia parecer campos diferentes.
+ *
+ * 🔴 POR QUE NÃO É SÓ `$device_name ?: $imei`. Sem nada cadastrado, o operador
+ * lê 15 dígitos numa coluna chamada "Placa" e vai procurar um veículo que não
+ * existe. E a armadilha é dupla: várias consultas do sistema já trazem
+ * `COALESCE(NULLIF(device_name,''), imei)`, então o campo vazio chega como o
+ * PRÓPRIO IMEI e nunca como vazio — um `?:` no template não dispara, e o número
+ * passa como se fosse identificação. Estava assim em três telas ao mesmo tempo.
+ *
+ * O VALOR do filtro continua sendo o IMEI: é por ele que as consultas casam, e
+ * como o campo é livre, dois veículos podem perfeitamente ter o mesmo texto.
+ * Isto aqui é só o que a pessoa LÊ.
+ *
+ * @param string|null $deviceName `devices.device_name` — cru ou já coalescido
+ * @param string      $imei       IMEI do equipamento
+ * @returns string O texto cadastrado, ou `(sem placa) <imei>` quando não há
+ */
+function placa_do_device(?string $deviceName, string $imei): string
+{
+    $nome = trim((string)$deviceName);
+    return ($nome === '' || $nome === $imei) ? '(sem placa) ' . $imei : $nome;
+}
+
+/**
  * Base da URL que a câmera JIMI usa para subir a lista do cartão (v4.9.18).
  *
  * Termina com barra; o IMEI é concatenado pelo chamador, formando

@@ -42,11 +42,11 @@ include __DIR__ . '/../web/layout_base.php';
     <div class="card">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Consultar Dispositivo</h4>
         <div class="form-group">
-            <label>Dispositivo</label>
+            <label>Placa</label>
             <select id="cfg-imei-query">
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= $d['imei'] ?>" data-protocol="<?= $d['protocol'] ?>">
-                    <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?> (<?= htmlspecialchars($d['model_display']) ?>)
+                    <?= htmlspecialchars(placa_do_device($d['device_name'], $d['imei'])) ?> (<?= htmlspecialchars($d['model_display']) ?>)
                 </option>
                 <?php endforeach; ?>
             </select>
@@ -72,7 +72,7 @@ include __DIR__ . '/../web/layout_base.php';
     <div class="card">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Definir Parâmetro</h4>
         <div class="form-group">
-            <label>Dispositivo</label>
+            <label>Placa</label>
             <select id="cfg-imei-set">
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= $d['imei'] ?>"><?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?></option>

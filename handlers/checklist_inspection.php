@@ -148,11 +148,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                     </select>
                 </div>
                 <div>
-                    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Dispositivo</label>
-                    <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
+                    <label class="filtro-rotulo" for="chk-imei">Placa</label>
+                    <select name="imei" id="chk-imei" class="filtro-campo" style="min-width:180px">
                         <option value="">— Selecione —</option>
                         <?php foreach ($devices as $d): ?>
-                        <option value="<?= $d['imei'] ?>" <?= $selectedImei==$d['imei']?'selected':'' ?>><?= htmlspecialchars($d['label']) ?></option>
+                        <option value="<?= $d['imei'] ?>" <?= $selectedImei==$d['imei']?'selected':'' ?>><?= htmlspecialchars(placa_do_device($d['label'], $d['imei'])) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>

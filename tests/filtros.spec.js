@@ -58,6 +58,29 @@ test.describe('Barras de filtro — padrão visual', () => {
         }
     });
 
+    test('🔴 o campo do veículo se chama PLACA em toda tela', async ({ authedPage }) => {
+        // CONVENÇÃO (dono do produto, 20/08/2026): "placa" é o que estiver
+        // cadastrado no campo do dispositivo, TEXTO LIVRE, sem formato exigido.
+        // O campo já teve TRÊS nomes para a mesma coisa — "Nome do Dispositivo"
+        // no cadastro, "Dispositivo" na grade, "Placa" na operação —, o que
+        // fazia parecer que eram campos diferentes.
+        const rotas = ['/ativos', '/ativos/novo', '/equipamentos?action=novo', '/relatorios',
+                       '/config-dispositivos', '/comandos', '/video/downloads',
+                       '/video/playback', '/relatorios/alarmes'];
+        for (const rota of rotas) {
+            const resp = await authedPage.goto(rota);
+            expect(resp && resp.status(), rota + ' não abriu').toBeLessThan(400);
+            await authedPage.waitForLoadState('domcontentloaded');
+
+            const rotulos = await authedPage.evaluate(() =>
+                [...document.querySelectorAll('label, th')].map((e) => e.textContent.trim()));
+
+            expect(rotulos.some((r) => /^placa/i.test(r)), rota + ': falta o rótulo Placa').toBeTruthy();
+            expect(rotulos.filter((r) => /^(nome do )?dispositivo\s*\*?$/i.test(r)),
+                rota + ': ainda chama o campo de "Dispositivo"').toEqual([]);
+        }
+    });
+
     test('🔴 o filtro de veículo é por PLACA, não por IMEI', async ({ authedPage }) => {
         for (const rota of ['/comandos', '/video/downloads', '/video/playback', '/relatorios/alarmes']) {
             await authedPage.goto(rota);
