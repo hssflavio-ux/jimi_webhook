@@ -435,13 +435,62 @@
 >    e injeta o `Content-Length` (conferido: um POST chunked de 54 bytes chega
 >    com `CONTENT_LENGTH=54` e sem `Transfer-Encoding`).
 >
->    **Correção proposta, NÃO aplicada** (mexe na config do Apache em produção e
->    precisa de autorização): forçar o Apache a bufferizar o corpo desta rota e
->    entregá-lo com `Content-Length`, escopado só em `/filelist` —
->    `SetEnv proxy-sendcl 1` e/ou `mod_buffer` (`SetInputFilter BUFFER`).
->    Precisa ser MEDIDO depois de aplicado: a mesma busca binária tem de passar
->    acima de 16 K. Enquanto não for aplicada, o `FILELIST` continua inútil — o
->    parser da FASE 1 não tem o que parsear.
+>    **A culpa é do Apache, isolada por experimento.** O MESMO corpo de 39.030
+>    bytes, mandado pelo mesmo socket cru:
+>
+>    | destino | chegou ao `php://input` |
+>    |---|---|
+>    | servidor embutido do PHP (`php -S`, sem Apache) | **39.030** ✓ |
+>    | Apache → `mod_proxy_fcgi` → PHP-FPM | **0** 🔴 |
+>
+>    PHP é servido por `SetHandler "proxy:unix:/run/php/php8.3-fpm.sock|fcgi://localhost"`,
+>    ou seja **mod_proxy_fcgi** — e é ele que perde o corpo.
+>
+>    #### O que já foi TESTADO e DESCARTADO (19/08/2026)
+>
+>    - 🔴 **`mod_buffer` (`SetInputFilter BUFFER` + `BufferSize 8M`) NÃO resolve.**
+>      Testado com escopo LARGO de propósito (`<Directory /var/www/jimi_webhook>`),
+>      justamente para não confundir "não funciona" com "não foi aplicado":
+>      o corpo de 39 KB continuou chegando zerado. Módulo desativado de volta.
+>    - ⚠️ **`<LocationMatch "^/filelist/">` NÃO é escopo válido para esta rota.**
+>      O `.htaccess` reescreve `/filelist/…` para `handlers/router.php`, e o
+>      location walk roda de novo contra a URI REESCRITA — a diretiva nunca é
+>      aplicada. A primeira tentativa de correção caiu exatamente nisso e o
+>      sintoma foi enganoso: config no ar, `configtest` OK, e zero efeito.
+>      **`<Directory>` funciona** (o `mod_buffer` foi de fato aplicado por ele).
+>
+>    #### O candidato que sobrou, ainda NÃO testado
+>
+>    **`SetEnv proxy-sendcl 1`** — força o proxy a spoolar o corpo e mandá-lo com
+>    `Content-Length`, que é exatamente o que falta. Confirmado que o módulo o
+>    conhece (`grep -a 'proxy-sendcl' mod_proxy_fcgi.so` casa, ao lado de
+>    `proxy-fcgi-input` e `proxy-nocanon`; controle feito com `mod_proxy_http`).
+>    Ele **nunca chegou a ser exercitado**: a primeira tentativa o pôs dentro do
+>    `<LocationMatch>` que não casa.
+>
+>    ```apache
+>    # /etc/apache2/conf-available/filelist-chunked.conf
+>    <Directory /var/www/jimi_webhook>
+>        SetEnv proxy-sendcl 1
+>    </Directory>
+>    ```
+>    `a2enconf filelist-chunked && apache2ctl configtest && systemctl reload apache2`
+>
+>    ⚠️ **Medir depois de aplicar, não presumir**: a busca binária tem de passar
+>    acima de 16 K. E se funcionar, ESTREITAR o escopo — `<Directory>` pega todas
+>    as rotas, e spoolar o corpo de todo webhook de GPS é custo desnecessário.
+>    Escopo estreito exige contornar a reescrita (`SetEnvIf Request_URI`, com a
+>    ressalva de que mod_rewrite prefixa `REDIRECT_` nas variáveis ao redirecionar
+>    internamente).
+>
+>    **Plano B, se o `proxy-sendcl` não resolver**: tirar o `/filelist` do caminho
+>    do Apache. A rota do vídeo já funciona assim (porta 23010, container
+>    `dvr-upload`, arquivos de MB) e o `FILELIST,<url>` é configurável — basta
+>    apontar a câmera para uma porta com um receptor próprio. Custa mais, mas o
+>    experimento acima já provou que fora do Apache o corpo chega inteiro.
+>
+>    Enquanto nada disso for aplicado, o `FILELIST` continua inútil — o parser da
+>    FASE 1 não tem o que parsear.
 > 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
 >    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
 >    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
