@@ -98,6 +98,33 @@ try {
     exit('Erro interno.');
 }
 
+// ── Carimbo de "já baixado" (v4.9.37) ───────────────────────────────────────
+//
+// 🔴 SÓ COM `dl=1`, e a distinção não é preciosismo: o player de MPEG-TS busca
+// os bytes por esta MESMA URL, por `fetch`, para remuxar. Carimbar em toda
+// leitura faria "assistir" virar "baixado", e a fila de downloads passaria a
+// mentir exatamente na coluna que ela existe para responder — "isto aqui eu já
+// levei?". Quem manda `dl=1` é o link com atributo `download`, mais nada.
+//
+// Fora de qualquer `if` de erro: o carimbo vem ANTES do envio dos bytes porque
+// um download interrompido no meio ainda foi um download iniciado pela pessoa;
+// e falhar aqui não pode impedir o arquivo de sair.
+if (!empty($_GET['dl'])) {
+    try {
+        $db->prepare("
+            UPDATE media_files
+               SET downloaded_at  = COALESCE(downloaded_at, UTC_TIMESTAMP()),
+                   downloaded_by  = COALESCE(downloaded_by, :uid),
+                   download_count = download_count + 1
+             WHERE file_url = :f
+        ")->execute([':uid' => (int)($_SESSION['user_id'] ?? 0) ?: null, ':f' => $arquivo]);
+    } catch (Throwable $e) {
+        Logger::warning('midia: falha ao carimbar download', [
+            'arquivo' => $arquivo, 'error' => $e->getMessage(),
+        ]);
+    }
+}
+
 $caminho = $baseDir . '/' . $arquivo;
 if (!is_file($caminho) || !is_readable($caminho)) {
     http_response_code(404);

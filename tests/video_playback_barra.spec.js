@@ -1,107 +1,69 @@
 // @ts-check
 /**
- * Spec da barra do período do playback (v4.9.35).
+ * Spec da barra do período do playback e da lista que a acompanha.
  *
  * 🔴 O DEFEITO QUE ESTE SPEC EXISTE PARA PEGAR não é a barra: é o **script da
  * tela inteira morrer**. Uma `alert('texto` com quebra de linha literal dentro
  * da string — resíduo de edição — derruba o `<script>` inline com
  * `Invalid or unexpected token`, e a partir daí NENHUMA função da página
- * existe: nem `pbRequestJimi`, nem `requestExtractJimi`, nem `selectRecording`.
- * A página renderiza bonita, o HTML está correto, e todo clique é morto.
- * Aconteceu de verdade em 20/08/2026, e nenhuma verificação de HTML pegaria —
- * só abrir no navegador pegou.
+ * existe. A página renderiza bonita, o HTML está correto, e todo clique é
+ * morto. Aconteceu de verdade em 20/08/2026, e nenhuma verificação de HTML
+ * pegaria — só abrir no navegador pegou. Por isso a primeira asserção aqui é
+ * "o console está limpo".
  *
- * Por isso a primeira asserção aqui é "o console está limpo".
+ * O resto trava o que a barra promete: uma faixa por canal, panorama em
+ * SESSÕES, zoom que chega ao bloco de um minuto, dica com início e fim ao
+ * passar o mouse, e a lista espelhando a janela de zoom.
  *
- * O resto trava o que a barra promete: uma faixa por canal, segmentos que são
- * SESSÕES (não os 3.021 blocos de um minuto, que virariam uma mancha sólida
- * mentindo "gravou o tempo todo") e o clique que leva à lista.
- *
- * O segundo bloco cobre a LISTA, pelo mesmo motivo de método: o botão
- * [Extrair] passava por cima do texto e nenhuma verificação de HTML pegava —
- * o HTML estava correto, a GEOMETRIA é que não. Por isso a asserção é de
- * caixas, não de marcação.
+ * A geometria da linha da lista está aqui pelo mesmo motivo de método: o botão
+ * [Extrair] passava por cima do texto e o HTML estava perfeitamente válido —
+ * a GEOMETRIA é que não. Asserção de caixas, não de marcação.
  */
 const { test, expect, hasCreds } = require('./fixtures/auth');
 
 test.skip(!hasCreds(), 'defina TEST_EMAIL e TEST_PASSWORD');
 
 /**
- * Abre o playback num equipamento que TENHA listagem válida.
+ * Semeia uma listagem e abre a tela nela.
  *
- * ⚠️ Não basta pegar o primeiro `<option>`: a ordem é por cliente e nome, e o
- * primeiro equipamento quase nunca é o que foi listado nos últimos 30 min (a
- * listagem vence — o cartão é buffer circular). Pegar o primeiro fazia os dois
- * testes que mais importam PULAREM, e spec que pula não é cobertura.
- *
- * A varredura é limitada: se nenhum equipamento tem listagem válida, não há o
- * que testar neste ambiente — e aí o skip é honesto, com o motivo certo.
- *
- * @returns {Promise<{imei: string, sessoes: number}>} imei vazio = não achou
- */
-/**
- * Garante que existe listagem para desenhar, e devolve o equipamento e a janela.
- *
- * 🔴 SEM ISTO OS DOIS TESTES QUE MAIS IMPORTAM PULAM — e spec que pula não é
+ * 🔴 SEM ISTO OS TESTES QUE MAIS IMPORTAM PULAM — e spec que pula não é
  * cobertura. A listagem do cartão VENCE em 30 min (é um retrato de buffer
  * circular), então um teste que dependa de dado pré-existente passa hoje e pula
  * amanhã, sem ninguém perceber que a barra deixou de ser verificada.
  *
- * Com `TEST_IMEI` definido, o spec SEMEIA pelo endpoint real `/filelist/{imei}`
- * — o mesmo caminho da câmera, então o que se testa continua sendo produção e
- * não um atalho. Sem ele, varre os equipamentos atrás de listagem válida e,
- * não achando, pula com o motivo certo.
- *
- * ⚠️ Os nomes semeados ficam num passado DISTANTE (2020) de propósito: se
- * alguém rodar a suíte apontando para um ambiente real, eles não aparecem em
- * nenhuma janela que um operador consulte. O teste pede exatamente esse dia.
+ * A semeadura usa o endpoint REAL `/filelist/{imei}` — o mesmo caminho da
+ * câmera —, então o que se testa continua sendo produção e não um atalho. Os
+ * nomes ficam num passado distante (2020) de propósito: se a suíte apontar
+ * para um ambiente real, eles não aparecem em nenhuma janela que um operador
+ * consulte, e o teste pede exatamente esse dia.
  */
 const SEED_IMEI = process.env.TEST_IMEI || '';
-const SEED_DIA  = '2020-03-01';
+const SEED_DIA = '2020-03-01';
 
-/** Lista sintética: 40 blocos, buraco de 30 min, mais 20 — nos dois canais. */
+/** 40 blocos, buraco de 30 min, mais 20 — nos dois canais. */
 function listaSemeada() {
     const nomes = [];
-    const doMinuto = (min, canal) => {
+    const nome = (min, canal) => {
         const d = new Date(Date.UTC(2020, 2, 1, 8, 0, 0) + min * 60000);
         const p = (n) => String(n).padStart(2, '0');
         return `2020_03_${p(d.getUTCDate())}_${p(d.getUTCHours())}_${p(d.getUTCMinutes())}_00_0${canal}.ts`;
     };
     for (const canal of [1, 2]) {
-        for (let i = 0; i < 40; i++) nomes.push(doMinuto(i, canal));
-        for (let i = 70; i < 90; i++) nomes.push(doMinuto(i, canal));
+        for (let i = 0; i < 40; i++) nomes.push(nome(i, canal));
+        for (let i = 70; i < 90; i++) nomes.push(nome(i, canal));
     }
     return nomes.join(',') + ',';   // vírgula final, como a câmera manda
 }
 
-let imeiComDados;   // memo: a varredura custa uma página de centenas de KB por
-                    // equipamento, e o worker é o mesmo para todos os testes
-
-async function abrirComSessoes(page, request, maxDevices = 8) {
-    if (SEED_IMEI) {
-        const r = await request.post(`/filelist/${SEED_IMEI}`, {
-            headers: { 'Content-Type': 'application/json' },
-            data: { imei: SEED_IMEI, fileNameList: listaSemeada() },
-        });
-        expect(r.ok(), 'o endpoint /filelist tem de aceitar a semeadura').toBeTruthy();
-        await page.goto(`/video/playback?imei=${SEED_IMEI}&channel=1`
-            + `&date_from=${SEED_DIA}&date_to=${SEED_DIA}&request=1`);
-        return { imei: SEED_IMEI, sessoes: await page.locator('rect.pb-sessao').count(), semeado: true };
-    }
-    if (imeiComDados !== undefined) {
-        if (!imeiComDados) return { imei: '', sessoes: 0, semeado: false };
-        await page.goto(`/video/playback?imei=${imeiComDados}&channel=1&request=1`);
-        return { imei: imeiComDados, sessoes: await page.locator('rect.pb-sessao').count(), semeado: false };
-    }
-    const imeis = await page.locator('#pb-imei option').evaluateAll((opts) =>
-        opts.map((o) => /** @type {HTMLOptionElement} */ (o).value));
-    for (const imei of imeis.slice(0, maxDevices)) {
-        await page.goto(`/video/playback?imei=${imei}&channel=1&request=1`);
-        const n = await page.locator('rect.pb-sessao').count();
-        if (n > 0) { imeiComDados = imei; return { imei, sessoes: n, semeado: false }; }
-    }
-    imeiComDados = '';
-    return { imei: '', sessoes: 0, semeado: false };
+async function abrirComDados(page, request) {
+    const r = await request.post(`/filelist/${SEED_IMEI}`, {
+        headers: { 'Content-Type': 'application/json' },
+        data: { imei: SEED_IMEI, fileNameList: listaSemeada() },
+    });
+    expect(r.ok(), '/filelist tem de aceitar a semeadura').toBeTruthy();
+    await page.goto(`/video/playback?imei=${SEED_IMEI}`
+        + `&date_from=${SEED_DIA}&date_to=${SEED_DIA}&request=1`);
+    await expect(page.locator('#pb-svg rect.pb-trilho').first()).toBeVisible();
 }
 
 test.describe('Playback — barra do período', () => {
@@ -114,13 +76,11 @@ test.describe('Playback — barra do período', () => {
         await authedPage.goto('/video/playback');
         await expect(authedPage.locator('#pb-imei')).toBeVisible();
 
-        // Se o <script> morreu, as funções globais não existem — é o sintoma
-        // direto, e mais específico que só olhar o console.
         const vivas = await authedPage.evaluate(() => [
+            // @ts-ignore — funções globais da tela
+            typeof onSubmitRequest, typeof pbSendCmd, typeof selectRecording, typeof pbRequestJimi,
             // @ts-ignore
-            typeof onSubmitRequest, typeof pbSendCmd, typeof selectRecording,
-            // @ts-ignore
-            typeof pbRequestJimi, typeof requestExtractJimi, typeof pbIrParaSessao,
+            typeof pbVerNaCamera, typeof pbSubirStorage, typeof pbZoom, typeof pbTudo, typeof pbIrPara,
         ]);
         expect(erros, 'nenhum erro de console ao abrir a tela').toEqual([]);
         expect(vivas.every((t) => t === 'function'),
@@ -129,79 +89,119 @@ test.describe('Playback — barra do período', () => {
 
     test('a barra só aparece depois de um período pedido', async ({ authedPage }) => {
         await authedPage.goto('/video/playback');
-        await expect(authedPage.locator('.pb-barra')).toHaveCount(0);
+        await expect(authedPage.locator('#pb-svg')).toHaveCount(0);
     });
 
-    test('uma faixa por canal do equipamento, no mesmo eixo', async ({ authedPage }) => {
-        await authedPage.goto('/video/playback');
-        const imei = await authedPage.locator('#pb-imei option').first().getAttribute('value');
-        const cams = Number(await authedPage.locator('#pb-imei option').first().getAttribute('data-cam')) || 1;
-        test.skip(!imei, 'nenhum equipamento cadastrado neste ambiente');
-
-        await authedPage.goto(`/video/playback?imei=${imei}&channel=1&request=1`);
-        await expect(authedPage.locator('.pb-barra')).toBeVisible();
-
-        // Uma trilha por câmera cadastrada. Os dois canais gravam juntos, então
-        // desenhá-los no mesmo eixo é o que torna o desalinhamento visível.
-        await expect(authedPage.locator('.pb-trilho')).toHaveCount(cams);
-        await expect(authedPage.locator('.pb-canal.atual')).toHaveCount(1);
+    test('uma faixa por canal, no mesmo eixo', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
+        // Os canais gravam juntos: desenhá-los no mesmo eixo é o que torna o
+        // desalinhamento entre câmeras visível de relance.
+        expect(await authedPage.locator('rect.pb-trilho').count()).toBeGreaterThanOrEqual(2);
     });
 
-    test('🔴 os segmentos são SESSÕES, não um por bloco de minuto', async ({ authedPage }) => {
-        // A varredura abre uma página pesada por equipamento até achar o que
-        // tem listagem válida — o default de 45 s não cobre isso.
-        test.setTimeout(150000);
-        await authedPage.goto('/video/playback');
-        const { imei, sessoes, semeado } = await abrirComSessoes(authedPage, authedPage.request);
-        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
-        await expect(authedPage.locator('.pb-barra')).toBeVisible();
+    test('🔴 panorama mostra SESSÕES; o zoom chega ao bloco de um minuto', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
 
-        const itens = await authedPage.locator('.timeline-item').count();
+        // Panorama: 120 blocos semeados viram 2 sessões por canal (o buraco de
+        // 30 min parte cada canal em duas). Desenhar os 120 individualmente
+        // produziria uma mancha sólida que MENTE — diria "gravou o tempo todo"
+        // exatamente onde há buraco.
+        const panorama = await authedPage.evaluate(() => ({
+            sessoes: document.querySelectorAll('rect.pb-sessao').length,
+            blocos: document.querySelectorAll('rect.pb-bloco').length,
+            blocosNoDado: PB.blocos.length,
+        }));
+        expect(panorama.blocosNoDado, '120 blocos semeados').toBe(120);
+        expect(panorama.sessoes, 'duas sessões por canal').toBe(4);
+        expect(panorama.blocos, 'no panorama não se desenha bloco a bloco').toBe(0);
 
-        if (semeado) {
-            // 60 blocos por canal, partidos por um buraco de 30 min: DUAS
-            // sessões em cada uma das faixas. Números exatos, porque o dado é
-            // nosso — é aqui que a agregação fica de fato travada.
-            expect(sessoes, 'duas sessões por canal semeado').toBe(4);
-            expect(itens, '60 blocos do canal 1 na lista').toBe(60);
-        }
+        // Aproximando o suficiente, cada bloco vira um alvo próprio — é o
+        // "chegar ao intervalo de 1 vídeo".
+        const perto = await authedPage.evaluate(() => {
+            pbIrPara(PB.blocos[0][0]);
+            for (let i = 0; i < 12; i++) pbZoom(1.8, PB.blocos[0][0]);
+            return {
+                sessoes: document.querySelectorAll('rect.pb-sessao').length,
+                blocos: document.querySelectorAll('rect.pb-bloco').length,
+                vista: PB.vista[1] - PB.vista[0],
+            };
+        });
+        expect(perto.blocos, 'aproximado, os blocos aparecem um a um').toBeGreaterThan(0);
+        expect(perto.sessoes, 'e as sessões dão lugar a eles').toBe(0);
+        expect(perto.vista, 'o zoom máximo é da ordem do bloco').toBeLessThanOrEqual(600);
 
-        // A fusão só tem valor se REDUZIR. Igualdade significaria que cada bloco
-        // virou um segmento, que é exatamente a mancha sólida que queremos
-        // evitar. (Com poucos itens a redução pode ser 1:1 legitimamente, daí
-        // o piso.)
-        if (itens > 20) {
-            expect(sessoes, 'a barra tem de agregar blocos contíguos em sessões')
-                .toBeLessThan(itens);
-        }
-
-        // Todo segmento carrega o resumo no tooltip nativo do SVG — sem ele a
-        // barra vira decoração: dá para ver que há gravação e não quando.
-        const comTitulo = await authedPage.locator('rect.pb-sessao > title').count();
-        expect(comTitulo).toBe(sessoes);
+        // E volta: o botão Tudo devolve o período pedido inteiro.
+        const volta = await authedPage.evaluate(() => { pbTudo(); return PB.vista[1] - PB.vista[0]; });
+        expect(volta, 'Tudo devolve a janela pedida').toBeGreaterThan(perto.vista);
     });
 
-    test('clicar numa faixa leva até a lista', async ({ authedPage }) => {
-        test.setTimeout(150000);
-        authedPage.on('dialog', (d) => d.dismiss().catch(() => {}));
-        await authedPage.goto('/video/playback');
-        const { imei } = await abrirComSessoes(authedPage, authedPage.request);
-        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
+    test('🔴 a dica do mouse mostra início e fim do trecho', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
+        await authedPage.evaluate(() => {
+            pbIrPara(PB.blocos[0][0]);
+            for (let i = 0; i < 12; i++) pbZoom(1.8, PB.blocos[0][0]);
+        });
 
-        // Uma sessão do canal ATUAL destaca o item; de outro canal recarregaria
-        // a página, e é por isso que o teste usa a primeira faixa.
-        expect(await authedPage.locator('.timeline-item.alvo').count()).toBe(0);
-        await authedPage.locator('rect.pb-sessao').first().click();
-        await expect(authedPage.locator('.timeline-item.alvo')).toHaveCount(1);
+        await authedPage.locator('rect.pb-bloco').first().hover();
+        const dica = authedPage.locator('#pb-dica');
+        await expect(dica).toHaveClass(/on/);
+        // Início — fim, que é o que o dono do produto pediu para ver ao passar
+        // o mouse. `HH:MM:SS — HH:MM:SS`, na hora local da câmera.
+        await expect(dica).toContainText(/\d{2}:\d{2}:\d{2}\s*—\s*\d{2}:\d{2}:\d{2}/);
+        await expect(dica).toContainText(/clique/i);
+    });
+
+    test('a lista espelha a janela de zoom', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
+
+        const tudo = await authedPage.locator('.timeline-item').count();
+        expect(tudo, 'no panorama, a lista traz o período inteiro').toBe(120);
+
+        // 🔴 É isto que elimina o teto de itens: em vez de cortar as 500 mais
+        // recentes e avisar, a tela mostra o que está na vista — e aproximar
+        // É filtrar.
+        await authedPage.evaluate(() => {
+            pbIrPara(PB.blocos[0][0]);
+            for (let i = 0; i < 12; i++) pbZoom(1.8, PB.blocos[0][0]);
+        });
+        const perto = await authedPage.locator('.timeline-item').count();
+        expect(perto, 'aproximado, a lista encolhe junto').toBeLessThan(tudo);
+        expect(perto, 'e ainda mostra algo').toBeGreaterThan(0);
+    });
+
+    test('vazio é ACIONÁVEL: leva até a gravação mais próxima', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
+        // O buraco de 30 min entre as duas sessões semeadas. Dois terços de um
+        // cartão real são buraco, então cair num é o caso NORMAL — e "nada
+        // aqui" sem saída deixa o usuário arrastando às cegas.
+        // ⚠️ Acha o buraco MEDINDO, e não por índice: os dois canais chegam
+        // intercalados por tempo, então `blocos[39]` não é o fim da primeira
+        // sessão — é o vigésimo minuto dela. Foi o que fez este teste falhar
+        // apontando para o lugar errado.
+        await authedPage.evaluate(() => {
+            const ts = [...new Set(PB.blocos.map((b) => b[0]))].sort((a, b) => a - b);
+            let maior = 0, em = ts[0];
+            for (let i = 1; i < ts.length; i++) {
+                if (ts[i] - ts[i - 1] > maior) { maior = ts[i] - ts[i - 1]; em = ts[i - 1]; }
+            }
+            pbAplicarVista(em + 300, em + 900);   // dentro do vazio
+        });
+        const botao = authedPage.locator('#pb-lista button', { hasText: /gravação mais próxima/i });
+        await expect(botao).toBeVisible();
+        await botao.click();
+        await expect.poll(async () => authedPage.locator('.timeline-item').count()).toBeGreaterThan(0);
     });
 });
 
 test.describe('Playback — lista de gravações', () => {
     test('🔴 o texto da linha nunca invade o botão', async ({ authedPage }) => {
-        test.setTimeout(150000);
-        await authedPage.goto('/video/playback');
-        const { imei } = await abrirComSessoes(authedPage, authedPage.request);
-        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
 
         const linhas = authedPage.locator('.timeline-item');
         expect(await linhas.count(), 'a lista precisa ter linhas').toBeGreaterThan(0);
@@ -210,7 +210,6 @@ test.describe('Playback — lista de gravações', () => {
         // nem sem a correção — um teste que só medisse o conteúdo atual PASSA
         // com o defeito no lugar, e vira decoração. O contrato a travar é o do
         // LAYOUT: por mais longo que o texto fique, ele encolhe, e a ação não.
-        // Então o teste força um texto absurdo e mede.
         const medida = await linhas.first().evaluate((it) => {
             const meta = it.querySelector('.tl-meta');
             const acao = it.querySelector('.pb-extract') || it.querySelector('.pb-badge');
@@ -218,11 +217,8 @@ test.describe('Playback — lista de gravações', () => {
             const original = meta.textContent;
             meta.textContent = 'descrição deliberadamente longa '.repeat(12);
             const a = meta.getBoundingClientRect(), b = acao.getBoundingClientRect();
-            const r = {
-                invade: a.right > b.left + 0.5,
-                acaoVisivel: b.width > 1,
-                truncou: meta.scrollWidth > meta.clientWidth,
-            };
+            const r = { invade: a.right > b.left + 0.5, acaoVisivel: b.width > 1,
+                        truncou: meta.scrollWidth > meta.clientWidth };
             meta.textContent = original;
             return r;
         });
@@ -231,25 +227,28 @@ test.describe('Playback — lista de gravações', () => {
         expect(medida.acaoVisivel, 'a ação não pode ser espremida a zero').toBeTruthy();
         expect(medida.truncou, 'o texto que não cabe tem de ser truncado, não transbordar').toBeTruthy();
 
-        // Com o conteúdo REAL, nada pode estar cortado: se a duração aparece
-        // como "1 …", o layout perdeu a briga por espaço.
         const cortados = await linhas.locator('.tl-meta').evaluateAll((ms) =>
             ms.slice(0, 30).filter((m) => m.scrollWidth > m.clientWidth + 1).length);
         expect(cortados, 'a duração não pode ser cortada na largura padrão').toBe(0);
     });
 
-    test('a data é dita uma vez por dia, não em toda linha', async ({ authedPage }) => {
-        test.setTimeout(150000);
-        await authedPage.goto('/video/playback');
-        const { imei } = await abrirComSessoes(authedPage, authedPage.request);
-        test.skip(!imei, 'defina TEST_IMEI, ou tenha um equipamento com listagem válida');
+    test('a data é dita uma vez por dia; o canal, em cada linha', async ({ authedPage }) => {
+        test.skip(!SEED_IMEI, 'defina TEST_IMEI');
+        await abrirComDados(authedPage, authedPage.request);
 
         const dias = await authedPage.locator('.tl-dia').allTextContents();
         expect(dias.length, 'a lista precisa de separador de dia').toBeGreaterThan(0);
         expect(new Set(dias).size, 'cada dia aparece uma única vez').toBe(dias.length);
 
-        // A hora fica na linha; a data, não — era ela que se repetia 500 vezes.
-        const horas = await authedPage.locator('.tl-hora').first().textContent();
-        expect((horas || '').trim()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+        const hora = await authedPage.locator('.tl-hora').first().textContent();
+        expect((hora || '').trim()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+
+        // 🔴 O canal VOLTOU para a linha, e isso não contradiz tê-lo removido
+        // antes: naquele momento a lista era de um canal só e ele não variava.
+        // Agora a requisição traz os dois, então ele varia — e o que varia é
+        // exatamente o que a linha tem de dizer.
+        const canais = await authedPage.locator('.tl-canal').allTextContents();
+        expect(canais.length, 'toda linha diz o canal').toBe(await authedPage.locator('.timeline-item').count());
+        expect(new Set(canais.map((c) => c.trim())).size, 'os dois canais aparecem').toBeGreaterThan(1);
     });
 });

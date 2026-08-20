@@ -145,6 +145,7 @@
 > | 4.9.34 | A lista do `FILELIST` chegava e ninguém a lia; playback falava JT/T com câmera JIMI | `includes/filelist.php`, `video_playback.php` |
 > | 4.9.35 | Vídeo chegava ao servidor e o sistema não sabia; 3.021 blocos de 1 min viravam lista ilegível | `includes/media.php`, `pushalarm.php`, `video_playback.php` |
 > | 4.9.36 | Botão por cima do texto; e vídeo extraído caía no bloco errado (±120 s = 5 blocos) | `video_playback.php` |
+> | 4.9.37 | Playback refeito na barra com zoom; canal fora da requisição; download vira estado | `video_playback.php`, `video_downloads.php`, `midia.php` |
 >
 > **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
 > falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
@@ -654,6 +655,33 @@
 >    transbordar — passava com o defeito no lugar. Ela agora força um texto
 >    absurdo e mede as caixas; verificado removendo a correção (falha) e
 >    recolocando (passa).
+>
+> 13. ✅ **Playback refeito na barra — v4.9.37.** Cinco apontamentos do dono do
+>    produto. O segundo era um diagnóstico que **não batia com o dado**, e vale
+>    registrar: *"acredito que está mostrando somente as gravações de alarmes"*.
+>    A gravação contínua ESTAVA sendo capturada (2.625 blocos); ela some porque
+>    a listagem vence em 30 min, e o que fica são os vídeos de evento, que não
+>    têm validade. A correção foi no AVISO — que falava de download de arquivo
+>    sobrescrito, verdade que não explicava o buraco na tela.
+>
+>    | Pedido | O que foi feito |
+>    |---|---|
+>    | Canal não faz sentido na requisição | Seletor removido; o canal é a faixa que se clica. No JT/T o laço por canal ficou no código, invisível para a tela |
+>    | Gravação contínua | Já existia — corrigido o aviso de listagem vencida |
+>    | Nunca subir sem pedido | Clique abre a escolha: **ver na câmera** (`REPLAYLIST`/`37377`, não deixa arquivo) ou **subir** (`HVIDEO`/`37382`) |
+>    | Downloads com seleção e status | Lista suspensa + `pendente` → `pronto` → **`já baixado`** (migração v4.9.37) |
+>    | JT/T igual ao JIMI | Mesma barra, mesmo zoom, mesmas ações; só o comando difere |
+>
+>    ⚠️ **O que NÃO foi medido em câmera real**: o caminho de publicação do
+>    playback por streaming. Para o ao vivo ele é `live/<canal-base-0>/<imei>`
+>    (JIMI) e `<canal>/<imei>` (JT/T); supor que o playback publica no mesmo
+>    lugar é a hipótese mais provável, não um fato. O player tem prazo de 20 s
+>    com mensagem explícita em vez de ficar preto. **É o próximo teste de
+>    campo.**
+>
+>    ⚠️ **`setPointerCapture` troca o alvo do clique** — com a captura ativa
+>    (necessária para o arrasto), o `click` chega com `target` = o `<svg>`, e o
+>    clique no bloco não fazia nada. Só o navegador pega isso.
 > 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
 >    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
 >    apontar. Depende do fornecedor (item 5).

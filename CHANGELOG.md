@@ -5,6 +5,29 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.37
+
+**O playback foi refeito em torno da barra.** Cinco apontamentos do dono do produto, e o segundo era um diagnóstico que não batia com o que o dado dizia — a gravação contínua *estava* sendo capturada.
+
+### Fixed
+- 🔴 **"Só aparecem gravações de alarme" — a causa não era captura.** A gravação contínua é capturada (2.625 blocos numa câmera), mas a listagem **vence em 30 min** (v4.9.17, cartão é buffer circular) e some da tela; o que fica são os vídeos de evento, que não têm validade. O aviso de vencimento falava de "download de arquivo sobrescrito" — verdade, mas não explicava o buraco na tela. Agora ele diz o que está acontecendo: *"sem ela a gravação contínua não aparece — o que sobra são só os vídeos de evento"*.
+- 🔴 **Seletor de canal na requisição.** A resposta do equipamento sempre traz todos os canais: pedir um era filtro de exibição disfarçado de parâmetro, e obrigava a consultar duas vezes o que vem de uma vez. O seletor sumiu; escolhe-se o canal **clicando na faixa** dele. No JT/T o laço por canal ficou no código (o `37381` não aceita "todos"), mas a tela não pergunta — é o que dá às duas famílias a mesma experiência apesar da dinâmica diferente.
+- **Teto de 500 itens na lista.** Deixou de existir: a lista espelha a **janela de zoom**, e aproximar É filtrar.
+
+### Added
+- **Barra com zoom** — roda do mouse aproxima (ancorado no cursor), arrasto desloca, `Tudo` volta ao período. No panorama desenha **sessões**; aproximando o suficiente, cada **bloco de um minuto** vira um alvo próprio. Passar o mouse mostra **início, fim e duração** do trecho.
+- 🔴 **Duas ações explícitas, e nenhuma automática.** Clicar num bloco abre a escolha; **nada sobe para o storage sem pedido**:
+  - **Ver na câmera** — transmite direto do equipamento e **não deixa arquivo**: `REPLAYLIST,<nome>` (JIMI) ou `37377` (JT/T), no mesmo player do vídeo ao vivo.
+  - **Subir para o storage** — `HVIDEO,<carimbo>,<câmera>` (JIMI) ou `37382` (JT/T).
+- **Downloads: o estado que faltava.** `pendente na câmera` → `pronto` → **`já baixado`**. Migração `v4.9.37` acrescenta `downloaded_at`, `downloaded_by` e `download_count`; a tela ganha lista suspensa de equipamento e, escolhido um, **some com as colunas que repetem a escolha** (placa, IMEI, modelo, cliente) — eram elas que empurravam status e download para fora da tela.
+- **Vazio acionável**: caindo num trecho sem gravação — o caso NORMAL, já que dois terços de um cartão real são buraco — a lista oferece *ir para a gravação mais próxima* em vez de só dizer "nada aqui".
+
+### Notes
+- 🔴 **O carimbo de "baixado" é só do download EXPLÍCITO (`&dl=1`).** O player de MPEG-TS busca os bytes pela MESMA URL, por `fetch`, para remuxar: carimbar toda leitura faria *assistir* virar *baixado*, e a fila mentiria exatamente na coluna que ela existe para responder.
+- ⚠️ **O caminho de publicação do playback por streaming NÃO foi medido em câmera real.** Para o ao vivo ele é `live/<canal-base-0>/<imei>.flv` (JIMI) e `<canal>/<imei>.flv` (JT/T), medidos em 18/08/2026; supor que o playback publica no mesmo lugar é a hipótese mais provável, não um fato. Por isso o player tem **prazo de 20 s com mensagem explícita** em vez de ficar preto.
+- **A agregação em sessões passou a existir nos dois lados** (PHP para o resumo, JS para redesenhar a cada zoom). O algoritmo se repete; a **regra** tem uma casa só — `FILELIST_SESSAO_GAP_SEGUNDOS` viaja do PHP para o JS, então não há dois limiares para divergirem.
+- ⚠️ **`setPointerCapture` troca o alvo do clique.** Com a captura ativa (necessária para o arrasto), o `click` chega com `target` = o `<svg>`, não o `<rect>` — e o clique simplesmente não fazia nada. Guardar quem estava sob o ponteiro no `pointerdown` é o que preserva o alvo.
+
 ## [Unreleased] — 4.9.36
 
 **A linha da lista de gravações, refeita.** O sintoma relatado era o botão *Extrair* passando por cima do texto; a causa era `white-space:nowrap` sem `overflow` — o texto transbordava do flex e era pintado sob o botão. Mas o texto que transbordava era justamente o que não precisava estar ali.
