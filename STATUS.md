@@ -125,11 +125,12 @@
 > primeiro `UPDATE` de verdade sem uma câmera sacrificável e o pacote correto do
 > fornecedor em mãos.
 >
-> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.33 publicadas e verificadas
+> ### 📍 ESTADO EM 20/08/2026 — v4.9.26 a v4.9.33 no ar; v4.9.34 pronta para subir
 >
 > **Produção (`bycamera.ia.br`) está em `0d333c1`, `/ping` reportando 4.9.33,
-> banco em 4.9.32.** Oito versões em sequência, todas no ar. A maioria nasceu de
-> reclamação do campo; duas, de conferência contra a documentação da fabricante.
+> banco em 4.9.32.** Oito versões em sequência, todas no ar; a **v4.9.34 está no
+> repositório e ainda NÃO foi publicada**. A maioria nasceu de reclamação do
+> campo; duas, de conferência contra a documentação da fabricante.
 >
 > | Versão | O que era | Onde estava |
 > |---|---|---|
@@ -141,14 +142,17 @@
 > | 4.9.31 | Vídeo reenviado não voltava para o alarme | `alarm_video_request.php`, `solicitarvideo.php` |
 > | 4.9.32 | `UPDATE` travado em 1 dos 6 modelos; firmware NULL na base | `command_catalog.php`, `/firmwares` (tela nova) |
 > | 4.9.33 | Apache descartava o corpo do `FILELIST` acima de 16 KB | `docs/apache/filelist-chunked.conf` |
+> | 4.9.34 | A lista do `FILELIST` chegava e ninguém a lia; playback falava JT/T com câmera JIMI | `includes/filelist.php`, `video_playback.php` |
 >
 > **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
 > falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
 > Cadastro dizia "cadastrado com sucesso" e o equipamento ficava órfão; o botão
 > "Ver Vídeo" abria um player que nunca carregava; o comando de vídeo ao vivo
 > ficava `sent` para sempre; o botão FOTA dizia "enviado" mandando um proNo que
-> não é OTA; o `FILELIST` respondia `OK!` e gravava captura de 0 byte. Em nenhum
-> desses casos havia linha de erro em log algum.
+> não é OTA; o `FILELIST` respondia `OK!` e gravava captura de 0 byte; e, mesmo
+> depois de o corpo chegar, o `[Requisitar]` mandava o comando que só configura o
+> endereço e o `[Extrair]` mandava comando de outro protocolo. Em nenhum desses
+> casos havia linha de erro em log algum.
 >
 > ⚠️ **Duas coisas desta rodada NÃO são código e não viajam no `git pull`**:
 >
@@ -497,8 +501,8 @@
 >    aos webhooks de GPS, os pedidos mais frequentes do sistema. Só o `/filelist`
 >    recebe corpo chunked.
 >
->    **Pendência que isto abre**: escrever o parser (FASE 1) e transformar os
->    nomes em algo utilizável — hoje a captura só vai para `logs/filelist/`.
+>    **Pendência que isto abriu**: escrever o parser (FASE 1) — ✅ feita na
+>    v4.9.34, ver o item 6 desta lista.
 >> 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
 >    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
 >    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
@@ -519,11 +523,44 @@
 >    a **URL do pacote** da JC400AD, para cadastrar em `/firmwares`. Sem ela não
 >    há o que enviar, e inventar a URL é o erro que nenhuma validação pega.
 >
-> 6. **Escrever o parser do `FILELIST` (FASE 1).** Destravado agora que o corpo
->    chega: a lista de 3.021 nomes fica em `logs/filelist/` e ninguém a lê. O
->    formato está medido (`{"imei":…,"fileNameList":"a.ts,b.ts,…"}`), então dá
->    para escrever contra o arquivo real em vez de contra suposição — que era o
->    bloqueio original desta fase.
+> 6. ~~**Escrever o parser do `FILELIST` (FASE 1).**~~ ✅ **RESOLVIDO na v4.9.34.**
+>    `includes/filelist.php` interpreta o corpo e grava em `resource_lists` — a
+>    mesma tabela do JT/T. Verificado contra a captura real de 78.590 bytes:
+>    **3.021 nomes, 3.021 linhas, zero descartados**, e a segunda entrega da
+>    mesma lista (a câmera manda duas vezes, com 5 s de intervalo) só renova o
+>    `captured_at`.
+>
+>    🔴 **O achado que valia a fase: o carimbo do nome é hora LOCAL da câmera
+>    (UTC−3), não GMT 0.** Era a única parte que falharia em silêncio — a lista
+>    apareceria com datas plausíveis três horas fora do lugar. Medido contra os
+>    anexos de alarme das TRÊS câmeras JIMI, que trazem o mesmo carimbo no nome
+>    e cujo `alarm_time` é conhecido: `EVENT_…_2026_08_20_08_47_42_I_15.ts` ↔
+>    `11:47:42` UTC, **+3 h em 29 de 29 amostras**. A convenção "o device
+>    transmite GMT 0" vale para o CORPO do webhook, não para o nome do arquivo.
+>
+>    **Dois defeitos saíram junto, os dois do tipo "comando aceito, nada
+>    acontece"**: a tela mandava só `FILELIST,<url>` (que apenas CONFIGURA o
+>    endereço) e nunca o `FILELIST` nu, que é quem dispara; e o `[Extrair]`
+>    mandava `37382` — comando JT/T — para câmera JIMI. O comando dela é
+>    `HVIDEO,<carimbo>,<câmera>`, montado a partir do nome que veio na lista.
+>
+>    **Verificação** (20/08/2026, banco local + captura real de produção):
+>    a captura de 78.590 bytes entregue ao handler gravou 3.021 linhas e o
+>    reenvio da mesma lista não duplicou nada; corpo vazio — a assinatura do
+>    defeito do Apache — vira `WARNING`; a tela renderizou 274 gravações no CH1
+>    e 263 no CH2 com o `HVIDEO` certo em cada canal; um bloco extraído com
+>    upload no dia seguinte cai na gravação de origem em vez de virar item
+>    solto. `tests/helpers/filelist.test.php` **43/43**; suíte Playwright
+>    completa **138 passaram, 0 falharam, 6 pulados** (os mesmos 6 de antes).
+>
+>    **O que falta é medição em câmera real**: o `[Extrair]` do JIMI foi
+>    verificado até o despacho (spec de navegador trava qual comando sai), mas
+>    nenhum bloco foi puxado de uma 400AD ainda. É o próximo clique em produção,
+>    junto com a leitura de firmware do item 8.
+>
+>    ⚠️ **Ainda NÃO publicado.** `SYSTEM_VERSION` já está em 4.9.34 no
+>    `.env.example`; **não há migração** (o `resource_lists` já tinha todas as
+>    colunas), então o `deploy.sh` não precisa de entrada nova.
 > 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
 >    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
 >    apontar. Depende do fornecedor (item 5).
@@ -538,8 +575,9 @@
 >
 > **Fechadas nesta rodada**: religar o vídeo reenviado (v4.9.31); vincular a
 > `400AD_3` a Frota Principal (**zero equipamentos órfãos**); a trava do `UPDATE`
-> e o firmware gravado do device (v4.9.32); o `FILELIST` (v4.9.33); e a suíte
-> Playwright, que não rodava e saía verde.
+> e o firmware gravado do device (v4.9.32); o `FILELIST` — o corpo que não
+> chegava (v4.9.33) e a lista que ninguém lia (v4.9.34); e a suíte Playwright,
+> que não rodava e saía verde.
 >
 > #### Tooling
 >

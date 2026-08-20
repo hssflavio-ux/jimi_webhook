@@ -1,21 +1,29 @@
 <?php
 /**
- * bycamera — Recepção do FILELIST das câmeras JIMI (FASE 0: só captura)
+ * bycamera — Recepção do FILELIST das câmeras JIMI
  * Rota: /filelist/{imei}
  *
  * O QUE É. No protocolo JIMI a listagem de gravações do cartão funciona ao
  * contrário do JT/T. No JT/T pedimos uma janela (`37381`) e o IoT Hub devolve
- * a lista estruturada por webhook. No JIMI mandamos
- * `FILELIST,http://<servidor>/filelist/<imei>` e a CÂMERA sobe sozinha um
- * arquivo TXT com os nomes — sem filtro de data, a lista inteira.
+ * a lista estruturada por webhook. No JIMI mandamos `FILELIST,<url>` para
+ * CONFIGURAR o destino e, depois, o `FILELIST` NU para disparar — e a CÂMERA
+ * sobe sozinha a lista inteira, sem filtro de data, para a URL configurada.
  *
- * ✅ O LAYOUT FOI MEDIDO em 19/08/2026 (400AD_3, `tcpdump` na porta 80). Não é
- * TXT: é **JSON**, e a lista vem numa string única separada por vírgula —
+ * 🔴 **`FILELIST,<url>` sozinho não sobe nada.** Ele só grava o endereço no
+ * equipamento. Está provado nos dados de produção: sete comandos com URL entre
+ * 14:54 e 15:22 de 19/08 — nenhuma captura; o `FILELIST` nu de 15:00:19
+ * produziu a captura de 15:00:19, no mesmo segundo. É a metade que faltava no
+ * catálogo até a v4.9.27, e a tela de playback mandava só a primeira.
+ *
+ * O LAYOUT FOI MEDIDO em 19–20/08/2026 (400AD_3, `tcpdump` na porta 80 e
+ * captura crua). Não é TXT: é **JSON**, e a lista vem numa string única
+ * separada por vírgula —
  *
  *     {"imei":"864993060392306","fileNameList":"2026_08_16_05_33_58_01.ts,…"}
  *
- * O sufixo `_01`/`_02` do nome é a câmera (frontal/interna), o mesmo par que o
- * `EVIDEO`/`HVIDEO` usa. O parser da FASE 1 já tem contra o que ser escrito.
+ * O sufixo `_01`/`_02` do nome é a câmera (1=frontal, 2=interna), o mesmo par
+ * do parâmetro B do `EVIDEO`/`HVIDEO`. A interpretação dos nomes — inclusive a
+ * armadilha do fuso, que **não é GMT 0** — vive em `includes/filelist.php`.
  *
  * ⚠️ O CORPO SÓ CHEGA COM A CONFIG DO APACHE NO LUGAR. Corpo `chunked` acima de
  * 16 KB era descartado em silêncio entre o Apache e o PHP-FPM (mod_proxy_fcgi),
@@ -25,24 +33,26 @@
  * **infra fora do git**: o `deploy.sh` não a instala, e ela some se a máquina
  * for reprovisionada. Captura de 0 byte voltando é o primeiro sintoma disso.
  *
- * 🔴 POR QUE ESTA VERSÃO AINDA SÓ CAPTURA. Escrever o parser por suposição é
- * exatamente como o `34818` entrou no projeto: aceito pelo IoT Hub, marcado
- * `executed`, e nunca produziu um arquivo — 18 tentativas até alguém
- * desconfiar. A mesma disciplina da §2 do PROJETO_PARAMETROS.md, que evitou
- * três parsers errados nos parâmetros, vale aqui: medir primeiro, interpretar
- * depois. Agora o arquivo real existe (3.021 nomes medidos na 400AD_3), então a
- * FASE 1 pode ser escrita contra ele em vez de contra uma suposição.
+ * ── O QUE ESTE HANDLER FAZ (v4.9.34) ────────────────────────────────────────
+ *   1. valida o IMEI contra `devices`;
+ *   2. grava o corpo CRU em `logs/filelist/` — a captura continua, porque foi
+ *      ela que resolveu esta investigação e é o que permitirá diagnosticar o
+ *      próximo firmware que mudar o formato;
+ *   3. responde 200 e ENCERRA a requisição (`fastcgi_finish_request`) — a
+ *      câmera não espera as ~3.000 gravações irem para o banco;
+ *   4. só então interpreta e grava em `resource_lists`, a mesma tabela do
+ *      JT/T, de onde a tela de playback lê.
  *
- * Então este handler guarda o corpo CRU, registra método, tipo, tamanho e
- * cabeçalhos, e devolve 200. O parser vem na fase seguinte, escrito contra o
- * arquivo real.
+ * A ordem importa: o corpo cru é escrito ANTES de qualquer interpretação. Se o
+ * parser falhar, o dado que custou cinco dias para chegar continua no disco.
  *
  * SEM LOGIN, DE PROPÓSITO — e a razão é a mesma do `/download`: quem chama é
  * a câmera, que não tem como carregar sessão nem o token do webhook (ele nem
  * existe no comando de texto). As defesas são outras:
  *   • o IMEI do caminho tem de existir em `devices` — senão nada é gravado;
  *   • teto de tamanho, para o endpoint não virar depósito;
- *   • o corpo NUNCA é interpretado, só escrito em disco;
+ *   • o corpo é gravado no disco ANTES de ser interpretado, e o parser não
+ *     executa nada do que leu — no máximo descarta o nome que não casa;
  *   • a captura vai para `logs/filelist/`, que o VirtualHost NEGA à web
  *     (`DirectoryMatch` de `logs`), então o que entra não sai por aqui.
  *
@@ -54,6 +64,7 @@
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/filelist.php';
 
 if (ob_get_level()) ob_end_clean();
 
@@ -152,7 +163,12 @@ Logger::info('filelist: captura recebida', [
     'destino'  => basename($base),
 ]);
 
-// ── 3. Resposta ─────────────────────────────────────────────────────────────
+// ── 3. Resposta, ANTES de interpretar ───────────────────────────────────────
+//
+// A câmera não tem por que esperar ~3.000 gravações irem para o banco: o
+// `fastcgi_finish_request()` devolve o 200 e libera a conexão, e o trabalho
+// segue no processo — é a mesma técnica dos webhooks (ver CLAUDE.md; sem
+// PHP-FPM ela não existe e a resposta simplesmente espera).
 //
 // 🔴 A EXPLICAÇÃO ANTERIOR DESTE BLOCO ESTAVA ERRADA, e fica registrada porque
 // o erro é instrutivo. Ela dizia que o corpo vazio era um HANDSHAKE — a câmera
@@ -163,8 +179,8 @@ Logger::info('filelist: captura recebida', [
 // de uma vez, logo depois dos cabeçalhos. Quem perdia o corpo éramos nós — corpo
 // `chunked` acima de **16 KB** era descartado entre o Apache e o PHP-FPM (busca
 // binária no servidor: 16.293 B chegavam, 16.699 B viravam zero, sem erro em log
-// nenhum). Corrigido pela config do Apache, não por este arquivo — ver a
-// pendência 2 do STATUS.md e `docs/apache/filelist-chunked.conf`.
+// nenhum). Corrigido pela config do Apache, não por este arquivo — ver
+// `docs/apache/filelist-chunked.conf`.
 //
 // O envelope JSON FICA: é o mesmo dos outros receptores deste projeto, e não
 // custa nada. Mas ele não é o que faz o corpo chegar — acreditar que era é o
@@ -172,3 +188,89 @@ Logger::info('filelist: captura recebida', [
 http_response_code(200);
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode(['code' => 0, 'message' => 'success'], JSON_UNESCAPED_UNICODE) . "\n";
+
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+
+// ── 4. Interpretação e gravação (FASE 1) ────────────────────────────────────
+//
+// Daqui para baixo a câmera já foi embora: nada aqui pode alterar a resposta, e
+// uma falha não pode derrubar a captura crua, que já está no disco.
+//
+// ⚠️ O IMEI que vale é o da ROTA, não o do corpo. Os dois batem em tudo que foi
+// medido, mas quem foi conferido contra `devices` é o da rota — deixar o corpo
+// escolher a chave de gravação seria aceitar que um equipamento grave lista em
+// nome de outro.
+//
+// O `set_time_limit` conta a partir daqui: são ~3.000 gravações por lista, e o
+// relógio do `max_execution_time` continua correndo depois do
+// `fastcgi_finish_request()`. Estourar aqui deixaria a lista pela metade, sem
+// nada na tela dizendo que faltou — a captura crua estaria completa no disco e
+// o banco não.
+@set_time_limit(120);
+
+try {
+    $resultado = filelist_parse($corpo);
+
+    // Fallback multipart: se o corpo cru não trouxe nomes mas um arquivo veio
+    // anexado, a lista está nele. Nenhum firmware fez isso até aqui — é a
+    // mesma precaução que já existe na captura, e custa uma condição.
+    if ($resultado['validos'] === 0 && !empty($arquivos)) {
+        foreach ($arquivos as $a) {
+            $tentativa = filelist_parse($a['dados']);
+            if ($tentativa['validos'] > 0) { $resultado = $tentativa; break; }
+        }
+    }
+
+    $imeiCorpo = $resultado['imei'] !== null ? preg_replace('/[^0-9A-Za-z]/', '', (string)$resultado['imei']) : null;
+    if ($imeiCorpo !== null && $imeiCorpo !== '' && $imeiCorpo !== $imei) {
+        Logger::warning('filelist: IMEI do corpo diverge do IMEI da rota', [
+            'rota' => $imei, 'corpo' => $imeiCorpo,
+        ]);
+    }
+
+    $gravacao = filelist_persistir($db, $imei, $resultado['entradas']);
+
+    // Resumo ao lado da captura: o diretório passa a dizer, sozinho, o que
+    // aquele corpo virou — sem isso, conferir uma captura antiga exige
+    // reprocessá-la à mão.
+    @file_put_contents($base . '.parse.json', json_encode([
+        'formato'     => $resultado['formato'],
+        'imei_corpo'  => $resultado['imei'],
+        'total_nomes' => $resultado['total_nomes'],
+        'validos'     => $resultado['validos'],
+        'vazios'      => $resultado['vazios'],
+        'invalidos'   => $resultado['invalidos'],
+        'gravados'    => $gravacao['gravados'],
+        'erros'       => $gravacao['erros'],
+        'captura'     => $gravacao['captura'],
+        'primeiro'    => $resultado['entradas'][0]['start_utc'] ?? null,
+        'ultimo'      => $resultado['entradas'] ? end($resultado['entradas'])['start_utc'] : null,
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+
+    // Lista que chega e não produz linha nenhuma é o modo de falhar desta fase
+    // — e é exatamente o tipo de silêncio que custou os dias anteriores. Fica
+    // como WARNING, não INFO.
+    if ($resultado['validos'] === 0) {
+        Logger::warning('filelist: nenhum nome reconhecido na lista', [
+            'imei'    => $imei,
+            'formato' => $resultado['formato'],
+            'bytes'   => strlen($corpo),
+            'amostra' => $resultado['invalidos'],
+        ]);
+    } else {
+        Logger::info('filelist: lista interpretada', [
+            'imei'      => $imei,
+            'nomes'     => $resultado['total_nomes'],
+            'validos'   => $resultado['validos'],
+            'invalidos' => count($resultado['invalidos']),
+            'gravados'  => $gravacao['gravados'],
+            'erros'     => $gravacao['erros'],
+        ]);
+    }
+} catch (Throwable $e) {
+    Logger::error('filelist: falha ao interpretar a lista', [
+        'imei' => $imei, 'erro' => $e->getMessage(), 'captura' => basename($base),
+    ]);
+}

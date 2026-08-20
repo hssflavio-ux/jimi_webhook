@@ -5,6 +5,33 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.34
+
+**A lista de gravações do cartão passou a ser LIDA.** A v4.9.33 fez o corpo chegar; ele ia inteiro para `logs/filelist/` e ninguém o abria. Agora o `/filelist` interpreta os nomes e grava em `resource_lists` — a mesma tabela do JT/T —, e a tela de playback trata os dois protocolos pelo mesmo caminho. Verificado contra a captura real da 400AD_3 (78.590 bytes): **3.021 nomes, 3.021 linhas gravadas, zero descartados**.
+
+Junto saíram os dois defeitos que teriam feito a leitura não valer nada, e que falhavam do mesmo jeito de sempre — comando aceito, tela verde, nada acontecendo.
+
+### Added
+- **`includes/filelist.php`** — parser e persistência da lista. Entrada: o corpo cru; saída: linhas em `resource_lists` com início, fim e canal. Idempotente por `ON DUPLICATE KEY UPDATE` (a câmera sobe a MESMA lista duas vezes por disparo, com 5 s de intervalo — medido).
+- **`/filelist` responde antes de processar** (`fastcgi_finish_request`): a câmera não espera 3.000 gravações irem para o banco. O corpo cru continua sendo gravado ANTES de qualquer interpretação, e um `.parse.json` ao lado da captura diz o que aquele corpo virou.
+- **[Extrair] no playback das câmeras JIMI** — `HVIDEO,<carimbo>,<câmera>` (proNo 128), montado a partir do nome que veio na lista.
+- **`tests/helpers/filelist.test.php`** (41 checagens, sem banco) e **`tests/video_playback_filelist.spec.js`** (5 testes em navegador).
+- **Retenção das capturas cruas** em `scripts/log_cleanup.php`. `logs/filelist/` guarda ~78 KB por listagem (e a câmera manda duas por disparo), e `Logger::cleanOldLogs()` só varre `*.log` — até aqui nada limpava esse diretório. Ele **continua existindo de propósito**: foi essa captura que resolveu a v4.9.33. Agora que a tela dispara o upload de verdade, ele cresce sozinho; a purga usa `LOG_RETENTION_DAYS`.
+
+### Fixed
+- 🔴 **A tela de playback nunca disparou o upload da lista.** Ela mandava só `FILELIST,<url>`, que apenas **grava o endereço** no equipamento; quem manda subir é a forma **NUA** `FILELIST` (planilha A006 vs A007 — a metade que a v4.9.27 achou faltando no catálogo, mas que a tela continuou sem usar). Está nos dados de produção: sete `FILELIST,<url>` entre 14:54 e 15:22 de 19/08, **zero** capturas; o `FILELIST` nu de 15:00:19 produziu a captura de 15:00:19, no mesmo segundo. Agora vão os dois, em sequência — e o segundo **não** sai se o equipamento recusar o endereço.
+- 🔴 **O [Extrair] mandava `37382` para câmera JIMI.** É o "FTP file upload command" do JT/T; a JIMI não o conhece. Era o mesmo erro que a v4.9.0 corrigiu no JT/T (34818) e a v4.9.32 no FOTA (33027), agora no dialeto errado: o comando sai, o gateway aceita, e arquivo nenhum aparece. O botão passa a existir **por protocolo**, e some quando não há comando válido para o item.
+- **Arquivo extraído aparecia no lugar errado da linha do tempo.** `media_files.event_time` de um bloco trazido por `HVIDEO` é a hora em que o **upload terminou** (o equipamento avisa pelo evento `105`), não a hora do que está gravado — o item virava um "Disponível" solto horas adiante, e a gravação de origem ficava "No cartão" para sempre. A unificação passa a usar o carimbo do **nome** quando ele existe. Para anexo de alarme os dois coincidem (medido), e nome de arquivo JT/T não tem carimbo: nesses casos nada muda.
+- **A lista era cortada em silêncio.** O teto de 300 itens era invisível — no JT/T uma listagem traz dezenas. No JIMI o cartão é picado em blocos de **um minuto** (1.440 por dia por canal), e o filtro padrão da tela pede dois dias: cortar sem avisar mostraria as horas mais recentes como se fossem tudo o que há. Teto em 500, com aviso quando corta.
+- **Plural quebrado no cabeçalho da lista** — "gravaçãoões" desde sempre.
+
+### Notes
+- 🔴 **O carimbo do nome é a hora LOCAL da câmera (UTC−3), não GMT 0.** É a armadilha desta fase e a única parte dela que falharia em silêncio: a lista apareceria com datas plausíveis, três horas fora do lugar, e o operador baixaria o minuto errado. Medido contra os anexos de alarme das **três** câmeras JIMI, que trazem o mesmo carimbo no nome e cujo `alarms.alarm_time` é conhecido — `EVENT_…_2026_08_20_08_47_42_I_15.ts` ↔ `11:47:42` UTC, offset +3 h em **29 de 29** amostras. A convenção "o device transmite GMT 0" vale para o CORPO do webhook; o nome do arquivo segue o relógio do equipamento. O código já dependia disso sem dizê-lo: `alarm_video_request.php` converte com `CONVERT_TZ(…,'-03:00')` antes de montar o `EVIDEO`.
+- **O bloco do cartão é de um minuto** — doc oficial (A010: "which is one minute each file") e medição (1.442 dos 1.461 intervalos do canal 01 são de exatamente 60 s) concordam. `end_time` é `min(início do bloco seguinte, início + 60 s)`: nunca anuncia cobertura que o arquivo seguinte desminta. ⚠️ O "3 mins for each video file" da descrição do `EVIDEO` é outro comando — ele GERA um trecho novo.
+- **O `HVIDEO` recebe o nome de volta sem conversão.** `HVIDEO,<Year_Month_Day_Hour_Minute_Second>,<1|2>` é exatamente o prefixo do nome que veio na lista, e o `_01`/`_02` é o mesmo par `1=Front camera; 2=Inward camera` do parâmetro B. Converter para UTC no caminho faria a câmera procurar um bloco três horas fora — e responder "não existe", não "fuso errado".
+- ⚠️ **Lista vazia agora grita.** Corpo que chega e não produz nome nenhum vira `WARNING` no log (`filelist: nenhum nome reconhecido`), com o formato e o tamanho. É o alarme para a config do Apache da v4.9.33 ter sumido — ela é infra fora do git.
+- **Volume**: uma listagem são ~3.000 linhas por câmera. Linhas de listas antigas não são apagadas; elas somem da tela sozinhas, pela validade de `captured_at` (v4.9.17).
+
 ## [Unreleased] — 4.9.33
 
 **O `FILELIST` nunca produziu nada porque o Apache descartava o corpo — a câmera sempre mandou a lista.** Levantado com `tcpdump` na porta 80 da 400AD_3 (`864993060392306`) enquanto o comando era disparado.

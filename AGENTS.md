@@ -84,6 +84,7 @@ Jimi IoT Hub  --POST-->  .htaccess  -->  handlers/router.php  -->  handlers/*.ph
 | Endpoint | Handler |
 |---|---|
 | `/pushevent`, `/pushhb`, `/pushgps`, `/pushalarm`, `/pushfileupload`, `/pushlbs`, `/pushresourcelist`, `/pushftpfileupload`, `/pushiothubevent`, `/pushTerminalTransInfo`, `/pushinstructresponse`, `/pushcmd` | Existing handlers — routed through `router.php` |
+| `/filelist/{imei}` | `filelist.php` — **não é do IoT Hub**: quem faz o POST é a CÂMERA JIMI, em HTTP simples e sem token (ela não tem como carregar sessão). Recebe a lista de gravações do cartão, grava o corpo cru em `logs/filelist/` e a interpreta para `resource_lists` via `includes/filelist.php`. A defesa é o IMEI ter de existir em `devices`. 🔴 O carimbo dos nomes é hora LOCAL da câmera (UTC−3), não GMT 0 — ver Gotchas do CLAUDE.md |
 
 ## Key navigation
 

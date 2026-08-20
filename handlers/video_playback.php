@@ -1,30 +1,46 @@
 <?php
 /**
- * JIMI Webhook System — Vídeo Playback v4.2.1
+ * JIMI Webhook System — Vídeo Playback v4.9.34
  * Rota: /video/playback
  *
- * Fluxo (JT/T — JC450/JC181/JC182/JC371):
+ * A tela é uma só; os DOIS protocolos chegam nela por caminhos opostos, e a
+ * linha do tempo é a mesma tabela (`resource_lists`) nos dois casos.
+ *
+ * Fluxo JT/T (JC450/JC181/JC182/JC371) — pergunta e resposta:
  *   1. [Requisitar] → proNo 37381 (0x9205, consulta de gravações no cartão).
  *      A janela beginTime/endTime é GMT-0 compacta (yyMMddHHmmss) e NÃO pode
  *      cruzar o dia — o período é fatiado em segmentos por dia UTC.
- *      A câmera responde de forma assíncrona via /pushresourcelist → resource_lists.
- *   2. Timeline = resource_lists ("no cartão") ∪ media_files ("disponível").
- *      Item "no cartão" → [Extrair] dispara proNo 37382 ("FTP file upload
- *      command") com a janela exata da gravação; a CÂMERA sobe o arquivo por
- *      FTP para o destino configurado em VIDEO_FTP_* e o IoTHub avisa por
- *      /pushftpfileupload → media_files, e o item vira reproduzível.
- *   3. Item "disponível" → play inline / download.
+ *      A câmera responde de forma assíncrona via /pushresourcelist.
+ *   2. [Extrair] → proNo 37382 ("FTP file upload command") com a janela exata
+ *      da gravação; a CÂMERA sobe o arquivo por FTP para o destino configurado
+ *      em VIDEO_FTP_* e o IoTHub avisa por /pushftpfileupload → media_files.
  *
- * ⚠️ Até a v4.9.0 o passo 2 mandava **34818**, que a doc chama de "Multimedia
- * data retrieval" — uma CONSULTA da família de fotos do JT/T 808. O IoTHub
- * aceitava, marcava `executed`, e arquivo nenhum aparecia: em três dias de
- * homologação, /pushfileupload e /pushftpfileupload não foram chamados uma vez.
+ * Fluxo JIMI (JC400D/AD) — a câmera é quem fala, e em hora LOCAL:
+ *   1. [Requisitar] → `FILELIST,<url>` (grava o endereço) **e** `FILELIST` nu
+ *      (dispara). São dois comandos: o primeiro sozinho não sobe nada. A
+ *      câmera então faz POST da lista INTEIRA do cartão em /filelist/{imei},
+ *      que a interpreta para `resource_lists` (v4.9.34). Não há janela de
+ *      datas no comando — o filtro da tela vale só na exibição.
+ *   2. [Extrair] → `HVIDEO,<carimbo>,<câmera>` (proNo 128), montado a partir do
+ *      nome que veio na lista. 🔴 NÃO é o 37382: aquele é JT/T, e mandá-lo para
+ *      uma câmera JIMI dá "enviado com sucesso" e arquivo nenhum.
  *
- * Modelos de protocolo JIMI (JC400D/AD) não suportam 0x9205 — mantém o envio
- * direto de 34818 na janela do filtro (comportamento legado).
+ * Em ambos: item "no cartão" vira "disponível" quando o arquivo chega, e aí
+ * toca inline / baixa.
+ *
+ * ⚠️ O instante de um arquivo é o carimbo do NOME quando ele tem um — ver a
+ * nota na unificação, mais abaixo. `event_time` de um bloco extraído por
+ * `HVIDEO` é a hora em que o UPLOAD terminou.
+ *
+ * ⚠️ Até a v4.9.0 o [Extrair] do JT/T mandava **34818**, que a doc chama de
+ * "Multimedia data retrieval" — uma CONSULTA da família de fotos do JT/T 808. O
+ * IoTHub aceitava, marcava `executed`, e arquivo nenhum aparecia: em três dias
+ * de homologação, /pushfileupload e /pushftpfileupload não foram chamados uma
+ * vez. O mesmo erro, no dialeto errado, é o que o [Extrair] fazia com as JIMI.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/filelist.php';
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -83,7 +99,18 @@ $dateFrom   = $_GET['date_from'] ?? date('Y-m-d', strtotime('-1 day'));
 $dateTo     = $_GET['date_to'] ?? date('Y-m-d');
 $requested  = !empty($_GET['request']);
 
+/**
+ * Teto de gravações "no cartão" exibidas de uma vez.
+ *
+ * Era 300, herdado do JT/T. Uma câmera JIMI grava um bloco por minuto: 300
+ * itens são 5 h de um canal, e o filtro padrão da tela pede DOIS DIAS. 500
+ * cobrem um turno inteiro (8 h 20 de gravação contínua) e mantêm a página em
+ * ~600 KB — no teto, cada item custa ~1,2 KB de HTML.
+ */
+const PB_LIMITE_CARTAO = 500;
+
 $recordings = [];
+$cartaoTruncado = false;
 // Defaults ANTES do bloco condicional: o template renderiza sob `$requested`,
 // mas a consulta só roda com `$requested && $selImei`. Sem isto, pedir a tela
 // sem equipamento selecionado usaria variável indefinida.
@@ -117,10 +144,21 @@ if ($requested && $selImei) {
           AND captured_at IS NOT NULL
           AND captured_at >= (NOW() - INTERVAL {$ttl} MINUTE)
         ORDER BY start_time DESC
-        LIMIT 300
+        LIMIT " . (PB_LIMITE_CARTAO + 1) . "
     ");
     $stmt->execute([':imei' => $selImei, ':ch' => $selChannel, ':df' => $utcFrom, ':dt' => $utcTo]);
     $resources = $stmt->fetchAll();
+
+    // ⚠️ v4.9.34 — TRUNCAGEM VISÍVEL. No JT/T uma listagem traz dezenas de
+    // arquivos e o teto nunca aparecia; no JIMI o cartão é picado em blocos de
+    // UM MINUTO, e um único dia dá 1.440 por canal. Cortar em silêncio faria a
+    // tela mostrar as horas mais recentes e omitir o resto do período pedido
+    // sem dizer nada — que é o mesmo modo de falhar que este módulo passou
+    // dias caçando. Busca-se um a mais que o teto só para saber que há mais.
+    $cartaoTruncado = count($resources) > PB_LIMITE_CARTAO;
+    if ($cartaoTruncado) {
+        $resources = array_slice($resources, 0, PB_LIMITE_CARTAO);
+    }
 
     // Idade da ÚLTIMA listagem deste equipamento, mesmo vencida — é o que
     // permite distinguir "nunca listado" de "listado há 3 h", que para o
@@ -134,6 +172,17 @@ if ($requested && $selImei) {
     $capturaInfo = $stmtCap->fetch(PDO::FETCH_ASSOC) ?: ['ultima' => null, 'minutos' => null];
 
     // 2) Arquivos já extraídos para o servidor (→ /pushfileupload)
+    //
+    // ⚠️ v4.9.34 — A JANELA DA CONSULTA É MAIOR QUE A DA TELA, DE PROPÓSITO.
+    // `event_time` de um bloco trazido por `HVIDEO` é a hora em que o UPLOAD
+    // terminou, não a da gravação — e extrair uma gravação de ontem produz um
+    // arquivo carimbado hoje. Com a janela justa, esse arquivo simplesmente não
+    // vinha na consulta, e a gravação de origem ficava "No cartão" para sempre
+    // mesmo com o vídeo no disco. A margem é de 2 dias (equipamento offline
+    // sobe atrasado); o instante REAL é resolvido logo abaixo, pelo nome, e o
+    // que cair fora da janela pedida é descartado ali — a tela continua
+    // mostrando exatamente o período que o usuário escolheu.
+    $margem = 2 * 86400;
     $stmt = $db->prepare("
         SELECT id, file_name, file_url, file_type, file_size, event_time, channel, download_status, created_at
         FROM media_files
@@ -141,14 +190,32 @@ if ($requested && $selImei) {
           AND (channel = :ch OR channel IS NULL)
           AND event_time BETWEEN :df AND :dt
         ORDER BY event_time DESC
-        LIMIT 200
+        LIMIT 400
     ");
-    $stmt->execute([':imei' => $selImei, ':ch' => $selChannel, ':df' => $utcFrom, ':dt' => $utcTo]);
+    $stmt->execute([
+        ':imei' => $selImei, ':ch' => $selChannel,
+        ':df'   => gmdate('Y-m-d H:i:s', strtotime($utcFrom . ' UTC') - $margem),
+        ':dt'   => gmdate('Y-m-d H:i:s', strtotime($utcTo . ' UTC') + $margem),
+    ]);
     $mediaFiles = $stmt->fetchAll();
 
     // 3) Unificação: media_file cujo horário cai na janela da gravação (±120s)
     //    torna aquela gravação reproduzível; os demais entram como itens próprios
     //    (ex.: vídeos de evento extraídos pelo motor de ocorrências).
+    //
+    // ⚠️ v4.9.34 — O INSTANTE DE UM ARQUIVO É O DO NOME, QUANDO ELE TEM UM.
+    // `media_files.event_time` de um bloco trazido por `HVIDEO` é a hora em que
+    // o UPLOAD terminou (o equipamento avisa pelo evento `105`), que pode estar
+    // horas longe do que está gravado. O nome, esse, carrega o carimbo da
+    // gravação. Sem isto o arquivo extraído aparecia como item solto no lugar
+    // errado da linha do tempo, e a gravação de origem continuava "No cartão"
+    // para sempre. Para anexo de alarme os dois coincidem (medido), e nome de
+    // arquivo JT/T não tem carimbo — nesses casos nada muda.
+    $instanteDoArquivo = function (array $m) use ($toTs) {
+        $doNome = filelist_ts_do_nome_utc((string)($m['file_name'] ?? ''));
+        return $toTs($doNome ?: ($m['event_time'] ?? null));
+    };
+
     $mediaUsed = [];
     foreach ($resources as $r) {
         $rs = $toTs($r['start_time']);
@@ -157,7 +224,7 @@ if ($requested && $selImei) {
         if ($rs !== null) {
             foreach ($mediaFiles as $mi => $m) {
                 if (isset($mediaUsed[$mi])) continue;
-                $mt = $toTs($m['event_time'] ?? null);
+                $mt = $instanteDoArquivo($m);
                 if ($mt !== null && $mt >= $rs - 120 && $mt <= $re + 120) {
                     $match = $m;
                     $mediaUsed[$mi] = true;
@@ -174,24 +241,44 @@ if ($requested && $selImei) {
             'time_end'   => $r['end_time'],
             'channel'    => (int)($r['channel_id'] ?: $selChannel),
             'alarm_type' => $r['alarm_type'],
-            // Janela exata da gravação em GMT-0 compacto, para o 34818 do [Extrair]
+            // Janela exata da gravação em GMT-0 compacto, para o 37382 do [Extrair]
             'begin_c'    => $rs !== null ? gmdate('ymdHis', $rs) : '',
             'end_c'      => $re !== null ? gmdate('ymdHis', $re) : '',
+            // JIMI: o comando que traz ESTE bloco, montado a partir do próprio
+            // nome que a câmera mandou na lista. Null para JT/T e para qualquer
+            // nome fora do padrão — e sem ele não há botão, que é o certo:
+            // 🔴 até a v4.9.33 o [Extrair] mandava 37382 (JT/T) para qualquer
+            // item, inclusive de câmera JIMI, que não conhece esse comando.
+            'hvideo'     => filelist_hvideo_command((string)$r['file_name']),
         ];
     }
+    $janelaIni = $toTs($utcFrom);
+    $janelaFim = $toTs($utcTo);
     foreach ($mediaFiles as $mi => $m) {
         if (isset($mediaUsed[$mi])) continue;
+        // Arquivo que não casou com gravação nenhuma entra como item próprio
+        // (vídeo de evento, por exemplo) — mas só se o instante REAL dele cair
+        // no período pedido. É aqui que a margem da consulta acima é desfeita.
+        $inst = $instanteDoArquivo($m);
+        if ($inst !== null && $janelaIni !== null && $janelaFim !== null
+            && ($inst < $janelaIni || $inst > $janelaFim)) {
+            continue;
+        }
         $recordings[] = [
             'kind'       => 'available',
             'media'      => $m,
             'file_name'  => $m['file_name'],
             'file_size'  => (int)($m['file_size'] ?? 0),
-            'time_start' => $m['event_time'] ?: $m['created_at'],
+            // Mesma regra da unificação acima: o carimbo do NOME manda, porque
+            // `event_time` de um bloco extraído é a hora do upload.
+            'time_start' => filelist_ts_do_nome_utc((string)$m['file_name'])
+                            ?: ($m['event_time'] ?: $m['created_at']),
             'time_end'   => null,
             'channel'    => (int)($m['channel'] ?: $selChannel),
             'alarm_type' => null,
             'begin_c'    => '',
             'end_c'      => '',
+            'hvideo'     => null,
         ];
     }
     usort($recordings, function ($a, $b) {
@@ -316,8 +403,19 @@ require_once __DIR__ . '/../web/layout_base.php';
         <?php if ($requested): ?>
         <div class="card" style="max-height:calc(100vh - 440px);overflow-y:auto;">
             <div style="font-size:12px;font-weight:600;color:var(--ink);padding-bottom:8px;border-bottom:1px solid var(--hairline);margin-bottom:8px;">
-                <?= count($recordings) ?> gravação<?= count($recordings) !== 1 ? 'ões' : '' ?>
+                <?= count($recordings) ?> grava<?= count($recordings) !== 1 ? 'ções' : 'ção' ?>
             </div>
+
+            <?php if ($cartaoTruncado): ?>
+            <?php /* Dizer que cortou, e onde. Uma lista silenciosamente cortada
+                     parece "só isso foi gravado" — e no JIMI, com um bloco por
+                     minuto, cortar é o caso NORMAL de um período de dois dias. */ ?>
+            <div class="callout" style="font-size:11px;margin-bottom:8px;background:#fdf6e3;border-left:3px solid #b45309;color:#7c4a03">
+                O período pedido tem mais gravações do que cabe nesta lista.
+                Mostrando as <strong><?= PB_LIMITE_CARTAO ?> mais recentes</strong> —
+                estreite o período para ver as anteriores.
+            </div>
+            <?php endif; ?>
 
             <?php
             // ── Idade da listagem (v4.9.17) ─────────────────────────────────
@@ -398,7 +496,16 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <?php endif; ?>
                     </div>
                 </div>
-                <?php if (!$isAvailable && $rec['begin_c']): ?>
+                <?php if (!$isAvailable && $selProtocol === 'JIMI' && $rec['hvideo']): ?>
+                <?php /* JIMI: `HVIDEO,<carimbo>,<câmera>` — o mesmo comando que
+                         o reenvio de vídeo de alarme usa em produção. Não é o
+                         37382: aquele é JT/T, e mandá-lo para uma câmera JIMI
+                         é o "enviado com sucesso" que nunca produz arquivo. */ ?>
+                <button class="btn btn-outline btn-sm pb-extract"
+                        onclick="requestExtractJimi(event, this, '<?= htmlspecialchars($rec['hvideo'], ENT_QUOTES) ?>')">
+                    &#8681; Extrair
+                </button>
+                <?php elseif (!$isAvailable && $selProtocol !== 'JIMI' && $rec['begin_c']): ?>
                 <button class="btn btn-outline btn-sm pb-extract"
                         onclick="requestExtract(event, this, <?= $rec['channel'] ?>, '<?= $rec['begin_c'] ?>', '<?= $rec['end_c'] ?>')">
                     &#8681; Extrair
@@ -572,6 +679,39 @@ function utcDaySegments(fromDay, toDay) {
     return segs;
 }
 
+/**
+ * Pede a lista do cartão a uma câmera JIMI.
+ *
+ * 🔴 SÃO DOIS COMANDOS, e mandar só o primeiro não sobe lista nenhuma.
+ * `FILELIST,<url>` (planilha A006) apenas GRAVA o endereço no equipamento; quem
+ * dispara o upload é a forma NUA `FILELIST` (A007). Até a v4.9.33 esta tela
+ * mandava só o primeiro: o comando voltava `executed`, a tela dizia
+ * "consultando" e a câmera não tinha o que fazer. Está nos dados de produção —
+ * sete `FILELIST,<url>` entre 14:54 e 15:22 de 19/08 sem uma única captura; o
+ * `FILELIST` nu de 15:00:19 gerou a captura de 15:00:19, no mesmo segundo.
+ *
+ * Em SEQUÊNCIA, não em paralelo: a URL precisa estar gravada antes do disparo.
+ * A resposta do JIMI é síncrona, então o callback do primeiro já é a
+ * confirmação de que o equipamento aceitou o endereço — e se ele recusar, o
+ * segundo NÃO sai: disparar contra endereço que não foi aceito é mandar a
+ * câmera subir 78 KB para lugar nenhum.
+ *
+ * @param {string} imei Equipamento
+ * @param {function(boolean,string=):void} [cb] Chamado ao fim (para teste)
+ */
+function pbRequestJimi(imei, cb) {
+    pbSendCmd(imei, 128, 'FILELIST,' + filelistBase + imei, function (ok, msg) {
+        if (!ok) {
+            alert('A câmera não aceitou o endereço da lista: ' + (msg || 'sem resposta.'));
+            if (cb) cb(false, msg);
+            return;
+        }
+        pbSendCmd(imei, 128, 'FILELIST', function (ok2, msg2) {
+            if (cb) cb(ok2, msg2);
+        });
+    });
+}
+
 function onSubmitRequest(e) {
     var imei = document.getElementById('pb-imei').value;
     var channel = Number(document.querySelector('select[name=channel]').value) || 1;
@@ -595,8 +735,8 @@ function onSubmitRequest(e) {
         // comando não aceita intervalo, e o filtro de data continua valendo
         // só na exibição.
         //
-        // Comando de TEXTO (proNo 128), não JSON.
-        pbSendCmd(imei, 128, 'FILELIST,' + filelistBase + imei);
+        // Comando de TEXTO (proNo 128), não JSON — ver pbRequestJimi().
+        pbRequestJimi(imei);
     } else {
         // proNo 37381 (0x9205): lista as gravações do cartão; resposta assíncrona
         // via /pushresourcelist. channel+channelId: exemplos da doc divergem.
@@ -645,6 +785,38 @@ function requestExtract(ev, btn, channel, beginC, endC) {
             btn.disabled = false;
             btn.innerHTML = '&#8681; Extrair';
             alert(msg || 'Não foi possível solicitar a extração.');
+        }
+    });
+}
+
+/**
+ * [Extrair] do JIMI — `HVIDEO,<carimbo>,<câmera>` (proNo 128).
+ *
+ * O comando vem pronto do servidor (`filelist_hvideo_command()`), montado a
+ * partir do nome que a própria câmera mandou na lista: o carimbo volta na hora
+ * LOCAL dela, sem conversão pelo caminho. Converter para UTC aqui faria a
+ * câmera procurar um bloco três horas fora — e ela responderia "não existe",
+ * não "fuso errado".
+ *
+ * A resposta do equipamento é SÍNCRONA e chega em `msg`: `OK!` quando aceitou,
+ * ou o motivo da recusa (há firmware que não aceita as formas longas — foi o
+ * que obrigou o reenvio de alarme a tentar `EVIDEO` e cair no `HVIDEO`).
+ * O arquivo em si sobe depois, e o equipamento avisa o fim pelo evento `105`.
+ */
+function requestExtractJimi(ev, btn, comando) {
+    ev.stopPropagation();
+    btn.disabled = true;
+    btn.innerHTML = '&#8230; Enviando';
+
+    pbSendCmd(selImei, 128, comando, function (ok, msg) {
+        if (ok) {
+            btn.innerHTML = '&#10003; Solicitado';
+            btn.title = 'A câmera respondeu: ' + (msg || 'OK') +
+                        '. O vídeo aparece aqui quando o upload terminar.';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '&#8681; Extrair';
+            alert('A câmera recusou o pedido: ' + (msg || 'sem resposta.'));
         }
     });
 }

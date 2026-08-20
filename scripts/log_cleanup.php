@@ -9,11 +9,22 @@
  * 2. Purga por idade: Logger::cleanOldLogs() remove *.log e *.log.old com
  *    mtime além de LOG_RETENTION_DAYS (default 30) — inclui os webhook_* datados
  *    e órfãos de writers antigos.
- * 3. Purga de relatórios (v4.7.1): storage/reports cresce para sempre — um
+ * 3. Purga das capturas do FILELIST (v4.9.34): `logs/filelist/` guarda o corpo
+ *    CRU que a câmera sobe (~78 KB por listagem, e ela sobe a mesma lista duas
+ *    vezes por disparo). Ele fica de propósito — foi essa captura que resolveu
+ *    a investigação da v4.9.33, e é o que permitirá diagnosticar o próximo
+ *    firmware que mudar o formato —, mas `Logger::cleanOldLogs()` só varre
+ *    `*.log`, então até aqui nada limpava esse diretório. Agora que a tela de
+ *    playback dispara o upload de verdade (v4.9.34), ele cresce sozinho.
+ *    Mesma retenção dos logs (LOG_RETENTION_DAYS).
+ * 4. Purga de relatórios (v4.7.1): storage/reports cresce para sempre — um
  *    agendamento diário gera 1 arquivo por dia, e cada arquivo é uma cópia de
  *    dado de cliente parada em disco. REPORT_RETENTION_DAYS (default 30) apaga
  *    os arquivos antigos e, junto, as linhas de report_schedule_runs além da
  *    mesma idade, para o histórico não crescer sem teto.
+ *
+ * ⚠️ O item 4 é o antigo 3 — a numeração andou com a entrada do FILELIST. A
+ * conexão PDO citada logo abaixo é a dele.
  *
  * NÃO usa a classe Database: o construtor dela dá exit em falha de conexão e a
  * limpeza precisa rodar mesmo com o banco fora. A conexão do item 3 é PDO
@@ -58,14 +69,30 @@ $before = count(glob($logDir . '/*.log*') ?: []);
 Logger::cleanOldLogs($days);
 $after = count(glob($logDir . '/*.log*') ?: []);
 
+// 3) Capturas do FILELIST — `.body.raw`, `.meta.json`, `.parse.json`, `.fileN.raw`
+//
+// Por IDADE do arquivo, não por contagem: uma câmera listada uma única vez em
+// três meses não pode perder a captura dela porque outra foi listada mil vezes.
+// O diretório pode não existir (instalação sem câmera JIMI).
+$filelistDir = $logDir . '/filelist';
+$capturasRemovidas = 0;
+$limiteCaptura = time() - $days * 86400;
+foreach (glob($filelistDir . '/*') ?: [] as $arquivoCaptura) {
+    if (!is_file($arquivoCaptura)) continue;
+    if (filemtime($arquivoCaptura) < $limiteCaptura && @unlink($arquivoCaptura)) {
+        $capturasRemovidas++;
+    }
+}
+
 echo sprintf(
-    "[%s] log_cleanup OK — retenção %dd, teto %dMB: %d rotacionado(s), %d removido(s), %d arquivo(s) restante(s)\n",
+    "[%s] log_cleanup OK — retenção %dd, teto %dMB: %d rotacionado(s), %d removido(s), %d arquivo(s) restante(s), %d captura(s) de FILELIST removida(s)\n",
     Logger::stamp(),
     $days,
     $maxMb,
     $rotated,
     max(0, $before - $after),
-    $after
+    $after,
+    $capturasRemovidas
 );
 
 // ════════════════════════════════════════════════════════════
