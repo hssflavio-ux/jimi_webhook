@@ -125,11 +125,11 @@
 > primeiro `UPDATE` de verdade sem uma câmera sacrificável e o pacote correto do
 > fornecedor em mãos.
 >
-> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.31 publicadas e verificadas
+> ### 📍 ESTADO EM 19/08/2026 — v4.9.26 a v4.9.33 publicadas e verificadas
 >
-> Seis versões em sequência, todas no ar em produção (`bycamera.ia.br`). Quatro
-> nasceram de reclamação do campo; a quinta, de uma conferência contra a
-> documentação oficial da fabricante.
+> **Produção (`bycamera.ia.br`) está em `0d333c1`, `/ping` reportando 4.9.33,
+> banco em 4.9.32.** Oito versões em sequência, todas no ar. A maioria nasceu de
+> reclamação do campo; duas, de conferência contra a documentação da fabricante.
 >
 > | Versão | O que era | Onde estava |
 > |---|---|---|
@@ -139,13 +139,36 @@
 > | 4.9.29 | Telas de vídeo listavam equipamento desativado | `video_aovivo.php`, `video_playback.php` |
 > | 4.9.30 | Relatório oferecia vídeo de arquivo que nunca chegou | `rel_alarmes.php`, `includes/media.php` |
 > | 4.9.31 | Vídeo reenviado não voltava para o alarme | `alarm_video_request.php`, `solicitarvideo.php` |
+> | 4.9.32 | `UPDATE` travado em 1 dos 6 modelos; firmware NULL na base | `command_catalog.php`, `/firmwares` (tela nova) |
+> | 4.9.33 | Apache descartava o corpo do `FILELIST` acima de 16 KB | `docs/apache/filelist-chunked.conf` |
 >
-> **O fio que liga quatro delas**: a tela prometia algo que o sistema não podia
-> cumprir, e falhava **em silêncio** — HTTP 200, mensagem verde, e nada
-> acontecendo. Cadastro dizia "cadastrado com sucesso" e o equipamento ficava
-> órfão; o botão "Ver Vídeo" abria um player que nunca carregava; o comando de
-> vídeo ao vivo ficava `sent` para sempre. Em nenhum desses casos havia linha de
-> erro em log algum.
+> **O fio que liga SEIS delas**: o sistema prometia algo que não podia cumprir, e
+> falhava **em silêncio** — HTTP 200, mensagem verde, e nada acontecendo.
+> Cadastro dizia "cadastrado com sucesso" e o equipamento ficava órfão; o botão
+> "Ver Vídeo" abria um player que nunca carregava; o comando de vídeo ao vivo
+> ficava `sent` para sempre; o botão FOTA dizia "enviado" mandando um proNo que
+> não é OTA; o `FILELIST` respondia `OK!` e gravava captura de 0 byte. Em nenhum
+> desses casos havia linha de erro em log algum.
+>
+> ⚠️ **Duas coisas desta rodada NÃO são código e não viajam no `git pull`**:
+>
+> - `docs/apache/filelist-chunked.conf` precisa de `a2enconf filelist-chunked`
+>   no servidor. Sobrevive a deploy, some se a máquina for reprovisionada.
+> - A chave SSH da máquina Windows em `~administrador/.ssh/authorized_keys`
+>   (v4.9.32) — mesma propriedade, mesma armadilha. Ver §8.
+>
+> #### 🔴 O achado que valia mais que as duas versões: a suíte não rodava
+>
+> `npx playwright test` sem argumento imprimia "Running 137 tests" e **nada
+> mais**, saindo com **código 0** — que é o que qualquer CI lê como verde. O
+> `testMatch` padrão coleta `*.test.js` além de `*.spec.js`, e
+> `tests/helpers/player_snapshot.test.js` é script Node cuja IIFE roda na
+> importação e termina em `process.exit()`: matava o processo antes do primeiro
+> spec. Passar um caminho sempre funcionou, e é por isso que sobreviveu.
+> Corrigido com `testMatch: '**/*.spec.js'`. **Primeira execução real: 133
+> passaram, 0 falharam, 6 pulados** (3 de multi-tenant esperando `TEST_EMAIL_B`,
+> rate limiting que bloqueia o IP de propósito, coerência entre relatórios e
+> webhook→ocorrência sem `TEST_IMEI`).
 >
 > #### 🔴 v4.9.26 — cadastro de equipamento e o cliente errado
 >
@@ -496,8 +519,27 @@
 >    a **URL do pacote** da JC400AD, para cadastrar em `/firmwares`. Sem ela não
 >    há o que enviar, e inventar a URL é o erro que nenhuma validação pega.
 >
-> **Fechadas nesta rodada**: religar o vídeo reenviado (v4.9.31) e vincular a
-> `400AD_3` a Frota Principal — a base está com **zero equipamentos órfãos**.
+> 6. **Escrever o parser do `FILELIST` (FASE 1).** Destravado agora que o corpo
+>    chega: a lista de 3.021 nomes fica em `logs/filelist/` e ninguém a lê. O
+>    formato está medido (`{"imei":…,"fileNameList":"a.ts,b.ts,…"}`), então dá
+>    para escrever contra o arquivo real em vez de contra suposição — que era o
+>    bloqueio original desta fase.
+> 7. **Cadastrar as URLs de firmware em `/firmwares`.** A tabela
+>    `firmware_releases` está vazia e o botão *Atualizar* não tem para onde
+>    apontar. Depende do fornecedor (item 5).
+> 8. **Ler o firmware da frota.** `devices.firmware_version` segue NULL nos 8
+>    equipamentos: o mecanismo existe desde a v4.9.32, mas a leitura é uma AÇÃO —
+>    botão *Ler versão de todos* em `/firmwares`. É o primeiro clique a dar no
+>    próximo acesso.
+> 9. **3 specs de multi-tenant continuam pulando** por falta de
+>    `TEST_EMAIL_B`/`TEST_PASSWORD_B`. Agora que a suíte roda de verdade, é o
+>    maior buraco de cobertura que sobra — e é justamente o que já escondeu
+>    vazamento entre clientes antes.
+>
+> **Fechadas nesta rodada**: religar o vídeo reenviado (v4.9.31); vincular a
+> `400AD_3` a Frota Principal (**zero equipamentos órfãos**); a trava do `UPDATE`
+> e o firmware gravado do device (v4.9.32); o `FILELIST` (v4.9.33); e a suíte
+> Playwright, que não rodava e saía verde.
 >
 > #### Tooling
 >
@@ -514,6 +556,16 @@
 > checagens em `command_response.test.php` (40 → 46). O par ativo/inativo de
 > equipamento entrou no `seed_tenants.php` — sem ele, "não lista desativado"
 > passaria por vacuidade.
+>
+> **v4.9.32/33**: `firmware.spec.js` (7 casos em navegador real) e mais 30
+> checagens em `command_response.test.php` (50 → 80), incluindo a contagem do
+> cabeçalho do catálogo — que estava **errada desde a v4.9.27** e agora é
+> conferida contra o array. `/parametros` e `/firmwares` entraram no
+> `navigation.spec.js`: a lista de rotas cobria a sidebar de antes da v4.9.16 e
+> as duas telas de admin não eram exercitadas por ninguém. O
+> `player_snapshot.test.js` passou a ser chamado explicitamente pelo runner —
+> antes rodava **por acidente**, como efeito colateral de envenenar a coleta do
+> Playwright.
 
 ---
 
