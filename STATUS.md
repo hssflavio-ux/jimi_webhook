@@ -1,4 +1,4 @@
-# STATUS.md — Jimi Webhook System v4.9.32 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.33 (YUV Parity)
 
 > ### 🔴 v4.9.32 — a trava do `UPDATE` desligava a atualização de 5 dos 6 modelos
 >
@@ -391,10 +391,11 @@
 >    Destravado agora que o religamento funciona. Sugestão: começar por um dia
 >    só, conferir a taxa de religamento, e só então rodar o resto — com intervalo
 >    entre os disparos, para não afogar a câmera nem a franquia do SIM.
-> 2. 🔴 **`FILELIST`: RESOLVIDO O DIAGNÓSTICO em 19/08/2026 — a câmera manda a
->    lista inteira, e nós é que perdemos.** Medido na 400AD_3
->    (`864993060392306`) com `tcpdump` na porta 80 enquanto o comando era
->    disparado. O que ela transmite:
+> 2. ✅ **`FILELIST`: RESOLVIDO em 19/08/2026 — a lista chega inteira.** Eram
+>    DOIS defeitos empilhados, e o de baixo escondia o de cima.
+>
+>    **O que a câmera manda** (400AD_3, `864993060392306`, medido com `tcpdump`
+>    na porta 80 durante o disparo):
 >
 >    ```
 >    POST /filelist/864993060392306 HTTP/1.1
@@ -404,94 +405,78 @@
 >    {"imei":"864993060392306","fileNameList":"2026_08_16_05_33_58_01.ts,…"}
 >    ```
 >
->    **O formato é JSON com `imei` e `fileNameList`** (nomes `.ts` separados por
->    vírgula, sufixo `_01`/`_02` = câmera frontal/interna) — layout que ninguém
->    publica e que agora está medido, não suposto.
+>    **O layout deixou de ser desconhecido**: é JSON com `imei` e
+>    `fileNameList` (nomes `.ts` separados por vírgula; sufixo `_01`/`_02` =
+>    câmera frontal/interna, o mesmo par do `EVIDEO`/`HVIDEO`). A lista real da
+>    400AD_3 tem **3.021 nomes, 78.590 bytes**. O parser da FASE 1 já tem contra
+>    o que ser escrito.
 >
->    **A causa: corpo `chunked` acima de 16 KB é descartado em silêncio entre o
->    Apache e o PHP-FPM.** Busca binária no próprio servidor:
+>    **A causa**: corpo `chunked` acima de **16 KB** era descartado em silêncio
+>    entre o Apache e o PHP-FPM. Busca binária no servidor:
 >
->    | corpo enviado | chegou ao `php://input` |
+>    | corpo enviado | chegava ao `php://input` |
 >    |---|---|
 >    | 13.043 B | 13.043 ✓ |
 >    | 16.293 B | 16.293 ✓ |
 >    | 16.699 B | **0** 🔴 |
 >    | 39.043 B | **0** 🔴 |
 >
->    Fronteira cravada em **16.384 (16 K)** — número de buffer, não de
->    protocolo. Sem erro no `error.log`, HTTP 200 normal, `LimitRequestBody`
->    ausente e `post_max_size = 8M` (folgadíssimo). A lista real da 400AD_3 tem
->    milhares de nomes e passa MUITO dos 16 K, então cai sempre.
+>    Fronteira cravada em 16.384 (16 K) — número de buffer, não de protocolo.
+>    Sem erro no `error.log`, HTTP 200 normal, `LimitRequestBody` ausente e
+>    `post_max_size = 8M`. A culpa foi isolada por experimento: o MESMO corpo de
+>    39.030 bytes chega inteiro ao servidor embutido do PHP (`php -S`, sem
+>    Apache) e chega **zerado** por Apache → `mod_proxy_fcgi` → PHP-FPM.
 >
->    ⚠️ **A conclusão anterior ("infraestrutura descartada") estava errada, e o
->    motivo é instrutivo**: os POSTs de controle tinham 17 e 28 bytes. O teste
->    reproduziu o *protocolo* e não o *tamanho* — e o tamanho era a variável. A
->    pista do `ACC: OFF` também não era: a captura acima foi feita com `ACC: OFF`
->    e a câmera transmitiu a lista completa assim mesmo.
->
->    **Assinatura para reconhecer o defeito**: nas capturas de campo sobra
->    `HTTP_TRANSFER_ENCODING: chunked` e falta `CONTENT_LENGTH`. Quando o Apache
->    processa chunked de verdade é o inverso — ele consome o `Transfer-Encoding`
->    e injeta o `Content-Length` (conferido: um POST chunked de 54 bytes chega
->    com `CONTENT_LENGTH=54` e sem `Transfer-Encoding`).
->
->    **A culpa é do Apache, isolada por experimento.** O MESMO corpo de 39.030
->    bytes, mandado pelo mesmo socket cru:
->
->    | destino | chegou ao `php://input` |
->    |---|---|
->    | servidor embutido do PHP (`php -S`, sem Apache) | **39.030** ✓ |
->    | Apache → `mod_proxy_fcgi` → PHP-FPM | **0** 🔴 |
->
->    PHP é servido por `SetHandler "proxy:unix:/run/php/php8.3-fpm.sock|fcgi://localhost"`,
->    ou seja **mod_proxy_fcgi** — e é ele que perde o corpo.
->
->    #### O que já foi TESTADO e DESCARTADO (19/08/2026)
->
->    - 🔴 **`mod_buffer` (`SetInputFilter BUFFER` + `BufferSize 8M`) NÃO resolve.**
->      Testado com escopo LARGO de propósito (`<Directory /var/www/jimi_webhook>`),
->      justamente para não confundir "não funciona" com "não foi aplicado":
->      o corpo de 39 KB continuou chegando zerado. Módulo desativado de volta.
->    - ⚠️ **`<LocationMatch "^/filelist/">` NÃO é escopo válido para esta rota.**
->      O `.htaccess` reescreve `/filelist/…` para `handlers/router.php`, e o
->      location walk roda de novo contra a URI REESCRITA — a diretiva nunca é
->      aplicada. A primeira tentativa de correção caiu exatamente nisso e o
->      sintoma foi enganoso: config no ar, `configtest` OK, e zero efeito.
->      **`<Directory>` funciona** (o `mod_buffer` foi de fato aplicado por ele).
->
->    #### O candidato que sobrou, ainda NÃO testado
->
->    **`SetEnv proxy-sendcl 1`** — força o proxy a spoolar o corpo e mandá-lo com
->    `Content-Length`, que é exatamente o que falta. Confirmado que o módulo o
->    conhece (`grep -a 'proxy-sendcl' mod_proxy_fcgi.so` casa, ao lado de
->    `proxy-fcgi-input` e `proxy-nocanon`; controle feito com `mod_proxy_http`).
->    Ele **nunca chegou a ser exercitado**: a primeira tentativa o pôs dentro do
->    `<LocationMatch>` que não casa.
+>    **A correção** (`docs/apache/filelist-chunked.conf`, aplicada em produção):
 >
 >    ```apache
->    # /etc/apache2/conf-available/filelist-chunked.conf
->    <Directory /var/www/jimi_webhook>
->        SetEnv proxy-sendcl 1
->    </Directory>
+>    SetEnvIf Request_URI "^/filelist/" proxy-sendcl=1
+>    SetEnvIf REDIRECT_proxy-sendcl "^1$" proxy-sendcl=1
 >    ```
->    `a2enconf filelist-chunked && apache2ctl configtest && systemctl reload apache2`
 >
->    ⚠️ **Medir depois de aplicar, não presumir**: a busca binária tem de passar
->    acima de 16 K. E se funcionar, ESTREITAR o escopo — `<Directory>` pega todas
->    as rotas, e spoolar o corpo de todo webhook de GPS é custo desnecessário.
->    Escopo estreito exige contornar a reescrita (`SetEnvIf Request_URI`, com a
->    ressalva de que mod_rewrite prefixa `REDIRECT_` nas variáveis ao redirecionar
->    internamente).
+>    `proxy-sendcl` manda o proxy spoolar o corpo e entregá-lo com
+>    `Content-Length` — que é o que faltava. **Verificado com a câmera real**:
+>    78.590 bytes, 3.021 nomes, `CONTENT_LENGTH=78590` e sem `Transfer-Encoding`.
+>    A captura anterior, de 40 minutos antes, está no mesmo diretório com a
+>    assinatura antiga (`corpo_bytes=0`, `TRANSFER_ENCODING=chunked`) — o antes e
+>    o depois lado a lado.
 >
->    **Plano B, se o `proxy-sendcl` não resolver**: tirar o `/filelist` do caminho
->    do Apache. A rota do vídeo já funciona assim (porta 23010, container
->    `dvr-upload`, arquivos de MB) e o `FILELIST,<url>` é configurável — basta
->    apontar a câmera para uma porta com um receptor próprio. Custa mais, mas o
->    experimento acima já provou que fora do Apache o corpo chega inteiro.
+>    ⚠️ **É infra FORA do git**: mora em `/etc/apache2/conf-available/` e o
+>    `deploy.sh` não a instala. Sobrevive a deploy, some se a máquina for
+>    reprovisionada. Instalar com `a2enconf filelist-chunked`; reverter com
+>    `a2disconf`. A cópia versionada é `docs/apache/filelist-chunked.conf`.
 >
->    Enquanto nada disso for aplicado, o `FILELIST` continua inútil — o parser da
->    FASE 1 não tem o que parsear.
-> 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
+>    #### O que foi descartado no caminho, e por quê importa
+>
+>    - 🔴 **`mod_buffer` (`SetInputFilter BUFFER`) NÃO resolve.** Testado com
+>      escopo LARGO de propósito (`<Directory>`), justamente para não confundir
+>      "não funciona" com "não foi aplicado". Módulo desativado de volta.
+>    - ⚠️ **`<LocationMatch "^/filelist/">` não é escopo válido nesta rota**, e
+>      falha do jeito pior: em silêncio. O `.htaccess` reescreve `/filelist/…`
+>      para `handlers/router.php` e o location walk roda contra a URI REESCRITA.
+>      A primeira tentativa de correção caiu nisso — config no ar, `configtest`
+>      OK, zero efeito. `SetEnvIf` funciona porque roda ANTES da reescrita; a
+>      segunda linha recupera a marca do outro lado do redirect interno
+>      (mod_rewrite prefixa `REDIRECT_`).
+>    - ⚠️ **A conclusão anterior ("infraestrutura descartada") estava errada.**
+>      Os POSTs de controle tinham 17 e 28 bytes: o teste reproduziu o
+>      *protocolo* e não o *tamanho*, e o tamanho era a variável. A pista do
+>      `ACC: OFF` também não era — a captura boa foi feita com `ACC: OFF`.
+>    - ⚠️ **Uma checagem passou por vacuidade e quase virou conclusão errada.**
+>      `strings mod_proxy_fcgi.so | grep proxy-sendcl` devolveu vazio, e eu quase
+>      li isso como "o módulo não suporta". O `strings` **não existe no
+>      servidor** — o comando falhou. Refeito com `grep -a` (e controle em
+>      `mod_proxy_http.so`), o resultado se inverteu: o módulo suporta, e é a
+>      correção que funcionou.
+>
+>    **Escopo estreito de propósito**: `<Directory>` também funciona e foi como a
+>    correção foi provada primeiro, mas aplicaria o spool a TODA rota — inclusive
+>    aos webhooks de GPS, os pedidos mais frequentes do sistema. Só o `/filelist`
+>    recebe corpo chunked.
+>
+>    **Pendência que isto abre**: escrever o parser (FASE 1) e transformar os
+>    nomes em algo utilizável — hoje a captura só vai para `logs/filelist/`.
+>> 3. ⚠️ **`commands.response_time` é carimbado no DESPACHO, não na resposta**
 >    (`sendcommand.php`, `':rtime' => date(...)` dentro do INSERT). Além disso,
 >    **140 das 183** linhas com resposta têm exatamente 10800 s de intervalo — 3 h
 >    cravadas, mesmo segundo — e a configuração inspecionada **não explica** o

@@ -17,12 +17,21 @@
  * O sufixo `_01`/`_02` do nome é a câmera (frontal/interna), o mesmo par que o
  * `EVIDEO`/`HVIDEO` usa. O parser da FASE 1 já tem contra o que ser escrito.
  *
- * 🔴 POR QUE ESTA VERSÃO AINDA SÓ CAPTURA. **O corpo não chega ao PHP.**
- * Escrever o parser por suposição é exatamente como o `34818` entrou no
- * projeto: aceito pelo IoT Hub, marcado `executed`, e nunca produziu um
- * arquivo — 18 tentativas até alguém desconfiar. A mesma disciplina da §2 do
- * PROJETO_PARAMETROS.md, que evitou três parsers errados nos parâmetros, vale
- * aqui: medir primeiro, interpretar depois.
+ * ⚠️ O CORPO SÓ CHEGA COM A CONFIG DO APACHE NO LUGAR. Corpo `chunked` acima de
+ * 16 KB era descartado em silêncio entre o Apache e o PHP-FPM (mod_proxy_fcgi),
+ * e a lista real tem ~78 KB — por isso este handler passou dias gravando
+ * captura de 0 byte. Corrigido em 19/08/2026 com
+ * `docs/apache/filelist-chunked.conf` (`SetEnvIf … proxy-sendcl=1`), que é
+ * **infra fora do git**: o `deploy.sh` não a instala, e ela some se a máquina
+ * for reprovisionada. Captura de 0 byte voltando é o primeiro sintoma disso.
+ *
+ * 🔴 POR QUE ESTA VERSÃO AINDA SÓ CAPTURA. Escrever o parser por suposição é
+ * exatamente como o `34818` entrou no projeto: aceito pelo IoT Hub, marcado
+ * `executed`, e nunca produziu um arquivo — 18 tentativas até alguém
+ * desconfiar. A mesma disciplina da §2 do PROJETO_PARAMETROS.md, que evitou
+ * três parsers errados nos parâmetros, vale aqui: medir primeiro, interpretar
+ * depois. Agora o arquivo real existe (3.021 nomes medidos na 400AD_3), então a
+ * FASE 1 pode ser escrita contra ele em vez de contra uma suposição.
  *
  * Então este handler guarda o corpo CRU, registra método, tipo, tamanho e
  * cabeçalhos, e devolve 200. O parser vem na fase seguinte, escrito contra o
@@ -151,10 +160,11 @@ Logger::info('filelist: captura recebida', [
 // texto puro a fazia desistir. Era teoria construída sobre a AUSÊNCIA de dado.
 //
 // O `tcpdump` de 19/08/2026 (400AD_3) desmentiu: a câmera manda a lista INTEIRA,
-// de uma vez, logo depois dos cabeçalhos. Quem perde o corpo somos nós — corpo
-// `chunked` acima de **16 KB** é descartado entre o Apache e o PHP-FPM (busca
-// binária no servidor: 16.293 B chegam, 16.699 B viram zero, sem erro em log
-// nenhum). Ver a pendência 2 do STATUS.md.
+// de uma vez, logo depois dos cabeçalhos. Quem perdia o corpo éramos nós — corpo
+// `chunked` acima de **16 KB** era descartado entre o Apache e o PHP-FPM (busca
+// binária no servidor: 16.293 B chegavam, 16.699 B viravam zero, sem erro em log
+// nenhum). Corrigido pela config do Apache, não por este arquivo — ver a
+// pendência 2 do STATUS.md e `docs/apache/filelist-chunked.conf`.
 //
 // O envelope JSON FICA: é o mesmo dos outros receptores deste projeto, e não
 // custa nada. Mas ele não é o que faz o corpo chegar — acreditar que era é o

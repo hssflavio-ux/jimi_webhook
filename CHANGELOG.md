@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.33
+
+**O `FILELIST` nunca produziu nada porque o Apache descartava o corpo — a câmera sempre mandou a lista.** Levantado com `tcpdump` na porta 80 da 400AD_3 (`864993060392306`) enquanto o comando era disparado.
+
+### Fixed
+- 🔴 **Corpo `chunked` acima de 16 KB era descartado em silêncio entre o Apache e o PHP-FPM** (`mod_proxy_fcgi`). HTTP 200 normal, nada no `error.log`, `php://input` vazio. Busca binária no servidor: 13.043 B → chegam; 16.293 B → chegam; **16.699 B → 0**; 39.043 B → 0. Fronteira cravada em **16.384 (16 K)** — número de buffer, não de protocolo; `post_max_size` é 8M e não há `LimitRequestBody`.
+  - **Culpa isolada por experimento**: o MESMO corpo de 39.030 bytes, pelo mesmo socket cru, chega inteiro ao servidor embutido do PHP (sem Apache) e chega **zerado** por Apache → `mod_proxy_fcgi` → PHP-FPM.
+  - **Correção**: `docs/apache/filelist-chunked.conf` — `SetEnvIf Request_URI "^/filelist/" proxy-sendcl=1`, que manda o proxy spoolar o corpo e entregá-lo com `Content-Length`. Aplicada em produção e **verificada com a câmera real**: 78.590 bytes, 3.021 nomes de arquivo, `CONTENT_LENGTH=78590`, sem `Transfer-Encoding`.
+
+### Added
+- **O layout do retorno do `FILELIST` deixou de ser desconhecido.** Não é TXT, é **JSON**: `{"imei":"…","fileNameList":"2026_08_16_05_33_58_01.ts,…"}`. O sufixo `_01`/`_02` é a câmera (frontal/interna), o mesmo par do `EVIDEO`/`HVIDEO`. O parser da FASE 1 tem contra o que ser escrito — 3.021 nomes medidos.
+- **`docs/apache/filelist-chunked.conf`** — a config versionada, com o diagnóstico inteiro no cabeçalho.
+
+### Notes
+- ⚠️ **É infra FORA do git.** Mora em `/etc/apache2/conf-available/` e o `deploy.sh` **não** a instala: sobrevive a deploy, some se a máquina for reprovisionada. Instalar com `a2enconf filelist-chunked`, reverter com `a2disconf`. Captura de 0 byte voltando a aparecer em `logs/filelist/` é o primeiro sintoma de que ela sumiu.
+- 🔴 **`<LocationMatch "^/filelist/">` NÃO é escopo válido nesta rota, e falha em silêncio.** O `.htaccess` reescreve `/filelist/…` para `handlers/router.php` e o location walk roda contra a URI REESCRITA — config no ar, `configtest` OK, zero efeito. Foi assim que a primeira tentativa de correção passou por boa. `SetEnvIf` funciona porque roda antes da reescrita; a segunda linha recupera a marca do outro lado do redirect interno (mod_rewrite prefixa `REDIRECT_`).
+- 🔴 **`mod_buffer` (`SetInputFilter BUFFER`) não resolve** — testado com escopo largo de propósito, para não confundir "não funciona" com "não foi aplicado". Módulo desativado de volta.
+- ⚠️ **A conclusão anterior ("infraestrutura descartada") estava errada**, e o motivo generaliza: os POSTs de controle tinham 17 e 28 bytes. O teste reproduziu o *protocolo* e não o *tamanho* — e o tamanho era a variável. A pista do `ACC: OFF` também não era: a captura boa foi feita com `ACC: OFF`.
+- ⚠️ **Uma checagem passou por vacuidade e quase virou conclusão errada.** `strings mod_proxy_fcgi.so | grep proxy-sendcl` devolveu vazio e quase foi lido como "o módulo não suporta"; o `strings` **não existe no servidor** e o comando falhou. Refeito com `grep -a` (com controle em `mod_proxy_http.so`), o resultado se inverteu — e era justamente a correção que funciona.
+- **Pendência aberta**: escrever o parser (FASE 1). Hoje a lista só é gravada em `logs/filelist/`.
+
 ## [Unreleased] — 4.9.32
 
 **A trava do `UPDATE` estava errada, e por isso só um dos seis modelos podia ser atualizado pela tela.** O comando de atualização de firmware vale para a linha JC inteira — o que muda de um modelo para o outro é **só a URL do pacote**. Ele estava travado em JC371 porque `includes/command_catalog.php` deriva o campo `universal` da wiki ("presente em 5+ das 6 páginas") e **só a página do JC371 documenta o comando**. Era artefato da fonte, não do protocolo: com 9 dos 10 equipamentos do banco de teste desabilitados, a tela tornava impossível atualizar as JC400AD de produção — justamente onde a divergência de firmware custou caro na v4.9.31.
