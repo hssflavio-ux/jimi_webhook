@@ -51,6 +51,7 @@ test.describe('Barras de filtro — padrão visual', () => {
     }
 
     test('🔴 nenhuma tela usa mais a nuvem de chips', async ({ authedPage }) => {
+        test.setTimeout(120000);
         for (const rota of ['/comandos', '/video/downloads', '/relatorios/alarmes', '/bi']) {
             await authedPage.goto(rota);
             await authedPage.waitForLoadState('domcontentloaded');
@@ -59,6 +60,9 @@ test.describe('Barras de filtro — padrão visual', () => {
     });
 
     test('🔴 o campo do veículo se chama PLACA em toda tela', async ({ authedPage }) => {
+        // Nove páginas em sequência, algumas pesadas (o playback carrega a
+        // barra inteira): o teto padrão de 45 s não cobre a varredura.
+        test.setTimeout(180000);
         // CONVENÇÃO (dono do produto, 20/08/2026): "placa" é o que estiver
         // cadastrado no campo do dispositivo, TEXTO LIVRE, sem formato exigido.
         // O campo já teve TRÊS nomes para a mesma coisa — "Nome do Dispositivo"
@@ -82,6 +86,7 @@ test.describe('Barras de filtro — padrão visual', () => {
     });
 
     test('🔴 o filtro de veículo é por PLACA, não por IMEI', async ({ authedPage }) => {
+        test.setTimeout(120000);
         for (const rota of ['/comandos', '/video/downloads', '/video/playback', '/relatorios/alarmes']) {
             await authedPage.goto(rota);
             await authedPage.waitForLoadState('domcontentloaded');
