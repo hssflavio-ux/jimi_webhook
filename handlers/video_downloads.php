@@ -10,6 +10,8 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/media.php';     // media_canal_do_nome()
+require_once __DIR__ . '/../includes/filelist.php';  // filelist_ts_do_nome_utc()
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -172,9 +174,10 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['device_name'],
             $r['imei'],
             $r['model_name'],
-            $r['channel'] ? 'CH' . $r['channel'] : '—',
+            ($cx = $r['channel'] ?: media_canal_do_nome((string)$r['file_name'])) ? 'CH' . (int)$cx : '—',
             $r['file_name'] ?: '—',
-            $r['file_type'] ?: '—',
+            ($ini = filelist_ts_do_nome_utc((string)$r['file_name']) ?: $r['event_time'])
+                ? fmt_brt($ini, 'd/m/Y H:i:s') : '—',
             $r['file_size'] ? number_format($r['file_size'] / 1024 / 1024, 1, ',', '.') : '—',
             $rotuloDoArquivo($r),
             !empty($r['downloaded_at']) ? fmt_brt($r['downloaded_at'], 'd/m/Y H:i:s') : '—',
@@ -194,7 +197,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 
     stream_export($export, 'downloads_video',
         ['Requisitado em', 'Cliente', 'Placa', 'IMEI', 'Modelo', 'Canal',
-         'Arquivo', 'Tipo', 'Tamanho (MB)', 'Status', 'Baixado em'],
+         'Arquivo', 'Início do vídeo', 'Tamanho (MB)', 'Status', 'Baixado em'],
         $expRows, 'Downloads de Vídeo', $subtitulo,
         // Nome do arquivo é a coluna longa (`EVENT_<imei>_..._I_15.mp4`); as
         // demais são curtas e de largura previsível.
@@ -298,8 +301,12 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 <th>Modelo</th>
                 <?php endif; ?>
                 <th>Canal</th>
-                <th>Tipo</th>
-                <th>Tamanho</th>
+                <?php /* 🔴 A tela dizia QUANDO foi pedido e nunca QUANDO é o
+                         vídeo — que é a informação com que se procura uma
+                         gravação. Sai do carimbo do NOME, que é o instante da
+                         gravação; `created_at` é o do pedido, e os dois podem
+                         estar a dias de distância quando se extrai algo antigo. */ ?>
+                <th>Início do vídeo</th>
                 <th>Requisitado em</th>
                 <th>Status</th>
                 <th style="text-align:center;">Download</th>
@@ -307,7 +314,7 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
         </thead>
         <tbody>
             <?php if (empty($files)): ?>
-            <tr><td colspan="<?= $umEquipamento ? 7 : ($mostrarCliente ? 11 : 10) ?>" style="text-align:center;padding:32px;color:var(--muted);">
+            <tr><td colspan="<?= $umEquipamento ? 6 : ($mostrarCliente ? 10 : 9) ?>" style="text-align:center;padding:32px;color:var(--muted);">
                 <?= $umEquipamento ? 'Nenhum vídeo deste equipamento no storage ainda.' : 'Nenhum arquivo encontrado' ?>
                 <?php if ($umEquipamento): ?>
                 <div style="font-size:11px;margin-top:6px;">Peça um trecho em <a href="/video/playback?imei=<?= htmlspecialchars($umEquipamento['imei']) ?>">Playback</a> — ele aparece aqui quando a câmera terminar de enviar.</div>
@@ -333,9 +340,15 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 <td><span class="text-mono" style="font-size:11px;color:var(--muted);"><?= htmlspecialchars($f['imei']) ?></span></td>
                 <td><?= htmlspecialchars($f['model_name']) ?></td>
                 <?php endif; ?>
-                <td><?= $f['channel'] ? 'CH' . $f['channel'] : '—' ?></td>
-                <td><span class="badge"><?= htmlspecialchars($f['file_type'] ?? '—') ?></span></td>
-                <td><?= $f['file_size'] ? number_format($f['file_size']/1024/1024, 1) . ' MB' : '—' ?></td>
+                <?php
+                    // Canal derivado do nome quando a linha é antiga: até a
+                    // v4.9.39 a coluna nunca era gravada, e as linhas de então
+                    // continuam com NULL. O dado está no nome — `_F_`/`_I_`.
+                    $canalF = $f['channel'] ?: media_canal_do_nome((string)$f['file_name']);
+                    $inicio = filelist_ts_do_nome_utc((string)$f['file_name']) ?: $f['event_time'];
+                ?>
+                <td><?= $canalF ? 'CH' . (int)$canalF : '—' ?></td>
+                <td class="text-mono"><?= $inicio ? fmt_brt($inicio) : '—' ?></td>
                 <td class="text-mono"><?= fmt_brt($f['created_at'] ?? $f['event_time']) ?></td>
                 <td>
                     <?php if ($jaBaixado): ?>

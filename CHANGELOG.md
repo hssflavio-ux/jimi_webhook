@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.39
+
+**Duas falhas relatadas do campo nas câmeras JIMI, e a doc oficial (docs.jimicloud.com §1.3.5–1.3.7) resolveu as duas.** Uma era minha suposição não medida; a outra, uma assimetria com o JT/T.
+
+### Fixed
+- 🔴 **"Ver na câmera" nunca funcionaria: a URL do stream estava errada.** O playback publica **sem canal no caminho** — `http://<ip>:8881/live/<IMEI>.flv` (§1.3.5). Eu havia reaproveitado a URL do vídeo AO VIVO, que é `live/<canal-base-0>/<imei>.flv` (medida em 18/08). O `REPLAYLIST` saía, a câmera aceitava, e o player buscava um endereço onde nada era publicado. A diferença tem lógica: no playback o canal já está escolhido pelo NOME do arquivo que vai no comando.
+- 🔴 **O pedido de upload não aparecia em Downloads enquanto o arquivo não chegava.** O JT/T ganhava linha `solicitado` ao despachar o 37382; o JIMI não ganhava nada ao despachar o `HVIDEO`. Entre o clique e a chegada (~15 s medidos) a tela não tinha o que mostrar — relatado como "não listam, seja como pendente ou pronto". Agora o `HVIDEO`/`EVIDEO` grava a mesma linha de espera, e quando o arquivo chega ela é **promovida** em vez de nascer uma segunda: um pedido, uma linha, de "aguardando câmera" a "pronto".
+  - ⚠️ **O casamento é por instante E por canal.** O DMS dispara várias vezes no mesmo minuto: um anexo de alarme comum que roubasse o pedido faria a fila dizer "pronto" apontando para o vídeo ERRADO, e o pedido de verdade ficaria pendente para sempre. A decisão virou função pura (`media_pedido_correspondente()`) com 11 checagens sem banco, e foi verificada nos três cenários contra o banco real.
+- 🔴 **A coluna "Canal" da tela de Downloads estava vazia em toda linha de anexo de alarme** — `media_register_file()` nunca gravava `channel`. O dado sempre esteve no nome (`_F_` = frontal, `_I_` = interna). Passou a ser gravado, e a tela também o deriva do nome para as linhas antigas, que continuam com NULL.
+- **`REPLAYLIST,OFF` ao fechar o player** (§1.3.6). Sem ele a câmera segue empurrando vídeo até o timeout de 20 s do media server, gastando franquia do SIM por um stream que ninguém assiste — o mesmo cuidado que o ao vivo já tinha com o `RTMP,OFF`.
+
+### Changed
+- **Downloads: as colunas dizem o que se procura.** Saíram **Tipo** (sempre "video") e **Tamanho**; entrou **Início do vídeo**. A tela dizia apenas QUANDO o arquivo foi pedido e nunca QUANDO é a gravação — e os dois podem estar a dias de distância ao extrair algo antigo. O instante sai do carimbo do NOME, com `event_time` como reserva. O export ganhou a mesma coluna.
+
+### Notes
+- **A resposta do `/filelist` passou a ser `{"code":0,"ok":true}`**, como a §1.3.5 especifica; devolvíamos `message:"success"`. Funcionava — este firmware não confere. Alinhado mesmo assim: contar com a tolerância do device é apostar que o próximo firmware também será tolerante, e este projeto já perdeu essa aposta.
+- ⚠️ **`REPLAYLIST` aceita até OITO nomes** separados por vírgula (§1.3.5), o que permitiria emendar trechos numa reprodução só. Mandamos um — o bloco pedido.
+
 ## [Unreleased] — 4.9.38
 
 **As barras de filtro ganharam o padrão visual que nunca tiveram.**

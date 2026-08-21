@@ -321,8 +321,8 @@ function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $ev
         $ins = $db->prepare(
             "INSERT INTO media_files
                 (imei, file_name, file_type, file_size, file_url, source_type,
-                 event_time, download_status)
-             VALUES (:i, :n, :t, 0, :u, :s, :e, 'disponivel')"
+                 event_time, channel, download_status)
+             VALUES (:i, :n, :t, 0, :u, :s, :e, :c, 'disponivel')"
         );
         $ins->execute([
             ':i' => $imei,
@@ -331,6 +331,11 @@ function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $ev
             ':u' => $fileUrl,
             ':s' => $origem,
             ':e' => $eventTime ?: gmdate('Y-m-d H:i:s'),
+            // 🔴 O CANAL VINHA SEMPRE NULL (corrigido na v4.9.39), e a coluna
+            // "Canal" da tela de downloads aparecia vazia em TODA linha de
+            // anexo de alarme — que é a maioria delas. O dado sempre esteve ali,
+            // no nome: `_F_` é a frontal, `_I_` a interna.
+            ':c' => media_canal_do_nome($fileUrl),
         ]);
         return (int)$db->lastInsertId() ?: null;
     } catch (Throwable $e) {
