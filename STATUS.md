@@ -123,11 +123,25 @@
 >
 > #### 🔴 Dois defeitos NA SUÍTE, não no produto
 >
-> **`TEST_IMEI` desliga 8 specs de playback em silêncio.** Sem a variável,
-> `npx playwright test` sai com **código 0** e 14 pulados — 7 de
-> `video_playback_barra.spec.js` e 1 de `video_playback_filelist.spec.js` nem
-> rodam. É a mesma armadilha do `TEST_EMAIL_B` (v4.9.24) e da coleta de
-> `*.test.js` (v4.9.32): **verde que não significa verificado**.
+> **9 specs não rodam por falta de `TEST_IMEI`, e a suíte sai com código 0.**
+> Inventário exato, colhido do relatório JSON em 21/08/2026 — 16 pulados:
+>
+> | Quantos | Onde | Por quê |
+> |---|---|---|
+> | 7 | `video_playback_barra.spec.js` | `TEST_IMEI` |
+> | 1 | `video_playback_filelist.spec.js` | `TEST_IMEI` |
+> | 1 | `webhook_occurrence.spec.js` | `TEST_IMEI` + `WEBHOOK_TOKEN` |
+> | 3 | `multitenant.spec.js` | `TEST_EMAIL_B` / `TEST_PASSWORD_B` — **desde a Fase M.4** |
+> | 2 | Modelos de relatório | sem dado no cliente de teste |
+> | 1 | Relatórios operacionais | sem dado de segmentação no período |
+> | 1 | rate limiting | opt-in (`RATE_LIMIT_TEST=1`) |
+>
+> As 9 primeiras cobrem justamente a barra de zoom, o despacho do `FILELIST` e o
+> webhook que cria ocorrência — o núcleo das últimas seis versões. É a terceira
+> encarnação da mesma armadilha (`TEST_EMAIL_B` na v4.9.24, coleta de `*.test.js`
+> na v4.9.32): **verde que não significa verificado**. Para rodar a suíte de
+> verdade: `TEST_EMAIL`, `TEST_PASSWORD`, `TEST_IMEI` (IMEI existente no banco
+> local) e `WEBHOOK_TOKEN`.
 >
 > **O fixture de login falha por timeout do evento `load`.** Com `TEST_IMEI`
 > definido, 5 specs falharam — todas em `tests/fixtures/auth.js:35`, ANTES de
