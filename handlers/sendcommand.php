@@ -567,7 +567,7 @@ try {
         }
     }
 
-    // ── Firmware: a resposta do VERSION# vira `devices.firmware_version` ─────
+    // ── Firmware: a resposta do VERSION# / CHECK# vira `devices.firmware_version` ──
     //
     // v4.9.32 — o `VERSION#` sempre respondeu na hora e ninguém gravava o
     // resultado; a coluna ficou NULL em 100% da base desde a v4.0.0. O custo
@@ -577,13 +577,13 @@ try {
     // Falha aqui não derruba o comando (o `rawResp` completo já está gravado),
     // mas é LOGADA: `catch` silencioso neste arquivo foi o que escondeu o
     // "Invalid JSON text" por meses (v4.8.9).
-    if ($proNo === 128 && !empty($syncContent) && firmware_is_version_command($cmdContent, $proNo)) {
+    if ($proNo === 128 && !empty($syncContent) && firmware_comando_le_versao($cmdContent, $proNo)) {
         try {
             $fw = firmware_capture($db, $imei, (string)$syncContent, (string)$iothubMsg, (string)$iothubCode);
             if ($fw !== null) {
                 Logger::info('sendcommand: firmware lido do equipamento', ['imei' => $imei, 'firmware' => $fw]);
             } else {
-                Logger::warning('sendcommand: resposta do VERSION# sem versão reconhecível', [
+                Logger::warning('sendcommand: resposta de leitura de versão sem versão reconhecível', [
                     'imei' => $imei, 'resposta' => substr((string)$syncContent, 0, 120),
                 ]);
             }

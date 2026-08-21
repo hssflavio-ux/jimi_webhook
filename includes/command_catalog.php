@@ -48,7 +48,7 @@
  * páginas da wiki = núcleo comum do proNo 128.
  *
  * ⚠️ A derivação tem EXCEÇÕES MANUAIS, e elas precisam sobreviver a uma
- * regeneração do catálogo por script. Hoje é uma:
+ * regeneração do catálogo por script. Hoje são duas:
  *
  *   `UPDATE,P1#` (v4.9.32) — só a página do JC371 documenta a atualização de
  *   firmware, e por isso ele nascia travado nesse modelo. O comando é o mesmo
@@ -60,6 +60,18 @@
  *   Procedência: informação do fornecedor + operação, **não** a wiki — a
  *   planilha oficial `JC400 & JC261 Command List` sequer lista `UPDATE`.
  *   O invariante está travado em `tests/helpers/command_response.test.php`.
+ *
+ *   `CHECK#` (v4.9.40) — só a planilha do JC371 documenta a consulta, e a
+ *   derivação a travaria nesse modelo. Foi MEDIDA em 20/08/2026 em produção
+ *   em JC400AD (dois equipamentos), JC371 e JC182, e os quatro responderam;
+ *   o JC181 estava offline e o comando virou fila, o que não é recusa.
+ *   Procedência: medição em câmera real, não a wiki. É a consulta de
+ *   diagnóstico mais completa do proNo 128 — firmware, servidor, endereço de
+ *   upload, APN e FUSO numa resposta só — e travá-la no JC371 esconderia dos
+ *   outros cinco modelos exatamente a informação que se procura quando uma
+ *   câmera some. Sendo LEITURA, o custo de errar o modelo é uma recusa, não
+ *   um estrago: é o inverso do `SERVER`. Travado em
+ *   `tests/helpers/command_response.test.php`.
  *
  * 🔴 `universal` NÃO significa "seguro em qualquer modelo": significa "a tela
  * não escolhe o equipamento por você". No `UPDATE` a escolha errada é a da
@@ -87,8 +99,8 @@
  *
  * `fonte` guarda a linha de origem na planilha (A007, G014…).
  *
- * Total: 220 entradas / 144 comandos distintos (15 universais), 67 com consulta.
- * Por categoria: alarme=70, audio=3, ia=36, manutencao=18, outros=22, posicao=22, rede=19, video=30.
+ * Total: 238 entradas / 151 comandos distintos (16 universais), 70 com consulta.
+ * Por categoria: alarme=70, audio=4, ia=36, manutencao=21, outros=24, posicao=25, rede=22, video=36.
  *
  * ⚠️ Estes números eram 219/143/video=29 e estavam ERRADOS desde a v4.9.27 — o
  * arquivo já tinha 220/144/video=30 antes da v4.9.32. Contagem em comentário
@@ -744,6 +756,8 @@ return [
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
     'params' => [
+      // Só a wiki; ela não descreve o campo.
+      0 => ['p' => 'A', 'desc' => '', 'format' => '', 'default' => ''],
     ],
     'exemplos' => [
     ],
@@ -1629,6 +1643,12 @@ return [
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
     'params' => [
+      // Documentado na planilha JC371 V1.0.1, linhas D002-D014: a família
+      // `EVENTALERT,<evento>,A,B,C` tem os MESMOS três campos em todos os
+      // eventos, e só o default muda de um para o outro.
+      0 => ['p' => 'P1', 'desc' => 'Alerta na plataforma — a planilha só documenta o valor 0', 'format' => '0', 'default' => '0'],
+      1 => ['p' => 'P2', 'desc' => 'Intervalo entre reportes, em segundos — 0/OFF não reporta, 1 reporta na hora', 'format' => '0/OFF ou 1-64800', 'default' => '60'],
+      2 => ['p' => 'P3', 'desc' => 'Intervalo entre avisos de voz, em segundos — 0/OFF não avisa', 'format' => '0/OFF ou 1-64800', 'default' => '0'],
     ],
     'exemplos' => [
       0 => [
@@ -1907,6 +1927,12 @@ return [
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
     'params' => [
+      // Documentado na planilha JC371 V1.0.1, linhas D002-D014: a família
+      // `EVENTALERT,<evento>,A,B,C` tem os MESMOS três campos em todos os
+      // eventos, e só o default muda de um para o outro.
+      0 => ['p' => 'P1', 'desc' => 'Alerta na plataforma — a planilha só documenta o valor 0', 'format' => '0', 'default' => '0'],
+      1 => ['p' => 'P2', 'desc' => 'Intervalo entre reportes, em segundos — 0/OFF não reporta, 1 reporta na hora', 'format' => '0/OFF ou 1-64800', 'default' => '60'],
+      2 => ['p' => 'P3', 'desc' => 'Intervalo entre avisos de voz, em segundos — 0/OFF não avisa', 'format' => '0/OFF ou 1-64800', 'default' => '0'],
     ],
     'exemplos' => [
       0 => [
@@ -3016,6 +3042,519 @@ return [
         'cmd' => 'FILELIST,http://186.248.143.197/filelist/862798051583785',
         'desc' => 'Pede à câmera a lista de gravações do cartão',
       ],
+    ],
+  ],
+  // ══ Da planilha JC371 V1.0.1 (v4.9.40) ═══════════════════════════════════
+  //
+  // Cruzamento por COMANDO:ARIDADE contra `docs/JC 371 Command List V1.0.1.xlsx`,
+  // feito para responder a uma pergunta que a planilha NÃO responde: se haveria
+  // ali o comando de PARAR o playback. Não há — a planilha é toda de
+  // configuração e consulta, e o controle de stream do JC371 vive no binário do
+  // JT/T 1078 (`37378`), não no proNo 128.
+  //
+  // O cruzamento achou 18 buracos, em duas naturezas bem diferentes:
+  //
+  //   • SETE comandos cujo NOME não existia aqui (CHECK, CHECKVIDEO,
+  //     STATUSVIDEO, SENSORSET, SHUTDOWNTIME, VIDEORSL_SUB, VIDETIMEZONE);
+  //   • ONZE variantes de ARIDADE — o nome já existia, aquela sintaxe não.
+  //     São o buraco que comparar só o nome-base NUNCA mostra, o mesmo tipo que
+  //     escondeu a forma nua do `FILELIST` por meses (v4.9.27).
+  //
+  // ⚠️ A variante de aridade divide o nome com uma entrada mais antiga, e por
+  // isso NENHUMA delas carrega `consulta`: a regra do cabeçalho é que só a
+  // PRIMEIRA sintaxe de um comando traz a forma de perguntar, senão a tela
+  // ofereceria dois botões idênticos de "consultar APN".
+  //
+  // 🔴 Escolher a variante de aridade errada não dá erro — o equipamento aceita
+  // o que entende e ignora o resto. É a trava por modelo (`aplicarTrava()`) que
+  // impede mandar a sintaxe de três campos do JC371 para uma JC400 que espera
+  // dois. Por isso estas entradas nascem presas ao JC371, mesmo quando o nome
+  // do comando é universal em outra sintaxe (`TIMER`, `ANGLEREP`, `SERVER`).
+
+  // ── Consultas: as três formas de PERGUNTAR do JC371 ───────────────────────
+
+  'CHECK#' => [
+    'cmd' => 'CHECK',
+    'nome' => 'Informação abrangente do equipamento',
+    //
+    // ★ SEGUNDA EXCEÇÃO MANUAL de `universal` — ver o cabeçalho deste arquivo.
+    //
+    // A planilha que documenta o `CHECK` é a do JC371, e só ela: pela derivação
+    // automática (presente em 5+ das 6 páginas da wiki) ele nasceria travado
+    // nesse modelo. Mas foi MEDIDO em 20/08/2026 em produção, em três modelos,
+    // e os três responderam — o que a derivação não tinha como saber:
+    //
+    //   JC400AD (864993060429173) VERSION:KMC28_0_0_STD_JM_C261_V1.8.0.9_...
+    //   JC400AD (864993060392306) VERSION:KMC28_0_0_STD_JM_C261_V1.8.1.3_...
+    //   JC371   (865478070003241) VERSION:C371_0_0_STD_JM_JC371_V1.9.0.2b_...
+    //   JC182   (869058070151343) IMEI:...;VERSION:C182_WEBP_VY_1_V1.2.5.2_...
+    //
+    // O JC181 estava offline e o comando virou fila — não é recusa. JC450 e
+    // JC400D não foram alcançados. `universal` aqui vale o que sempre valeu:
+    // "a tela não escolhe o equipamento por você", e o comando é de LEITURA —
+    // o risco de mandá-lo a um modelo que não o conheça é uma recusa, não um
+    // estrago. É o oposto do `SERVER`, onde errar tira a câmera da plataforma.
+    //
+    // ⚠️ NO JC181 ELE É CARO, e isso está medido — em 16/08/2026, na bateria de
+    // consultas da v4.9.25, o `CHECK#` estourou os 30 s do hub e DERRUBOU a
+    // sessão JIMI do equipamento: nove respostas boas antes dele, zero depois
+    // (`docs/COMANDOS_128_CONSULTA.md` §6). Não é motivo para travá-lo — o
+    // efeito é a sessão daquele equipamento, que volta sozinha, e ele responde
+    // rápido nos outros modelos —, mas é motivo para não varrer a frota inteira
+    // com ele em rajada. Espaçar os disparos, como manda a mesma §6.
+    //
+    // 🔑 A resposta é o retrato mais completo que o proNo 128 dá de uma câmera,
+    // e cada linha dela já respondeu uma pergunta que custou dias aqui:
+    //   VERSION  — a MESMA string que o `VERSION#` devolve (conferido nos dois
+    //              modelos, 20/08/2026), por isso `firmware_capture()` aceita a
+    //              resposta do CHECK e grava a versão sem risco de divergir
+    //              na comparação por igualdade que `/firmwares` faz;
+    //   UPLOAD   — o endereço para onde a câmera sobe arquivo (é o que falta
+    //              conferir na 400D, que aceita o `FILELIST` e nunca sobe);
+    //   SERVER   — para onde ela aponta, com a porta (21100 na linha 400,
+    //              21122 no JC371/JC182 — divergem por modelo);
+    //   TIMEZONE — `-3:00`, o fuso do equipamento. É a confirmação, pela boca
+    //              do device, da convenção que o parser do FILELIST assume ao
+    //              ler o carimbo dos nomes (`includes/filelist.php`).
+    'desc' => 'Retrato completo do equipamento numa resposta só: firmware, IMEI, ICCID, IMSI, servidor e porta, endereço de upload, APN, wifi, volume, LED e FUSO configurado. É a consulta de diagnóstico mais completa do proNo 128 — e não escreve nada.',
+    'categoria' => 'manutencao',
+    'modelos' => [
+      0 => 'JC371',
+      1 => 'JC182',
+      2 => 'JC181',
+      3 => 'JC400D',
+      4 => 'JC400AD',
+      5 => 'JC450',
+    ],
+    'universal' => true,
+    'template' => false,
+    'consulta' => 'CHECK#',
+    'consulta_modelos' => ['JC371', 'JC182', 'JC400AD'],
+    'consulta_ref' => 'medido+planilha',
+    'fonte' => 'planilha JC371 V1.0.1 A003',
+    'params' => [],
+    'exemplos' => [
+      0 => ['cmd' => 'CHECK#', 'desc' => 'firmware, servidor, upload, APN e fuso de uma vez'],
+    ],
+  ],
+  'STATUSVIDEO#' => [
+    'cmd' => 'STATUSVIDEO',
+    'nome' => 'Estado do módulo de vídeo',
+    // MEDIDO em 20/08/2026 na 371_3241:
+    //   Network: Connected;GSM: Dial Success;GPS: Not located;ACC: ON;
+    //   Battery: 11.91v;Time Zone: UTC-03:00;Time: 2026-08-20 22:53:03;
+    //   On video: CHN1 CHN2 CHN3;Camera insertion: CHN1 CHN2 CHN3;
+    //   TF: 2.2/119.1G;EMMC: 2.0/97.9G;CPU Temperature: 59.514;Memory: 80/121M
+    //
+    // 🔑 `On video` × `Camera insertion` são coisas DIFERENTES: uma câmera pode
+    // estar conectada e não estar gravando. Quando a barra do playback vier
+    // vazia num canal, esta é a pergunta que separa "não gravou" de "não tem
+    // câmera" — e nenhuma outra resposta do proNo 128 diz isso.
+    'desc' => 'Estado do módulo de vídeo: rede, GSM, GPS, ACC, bateria, fuso e hora do equipamento, canais GRAVANDO, câmeras CONECTADAS, espaço no cartão TF e no eMMC, temperatura da CPU e memória.',
+    'categoria' => 'manutencao',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'STATUSVIDEO#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido+planilha',
+    'fonte' => 'planilha JC371 V1.0.1 A001',
+    'params' => [],
+    'exemplos' => [
+      0 => ['cmd' => 'STATUSVIDEO#', 'desc' => 'canais gravando, espaço no cartão e fuso'],
+    ],
+  ],
+  'CHECKVIDEO#' => [
+    'cmd' => 'CHECKVIDEO',
+    'nome' => 'Configuração da câmera (servidor, BCD, DMS/ADAS)',
+    // MEDIDO em 20/08/2026 na 371_3241, que respondeu:
+    //   SERVER,186.248.143.197,21122,,@@BCD,0@@DMSSW,DMS@@DMSSP,ADAS,60,0,...
+    // O separador é `@@`, e cada bloco é um comando na sintaxe de escrita — o
+    // device devolve a configuração como a lista de comandos que a reproduz.
+    //
+    // ⚠️ NÃO vale na linha JC400: relatado do campo, e a planilha
+    // `JC400 & JC261 Command List V5.0.3` não lista o comando. Fica travado no
+    // JC371 de propósito — é o contrário do `CHECK#` logo acima, e a diferença
+    // entre os dois é o que a trava por modelo existe para carregar.
+    'desc' => 'Lê a configuração de vídeo: servidor e porta, tipo de ID (BCD) e os parâmetros de DMS/ADAS, na forma dos próprios comandos de escrita. Só JC371.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'CHECKVIDEO#',
+    'consulta_modelos' => ['JC371'],
+    'consulta_ref' => 'medido+planilha',
+    'fonte' => 'planilha JC371 V1.0.1 A004',
+    'params' => [],
+    'exemplos' => [
+      0 => ['cmd' => 'CHECKVIDEO#', 'desc' => 'servidor, BCD e a configuração de DMS/ADAS'],
+    ],
+  ],
+
+  // ── Configuração exclusiva do JC371 ───────────────────────────────────────
+
+  'SENSORSET,A,B,C,D#' => [
+    'cmd' => 'SENSORSET',
+    'nome' => 'Lógica de detecção de vibração',
+    // Duas funções no mesmo comando, e o `C` é o que gera ALARME:
+    // A/B decidem quando o GPS acorda para avaliar a ignição (o "ACC por
+    // software"); C decide quantas vibrações disparam o alerta de vibração.
+    // Fica em `posicao` para ficar ao lado do `ACC`, que é o que ele afeta.
+    'desc' => 'Quantas vibrações, em quanto tempo, acordam o GPS para avaliar a ignição (ACC por software) e quantas disparam o alerta de vibração. Padrão de fábrica: SENSORSET,10,3,5,1.',
+    'categoria' => 'posicao',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A020',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Janela de detecção, em segundos', 'format' => '1-300', 'default' => '10'],
+      1 => ['p' => 'B', 'desc' => 'Vibrações na janela que acordam o GPS para avaliar a ignição', 'format' => '1-20', 'default' => '3'],
+      2 => ['p' => 'C', 'desc' => 'Vibrações na janela que disparam o alerta de vibração', 'format' => '1-20', 'default' => '5'],
+      3 => ['p' => 'D', 'desc' => 'Intervalo entre detecções, em segundos', 'format' => '1-3', 'default' => '1'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'SENSORSET,10,3,5,1#', 'desc' => 'o padrão de fábrica (exemplo oficial A020)'],
+    ],
+  ],
+  'SHUTDOWNTIME,A#' => [
+    'cmd' => 'SHUTDOWNTIME',
+    'nome' => 'Gravação após desligar a ignição',
+    // ⚠️ A FAIXA MUDA DE MODELO PARA MODELO: JC371 aceita 10-86400, JC181
+    // aceita 1-86400. Duas planilhas, dois mínimos — o campo declara o do
+    // JC371, que é o mais restritivo dos dois.
+    'desc' => 'Por quantos segundos o equipamento continua gravando depois de a ignição ser desligada. Padrão 10 segundos.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371', 1 => 'JC181'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A021 + JC181 V1.0.7 A026',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Segundos de gravação após a ignição desligar', 'format' => '10-86400 (JC181: 1-86400)', 'default' => '10'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'SHUTDOWNTIME,600#', 'desc' => 'segue gravando 10 minutos (exemplo oficial A021)'],
+    ],
+  ],
+  'VIDEORSL_SUB,A,B,C,D,E#' => [
+    'cmd' => 'VIDEORSL_SUB',
+    'nome' => 'Qualidade do vídeo ao vivo / histórico / evento',
+    // ⚠️ É o IRMÃO do `VIDEORSL`, e a diferença importa: o `VIDEORSL` trata da
+    // gravação no cartão TF (o que a barra do playback lista), este trata do
+    // que SAI da câmera — o stream ao vivo, o histórico e o vídeo de evento.
+    // Mexer num não mexe no outro.
+    'desc' => 'Resolução, taxa de quadros, bitrate e codec do vídeo que SAI da câmera (ao vivo, histórico e evento), por canal. Não confunda com o VIDEORSL, que é a gravação no cartão TF.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 B002',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Canal — 1: CH1 (via, frontal), 2: CH2 (USB, interna), 3: CH3 (DMS, motorista)', 'format' => '1/2/3', 'default' => '1'],
+      1 => ['p' => 'B', 'desc' => 'Resolução', 'format' => '480/1080', 'default' => '480'],
+      2 => ['p' => 'C', 'desc' => 'Quadros por segundo', 'format' => '5-15', 'default' => '15'],
+      3 => ['p' => 'D', 'desc' => 'Bitrate em Mbps', 'format' => '0.1-2', 'default' => '0.5'],
+      4 => ['p' => 'E', 'desc' => 'Codec — 1: H.264, 2: H.265', 'format' => '1/2', 'default' => '1'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'VIDEORSL_SUB,1,480,15,0.5,1#', 'desc' => 'exemplo oficial (B002)'],
+    ],
+  ],
+  'VIDETIMEZONE,A,B,C#' => [
+    'cmd' => 'VIDETIMEZONE',
+    'nome' => 'Sincronismo de hora e fuso do vídeo',
+    // ⚠️ O NOME ESTÁ ASSIM MESMO NA PLANILHA — `VIDETIMEZONE`, sem o segundo
+    // `O` —, e o EXEMPLO da mesma linha escreve `VIDEOTIMEZONE`. A fabricante
+    // documenta as duas grafias na MESMA célula. O catálogo já tinha
+    // `VIDEOTIMEZONE,W,3,0#` vindo da wiki, que é a grafia do exemplo; esta
+    // entrada guarda a do campo Formato. Mandar a grafia que o firmware não
+    // conhece é comando aceito e ignorado, sem erro — por isso as duas ficam,
+    // cada uma com a sua procedência, em vez de eu escolher no palpite.
+    //
+    // 🔑 O fuso configurado aqui é o que o equipamento carimba nos nomes dos
+    // arquivos do FILELIST (`includes/filelist.php` assume UTC-3). Trocá-lo
+    // desloca a barra do playback em silêncio.
+    'desc' => 'Modo de sincronismo de hora do módulo de vídeo. AUTO usa a hora da rede (NITZ); E/W fixam o fuso a leste ou a oeste de GMT. ⚠️ É o fuso que a câmera carimba no nome dos vídeos.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A006',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'E: leste de GMT, W: oeste de GMT, AUTO: sincronismo pela rede (NITZ)', 'format' => 'E/W/AUTO', 'default' => 'W'],
+      1 => ['p' => 'B', 'desc' => 'Horas de deslocamento — só no modo manual', 'format' => '0-12', 'default' => '3'],
+      2 => ['p' => 'C', 'desc' => 'Minutos de deslocamento — só no modo manual', 'format' => '0/15/30/45', 'default' => '0'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'VIDETIMEZONE,W,3,0#', 'desc' => 'UTC-3, o fuso do Brasil (exemplo oficial A006)'],
+    ],
+  ],
+
+  // ── Variantes de ARIDADE: o nome já existia, esta sintaxe não ─────────────
+
+  'KEYFUN,A,B#' => [
+    'cmd' => 'KEYFUN',
+    'nome' => 'Função do botão — toque curto e toque longo',
+    'desc' => 'O que o botão físico faz. A é o toque curto (0,5 s), B é o toque longo (3 s). ⚠️ Duas sintaxes: esta, de dois campos, é a da planilha do JC371; a de três campos vem da wiki.',
+    'categoria' => 'outros',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A009',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Toque curto (0,5 s) — 0: nada, 1: mudo, 2: gravação, 3: SOS', 'format' => '0/1/2/3', 'default' => '1'],
+      1 => ['p' => 'B', 'desc' => 'Toque longo (3 s) — 0: nada, 1: mudo, 2: gravação, 3: SOS', 'format' => '0/1/2/3', 'default' => '2'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'KEYFUN,1,2#', 'desc' => 'toque curto muda, toque longo liga/desliga a gravação (A009)'],
+    ],
+  ],
+  'APN,A,B,C,D#' => [
+    'cmd' => 'APN',
+    'nome' => 'APN do chip, com usuário e senha',
+    // ⚠️ Os três últimos campos são OPCIONAIS na planilha, e os exemplos dela
+    // mostram a mesma linha com 3, 4, 5 e 13 campos. É por isso que este
+    // comando tem três aridades no catálogo — nenhuma está errada.
+    'desc' => 'APN do chip com usuário, senha e versão do protocolo IP. Usuário, senha e protocolo são opcionais.',
+    'categoria' => 'rede',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A013',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Nome da APN — pergunte à operadora do chip', 'format' => '', 'default' => 'allcombl.br'],
+      1 => ['p' => 'B', 'desc' => 'Usuário da APN (opcional)', 'format' => '', 'default' => 'allcom'],
+      2 => ['p' => 'C', 'desc' => 'Senha da APN (opcional)', 'format' => '', 'default' => 'allcom'],
+      3 => ['p' => 'D', 'desc' => 'Protocolo (opcional)', 'format' => 'IP/IPv6/IPv4v6', 'default' => ''],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'APN,vivo,,,IPV4V6#', 'desc' => 'sem usuário e senha, forçando IPv4v6 (exemplo oficial A013)'],
+    ],
+  ],
+  'SERVER,A,B,C,D,E,F#' => [
+    'cmd' => 'SERVER',
+    'nome' => 'Servidor principal e reserva, com ID e placa',
+    //
+    // 🔴 É O COMANDO QUE TIRA A CÂMERA DA PLATAFORMA se o endereço estiver
+    // errado — a recuperação é por SMS, em campo. A sintaxe de três campos
+    // (universal) já existia; esta acrescenta o servidor RESERVA, o ID do
+    // equipamento e a placa, e é a que a planilha do JC371 publica.
+    //
+    // Medido em 20/08/2026, o `CHECK#` devolve o que está gravado hoje:
+    //   JC371/JC182 → SERVER:0,186.248.143.197,21122
+    //   JC400AD     → SERVER:0,186.248.143.197,21100
+    // A porta MUDA de modelo para modelo. Copiar a de um para o outro é o jeito
+    // mais fácil de derrubar uma câmera que estava funcionando.
+    'desc' => '⚠️ Aponta o equipamento para um servidor. Endereço errado tira a câmera da plataforma e só se recupera por SMS, em campo. Use NA nos campos que não quiser mudar. A porta varia por modelo — confira antes com o CHECK#.',
+    'categoria' => 'rede',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A022',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Endereço do servidor principal', 'format' => '', 'default' => '186.248.143.197'],
+      1 => ['p' => 'B', 'desc' => 'Porta do servidor principal', 'format' => '', 'default' => '21122'],
+      2 => ['p' => 'C', 'desc' => 'Endereço do servidor reserva — NA para nenhum', 'format' => '', 'default' => 'NA'],
+      3 => ['p' => 'D', 'desc' => 'Porta do servidor reserva — NA para nenhum', 'format' => '', 'default' => 'NA'],
+      4 => ['p' => 'E', 'desc' => 'ID do equipamento — NA para não mudar', 'format' => '', 'default' => 'NA'],
+      5 => ['p' => 'F', 'desc' => 'Placa do veículo — NA para não mudar', 'format' => '', 'default' => 'NA'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'SERVER,186.248.143.197,21122,NA,NA,NA,NA#', 'desc' => 'só o principal, sem mexer em ID nem placa'],
+    ],
+  ],
+  'BCD,A,B#' => [
+    'cmd' => 'BCD',
+    'nome' => 'Tipo de ID e versão do protocolo JT/T 808',
+    //
+    // 🔑 O SEGUNDO CAMPO É A VERSÃO DO PROTOCOLO — 0 é JT/T 808-2011, 1 é
+    // 808-2019 —, e é isso que a entrada de um campo só não sabia dizer. A
+    // escolha muda o dialeto que a câmera fala com o IoT Hub inteiro, não um
+    // detalhe de formatação. A entrada antiga (`BCD,P1#`, da wiki) descrevia o
+    // primeiro campo como "JT/T 808-2013", ano que não existe nesta planilha.
+    'desc' => 'A: como o ID do equipamento é montado (IMEI em hexadecimal ou os 12 últimos dígitos). B: a VERSÃO do protocolo JT/T 808 que a câmera fala — 0 para 2011, 1 para 2019.',
+    'categoria' => 'rede',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A023',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => '0: os 14 primeiros dígitos do IMEI em hexadecimal; 1: os 12 últimos dígitos do IMEI', 'format' => '0/1', 'default' => '0'],
+      1 => ['p' => 'B', 'desc' => 'Versão do protocolo — 0: JT/T 808-2011, 1: JT/T 808-2019', 'format' => '0/1', 'default' => '0'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'BCD,0,0#', 'desc' => 'IMEI em hexadecimal, protocolo 808-2011 (exemplo oficial A023)'],
+    ],
+  ],
+  'LOG,ALL#' => [
+    'cmd' => 'LOG',
+    'nome' => 'Subir os logs para o servidor da Jimi',
+    // Aridade 1 com valor LITERAL: `ALL` não é placeholder, é a palavra que vai
+    // no comando — por isso `template` é false. A entrada `LOG,ALL,A#` (linha
+    // JC400) acrescenta um servidor TCP de destino; esta manda para o padrão
+    // da fabricante.
+    'desc' => 'Manda o equipamento subir os logs internos para o servidor padrão da Jimi. Serve para abrir chamado com o fabricante — os logs não chegam aqui.',
+    'categoria' => 'manutencao',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 A025',
+    'params' => [],
+    'exemplos' => [
+      0 => ['cmd' => 'LOG,ALL#', 'desc' => 'sobe tudo para o servidor padrão da Jimi'],
+    ],
+  ],
+  'RECORDAUDIO,A,B#' => [
+    'cmd' => 'RECORDAUDIO',
+    'nome' => 'Áudio na gravação do cartão TF, por canal',
+    'desc' => 'Liga ou desliga o áudio nas gravações do cartão TF, escolhendo o canal. ⚠️ A sintaxe de um campo só (linha JC400) vale para o equipamento inteiro; esta é por canal.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 B005',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Canal — 1: CH1 (via, frontal), 2: CH2 (USB, interna), 3: CH3 (DMS, motorista)', 'format' => '1/2/3', 'default' => '1'],
+      1 => ['p' => 'B', 'desc' => 'ON liga o áudio, OFF deixa mudo', 'format' => 'ON/OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'RECORDAUDIO,1,OFF#', 'desc' => 'grava o canal da via sem áudio (exemplo oficial B005)'],
+    ],
+  ],
+  'RECORDAUDIO_SUB,A,B#' => [
+    'cmd' => 'RECORDAUDIO_SUB',
+    'nome' => 'Áudio no vídeo histórico e de evento, por canal',
+    // ⚠️ `_SUB` é a memória INTERNA (histórico e evento), não o cartão TF —
+    // é o par do `RECORDAUDIO` acima, na mesma divisão que separa `VIDEORSL` de
+    // `VIDEORSL_SUB`. Desligar num não desliga no outro.
+    'desc' => 'Liga ou desliga o áudio nos vídeos histórico e de evento gravados na memória interna, escolhendo o canal.',
+    'categoria' => 'audio',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 B006',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Canal — 1: CH1 (via, frontal), 2: CH2 (USB, interna), 3: CH3 (DMS, motorista)', 'format' => '1/2/3', 'default' => '1'],
+      1 => ['p' => 'B', 'desc' => 'ON liga o áudio, OFF deixa mudo', 'format' => 'ON/OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'RECORDAUDIO_SUB,1,OFF#', 'desc' => 'histórico do canal da via sem áudio (exemplo oficial B006)'],
+    ],
+  ],
+  'RATATION,A,B,C,D#' => [
+    'cmd' => 'RATATION',
+    'nome' => 'Rotação, espelhamento e resolução da câmera',
+    // ⚠️ `RATATION` é erro de grafia da fabricante (seria ROTATION) e está
+    // assim no firmware — corrigir aqui faria o comando ser recusado.
+    'desc' => 'Gira a imagem em 180°, escolhe o espelhamento e a resolução, por canal. Serve para câmera montada de cabeça para baixo.',
+    'categoria' => 'outros',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 B008',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Canal — 1: CH1 (via, frontal), 2: CH2 (USB, interna), 3: CH3 (DMS, motorista)', 'format' => '1/2/3', 'default' => '1'],
+      1 => ['p' => 'B', 'desc' => 'Ângulo de rotação em graus', 'format' => '0/180', 'default' => '0'],
+      2 => ['p' => 'C', 'desc' => 'Espelhamento — 0: horizontal, 1: vertical', 'format' => '0/1', 'default' => '0'],
+      3 => ['p' => 'D', 'desc' => 'Resolução, para câmeras remotas', 'format' => '720P/1080P', 'default' => '1080P'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'RATATION,3,0,1,1080#', 'desc' => 'exemplo oficial (B008)'],
+    ],
+  ],
+  'PICTIMER,A,B,C,D#' => [
+    'cmd' => 'PICTIMER',
+    'nome' => 'Foto por tempo, com endereço de upload',
+    'desc' => 'Tira foto de tempos em tempos e sobe para um endereço HTTP. ⚠️ Sem endereço no último campo, a foto é tirada e NÃO sai da câmera.',
+    'categoria' => 'video',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 B009',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Intervalo em minutos, ou OFF para desligar', 'format' => 'OFF ou 1-1440', 'default' => '1440'],
+      1 => ['p' => 'B', 'desc' => 'Fotos por intervalo', 'format' => '1-3', 'default' => '1'],
+      2 => ['p' => 'C', 'desc' => 'Canal — 1: CH1 (via, frontal), 2: CH2 (USB, interna), 3: CH3 (DMS, motorista)', 'format' => '1/2/3', 'default' => '3'],
+      3 => ['p' => 'D', 'desc' => 'URL HTTP que recebe as fotos — em branco, elas não são enviadas', 'format' => '', 'default' => ''],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'PICTIMER,1440,1,3,HTTPURL#', 'desc' => 'uma foto por dia do canal do motorista (exemplo oficial B009)'],
+    ],
+  ],
+  'TIMER,A#' => [
+    'cmd' => 'TIMER',
+    'nome' => 'Intervalo de envio de posição',
+    'desc' => 'De quantos em quantos segundos o equipamento manda a posição. ⚠️ A sintaxe de dois campos (universal) separa o intervalo com e sem ignição; esta, da planilha do JC371, tem um valor só.',
+    'categoria' => 'posicao',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 C001',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Intervalo em segundos', 'format' => '5-60', 'default' => '10'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'TIMER,20#', 'desc' => 'posição a cada 20 segundos (exemplo oficial C001)'],
+    ],
+  ],
+  'ANGLEREP,A#' => [
+    'cmd' => 'ANGLEREP',
+    'nome' => 'Envio de posição por mudança de ângulo',
+    'desc' => 'Manda posição sempre que o veículo mudar de direção mais do que este ângulo — é o que desenha a curva no mapa entre dois envios por tempo.',
+    'categoria' => 'posicao',
+    'modelos' => [0 => 'JC371'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'planilha JC371 V1.0.1 C002',
+    'params' => [
+      0 => ['p' => 'A', 'desc' => 'Ângulo em graus', 'format' => '10-180', 'default' => '30'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'ANGLEREP,35#', 'desc' => 'envia a cada 35° de mudança de direção (exemplo oficial C002)'],
     ],
   ],
   'FILTER#' => [
@@ -4383,6 +4922,12 @@ return [
     'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
+      // ⚠️ A wiki não descreve os campos, e nenhuma planilha da fabricante
+      // traz esta sintaxe de dois campos — só a de um (`TIMER,A#`, C001 do
+      // JC371, intervalo em segundos). As posições vêm da sintaxe; o
+      // significado de cada uma segue sem fonte, e fica em branco.
+      0 => ['p' => 'A', 'desc' => '', 'format' => '', 'default' => ''],
+      1 => ['p' => 'B', 'desc' => '', 'format' => '', 'default' => ''],
     ],
     'exemplos' => [
     ],
@@ -4402,6 +4947,9 @@ return [
     'consulta_modelos' => ['JC181', 'JC400D'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
+      // Mesma situação do `TIMER,A,B#`: só a wiki, sem descrição de campo.
+      0 => ['p' => 'A', 'desc' => '', 'format' => '', 'default' => ''],
+      1 => ['p' => 'B', 'desc' => '', 'format' => '', 'default' => ''],
     ],
     'exemplos' => [
     ],
@@ -4896,11 +5444,12 @@ return [
       1 => 'JC182',
     ],
     'universal' => false,
-    'template' => true,
+    'template' => false,
     'consulta' => 'VIDEOTIMEZONE#',
     'consulta_modelos' => ['JC182', 'JC371'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
+
     ],
     'exemplos' => [
     ],
@@ -5002,6 +5551,9 @@ return [
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
     'params' => [
+      // A015 da planilha JC371: a forma completa é `WIFIAP,<estado>,<nome>,
+      // <senha>`; esta entrada é a de um campo, que só liga e desliga.
+      0 => ['p' => 'A', 'desc' => 'ON liga o ponto de acesso, OFF desliga', 'format' => 'ON/OFF', 'default' => 'ON'],
     ],
     'exemplos' => [
     ],

@@ -1274,6 +1274,27 @@ function atualizarPreview() {
     atualizarBotao();
 }
 
+/**
+ * Ficou parâmetro por preencher? (v4.9.40)
+ *
+ * 🔴 A pergunta é sobre os CAMPOS, não sobre o formato do texto. A guarda
+ * anterior olhava a string montada e recusava o que casasse com `,[A-Z],` —
+ * "parece placeholder" —, e isso é indistinguível de um VALOR legítimo de uma
+ * letra só. O `VIDEOTIMEZONE,W,3,0#` (W = oeste de GMT, o exemplo oficial da
+ * planilha JC371 A006) era recusado pela própria tela, sem que houvesse nada
+ * de errado com ele. Mesma armadilha esperava o `VIDETIMEZONE,A,B,C#` assim
+ * que alguém preenchesse o primeiro campo com `W`.
+ *
+ * Olhando os campos, não há ambiguidade: o que está em branco está em branco,
+ * e um `W` digitado é um valor. No modo livre não há campo a checar — ali o
+ * operador escreve o comando inteiro e responde por ele.
+ */
+function faltaParametro() {
+    if (document.getElementById('p-livre').checked) return false;
+    var ins = document.querySelectorAll('.p-in');
+    return Array.prototype.some.call(ins, function (i) { return i.value.trim() === ''; });
+}
+
 function atualizarBotao() {
     var b = document.getElementById('btn-enviar');
     var n = imeisMarcados().length;
@@ -1284,9 +1305,15 @@ function atualizarBotao() {
     // esta guarda deixaria o lote mandar a mesma URL para modelos diferentes.
     var fwMisto = cmdAtual && cmdAtual.c === 'UPDATE' && modelosMarcados().length > 1;
     if (fwMisto) pronto = false;
+    // Campo em branco desabilita o botão AQUI, e não só na recusa do envio: o
+    // operador via "Enviar para 3 equipamentos" e descobria o problema depois
+    // de clicar.
+    var falta = faltaParametro();
+    if (falta) pronto = false;
     b.disabled = !pronto;
     b.textContent = fwMisto ? 'UPDATE: marque um modelo por vez'
                   : !n ? 'Selecione equipamento e comando'
+                  : falta ? 'Preencha os parâmetros'
                   : (!pronto ? 'Escolha um comando'
                   : 'Enviar para ' + n + ' equipamento' + (n > 1 ? 's' : ''));
 }
@@ -1304,10 +1331,13 @@ function enviarLote() {
     var conteudo = livre ? document.getElementById('p-manual').value.trim() : montarComando();
     if (!imeis.length || !conteudo) return;
 
-    // Placeholder não substituído é erro de preenchimento, não comando válido
-    if (!livre && /(,P\d+|,[A-Z])(,|#)/.test(conteudo)) {
+    // Placeholder não substituído é erro de preenchimento, não comando válido.
+    // ⚠️ A pergunta é sobre os CAMPOS — ver faltaParametro(). Casar por formato
+    // (`,[A-Z],`) recusava valor legítimo de uma letra, como o `W` de oeste de
+    // GMT no VIDEOTIMEZONE.
+    if (faltaParametro()) {
         document.getElementById('envio-feedback').innerHTML =
-            '<span style="color:var(--error)">Preencha todos os parâmetros — ainda há placeholders em <code>' + esc(conteudo) + '</code>.</span>';
+            '<span style="color:var(--error)">Preencha todos os parâmetros — ainda há campo em branco em <code>' + esc(conteudo) + '</code>.</span>';
         return;
     }
 

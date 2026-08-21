@@ -264,6 +264,40 @@ test.describe('Playback — despacho de comandos', () => {
         expect(enviados[1].proNo, 'não pode ser o 37382, que é upload').not.toBe(37382);
     });
 
+    test('🔴 a URL do stream de playback difere do AO VIVO, e entre protocolos', async ({ authedPage }) => {
+        // Medido em 21/08/2026 no próprio media server (ZLMediaKit,
+        // /index/api/getMediaList) com o stream no ar:
+        //   JIMI  REPLAYLIST → app=live      stream=<imei>
+        //   JT/T  37377      → app=<canal>   stream=<imei>.history
+        // Reaproveitar a URL do ao vivo faz a câmera publicar e o player buscar
+        // um endereço vazio — o defeito relatado nas duas famílias.
+        await comEquipamento(authedPage, IMEI_FAKE, 'JIMI', 3);
+        const urls = await authedPage.evaluate((imei) => {
+            const vistas = [];
+            // Captura a URL sem abrir player nenhum, e responde ao despacho na
+            // hora — o que se mede aqui é a URL, não a ida ao servidor.
+            window.pbAbrirStream = function (url) { vistas.push(url); };
+            window.pbSendCmd = function (i, p, c, cb) { if (cb) cb(true, 'OK!'); };
+            const sel = document.getElementById('pb-imei');
+            const opt = Array.from(sel.options).find((o) => o.value === imei);
+            opt.dataset.proto = 'JIMI';
+            // @ts-ignore
+            pbVerNaCamera(1786869238, 60, 2);
+            opt.dataset.proto = 'JTT';
+            // @ts-ignore
+            pbVerNaCamera(1786869238, 60, 3);
+            return vistas;
+        }, IMEI_FAKE);
+
+        expect(urls, 'as duas chamadas têm de produzir URL').toHaveLength(2);
+        expect(urls[0], 'JIMI: sem canal no caminho — o canal está no nome do arquivo')
+            .toMatch(/\/live\/860000000000009\.flv$/);
+        expect(urls[1], 'JT/T: com canal E com o sufixo .history')
+            .toMatch(/\/3\/860000000000009\.history\.flv$/);
+        expect(urls[1], 'a URL do ao vivo não serve para playback no JT/T')
+            .not.toMatch(/\/3\/860000000000009\.flv$/);
+    });
+
     test('🔴 clicar numa gravação NÃO dispara comando nenhum', async ({ authedPage }) => {
         // A regra do dono do produto: nada sobe para o storage sem pedido
         // explícito. O clique ABRE a escolha; quem despacha é o botão dentro

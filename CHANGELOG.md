@@ -5,12 +5,66 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.9.40
+
+**A pergunta era se a planilha do JC371 tinha um comando de parar o playback. Não tem — e a busca achou 18 sintaxes ausentes do catálogo, uma delas descartada por engano há três versões.**
+
+### Added
+- 🔑 **`CHECK#` catalogado como consulta UNIVERSAL — a mais completa do proNo 128.** É a **segunda exceção manual** de `universal` (a primeira é o `UPDATE`, v4.9.32), e pelo mesmo motivo: a derivação automática mede a FONTE, e só a planilha do JC371 documenta o comando. Medido em produção em 20/08/2026, e os quatro equipamentos alcançáveis responderam:
+
+  | Equipamento | Modelo | Trecho da resposta |
+  |---|---|---|
+  | `864993060429173` | JC400AD | `VERSION:KMC28_..._V1.8.0.9_250807.1920; UPLOAD:http://…:23010/upload; SERVER:0,…,21100; TIMEZONE:-3:00` |
+  | `864993060392306` | JC400AD | `VERSION:KMC28_..._V1.8.1.3_250925.1127` |
+  | `865478070003241` | JC371 | `VERSION:C371_..._V1.9.0.2b_260528.0543;SERVER:0,…,21122;BCD:0` |
+  | `869058070151343` | JC182 | `IMEI:…;VERSION:C182_..._V1.2.5.2_260422.0924;[AR9150]:…` |
+
+  Sendo LEITURA, o custo de errar o modelo é uma recusa, não um estrago — é o inverso do `SERVER`, onde o endereço errado tira a câmera da plataforma. ⚠️ **No JC181 ele é caro**: na bateria da v4.9.25 estourou os 30 s do hub e derrubou a sessão JIMI daquele equipamento (nove respostas boas antes, zero depois). Não se varre a frota com ele em rajada.
+
+- 🔴 **Correção de um descarte da v4.9.25: `CHECK` e `LOG` não eram "tokens soltos".** Aquela varredura leu a wiki, onde os dois aparecem como palavra solta em tabelas de parâmetros, e os classificou como ruído. A planilha da fabricante os documenta (A003, A025) e o equipamento responde. É o **espelho** do erro do `MILE#` registrado na §4 do mesmo documento: lá batizei por coincidência, aqui descartei por ausência. **Ausência numa fonte não é ausência no protocolo.**
+
+- **Mais 17 sintaxes da planilha `JC 371 Command List V1.0.1`** — o catálogo foi de 220 para 238 entradas.
+  - **Seis nomes novos**: `CHECKVIDEO#` (servidor, BCD e DMS/ADAS da câmera — ⚠️ **não vale na linha JC400**, relatado do campo e ausente da planilha `JC400 & JC261`), `STATUSVIDEO#`, `SENSORSET`, `SHUTDOWNTIME`, `VIDEORSL_SUB`, `VIDETIMEZONE`.
+  - ⚠️ **Onze variantes de ARIDADE**, o buraco que comparar só o nome-base nunca mostra — a mesma classe que escondeu a forma nua do `FILELIST` por meses (v4.9.27): `KEYFUN,A,B` · `APN,A,B,C,D` · `SERVER,A,B,C,D,E,F` · `BCD,A,B` · `LOG,ALL` · `RECORDAUDIO,A,B` · `RECORDAUDIO_SUB,A,B` · `RATATION,A,B,C,D` · `PICTIMER,A,B,C,D` · `TIMER,A` · `ANGLEREP,A`. Mandar a aridade errada é **aceito e mal interpretado, sem erro nenhum**; o que protege é a trava por modelo, e por isso todas nascem presas ao JC371 mesmo quando o nome é universal em outra sintaxe.
+  - 🔑 **`BCD,A,B#` revela o que a entrada de um campo não sabia dizer**: o segundo campo é a **versão do protocolo JT/T 808** — `0` para 2011, `1` para 2019. Muda o dialeto que a câmera fala com o IoT Hub inteiro. A entrada antiga, vinda da wiki, descrevia "JT/T 808-2013", ano que não existe nesta planilha.
+  - 🔑 **`STATUSVIDEO#` diz o que nenhuma outra resposta diz**: `On video` × `Camera insertion` — quais canais estão **gravando** contra quais câmeras estão **conectadas**. Quando a barra do playback vier vazia num canal, é a pergunta que separa "não gravou" de "não tem câmera".
+
+### Fixed
+- 🔴 **A guarda de "placeholder por preencher" da tela de comandos casava por FORMATO, e recusava valor legítimo de uma letra.** Ela testava `/(,P\d+|,[A-Z])(,|#)/` sobre o texto montado — "parece placeholder" —, e isso é indistinguível de um **valor** de uma letra só. `VIDEOTIMEZONE,W,3,0#` (`W` = oeste de GMT, o exemplo oficial do próprio comando na planilha JC371 A006) era recusado **pela própria tela**, com a mensagem "ainda há placeholders". O comando novo `VIDETIMEZONE,A,B,C#` cairia na mesma armadilha assim que alguém preenchesse o primeiro campo com o valor documentado. Agora a pergunta é sobre os **campos** (`faltaParametro()`): o que está em branco está em branco, e um `W` digitado é um valor — sem ambiguidade possível.
+- 🔴 **Sete comandos podiam mandar o PLACEHOLDER CRU para o equipamento — e um deles era impossível de enviar.** A combinação `template: true` com `params: []` não desenhava campo nenhum na tela, e o preview saía com a letra crua (`TIMER,A,B#`). A guarda por formato barrava seis deles no clique (tarde, mas barrava) e barrava **errado** o sétimo, o `VIDEOTIMEZONE,W,3,0#`, que é comando pronto e não molde. Corrigidos os sete: `EVENTALERT,ANWSB` e `EVENTALERT,AWSB` ganharam os três campos que a planilha JC371 documenta para a família inteira (D002–D014: alerta na plataforma, intervalo de reporte, intervalo do aviso de voz), `WIFIAP,A#` ganhou o `ON/OFF` de A015, e `VIDEOTIMEZONE,W,3,0#` virou `template: false`. ⚠️ `TIMER,A,B#`, `TIMER1,A,B#` e `DMS_VIRTUAL_SPEED,A#` **só existem na wiki, que não descreve os campos**: as posições foram declaradas (a sintaxe já as diz) e a descrição ficou **em branco de propósito** — inventar o significado seria o palpite que este projeto não aceita.
+- **O botão de envio desabilita com campo em branco**, em vez de deixar clicar e recusar depois. O teste que se chamava "parâmetro em branco bloqueia o envio" só conferia que o placeholder continuava no preview — o nome prometia mais do que a asserção cobrava.
+- 🔴 **A leitura de pares descartava, em silêncio, chave que não fosse uma palavra.** `command_response_kv()` exigia `[A-Za-z][A-Za-z0-9 _/.-]{1,28}`, e três formatos reais caíam fora — a linha simplesmente não aparecia na tela, sem nada indicando por quê: `EVENTSET,AVD:OFF`, `EVENTSET,AEPLD:ON,115,120,10` e `WAKEUP,RTC:0,240` (JC371, chave com **vírgula**) e `[AR9150]:C182_…` (JC182, chave com **colchetes**). Duas coisas continuam de fora de propósito: a chave **nunca atravessa um `:`** — é o que mantém `RSERVICE:rtmp://ip:1936/live` com o rótulo certo apesar dos três dois-pontos — e o bloco `bootcase[…]` do JC182, que tem quebra de linha no meio e é despejo, não par. O preço de aceitar vírgula na chave seria uma frase comum (`Device busy, previous command: not returned`) virar par; uma regra de uma linha o impede.
+
+### Changed
+- **A leitura de firmware pega carona no `CHECK#`** (`firmware_is_version_command()` → `firmware_comando_le_versao()`). Só foi possível porque as duas leituras devolvem a **MESMA string**, conferida byte a byte nos dois modelos alcançáveis:
+
+  ```
+  JC400AD  VERSION# → KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920
+           CHECK#   → VERSION:KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920
+  JC371    VERSION# → C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543
+           CHECK#   → VERSION:C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543
+  ```
+
+  A conferência não é preciosismo: `/firmwares` compara versão por **igualdade** (não há regra publicada que ordene `V1.8.0.9_250807` contra `V4.3.2`), e duas grafias do mesmo firmware fariam a tela acusar "diferente da referência" conforme o comando usado por último. Importa porque `devices.firmware_version` só é preenchido quando alguém **pergunta** — estava NULL na 400AD de produção, online, no dia da medição.
+- **A contagem por categoria do cabeçalho do catálogo passou a ser conferida por teste**, como já era a de entradas/comandos desde a v4.9.32, mais uma guarda de que nenhuma categoria fica fora do mapa de rótulos de `handlers/comandos.php` (categoria desconhecida cai no rótulo cru na tela).
+
+### Não encontrado
+- **Não há comando de parar o playback na planilha do JC371.** Ela é toda de configuração e consulta; o controle de stream do JC371 vive no binário do JT/T 1078 (`37378`), cujos nomes de campo continuam sem verificação em equipamento real.
+
 ## [Unreleased] — 4.9.39
 
 **Duas falhas relatadas do campo nas câmeras JIMI, e a doc oficial (docs.jimicloud.com §1.3.5–1.3.7) resolveu as duas.** Uma era minha suposição não medida; a outra, uma assimetria com o JT/T.
 
 ### Fixed
-- 🔴 **"Ver na câmera" nunca funcionaria: a URL do stream estava errada.** O playback publica **sem canal no caminho** — `http://<ip>:8881/live/<IMEI>.flv` (§1.3.5). Eu havia reaproveitado a URL do vídeo AO VIVO, que é `live/<canal-base-0>/<imei>.flv` (medida em 18/08). O `REPLAYLIST` saía, a câmera aceitava, e o player buscava um endereço onde nada era publicado. A diferença tem lógica: no playback o canal já está escolhido pelo NOME do arquivo que vai no comando.
+- 🔴 **"Ver na câmera" nunca funcionaria: a URL do stream estava errada — nas DUAS famílias, e de formas diferentes.** Eu havia reaproveitado a URL do vídeo AO VIVO. Medido em 21/08/2026 perguntando ao próprio media server (ZLMediaKit, `/index/api/getMediaList`) com o stream no ar:
+
+  | | comando | app | stream | URL do playback |
+  |---|---|---|---|---|
+  | JIMI | `REPLAYLIST` | `live` | `<imei>` | `/live/<imei>.flv` |
+  | JT/T | `37377` | `<canal>` | `<imei>.history` | `/<canal>/<imei>.history.flv` |
+
+  O ao vivo publica em `live/<canal-base-0>/<imei>` (JIMI) e `<canal>/<imei>` (JT/T), medidos em 18/08. Reaproveitar aquela URL faz o comando ser aceito, a câmera publicar, e o player buscar um endereço vazio. A doc oficial (§1.3.5) descreve só o lado JIMI, e nele bate com a medição; **o sufixo `.history` do JT/T não está documentado em lugar nenhum** — só apareceu perguntando ao servidor.
+- **O prazo do player subiu de 20 s para 30 s.** Medido: a JIMI leva ~12 s entre aceitar o `REPLAYLIST` e publicar; a JT/T, ~6 s. Prazo apertado transforma câmera lenta em "falhou".
 - 🔴 **O pedido de upload não aparecia em Downloads enquanto o arquivo não chegava.** O JT/T ganhava linha `solicitado` ao despachar o 37382; o JIMI não ganhava nada ao despachar o `HVIDEO`. Entre o clique e a chegada (~15 s medidos) a tela não tinha o que mostrar — relatado como "não listam, seja como pendente ou pronto". Agora o `HVIDEO`/`EVIDEO` grava a mesma linha de espera, e quando o arquivo chega ela é **promovida** em vez de nascer uma segunda: um pedido, uma linha, de "aguardando câmera" a "pronto".
   - ⚠️ **O casamento é por instante E por canal.** O DMS dispara várias vezes no mesmo minuto: um anexo de alarme comum que roubasse o pedido faria a fila dizer "pronto" apontando para o vídeo ERRADO, e o pedido de verdade ficaria pendente para sempre. A decisão virou função pura (`media_pedido_correspondente()`) com 11 checagens sem banco, e foi verificada nos três cenários contra o banco real.
 - 🔴 **A coluna "Canal" da tela de Downloads estava vazia em toda linha de anexo de alarme** — `media_register_file()` nunca gravava `channel`. O dado sempre esteve no nome (`_F_` = frontal, `_I_` = interna). Passou a ser gravado, e a tela também o deriva do nome para as linhas antigas, que continuam com NULL.
@@ -22,6 +76,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Notes
 - **A resposta do `/filelist` passou a ser `{"code":0,"ok":true}`**, como a §1.3.5 especifica; devolvíamos `message:"success"`. Funcionava — este firmware não confere. Alinhado mesmo assim: contar com a tolerância do device é apostar que o próximo firmware também será tolerante, e este projeto já perdeu essa aposta.
 - ⚠️ **`REPLAYLIST` aceita até OITO nomes** separados por vírgula (§1.3.5), o que permitiria emendar trechos numa reprodução só. Mandamos um — o bloco pedido.
+- ⚠️ **O JT/T continua SEM comando de parada do playback.** O par do `37377` é o `37378` (0x9202), e os nomes de campo que o hub da Jimi espera não constam de nenhuma fonte conferida — inventá-los produz comando aceito pelo gateway e ignorado pelo device. Uma tentativa de medição em 21/08 ficou inconclusiva (o device não respondeu; virou comando offline). O impacto é pequeno e conhecido: **o playback termina sozinho** ao fim da janela pedida — verificado no media server, os dois streams do teste sumiram sem ninguém mandar parar. O JIMI tem parada (`REPLAYLIST,OFF`, respondeu `OK!`).
 
 ## [Unreleased] — 4.9.38
 

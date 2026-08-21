@@ -187,6 +187,20 @@ function command_response_interpret(string $texto, string $codigo = '', string $
  * linha inteira truncada, e o operador não conseguia ler a tensão da bateria
  * sem passar o mouse por cima.
  *
+ * ⚠️ A CHAVE NEM SEMPRE É UMA PALAVRA (v4.9.40). O `CHECK#` — a consulta mais
+ * completa do proNo 128 — devolve rótulos que a versão anterior desta função
+ * descartava calada, e o operador via a linha faltando sem nenhum indício de
+ * por quê. Medido em produção em 20/08/2026:
+ *
+ *   JC371  `EVENTSET,AVD:OFF`  `EVENTSET,AEPLD:ON,115,120,10`  `WAKEUP,RTC:0,240`
+ *   JC182  `[AR9150]:C182_0_3_STD_JM_JC182_V2.1.0.0b_260422.0116`
+ *
+ * Daí a vírgula e os colchetes na classe da chave. Duas coisas continuam de
+ * fora, e de propósito: a chave NUNCA atravessa um `:` (é o que mantém
+ * `RSERVICE:rtmp://ip:1936/live` com a chave certa mesmo com três deles na
+ * linha), e o bloco `bootcase[...]` do JC182, que tem quebra de linha no meio,
+ * segue sem casar — é despejo de diagnóstico, não par, e fica melhor cru.
+ *
  * @param string $texto
  * @returns array<string,string> Vazio quando não é resposta de pares
  */
@@ -195,10 +209,15 @@ function command_response_kv(string $texto): array
     $t = preg_replace('/^\s*ext\s+/i', '', trim($texto));
     $out = [];
     foreach (preg_split('/\s*;\s*/', $t) as $parte) {
-        if (!preg_match('/^\s*([A-Za-z][A-Za-z0-9 _\/\.-]{1,28})\s*:\s*(.+?)\s*$/', $parte, $m)) continue;
+        if (!preg_match('/^\s*([A-Za-z\[][A-Za-z0-9 _\/\.,\[\]-]{1,28})\s*:\s*(.+?)\s*$/', $parte, $m)) continue;
         $chave = trim($m[1]);
         $valor = trim($m[2]);
         if ($valor === '') continue;
+        // Chave com espaço E vírgula é frase, não rótulo — nenhuma das medidas
+        // tem as duas coisas (`EVENTSET,AVD` tem vírgula, `Local time` tem
+        // espaço). Sem esta linha, "Device busy, previous command: not
+        // returned" viraria um par, que é o preço de aceitar vírgula na chave.
+        if (strpos($chave, ' ') !== false && strpos($chave, ',') !== false) continue;
         $out[$chave] = $valor;
     }
     // Um par só, com valor longo, quase sempre é frase comum com dois-pontos

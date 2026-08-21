@@ -335,10 +335,10 @@ checa('comando montado', 'UPDATE,https://x.com/a.bin#', firmware_update_command(
 
 // A captura só vale para o comando VERSION — `STATUS#` responde
 // `Battery:12.1V`, que qualquer heurística de "parece versão" aceitaria.
-checa('VERSION# é leitura de firmware', true, firmware_is_version_command('VERSION#', 128));
-checa('VERSION sem # também', true, firmware_is_version_command('VERSION', 128));
-checa('STATUS# não é leitura de firmware', false, firmware_is_version_command('STATUS#', 128));
-checa('comando JT/T não é leitura de firmware', false, firmware_is_version_command('VERSION#', 33028));
+checa('VERSION# é leitura de firmware', true, firmware_comando_le_versao('VERSION#', 128));
+checa('VERSION sem # também', true, firmware_comando_le_versao('VERSION', 128));
+checa('STATUS# não é leitura de firmware', false, firmware_comando_le_versao('STATUS#', 128));
+checa('comando JT/T não é leitura de firmware', false, firmware_comando_le_versao('VERSION#', 33028));
 
 // ⚠️ Comparação por IGUALDADE, nunca por ordem: não há regra publicada que
 // ordene `V1.8.0.9_250807` contra `V4.3.2`.
@@ -348,6 +348,153 @@ checa('versão diferente', 'diferente', firmware_situacao('V1.8.0.9', 'V1.8.1.2'
 checa('sem leitura do equipamento', 'sem_leitura', firmware_situacao(null, 'V1.8.1.2')['estado']);
 checa('sem release de referência', 'sem_release', firmware_situacao('V1.8.1.2', null)['estado']);
 
+
+// ── v4.9.40: o `CHECK#`, a consulta universal ──────────────────────────────
+//
+// 🔴 SEGUNDA exceção manual de `universal`, e pela mesma razão da primeira: a
+// derivação ("presente em 5+ das 6 páginas da wiki") mede a FONTE, não o
+// protocolo. Só a planilha do JC371 documenta o `CHECK`, e ele nasceria travado
+// nesse modelo — mas foi medido em produção em 20/08/2026 respondendo em
+// JC400AD (dois equipamentos), JC371 e JC182. Uma regeneração do catálogo por
+// script desfaz isso em silêncio; é o que estas linhas impedem.
+echo "\n── Catálogo: CHECK# e os comandos do JC371 ──\n";
+
+$chk = $cat['CHECK#'] ?? null;
+checa('CHECK# existe no catálogo', true, $chk !== null);
+checa('🔴 CHECK# não trava a seleção por modelo', true, (bool)($chk['universal'] ?? false));
+checa('CHECK# cobre os seis modelos', 6, count($chk['modelos'] ?? []));
+checa('CHECK# é consulta de si mesmo', 'CHECK#', $chk['consulta'] ?? null);
+checa('CHECK# declara procedência medida', true,
+      strpos((string)($chk['consulta_ref'] ?? ''), 'medido') !== false);
+
+// ⚠️ O `CHECKVIDEO#` é o CONTRÁRIO e a distinção é o motivo de a trava existir:
+// mesma planilha, mesma família, e relatado do campo como recusado na linha
+// JC400 — que a planilha `JC400 & JC261` de fato não lista. Marcá-lo universal
+// junto com o `CHECK#` só porque os dois começam igual seria o erro.
+checa('CHECKVIDEO# existe', true, isset($cat['CHECKVIDEO#']));
+checa('🔴 CHECKVIDEO# fica travado no JC371', false, (bool)($cat['CHECKVIDEO#']['universal'] ?? true));
+checa('CHECKVIDEO# só JC371', ['JC371'], array_values($cat['CHECKVIDEO#']['modelos'] ?? []));
+
+// Os sete nomes que faltavam e as onze variantes de aridade, da planilha do
+// JC371. Cruzamento por COMANDO:ARIDADE — comparar só o nome-base esconde
+// variante faltante de comando que já existe (foi o caso do `FILELIST`).
+$daPlanilha371 = [
+    'CHECK#', 'CHECKVIDEO#', 'STATUSVIDEO#', 'SENSORSET,A,B,C,D#',
+    'SHUTDOWNTIME,A#', 'VIDEORSL_SUB,A,B,C,D,E#', 'VIDETIMEZONE,A,B,C#',
+    'KEYFUN,A,B#', 'APN,A,B,C,D#', 'SERVER,A,B,C,D,E,F#', 'BCD,A,B#',
+    'LOG,ALL#', 'RECORDAUDIO,A,B#', 'RECORDAUDIO_SUB,A,B#',
+    'RATATION,A,B,C,D#', 'PICTIMER,A,B,C,D#', 'TIMER,A#', 'ANGLEREP,A#',
+];
+$ausentes = array_values(array_filter($daPlanilha371, fn($k) => !isset($cat[$k])));
+checa('as 18 sintaxes da planilha JC371 estão no catálogo', [], $ausentes);
+
+// Toda entrada da planilha diz DE ONDE veio — sem isso, a próxima conferência
+// não sabe distinguir o que foi medido do que foi suposto.
+$semFonte = array_values(array_filter($daPlanilha371,
+    fn($k) => trim((string)($cat[$k]['fonte'] ?? '')) === ''));
+checa('toda entrada do JC371 declara a fonte', [], $semFonte);
+
+// 🔴 A variante de aridade divide o nome com uma entrada mais antiga. Se
+// carregasse `consulta`, a tela ofereceria dois botões idênticos de "consultar
+// APN" — é o mesmo invariante já conferido acima, aqui ancorado nos nomes que
+// ganharam uma segunda sintaxe.
+$variantes = ['KEYFUN,A,B#', 'APN,A,B,C,D#', 'SERVER,A,B,C,D,E,F#', 'BCD,A,B#',
+              'LOG,ALL#', 'RECORDAUDIO,A,B#', 'RECORDAUDIO_SUB,A,B#',
+              'RATATION,A,B,C,D#', 'PICTIMER,A,B,C,D#', 'TIMER,A#', 'ANGLEREP,A#'];
+$comConsulta = array_values(array_filter($variantes, fn($k) => !empty($cat[$k]['consulta'])));
+checa('variante de aridade não duplica a consulta', [], $comConsulta);
+
+// 🔴 E nenhuma delas é universal: mandar a sintaxe de um campo do `TIMER` para
+// uma JC400 que espera dois é aceito e mal interpretado, sem erro nenhum. A
+// trava por modelo é a única coisa entre o operador e esse silêncio.
+$universalDemais = array_values(array_filter($variantes, fn($k) => !empty($cat[$k]['universal'])));
+checa('🔴 variante de aridade fica presa ao JC371', [], $universalDemais);
+
+// A contagem por categoria também é comentário, e envelhece igual à outra.
+// Categoria fora do mapa de `handlers/comandos.php` cai no rótulo cru.
+$porCategoria = [];
+foreach ($cat as $d) $porCategoria[$d['categoria']] = ($porCategoria[$d['categoria']] ?? 0) + 1;
+ksort($porCategoria);
+$linha = [];
+foreach ($porCategoria as $k => $n) $linha[] = "$k=$n";
+preg_match('/Por categoria: ([^.]+)\./',
+           file_get_contents(__DIR__ . '/../../includes/command_catalog.php'), $mc);
+checa('cabeçalho: contagem por categoria confere', implode(', ', $linha), trim($mc[1] ?? ''));
+$conhecidas = ['ia','video','rede','posicao','audio','energia','alarme','manutencao','outros'];
+checa('nenhuma categoria fora do mapa da tela', [],
+      array_values(array_diff(array_keys($porCategoria), $conhecidas)));
+
+// ── O que o CHECK# devolve, medido em três modelos ─────────────────────────
+//
+// Respostas CRUAS (`data._content`) colhidas em produção em 20/08/2026. Não são
+// exemplo inventado: cada uma já mostrou um formato que a leitura de pares
+// descartava calada.
+echo "\n── CHECK#: leitura da resposta medida ──\n";
+
+$chk400 = 'VERSION:KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920; C170VERSION:C170_MB_WABL_V2.4.2_240618142753; IMEI:864993060429173; ICCID:89550534010048097267; IMSI:724050109820064; COREKITSW:0; RSERVICE:rtmp://186.248.143.197:1936/live; UPLOAD:http://186.248.143.197:23010/upload; SERVER:0,186.248.143.197,21100; APN:ApnAllcom,allcombl.br,724,05; WIFIAP:ON,864993060429173,60429173; SSID:OFF; VOLUME:2; VOICESW:100; LED:ON; TIMEZONE:-3:00; TIMESYNC:gps';
+
+$kv400 = command_response_kv($chk400);
+checa('[JC400AD] a versão sai nomeada', 'KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920', $kv400['VERSION'] ?? null);
+// 🔑 O endereço de upload é o que falta conferir na 400D, que aceita o
+// `FILELIST` e nunca sobe a lista. Nenhuma outra resposta do proNo 128 o diz.
+checa('[JC400AD] o endereço de upload sai inteiro', 'http://186.248.143.197:23010/upload', $kv400['UPLOAD'] ?? null);
+// A chave NUNCA atravessa um `:` — sem isso `rtmp://ip:1936/live` levaria
+// pedaço do valor para dentro do rótulo.
+checa('[JC400AD] três dois-pontos e a chave continua certa', 'rtmp://186.248.143.197:1936/live', $kv400['RSERVICE'] ?? null);
+checa('[JC400AD] o fuso do equipamento', '-3:00', $kv400['TIMEZONE'] ?? null);
+checa('[JC400AD] valor com vírgula fica inteiro', '0,186.248.143.197,21100', $kv400['SERVER'] ?? null);
+
+$chk371 = 'VERSION:C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543;MCUVER:C371_1_WAAO_V1.2.5_250120.2111;MODEMVER:EC200AAUHAR01A10M16_01.200.01.200;IMEI:865478070003241;ICCID:89550537010008815663;IMSI:724050103094927;SERVER:0,186.248.143.197,21122;BCD:0;APN:allcombl.br,allcom,allcom;INPUT1:1;INPUT2:1;RELAY1:0;RELAY2:0;EVENTSET,AVD:OFF;ACC:1,0;acc on type:0;EVENTSET,AEPLD:ON,115,120,10;WORKTIMEMAX:30 min;WAKEUP,RTC:0,240;BOOTREASON:4;';
+
+$kv371 = command_response_kv($chk371);
+// 🔴 Estas três eram descartadas em silêncio antes da v4.9.40: a chave tem
+// VÍRGULA, e a classe de caracteres não a aceitava. O operador via a linha
+// faltar sem nenhum indício de por quê.
+checa('[JC371] chave com vírgula é lida', 'OFF', $kv371['EVENTSET,AVD'] ?? null);
+checa('[JC371] chave com vírgula e valor com vírgula', 'ON,115,120,10', $kv371['EVENTSET,AEPLD'] ?? null);
+checa('[JC371] WAKEUP,RTC', '0,240', $kv371['WAKEUP,RTC'] ?? null);
+checa('[JC371] chave com espaço continua valendo', '0', $kv371['acc on type'] ?? null);
+checa('[JC371] a porta do JC371 é outra', '0,186.248.143.197,21122', $kv371['SERVER'] ?? null);
+
+// O JC182 responde com um bloco de diagnóstico QUEBRADO EM LINHA no meio
+// (`bootcase[...]`). Ele não é par e não deve virar par — fica melhor cru.
+$chk182 = "IMEI:869058070151343;VERSION:C182_WEBP_VY_1_V1.2.5.2_260422.0924;[AR9150]:C182_0_3_STD_JM_JC182_V2.1.0.0b_260422.0116;SERVER:0,186.248.143.197,21122,1;APN:allcombl.br,allcom,allcom;CSQ:[4G]20;BAT:3.85;EXTV:13.12;ACC:OFF,1,1;bootcase[Start_total:97 normal_power_on:0 Netfail_20_min:45\n];currcase:19:08-20 20:12:42(count:97)(reason:19);curboot:4;Local Timezone:W,3,0;";
+
+$kv182 = command_response_kv($chk182);
+checa('[JC182] rótulo entre colchetes é lido', 'C182_0_3_STD_JM_JC182_V2.1.0.0b_260422.0116', $kv182['[AR9150]'] ?? null);
+checa('[JC182] valor entre colchetes também', '[4G]20', $kv182['CSQ'] ?? null);
+checa('[JC182] o bloco quebrado em linha não vira par', false,
+      (bool)array_filter(array_keys($kv182), fn($k) => strpos($k, 'bootcase') !== false));
+checa('[JC182] o fuso, na grafia do JC182', 'W,3,0', $kv182['Local Timezone'] ?? null);
+
+// ⚠️ O preço de aceitar vírgula na chave: uma frase comum com vírgula e
+// dois-pontos passaria a virar par. Não passa.
+checa('frase com vírgula não vira par', [],
+      command_response_kv('Device busy, previous command: not returned'));
+
+// ── A versão de firmware que o CHECK# traz de graça ────────────────────────
+//
+// 🔴 A ligação só é segura porque as DUAS leituras devolvem a MESMA string —
+// medido nos dois modelos alcançáveis em 20/08/2026. `/firmwares` compara por
+// IGUALDADE; grafias diferentes do mesmo firmware fariam a tela acusar
+// "diferente da referência" conforme o comando usado por último.
+echo "\n── CHECK# alimenta a leitura de firmware ──\n";
+
+checa('CHECK# é leitura de firmware', true, firmware_comando_le_versao('CHECK#', 128));
+checa('CHECK sem # também', true, firmware_comando_le_versao('CHECK', 128));
+// ⚠️ `CHECKVIDEO#` NÃO é — e o primeiro token é o que separa os dois.
+checa('CHECKVIDEO# não é leitura de firmware', false, firmware_comando_le_versao('CHECKVIDEO#', 128));
+
+checa('[JC400AD] VERSION# e CHECK# dão a MESMA versão',
+      firmware_parse_version('[VERSION]KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920'),
+      firmware_parse_version($chk400));
+checa('[JC371] VERSION# e CHECK# dão a MESMA versão',
+      firmware_parse_version('[VERSION]C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543[MCU][MODEM]EC200AAUHAR01A10M16'),
+      firmware_parse_version($chk371));
+// ⚠️ No JC182 o `IMEI` vem ANTES da versão e o `[AR9150]` é outro firmware, do
+// chip de rádio. Quem vence é o par que se chama VERSION, não a ordem.
+checa('[JC182] a versão do equipamento, não a do rádio',
+      'C182_WEBP_VY_1_V1.2.5.2_260422.0924', firmware_parse_version($chk182));
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

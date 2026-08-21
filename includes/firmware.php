@@ -30,20 +30,43 @@
 require_once __DIR__ . '/command_response.php';
 
 /**
- * O comando enviado é um `VERSION` de texto (proNo 128)?
+ * O comando enviado traz a versão de firmware na resposta?
  *
  * Casa pelo PRIMEIRO token, como `command_label()`: o histórico grava tanto
  * `VERSION#` quanto `VERSION` conforme o caminho que despachou.
+ *
+ * 🔑 São DOIS comandos, não um (v4.9.40). O `CHECK#` devolve um retrato
+ * completo do equipamento que **começa** pela versão, e a string é
+ * BYTE A BYTE a mesma que o `VERSION#` devolve — conferido em 20/08/2026 nos
+ * dois modelos alcançáveis em produção:
+ *
+ *   JC400AD  VERSION# → KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920
+ *            CHECK#   → VERSION:KMC28_0_0_STD_JM_C261_V1.8.0.9_250807.1920
+ *   JC371    VERSION# → C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543
+ *            CHECK#   → VERSION:C371_0_0_STD_JM_JC371_V1.9.0.2b_260528.0543
+ *
+ * A conferência não é preciosismo: `/firmwares` compara versão por IGUALDADE
+ * (não há ordem publicada que ordene `V1.8.0.9_250807` contra `V4.3.2`). Se as
+ * duas leituras devolvessem grafias diferentes do MESMO firmware, a tela
+ * passaria a acusar "diferente da referência" conforme o comando que tivesse
+ * sido usado por último — um falso positivo que ninguém saberia explicar.
+ * Medi antes de ligar os dois caminhos, e só por isso este código existe.
+ *
+ * Aceitar o `CHECK#` importa porque `devices.firmware_version` só é preenchido
+ * quando alguém PERGUNTA: era NULL na 400AD de produção, online, no dia desta
+ * medição. Sendo o `CHECK#` universal e a consulta de diagnóstico mais
+ * completa do proNo 128, é o comando que o operador dispara — e agora a
+ * leitura de firmware pega carona nele em vez de exigir um segundo envio.
  *
  * @param  string   $conteudo Conteúdo enviado (`commands.command_content`)
  * @param  int|null $proNo    proNo do envio; 128 é o canal de texto
  * @returns bool
  */
-function firmware_is_version_command(string $conteudo, ?int $proNo = 128): bool
+function firmware_comando_le_versao(string $conteudo, ?int $proNo = 128): bool
 {
     if ($proNo !== null && $proNo !== 128) return false;
     $base = mb_strtoupper(trim(preg_split('/[,#]/', trim($conteudo))[0] ?? ''), 'UTF-8');
-    return $base === 'VERSION';
+    return $base === 'VERSION' || $base === 'CHECK';
 }
 
 /**

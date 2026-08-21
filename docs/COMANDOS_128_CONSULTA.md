@@ -104,7 +104,10 @@ O primeiro levantamento contou 36 ausentes. Depois de ler o texto em volta de
 cada um, sete saíram: `AOSD` e `SOS` não são comandos (`AOSD` é sub-comando do
 `EVENTSET`; `SOS` apareceu dentro da string SMS `FILTER#666666#SOS#1`, onde é
 **nome de evento**, não comando), e `ON`, `P3`, `P5`, `CAR`, `DMS`, `CHECK` e
-`LOG` são tokens soltos de tabelas de parâmetros. Sobraram **27**, todos
+`LOG` são tokens soltos de tabelas de parâmetros. 🔴 **`CHECK` e `LOG` NÃO
+eram — ver §8.1.** Os dois são comandos reais, documentados na planilha do
+JC371 e medidos respondendo em produção; o descarte foi feito contra a wiki,
+que não os documenta. Sobraram **27**, todos
 cadastrados com nome e descrição tirados do texto da wiki — não de palpite.
 
 O catálogo foi de **120 para 147** entradas, 49 delas com forma de consulta.
@@ -188,5 +191,109 @@ regenerar o catálogo da wiki por script essa distinção some sozinha.
   `18` ficam somente leitura.
 - **Contraparte de consulta do hodômetro** (`128`): não existe forma nua
   documentada para `MILEAGE`.
-- **JC400, JC400AD e JC450 não foram medidos.** A consulta neles está marcada
-  `consulta_ref = 'wiki'` — é promessa da página, não medição.
+- **JC450 e JC400D não foram medidos.** A consulta neles está marcada
+  `consulta_ref = 'wiki'` — é promessa da página, não medição. O JC400AD saiu
+  dessa lista em 20/08/2026: dois equipamentos responderam ao `CHECK#` (§8.2).
+
+## 8. A planilha do JC371 — 18 buracos, e um comando descartado por engano (v4.9.40)
+
+> Levantado em 20/08/2026 contra `docs/JC 371 Command List V1.0.1.xlsx` e medido
+> em quatro equipamentos de produção.
+
+A pergunta que abriu isto era outra: **existe na planilha do JC371 um comando de
+PARAR o playback?** Não existe. A planilha é toda de configuração e consulta, e
+o controle de stream do JC371 vive no binário do JT/T 1078 (`37378`), não no
+proNo 128. Mas o cruzamento feito para responder achou 18 sintaxes ausentes do
+catálogo, em duas naturezas:
+
+- **sete nomes** que não existiam aqui: `CHECK`, `CHECKVIDEO`, `STATUSVIDEO`,
+  `SENSORSET`, `SHUTDOWNTIME`, `VIDEORSL_SUB`, `VIDETIMEZONE`;
+- **onze variantes de ARIDADE** — o nome já existia, aquela sintaxe não:
+  `KEYFUN,A,B` · `APN,A,B,C,D` · `SERVER,A,B,C,D,E,F` · `BCD,A,B` · `LOG,ALL` ·
+  `RECORDAUDIO,A,B` · `RECORDAUDIO_SUB,A,B` · `RATATION,A,B,C,D` ·
+  `PICTIMER,A,B,C,D` · `TIMER,A` · `ANGLEREP,A`.
+
+As onze são o buraco que **comparar só o nome-base nunca mostra** — a mesma
+classe que escondeu a forma nua do `FILELIST` por meses (v4.9.27). Todas nascem
+travadas no JC371: mandar a sintaxe de um campo do `TIMER` para uma JC400 que
+espera dois é aceito e mal interpretado, sem erro nenhum.
+
+### 8.1 🔴 Correção: o `CHECK` não era "token solto" — é o comando mais útil
+
+A §5 desta mesma página, escrita na v4.9.25, descartou sete candidatos como
+"tokens soltos de tabelas de parâmetros", e **dois deles eram comandos de
+verdade**: `CHECK` (A003 da planilha) e `LOG` (A025, `LOG,ALL`). O descarte foi
+feito lendo o texto em volta da ocorrência na wiki, onde `CHECK` aparece mesmo
+como palavra solta — a wiki não o documenta como comando. A planilha da
+fabricante documenta, e o equipamento responde.
+
+É o espelho do erro do `MILE#` na §4: lá eu batizei por coincidência, aqui
+descartei por ausência. **Ausência numa fonte não é ausência no protocolo** —
+foi preciso a segunda fonte para desfazer.
+
+### 8.2 O `CHECK#` responde em toda a linha JC — medido
+
+Quatro equipamentos, 20/08/2026, produção:
+
+| Equipamento | Modelo | Resposta |
+|---|---|---|
+| `864993060429173` | JC400AD | `VERSION:KMC28_..._V1.8.0.9_250807.1920; …` |
+| `864993060392306` | JC400AD | `VERSION:KMC28_..._V1.8.1.3_250925.1127; …` |
+| `865478070003241` | JC371 | `VERSION:C371_..._V1.9.0.2b_260528.0543;…` |
+| `869058070151343` | JC182 | `IMEI:…;VERSION:C182_..._V1.2.5.2_260422.0924;…` |
+
+O JC181 estava offline e o comando virou fila — não é recusa. Por isso o
+`CHECK#` entrou como **segunda exceção manual de `universal`** no catálogo (a
+primeira é o `UPDATE`, v4.9.32): a derivação automática mede a FONTE, e só a
+planilha do JC371 o documenta. Sendo LEITURA, o custo de errar o modelo é uma
+recusa, não um estrago — é o inverso do `SERVER`.
+
+⚠️ **No JC181 ele é caro, e isso também está medido**: na bateria da v4.9.25 o
+`CHECK#` estourou os 30 s do hub e derrubou a sessão JIMI daquele equipamento —
+nove respostas boas antes dele, zero depois (§6). A sessão volta sozinha, mas
+não se varre a frota com ele em rajada.
+
+⚠️ **O `CHECKVIDEO#` é o contrário e a distinção é o motivo de a trava existir**:
+mesma planilha, mesma família, e não vale na linha JC400 — relatado do campo, e
+a planilha `JC400 & JC261 Command List V5.0.3` de fato não o lista. Marcá-lo
+universal junto com o `CHECK#` só porque os dois começam igual seria o erro que
+a trava por modelo existe para impedir.
+
+### 8.3 O que a resposta do `CHECK#` entrega
+
+Cada linha dela já respondeu uma pergunta que custou dias neste projeto:
+
+| Campo | Por que importa |
+|---|---|
+| `VERSION` | **A MESMA string que o `VERSION#` devolve** — conferido byte a byte nos dois modelos alcançáveis. Por isso `firmware_capture()` passou a aceitar a resposta do `CHECK#`: `/firmwares` compara versão por IGUALDADE, e duas grafias do mesmo firmware fariam a tela acusar "diferente da referência" conforme o comando usado por último |
+| `UPLOAD` | O endereço para onde a câmera sobe arquivo — é o que falta conferir na 400D, que aceita o `FILELIST` e nunca sobe a lista |
+| `SERVER` | Para onde ela aponta, **com a porta**: `21100` na linha 400, `21122` no JC371/JC182. Copiar a de um modelo para o outro derruba uma câmera que estava funcionando |
+| `TIMEZONE` | `-3:00` — o fuso do equipamento, pela boca dele. É a confirmação da convenção que `includes/filelist.php` assume ao ler o carimbo dos nomes dos vídeos |
+| `APN` | Quarta fonte independente do APN real, ao lado do `ASETAPN#` da §4 |
+
+O `STATUSVIDEO#` (só JC371) acrescenta o que nenhum outro diz: **`On video` ×
+`Camera insertion`** — quais canais estão gravando contra quais câmeras estão
+conectadas. Quando a barra do playback vier vazia num canal, é a pergunta que
+separa "não gravou" de "não tem câmera".
+
+### 8.4 A leitura de pares descartava chave que não fosse palavra
+
+`command_response_kv()` exigia que a chave fosse `[A-Za-z][A-Za-z0-9 _/.-]{1,28}`,
+e **três formatos reais caíam fora, em silêncio** — a linha simplesmente não
+aparecia na tela:
+
+- `EVENTSET,AVD:OFF`, `EVENTSET,AEPLD:ON,115,120,10`, `WAKEUP,RTC:0,240` (JC371)
+  — a chave tem **vírgula**;
+- `[AR9150]:C182_0_3_STD_JM_JC182_V2.1.0.0b_260422.0116` (JC182) — a chave tem
+  **colchetes**.
+
+Duas coisas continuam de fora, de propósito: a chave **nunca atravessa um `:`**
+(é o que mantém `RSERVICE:rtmp://ip:1936/live` com o rótulo certo apesar dos
+três dois-pontos), e o bloco `bootcase[…]` do JC182, que tem quebra de linha no
+meio — é despejo de diagnóstico, não par, e fica melhor cru. O preço de aceitar
+vírgula na chave é que uma frase comum (`Device busy, previous command: not
+returned`) viraria par; uma regra de uma linha o impede — chave com espaço **e**
+vírgula é frase, não rótulo.
+
+Tudo isto está travado em `tests/helpers/command_response.test.php`, com as
+respostas cruas das três medições como fixture.

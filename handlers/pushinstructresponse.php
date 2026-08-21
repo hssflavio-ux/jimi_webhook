@@ -290,7 +290,7 @@ class PushInstructResponseHandler extends WebhookHandler {
 
             require_once __DIR__ . '/../includes/firmware.php';
             $proNo = $cmd['pro_no'] !== null ? (int)$cmd['pro_no'] : null;
-            if (!firmware_is_version_command((string)$cmd['command_content'], $proNo)) return;
+            if (!firmware_comando_le_versao((string)$cmd['command_content'], $proNo)) return;
 
             $fw = firmware_capture(
                 $this->db, $imei, (string)$content,

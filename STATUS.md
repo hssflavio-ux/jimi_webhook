@@ -1,4 +1,165 @@
-# STATUS.md — Jimi Webhook System v4.9.33 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.9.40 (YUV Parity)
+
+> ### 📍 ESTADO EM 21/08/2026 — v4.9.39 no ar; v4.9.40 pronta, NÃO publicada
+>
+> **Produção (`bycamera.ia.br`) está em `17d874e`, `/ping` reportando 4.9.39.**
+> A **v4.9.40 está no working tree e ainda não foi commitada nem publicada** —
+> `SYSTEM_VERSION` já bumpado no `.env.example`, sem migração de banco.
+>
+> A rodada nasceu de uma pergunta de uma linha: *existe na planilha do JC371 um
+> comando de PARAR o playback?* **Não existe** — a planilha é toda de
+> configuração e consulta, e o controle de stream do JC371 vive no binário do
+> JT/T 1078 (`37378`). Mas o cruzamento feito para responder achou 18 sintaxes
+> ausentes do catálogo e um comando que a v4.9.25 tinha descartado por engano.
+>
+> #### 🔑 `CHECK#` — a consulta mais completa do proNo 128, e ela é universal
+>
+> Disparado em produção em 20/08/2026, ANTES de catalogar. Quatro equipamentos
+> alcançáveis, quatro respostas:
+>
+> | Equipamento | Modelo | |
+> |---|---|---|
+> | `864993060429173` | JC400AD | ✅ `VERSION:KMC28_..._V1.8.0.9_250807.1920` |
+> | `864993060392306` | JC400AD | ✅ `VERSION:KMC28_..._V1.8.1.3_250925.1127` |
+> | `865478070003241` | JC371 | ✅ `VERSION:C371_..._V1.9.0.2b_260528.0543` |
+> | `869058070151343` | JC182 | ✅ `IMEI:…;VERSION:C182_..._V1.2.5.2_260422.0924` |
+>
+> O JC181 estava offline e o comando virou fila — **não é recusa**. JC450 e
+> JC400D não foram alcançados. Virou a **segunda exceção manual** de `universal`
+> no catálogo (a primeira é o `UPDATE`, v4.9.32), pela mesma razão: a derivação
+> automática mede a FONTE — "presente em 5+ das 6 páginas da wiki" — e só a
+> planilha do JC371 documenta o comando. Sendo LEITURA, errar o modelo custa uma
+> recusa, não um estrago: é o inverso do `SERVER`.
+>
+> Quatro campos da resposta valem por si:
+>
+> | Campo | Para que serve aqui |
+> |---|---|
+> | `UPLOAD` | o endereço para onde a câmera sobe arquivo — **é o que falta conferir na 400D**, que aceita o `FILELIST` e nunca sobe a lista (pendência aberta) |
+> | `SERVER` | para onde ela aponta, **com a porta**: `21100` na linha 400, `21122` no JC371/JC182. Copiar a de um modelo para o outro derruba câmera que funcionava |
+> | `TIMEZONE` | `-3:00` — o fuso do equipamento, pela boca dele. É a confirmação da convenção que `includes/filelist.php` assume ao ler o carimbo dos nomes |
+> | `VERSION` | a **mesma string** que o `VERSION#` devolve |
+>
+> ⚠️ **No JC181 o `CHECK#` é caro, e isso está medido**: na bateria da v4.9.25
+> ele estourou os 30 s do hub e derrubou a sessão JIMI daquele equipamento —
+> nove respostas boas antes dele, zero depois. A sessão volta sozinha, mas não
+> se varre a frota com ele em rajada.
+>
+> #### 🔴 A v4.9.25 tinha descartado o `CHECK` como "token solto"
+>
+> Aquela varredura leu a wiki — onde `CHECK` e `LOG` aparecem mesmo como palavra
+> solta em tabelas de parâmetros — e os classificou como ruído, junto com `ON`,
+> `P3`, `P5`, `CAR` e `DMS`. A planilha da fabricante os documenta (A003, A025) e
+> o equipamento responde. É o **espelho** do erro do `MILE#` (`docs/COMANDOS_128_CONSULTA.md`
+> §4): lá batizei por coincidência, aqui descartei por ausência. **Ausência numa
+> fonte não é ausência no protocolo.** A §5 do documento foi corrigida no ponto
+> exato onde a afirmação errada estava, e o levantamento novo é a §8.
+>
+> #### As 18 sintaxes — e por que 11 delas nenhum levantamento por nome acharia
+>
+> - **Sete nomes** que não existiam: `CHECK`, `CHECKVIDEO`, `STATUSVIDEO`,
+>   `SENSORSET`, `SHUTDOWNTIME`, `VIDEORSL_SUB`, `VIDETIMEZONE`.
+> - **Onze variantes de ARIDADE** — o nome já existia, aquela sintaxe não:
+>   `KEYFUN,A,B` · `APN,A,B,C,D` · `SERVER,A,B,C,D,E,F` · `BCD,A,B` · `LOG,ALL` ·
+>   `RECORDAUDIO,A,B` · `RECORDAUDIO_SUB,A,B` · `RATATION,A,B,C,D` ·
+>   `PICTIMER,A,B,C,D` · `TIMER,A` · `ANGLEREP,A`. É a mesma classe que escondeu
+>   a forma nua do `FILELIST` por meses (v4.9.27). Mandar a aridade errada é
+>   **aceito e mal interpretado, sem erro nenhum**; o que protege é a trava por
+>   modelo, e por isso todas nascem presas ao JC371 — mesmo quando o nome é
+>   universal em outra sintaxe (`TIMER`, `ANGLEREP`, `SERVER`).
+>
+> Dois achados dentro dos 18: **`BCD,A,B#` revela que o segundo campo é a VERSÃO
+> do JT/T 808** (0 = 2011, 1 = 2019) — muda o dialeto que a câmera fala com o hub
+> inteiro, e a entrada de um campo só, vinda da wiki, dizia "808-2013", ano que
+> não existe na planilha. E **`STATUSVIDEO#` diz o que nenhuma outra resposta
+> diz**: `On video` × `Camera insertion`, quais canais estão gravando contra
+> quais câmeras estão conectadas — a pergunta que separa "não gravou" de "não tem
+> câmera" quando a barra do playback vem vazia num canal.
+>
+> #### Duas correções que apareceram no caminho
+>
+> **A leitura de pares descartava, em silêncio, chave que não fosse uma palavra.**
+> `command_response_kv()` exigia `[A-Za-z][A-Za-z0-9 _/.-]{1,28}` e três formatos
+> reais caíam fora — a linha sumia da tela sem nada indicando por quê:
+> `EVENTSET,AVD:OFF` e `WAKEUP,RTC:0,240` (JC371, chave com **vírgula**) e
+> `[AR9150]:C182_…` (JC182, chave com **colchetes**). Duas coisas seguem de fora
+> de propósito: a chave **nunca atravessa um `:`** — é o que mantém
+> `RSERVICE:rtmp://ip:1936/live` com o rótulo certo apesar dos três dois-pontos —
+> e o bloco `bootcase[…]` do JC182, que tem quebra de linha no meio.
+>
+> 🔴 **A guarda de "placeholder por preencher" da tela de comandos casava por
+> FORMATO, e recusava valor legítimo de uma letra.** Ela testava
+> `/(,P\d+|,[A-Z])(,|#)/` sobre o texto montado, e um valor de UMA LETRA é
+> idêntico a um placeholder de uma letra: `VIDEOTIMEZONE,W,3,0#` — onde `W` é
+> *oeste de GMT*, o exemplo oficial do próprio comando — era **recusado pela
+> própria tela**. Agora a pergunta é sobre os CAMPOS (`faltaParametro()`): o que
+> está em branco está em branco. ⚠️ A causa-raiz eram **sete entradas com
+> `template: true` e `params: []`** — sem parâmetro declarado a tela não desenha
+> campo, o preview sai com a letra crua e o operador manda `TIMER,A,B#` para o
+> equipamento. Corrigidas as sete; nas três que só a wiki documenta
+> (`TIMER,A,B`, `TIMER1,A,B`, `DMS_VIRTUAL_SPEED,A`) as posições foram declaradas
+> e **a descrição ficou em branco de propósito** — inventar o significado seria o
+> palpite que este projeto não aceita.
+>
+> #### `CHECK#` também alimenta a leitura de firmware
+>
+> `firmware_is_version_command()` virou `firmware_comando_le_versao()` e aceita
+> os dois comandos. **Só foi possível porque medi antes**: as duas leituras
+> devolvem a MESMA string, byte a byte, nos dois modelos alcançáveis. Se
+> divergissem, `/firmwares` — que compara por **igualdade**, porque não há regra
+> publicada que ordene `V1.8.0.9_250807` contra `V4.3.2` — passaria a acusar
+> "diferente da referência" conforme o comando usado por último. Importa porque
+> `devices.firmware_version` só é preenchido quando alguém **pergunta**: estava
+> NULL na 400AD de produção, online, no dia da medição.
+>
+> #### Verificação
+>
+> | | |
+> |---|---|
+> | PHP | 6 suítes; **115 checagens** no `command_response.test.php` (eram 80), com as respostas cruas das medições como fixture |
+> | Navegador | `comandos.spec.js` **17/17** |
+> | Lint | limpo em `handlers config core includes web` |
+> | Prova negativa | **8 checagens PHP** caem ao desfazer as três correções; **4 specs** caem ao reverter cada metade da correção da tela |
+>
+> #### 🔴 Dois defeitos NA SUÍTE, não no produto
+>
+> **`TEST_IMEI` desliga 8 specs de playback em silêncio.** Sem a variável,
+> `npx playwright test` sai com **código 0** e 14 pulados — 7 de
+> `video_playback_barra.spec.js` e 1 de `video_playback_filelist.spec.js` nem
+> rodam. É a mesma armadilha do `TEST_EMAIL_B` (v4.9.24) e da coleta de
+> `*.test.js` (v4.9.32): **verde que não significa verificado**.
+>
+> **O fixture de login falha por timeout do evento `load`.** Com `TEST_IMEI`
+> definido, 5 specs falharam — todas em `tests/fixtures/auth.js:35`, ANTES de
+> qualquer asserção: o login funciona (navega para `/`), o `domcontentloaded`
+> dispara e o `load` não fecha em 15 s. Provado que **não é regressão da
+> v4.9.40**: revertendo só os arquivos desta rodada, os mesmos testes falham
+> idênticos; e a cada execução falha um teste DIFERENTE, sempre no mesmo ponto.
+> As CDNs (`jsdelivr`, `fonts.googleapis`) respondem em 0,2 s, então não é rede —
+> o candidato é o servidor embutido do PHP ser de thread única.
+>
+> ⚠️ **A decisão de trocar a espera para `domcontentloaded` NÃO foi tomada**: é
+> uma linha, mas esconderia uma `/` genuinamente lenta, se for esse o caso.
+> Medir o tempo da `/` no servidor dev vem antes de mexer no fixture.
+>
+> #### ⚠️ Fora do git
+>
+> `docs/JC 371 Command List V1.0.1.xlsx` e
+> `docs/JC181_Command_List_V1.0.7_20250811.xlsx` estão **untracked**, e o
+> catálogo agora cita as linhas delas (A003, A020, A021, A023, B002, B005, B006,
+> B008, B009, C001, C002). Sem versioná-las, a procedência de 18 entradas aponta
+> para arquivos que só existem numa máquina.
+>
+> #### Pendências de campo que continuam abertas
+>
+> 1. **A 400D (`862798051583785`) aceita o `FILELIST` e nunca sobe a lista.** A
+>    hipótese é endereço de upload não configurado — o `CHECK#` agora responde
+>    isso (`UPLOAD:…`), e a câmera estava offline há 11 h na tentativa.
+> 2. **Não há comando verificado de PARAR o playback no JT/T** (`37378`): os
+>    nomes de campo continuam sem confirmação em equipamento real.
+> 3. **`CHECKVIDEO#` na linha JC400**: relatado do campo como não suportado e
+>    ausente da planilha `JC400 & JC261`; a tentativa de confirmar por medição
+>    caiu em fila offline nas duas 400AD, então segue sem medição própria.
 
 > ### 🔴 v4.9.32 — a trava do `UPDATE` desligava a atualização de 5 dos 6 modelos
 >

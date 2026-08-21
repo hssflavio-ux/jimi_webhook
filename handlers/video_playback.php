@@ -878,18 +878,21 @@ function fmtCompactUTC(d) {
  * servidor RTMP — o MESMO caminho do vídeo ao vivo, que já está provado.
  * JT/T: `37377` (0x9201), o playback do JT/T 1078, para o mesmo media server.
  *
- * 🔴 O CAMINHO DO PLAYBACK NÃO É O DO AO VIVO, e supor que fosse era o defeito
- * (v4.9.39). A doc oficial (docs.jimicloud.com §1.3.5, "Pull history stream")
- * publica o histórico SEM canal no caminho:
+ * 🔴 O CAMINHO DO PLAYBACK NÃO É O DO AO VIVO — e é DIFERENTE nos dois
+ * protocolos. Medido em 21/08/2026 perguntando ao próprio media server
+ * (ZLMediaKit, `/index/api/getMediaList`) enquanto o stream estava no ar:
  *
- *     RTMP  rtmp://<ip>:1936/live/<IMEI>
- *     FLV   http://<ip>:8881/live/<IMEI>.flv
- *     HLS   http://<ip>:8881/live/<IMEI>/hls.m3u8
+ *   JIMI  `REPLAYLIST` → app=`live`  stream=`<imei>`            → /live/<imei>.flv
+ *   JT/T  `37377`      → app=<canal> stream=`<imei>.history`    → /<canal>/<imei>.history.flv
  *
- * O AO VIVO, esse sim, publica em `live/<canal-base-0>/<imei>.flv` (medido em
- * 18/08/2026). A diferença tem lógica: no playback o canal já está escolhido
- * pelo NOME do arquivo que se manda no `REPLAYLIST` — não há o que separar por
- * caminho. Eu havia reaproveitado a URL do ao vivo, e o stream nunca chegava.
+ * O AO VIVO publica em `live/<canal-base-0>/<imei>` (JIMI) e `<canal>/<imei>`
+ * (JT/T), medidos em 18/08. Reaproveitar a URL do ao vivo faz o comando ser
+ * aceito, a câmera publicar, e o player buscar um endereço vazio — foi o
+ * defeito relatado nas duas famílias, uma de cada vez.
+ *
+ * A doc oficial (§1.3.5) descreve só o lado JIMI, e nele bate com a medição.
+ * Para o JT/T não há doc: o sufixo `.history` só apareceu perguntando ao
+ * servidor.
  *
  * ⚠️ `REPLAYLIST` aceita até OITO nomes separados por vírgula (§1.3.5), o que
  * permitiria emendar trechos numa reprodução só. Mandamos um — o bloco pedido.
@@ -935,11 +938,11 @@ function pbVerNaCamera(t, dur, canal) {
                 + 'A câmera recusou o pedido.<br><span style="font-size:12px;">' + (msg || 'sem resposta') + '</span></div>';
             return;
         }
-        // 🔴 SEM O CANAL no caminho — ver a nota acima. O canal do playback
-        // está no nome do arquivo, não na URL do stream.
+        // Ver a nota de pbVerNaCamera(): JIMI sem canal, JT/T com canal E com
+        // o sufixo `.history`. Os dois valores foram MEDIDOS no media server.
         var url = ehJimi
             ? streamBase + '/live/' + selImei + '.flv'
-            : streamBase + '/' + canal + '/' + selImei + '.flv';
+            : streamBase + '/' + canal + '/' + selImei + '.history.flv';
         pbAbrirStream(url, ph, v, msg);
     });
 }
@@ -954,6 +957,16 @@ function pbVerNaCamera(t, dur, canal) {
 function pbPararStream() {
     if (!pbStreamAtivo) return;
     pbStreamAtivo = false;
+    // ⚠️ SÓ O JIMI TEM PARADA AQUI. O par do JT/T é o `37378` (0x9202), e os
+    // nomes de campo que o hub da Jimi espera não constam de nenhuma fonte
+    // conferida — inventá-los produz comando aceito pelo gateway e ignorado
+    // pelo device, que é o defeito que este projeto já pagou três vezes.
+    // Tentativa de medição em 21/08/2026 ficou inconclusiva: o device não
+    // respondeu (virou comando offline).
+    //
+    // O impacto é pequeno e conhecido: o playback do JT/T **termina sozinho**
+    // ao fim da janela pedida — verificado no media server, os dois streams do
+    // teste sumiram sem ninguém mandar parar.
     if (selProtoOf(selImei) === 'JIMI') pbSendCmd(selImei, 128, 'REPLAYLIST,OFF');
 }
 var pbStreamAtivo = false;
@@ -971,6 +984,9 @@ function pbAbrirStream(url, ph, v, msgDevice) {
     pbPlayer.load();
     v.play().catch(function () {});
     v.addEventListener('playing', function () { chegou = true; ph.style.display = 'none'; v.style.display = 'block'; }, { once: true });
+    // 30 s, não 20: medido em 21/08/2026, a JIMI levou 12 s entre aceitar o
+    // `REPLAYLIST` e o stream aparecer no media server, e a JT/T levou 6 s.
+    // Um prazo apertado transforma câmera lenta em "falhou".
     setTimeout(function () {
         if (chegou) return;
         pbDestroyPlayer();
@@ -978,10 +994,10 @@ function pbAbrirStream(url, ph, v, msgDevice) {
         ph.style.display = '';
         ph.innerHTML = '<div style="text-align:center;color:var(--muted-soft);padding:16px;">'
             + 'A câmera aceitou o comando' + (msgDevice ? ' (“' + msgDevice + '”)' : '')
-            + ', mas o stream não chegou em 20 s.<br>'
+            + ', mas o stream não chegou em 30 s.<br>'
             + '<span style="font-size:12px;">Use <strong>Subir para o storage</strong> para receber o arquivo, '
             + 'ou verifique o servidor de mídia.</span></div>';
-    }, 20000);
+    }, 30000);
 }
 
 /**

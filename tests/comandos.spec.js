@@ -149,3 +149,197 @@ test.describe('Comandos — lista sensível ao modelo', () => {
         }
     });
 });
+
+test.describe('Comandos — o CHECK# e as sintaxes do JC371 (v4.9.40)', () => {
+
+    test('🔴 CHECK# não trava a seleção, CHECKVIDEO# trava', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+
+        const chk = cat.find(c => c.s === 'CHECK#');
+        expect(chk, 'CHECK# precisa estar no catálogo da tela').toBeTruthy();
+
+        // A exceção manual: medido respondendo em JC400AD, JC371 e JC182. Uma
+        // regeneração do catálogo por script a desfaz em silêncio, e o sintoma
+        // seria este — equipamento desabilitado numa consulta de LEITURA.
+        await authedPage.selectOption('#cmd-sel', 'T:CHECK#');
+        const presos = await authedPage.$$eval('.dev-row',
+            rows => rows.filter(r => r.querySelector('.dev-chk').disabled)
+                        .map(r => r.dataset.modelo));
+        expect(presos, 'CHECK# é leitura e vale na linha JC inteira').toEqual([]);
+
+        // ⚠️ O contraste é o ponto: mesma planilha, mesma família, e o
+        // CHECKVIDEO# NÃO vale na linha JC400. Se os dois soltassem a trava,
+        // o teste acima passaria por vacuidade — a trava estaria quebrada.
+        const cv = cat.find(c => c.s === 'CHECKVIDEO#');
+        expect(cv, 'CHECKVIDEO# precisa estar no catálogo').toBeTruthy();
+        expect(cv.u, 'CHECKVIDEO# não é universal').toBeFalsy();
+
+        const modelos = await authedPage.$$eval('.dev-row',
+            rows => [...new Set(rows.map(r => r.dataset.modelo))]);
+        test.skip(!modelos.some(m => m && m !== 'JC371'),
+                  'este cliente só tem JC371; a trava não tem o que segurar');
+
+        await authedPage.selectOption('#cmd-sel', 'T:CHECKVIDEO#');
+        const estado = await authedPage.$$eval('.dev-row', rows => rows.map(r => ({
+            modelo: r.dataset.modelo,
+            desabilitado: r.querySelector('.dev-chk').disabled,
+        })));
+        for (const d of estado) {
+            expect(d.desabilitado, `${d.modelo} para CHECKVIDEO#`).toBe(d.modelo !== 'JC371');
+        }
+        await expect(authedPage.locator('#lock-note')).toBeVisible();
+    });
+
+    test('CHECK# é oferecido como leitura, com a procedência à vista', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const chk = cat.find(c => c.s === 'CHECK#');
+        expect(chk.q, 'CHECK# é consulta de si mesmo').toBe('CHECK#');
+        expect(chk.qr, 'a procedência é medição em câmera real').toContain('medido');
+
+        await authedPage.selectOption('#cmd-sel', 'T:CHECK#');
+        // Sendo consulta sem parâmetro, não pode pedir campo nenhum ao operador
+        await expect(authedPage.locator('.p-in')).toHaveCount(0);
+        const preview = await authedPage.locator('#p-preview').textContent();
+        expect(preview.trim()).toBe('CHECK#');
+    });
+
+    test('🔴 as duas aridades do TIMER convivem, e a nova fica presa ao JC371', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+
+        // Comparar por nome-base esconderia isto: são duas entradas do MESMO
+        // comando, com números de campos diferentes.
+        const timers = cat.filter(c => c.c === 'TIMER');
+        expect(timers.length, 'TIMER tem duas sintaxes catalogadas').toBeGreaterThanOrEqual(2);
+
+        const umCampo = timers.find(c => c.p.length === 1);
+        const doisCampos = timers.find(c => c.p.length === 2);
+        expect(umCampo, 'a sintaxe de um campo, da planilha do JC371').toBeTruthy();
+        expect(doisCampos, 'a sintaxe de dois campos, universal').toBeTruthy();
+        expect(umCampo.u, 'a variante nasce presa ao modelo da planilha').toBeFalsy();
+        expect(doisCampos.u, 'a antiga continua universal').toBeTruthy();
+
+        // Só a primeira sintaxe carrega a consulta — senão a tela ofereceria
+        // dois botões idênticos de "ler o valor atual".
+        expect(umCampo.q, 'variante de aridade não duplica a consulta').toBeFalsy();
+
+        await authedPage.selectOption('#cmd-sel', 'T:' + umCampo.s);
+        await expect(authedPage.locator('.p-in')).toHaveCount(1);
+        await authedPage.locator('.p-in').first().fill('20');
+        expect((await authedPage.locator('#p-preview').textContent()).trim()).toBe('TIMER,20#');
+    });
+
+    test('as 18 sintaxes da planilha do JC371 chegaram à tela', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const esperadas = [
+            'CHECK#', 'CHECKVIDEO#', 'STATUSVIDEO#', 'SENSORSET,A,B,C,D#',
+            'SHUTDOWNTIME,A#', 'VIDEORSL_SUB,A,B,C,D,E#', 'VIDETIMEZONE,A,B,C#',
+            'KEYFUN,A,B#', 'APN,A,B,C,D#', 'SERVER,A,B,C,D,E,F#', 'BCD,A,B#',
+            'LOG,ALL#', 'RECORDAUDIO,A,B#', 'RECORDAUDIO_SUB,A,B#',
+            'RATATION,A,B,C,D#', 'PICTIMER,A,B,C,D#', 'TIMER,A#', 'ANGLEREP,A#',
+        ];
+        const presentes = new Set(cat.map(c => c.s));
+        expect(esperadas.filter(s => !presentes.has(s))).toEqual([]);
+
+        // A tela agrupa por categoria pelo mapa de rótulos; categoria fora do
+        // mapa cairia no valor cru (`manutencao` em vez de "Manutenção e
+        // diagnóstico"). Toda entrada nova precisa cair num grupo conhecido.
+        const rotulos = await authedPage.evaluate(() => Object.keys(window.ROTCAT || {}));
+        const forasteiras = [...new Set(cat.map(c => c.k))].filter(k => !rotulos.includes(k));
+        expect(forasteiras, 'categoria sem rótulo na tela').toEqual([]);
+    });
+
+    test('LOG,ALL# é comando pronto, não um campo para preencher', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        // `ALL` é palavra literal do comando, não placeholder — pedir que o
+        // operador a digite seria o erro que `template: false` evita.
+        await authedPage.selectOption('#cmd-sel', 'T:LOG,ALL#');
+        await expect(authedPage.locator('.p-in')).toHaveCount(0);
+        expect((await authedPage.locator('#p-preview').textContent()).trim()).toBe('LOG,ALL#');
+    });
+});
+
+test.describe('Comandos — placeholder é campo em branco, não formato (v4.9.40)', () => {
+
+    /** Marca o primeiro equipamento habilitado, para o botão poder ficar pronto. */
+    async function marcarUm(page) {
+        const chk = page.locator('.dev-row .dev-chk:not([disabled])').first();
+        await chk.check();
+    }
+
+    test('🔴 valor legítimo de UMA LETRA não é lido como placeholder', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const vtz = cat.find(c => c.s === 'VIDETIMEZONE,A,B,C#');
+        expect(vtz, 'a entrada da planilha JC371 A006').toBeTruthy();
+
+        // A guarda antiga casava `,[A-Z],` no texto montado e recusava o `W` —
+        // oeste de GMT, o valor do exemplo OFICIAL do próprio comando.
+        await authedPage.selectOption('#cmd-sel', 'T:VIDETIMEZONE,A,B,C#');
+        const campos = authedPage.locator('.p-in');
+        await expect(campos).toHaveCount(3);
+        await campos.nth(0).fill('W');
+        await campos.nth(1).fill('3');
+        await campos.nth(2).fill('0');
+
+        expect((await authedPage.locator('#p-preview').textContent()).trim())
+            .toBe('VIDETIMEZONE,W,3,0#');
+
+        // A pergunta exata, no ponto exato: para a tela, este `W` esta
+        // preenchido. E o predicado que a guarda antiga nao tinha.
+        const bloqueia = await authedPage.evaluate(() => faltaParametro());
+        expect(bloqueia, 'W e valor, nao placeholder').toBe(false);
+
+        await marcarUm(authedPage);
+        const btn = authedPage.locator('#btn-enviar');
+        await expect(btn).toBeEnabled();
+        await expect(btn).toContainText('Enviar para');
+    });
+
+    test('🔴 campo em branco desabilita o botão, não só recusa depois do clique', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const comParam = cat.find(c => c.t && c.p && c.p.length >= 2);
+        test.skip(!comParam, 'catálogo sem comando com 2+ parâmetros');
+
+        await authedPage.selectOption('#cmd-sel', 'T:' + comParam.s);
+        await authedPage.locator('.p-in').first().fill('1');   // demais em branco
+        await marcarUm(authedPage);
+
+        const btn = authedPage.locator('#btn-enviar');
+        await expect(btn).toBeDisabled();
+        await expect(btn).toContainText('Preencha');
+    });
+
+    test('comando pronto com valores literais é enviável', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const vtz = cat.find(c => c.s === 'VIDEOTIMEZONE,W,3,0#');
+        expect(vtz, 'a entrada cuja CHAVE é o exemplo oficial').toBeTruthy();
+        // 🔴 Estava marcada como template sem nenhum parâmetro declarado: a tela
+        // não desenhava campo, o preview ficava com a string crua e a guarda por
+        // formato recusava o `W`. Comando impossível de enviar pela tela.
+        expect(vtz.t, 'não é molde, é comando pronto').toBeFalsy();
+
+        await authedPage.selectOption('#cmd-sel', 'T:VIDEOTIMEZONE,W,3,0#');
+        await expect(authedPage.locator('.p-in')).toHaveCount(0);
+        expect((await authedPage.locator('#p-preview').textContent()).trim())
+            .toBe('VIDEOTIMEZONE,W,3,0#');
+
+        await marcarUm(authedPage);
+        await expect(authedPage.locator('#btn-enviar')).toBeEnabled();
+    });
+
+    test('nenhum comando do catálogo pede campo que a tela não desenha', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        // ⚠️ `template: true` com `params: []` é a combinação que criava o
+        // buraco: a tela não desenha campo, o preview sai com o placeholder cru
+        // e o operador manda a letra para o equipamento. Eram sete entradas.
+        const mudas = cat.filter(c => c.t && (!c.p || c.p.length === 0)).map(c => c.s);
+        expect(mudas).toEqual([]);
+    });
+});
