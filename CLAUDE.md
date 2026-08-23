@@ -16,7 +16,7 @@ PHP IoT gateway that receives GPS/heartbeat/alarm/event webhooks from the Jimi I
 
 Official API reference: https://docs.jimicloud.com/integration/integration.html
 
-**Read `STATUS.md` before continuing development** — it tracks current bugs, fixed issues, pending work, and the YUV-parity roadmap status. `AGENTS.md` holds the same architectural detail as this file with the full route/table tables.
+**Read `STATUS.md` before continuing development** — it tracks current bugs, fixed issues, pending work, and the YUV-parity roadmap status. `AGENTS.md` holds the same architectural detail as this file with the full route/table tables. Only the 3 most recent dated session entries stay inline at the top of `STATUS.md`; older ones are archived in `docs/status-history/STATUS_ARCHIVE.md` (skill `status-archive`) — check there before concluding some past decision or root-cause "isn't documented".
 
 ## Ambientes — DOIS servidores, e a doc antiga trocava os nomes
 

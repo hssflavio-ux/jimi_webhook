@@ -62,4 +62,7 @@ Thumbs.db
 # Ferramentas de IA locais (estado de sessão, planos, configurações)
 .opencode/
 .claude/
+# Framework de agentes externo (skills/workflows genéricos, memória de sessão)
+# — não faz parte da aplicação, ver CLAUDE.md §"Not part of the application".
+.agents/
 User Manual.pdf
