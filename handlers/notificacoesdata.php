@@ -75,15 +75,24 @@ try {
     $countStmt->execute($params);
     $unread = (int)$countStmt->fetchColumn();
 
+    // Lida some da lista à MEIA-NOITE BRT do dia em que foi lida (v4.10.5) —
+    // "sai da lista às 23:59" na prática é "não sobrevive à virada do dia
+    // BRT", já que não há corte no meio do dia sem um cron dedicado. Filtra
+    // só esta CONSULTA (o sino), nunca a tabela: o histórico de 30 dias que
+    // includes/auth.php::auth_cleanup() mantém continua intacto para quem
+    // precisar auditar depois.
+    [$todayStartUtc, ] = brt_day_range_to_utc(brt_today(), brt_today());
+    $listParams = $params;
+    $listParams[':today_start'] = $todayStartUtc;
     $listStmt = $db->prepare(
         "SELECT n.id, n.kind, n.severity, n.title, n.body, n.link_url,
                 n.want_popup, n.want_sound, n.is_read, n.created_at
          FROM notifications n
-         $scope
+         $scope AND (n.is_read = 0 OR n.read_at >= :today_start)
          ORDER BY n.created_at DESC, n.id DESC
          LIMIT 20"
     );
-    $listStmt->execute($params);
+    $listStmt->execute($listParams);
     $rows = $listStmt->fetchAll();
 
     $items = [];

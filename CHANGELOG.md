@@ -17,6 +17,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Changed
 - `handlers/ativos.php` e `handlers/ativos_novo.php` ganham a coluna/seletor "Veículo".
 
+## [Unreleased] — 4.10.5
+
+**Correção pedida pelo dono do produto: notificação lida deve sair da lista do sino ao final do dia.**
+
+### Fixed
+- **`handlers/notificacoesdata.php`**: a consulta do sino não tinha corte nenhum — uma notificação lida ficava na lista até ser empurrada por 20 mais novas, às vezes por dias. Agora uma notificação **lida** só aparece na lista enquanto `read_at` estiver dentro do dia BRT corrente; na virada da meia-noite ela some sozinha no próximo polling (30s) ou na próxima vez que o sino for aberto — sem precisar de cron. **Não lidas continuam sempre visíveis**, independente da data. O filtro é só na consulta do sino: a linha continua no banco, dentro da janela de 30/90 dias que `includes/auth.php::auth_cleanup()` já mantinha antes desta versão — nada mudou na retenção de dados, só no que aparece na lista.
+
+### Verificação
+- Testado com três notificações semeadas (não lida / lida há 2 dias / lida agora): a lida há 2 dias ficou de fora tanto na resposta JSON de `/notificacoesdata` quanto no dropdown real do sino no navegador; as outras duas apareceram normalmente; o contador de não lidas não foi afetado; marcar uma notificação como lida agora e reconsultar a lista confirmou que ela continua visível no mesmo dia.
+
 ## [Unreleased] — 4.10.4
 
 **Falha de lógica reportada pelo dono do produto: chip é 1:1 com equipamento, mas nada garantia isso — e o cadastro pedia o vínculo na direção errada.**
