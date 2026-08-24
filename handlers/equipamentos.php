@@ -91,9 +91,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     else {
     csrf_verify();
     $imei = trim($_POST['imei'] ?? '');
+    // "Nome" é só um rótulo interno de estoque (ex.: "Câmera JC400AD #12") —
+    // desde a Fase 1 do fluxo chip→câmera→veículo, "Placa" pertence ao
+    // VEÍCULO (/ativos), não à câmera. Opcional; sem ele, cai no IMEI (mesmo
+    // fallback do import em lote).
     $deviceName = trim($_POST['device_name'] ?? '');
     $modelId = !empty($_POST['device_model_id']) ? (int)$_POST['device_model_id'] : null;
-    $simImei = trim($_POST['sim_imei'] ?? '');
+    $simCardId = (int)($_POST['sim_card_id'] ?? 0) ?: null;
     $peripherals = $_POST['peripherals'] ?? [];
     $rotation = (int)($_POST['streaming_rotation'] ?? 0);
     $watermark = !empty($_POST['streaming_watermark']) ? 1 : 0;
@@ -105,19 +109,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ? (int)$_POST['speed_limit_kmh'] : null;
     $isActive = !empty($_POST['is_active']) ? 1 : ((($_POST['action'] ?? '') === 'create') ? 1 : 0);
     $cameraCount = (int)($_POST['camera_count'] ?? 1);
+    $chipWarning = null;
 
     // Dono do equipamento: o <select> da tela para admin/revendedor, o cliente da
     // sessão para os demais. NULL = não dá para resolver → recusa (o cadastro
     // seguia com `?? 1`, gravando no tenant errado, ou com NULL, criando órfão).
     $ownerId = resolve_owner_customer_id($_POST['customer_id'] ?? null, $isAdmin, $customerId);
 
-    if (empty($imei) || empty($deviceName)) {
-        $message = 'IMEI e Nome do dispositivo são obrigatórios.';
+    if (empty($imei)) {
+        $message = 'IMEI é obrigatório.';
         $messageType = 'error';
     } elseif ($ownerId === null) {
         $message = 'Selecione o cliente do equipamento. Sua sessão está sem cliente definido — salvar assim deixaria o equipamento sem vínculo e invisível nas telas.';
         $messageType = 'error';
     } else {
+        $deviceName = $deviceName ?: $imei;
         try {
             $isNew = ($_POST['action'] ?? '') === 'create';
             if ($isNew) {
@@ -140,7 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':spd' => $speedLimit,
                         ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
                     ]);
-                    $message = 'Equipamento cadastrado com sucesso.';
+                    // Câmera recém-criada nunca tem instalação — o vínculo de
+                    // chip aqui é sempre seguro (não há cascade de desativação
+                    // a considerar numa linha que acabou de nascer).
+                    $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $ownerId);
+                    $message = 'Equipamento cadastrado com sucesso.' . ($chipWarning ? ' ' . $chipWarning : '');
                     $messageType = 'success';
                 }
             } else {
@@ -160,35 +170,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $in = implode(',', array_map('intval', $allowedIds));
                     $scopeSql = $in !== '' ? " AND customer_id IN ($in)" : ' AND 1 = 0';
                 }
-                $stmt = $db->prepare("
-                    UPDATE devices SET device_name = :name, customer_id = :cid, device_model_id = :mid, camera_count = :cc,
-                        streaming_rotation = :rot, streaming_watermark = :wm,
-                        firmware_version = :fw, branch_id = :bid, speed_limit_kmh = :spd,
-                        is_active = :act, peripherals = :per
-                    WHERE imei = :imei" . $scopeSql . "
+
+                // Só desativa (is_active 1→0) câmera SEM instalação aberta — é
+                // o mesmo princípio já aplicado a chip em chips.php. Desativar
+                // em uso deixaria o veículo com uma câmera "fantasma".
+                $wasActive = (bool)$db->query(
+                    "SELECT is_active FROM devices WHERE imei = " . $db->quote($editImei)
+                )->fetchColumn();
+                $installed = $db->prepare("
+                    SELECT 1 FROM device_installations di
+                    JOIN devices d ON d.id = di.device_id
+                    WHERE d.imei = ? AND di.removed_at IS NULL
                 ");
-                $stmt->execute(array_merge([
-                    ':name' => $deviceName, ':cid' => $ownerId, ':mid' => $modelId, ':cc' => $cameraCount,
-                    ':rot' => $rotation, ':wm' => $watermark, ':fw' => $firmware ?: null,
-                    ':bid' => $branchId, ':spd' => $speedLimit,
-                    ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
-                    ':imei' => $editImei,
-                ], $scopeParams));
-                if ($stmt->rowCount() === 0) {
-                    // 0 linhas = fora do escopo, ou nada mudou. Só o primeiro é erro,
-                    // mas confundir "não é seu" com "salvo" é pior que o falso alarme.
-                    $chk = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei" . $scopeSql);
-                    $chk->execute(array_merge([':imei' => $editImei], $scopeParams));
-                    if ((int)$chk->fetchColumn() === 0) {
-                        $message = 'Equipamento não encontrado no seu escopo de cliente.';
-                        $messageType = 'error';
+                $installed->execute([$editImei]);
+                $isInstalled = (bool)$installed->fetchColumn();
+
+                if ($wasActive && !$isActive && $isInstalled) {
+                    $message = 'Esta câmera está instalada num veículo — desinstale-a em /ativos antes de desativar.';
+                    $messageType = 'error';
+                } else {
+                    // Instalada: dono deriva do veículo (readonly na tela) —
+                    // o <select> de cliente do form vem desabilitado nesse
+                    // caso e o hidden carrega o valor atual, então $ownerId
+                    // já é o certo; não sobrescrevemos aqui.
+                    $stmt = $db->prepare("
+                        UPDATE devices SET device_name = :name, customer_id = :cid, device_model_id = :mid, camera_count = :cc,
+                            streaming_rotation = :rot, streaming_watermark = :wm,
+                            firmware_version = :fw, branch_id = :bid, speed_limit_kmh = :spd,
+                            is_active = :act, peripherals = :per
+                        WHERE imei = :imei" . $scopeSql . "
+                    ");
+                    $stmt->execute(array_merge([
+                        ':name' => $deviceName, ':cid' => $ownerId, ':mid' => $modelId, ':cc' => $cameraCount,
+                        ':rot' => $rotation, ':wm' => $watermark, ':fw' => $firmware ?: null,
+                        ':bid' => $branchId, ':spd' => $speedLimit,
+                        ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
+                        ':imei' => $editImei,
+                    ], $scopeParams));
+                    if ($stmt->rowCount() === 0) {
+                        // 0 linhas = fora do escopo, ou nada mudou. Só o primeiro é erro,
+                        // mas confundir "não é seu" com "salvo" é pior que o falso alarme.
+                        $chk = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei" . $scopeSql);
+                        $chk->execute(array_merge([':imei' => $editImei], $scopeParams));
+                        if ((int)$chk->fetchColumn() === 0) {
+                            $message = 'Equipamento não encontrado no seu escopo de cliente.';
+                            $messageType = 'error';
+                        } else {
+                            $message = 'Equipamento atualizado.';
+                            $messageType = 'success';
+                        }
                     } else {
-                        $message = 'Equipamento atualizado.';
+                        // Desativou agora (estava ativa, câmera livre, confirmado
+                        // acima): libera o chip — cascade pedido pelo dono do
+                        // produto ("desativar a câmera libera o chip").
+                        if ($wasActive && !$isActive) {
+                            link_sim_card_to_device($db, null, $editImei, $ownerId);
+                        } else {
+                            $chipWarning = link_sim_card_to_device($db, $simCardId, $editImei, $ownerId);
+                        }
+                        $message = 'Equipamento atualizado.' . ($chipWarning ? ' ' . $chipWarning : '');
                         $messageType = 'success';
                     }
-                } else {
-                    $message = 'Equipamento atualizado.';
-                    $messageType = 'success';
                 }
             }
         } catch (Exception $e) {
@@ -385,6 +427,32 @@ if ($action === 'editar' && $editImei) {
     $editDevice = $stmt->fetch();
 }
 
+// Instalação corrente (Fase 1 do fluxo chip→câmera→veículo): trava a
+// desativação e faz o campo "Cliente" virar somente leitura na tela (o dono
+// passa a derivar do veículo — ver install_device_on_vehicle()).
+$editInstalled = $editDevice ? get_open_installation_for_device($db, (int)$editDevice['id']) : null;
+
+// Chips livres (mesmo padrão de /ativos/novo) — inclui o já vinculado a esta
+// câmera na edição, senão ele "some" da lista ao reabrir o formulário.
+$currentChipImei = $editDevice['imei'] ?? '';
+$chipWhere = $isAdmin ? '1=1' : 's.customer_id = :cid';
+$chipParams = $isAdmin ? [] : [':cid' => $customerId];
+$chipParams[':cur'] = $currentChipImei;
+$chipsStmt = $db->prepare("
+    SELECT s.id, s.carrier, s.msisdn, s.iccid, c.name AS customer_name
+    FROM sim_cards s LEFT JOIN customers c ON c.id = s.customer_id
+    WHERE $chipWhere AND s.is_active = 1 AND (s.imei IS NULL OR s.imei = '' OR s.imei = :cur)
+    ORDER BY s.carrier, s.msisdn
+");
+$chipsStmt->execute($chipParams);
+$freeChips = $chipsStmt->fetchAll(PDO::FETCH_ASSOC);
+$currentSimCardId = null;
+if ($currentChipImei !== '') {
+    $cc = $db->prepare("SELECT id FROM sim_cards WHERE imei = ?");
+    $cc->execute([$currentChipImei]);
+    $currentSimCardId = $cc->fetchColumn() ?: null;
+}
+
 $isForm = ($action === 'novo' || ($action === 'editar' && $editDevice));
 
 $page_title = 'Equipamentos';
@@ -425,12 +493,43 @@ require_once __DIR__ . '/../web/layout_base.php';
                        class="text-mono" style="font-family:'JetBrains Mono',monospace;">
             </div>
             <div class="form-group">
-                <label>Placa *</label>
-                <input type="text" name="device_name" value="<?= htmlspecialchars($editDevice['device_name'] ?? '') ?>" required
-                       placeholder="Ex: ABC1D23, Frota 07, Câmera Frontal Ônibus 12">
+                <label>Nome (rótulo interno)</label>
+                <input type="text" name="device_name" value="<?= htmlspecialchars($editDevice['device_name'] ?? '') ?>"
+                       placeholder="Ex: Câmera JC400AD #12 — opcional, cai no IMEI se vazio">
                 <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
-                    Texto livre: placa, número de frota ou apelido — o sistema não exige formato.
-                    É por este texto que o veículo aparece em todas as telas.
+                    Identifica a câmera no estoque — não é a placa do veículo. A placa é
+                    cadastrada em <a href="/ativos">Ativos</a>, ao instalar esta câmera num veículo.
+                </small>
+            </div>
+        </div>
+
+        <?php if ($editInstalled): ?>
+        <div class="card mb-16" style="border-color:#fdf3e8;background:#fffaf3;font-size:13px;">
+            Instalada no veículo <strong><?= htmlspecialchars($editInstalled['plate']) ?></strong> desde
+            <?= htmlspecialchars(fmt_brt($editInstalled['installed_at'])) ?>.
+            Para trocar o dono ou desativar esta câmera, desinstale-a primeiro em
+            <a href="/ativos">Ativos</a>.
+        </div>
+        <?php endif; ?>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="sim_card_id">Chip (SIM)</label>
+                <select id="sim_card_id" name="sim_card_id">
+                    <option value="">— Nenhum —</option>
+                    <?php foreach ($freeChips as $chip):
+                        $chipLabel = chip_label($chip);
+                        if ($isAdmin && $chip['customer_name']) $chipLabel .= ' (' . $chip['customer_name'] . ')';
+                    ?>
+                    <option value="<?= $chip['id'] ?>" <?= (string)$currentSimCardId === (string)$chip['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($chipLabel) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Só aparecem chips ativos ainda sem câmera vinculada (e o já vinculado a
+                    esta, se houver).
+                    <?= empty($freeChips) ? 'Nenhum chip livre agora — cadastre um em <a href="/chips">Chips</a>.' : '' ?>
                 </small>
             </div>
         </div>
@@ -527,7 +626,16 @@ require_once __DIR__ . '/../web/layout_base.php';
         <div class="form-row">
             <div class="form-group">
                 <label>Cliente <?= $isAdmin ? '*' : '' ?></label>
-                <?php if ($isAdmin): ?>
+                <?php if ($editInstalled): ?>
+                <?php // Instalada: o dono deriva do veículo (install_device_on_vehicle()
+                      // sincroniza isto) — editável só desinstalando primeiro. ?>
+                <input type="text" value="<?= htmlspecialchars($editDevice['customer_name'] ?? '—') ?>" readonly
+                       style="background:var(--canvas-soft);">
+                <input type="hidden" name="customer_id" value="<?= (int)$editDevice['customer_id'] ?>">
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);">
+                    Derivado do veículo instalado — desinstale em /ativos para trocar.
+                </small>
+                <?php elseif ($isAdmin): ?>
                 <?php
                 // Pré-seleção: o dono atual (edição) → o filtro da grade → o da sessão.
                 // Sem seleção o POST é RECUSADO: era daqui que saía equipamento órfão.
@@ -552,11 +660,19 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end;">
+                <?php if ($editInstalled): ?>
+                <label style="display:flex;align-items:center;gap:8px;color:var(--muted);" title="Desinstale a câmera do veículo em /ativos antes de desativar.">
+                    <input type="checkbox" checked disabled style="width:auto;">
+                    Equipamento Ativo (instalada — desinstale para desativar)
+                </label>
+                <input type="hidden" name="is_active" value="1">
+                <?php else: ?>
                 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                     <input type="checkbox" name="is_active" value="1"
                            <?= ($editDevice ? ($editDevice['is_active'] ?? 1) : 1) ? 'checked' : '' ?> style="width:auto;">
                     Equipamento Ativo
                 </label>
+                <?php endif; ?>
             </div>
         </div>
 

@@ -585,6 +585,152 @@ function link_sim_card_to_device(PDO $db, ?int $simCardId, string $imei, int $ow
 }
 
 /**
+ * Instalação corrente (aberta) de um veículo, se houver.
+ *
+ * @param PDO $db
+ * @param int $vehicleId
+ * @returns array|null Linha de `device_installations` + `devices.imei`/`device_name`, ou null se o veículo não tem câmera instalada
+ */
+function get_open_installation_for_vehicle(PDO $db, int $vehicleId): ?array
+{
+    $stmt = $db->prepare("
+        SELECT di.*, d.imei, d.device_name AS device_label
+        FROM device_installations di
+        JOIN devices d ON d.id = di.device_id
+        WHERE di.vehicle_id = ? AND di.removed_at IS NULL
+        LIMIT 1
+    ");
+    $stmt->execute([$vehicleId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+/**
+ * Instalação corrente (aberta) de uma câmera, se houver.
+ *
+ * @param PDO $db
+ * @param int $deviceId
+ * @returns array|null Linha de `device_installations` + `vehicles.plate`, ou null se a câmera está livre
+ */
+function get_open_installation_for_device(PDO $db, int $deviceId): ?array
+{
+    $stmt = $db->prepare("
+        SELECT di.*, v.plate
+        FROM device_installations di
+        JOIN vehicles v ON v.id = di.vehicle_id
+        WHERE di.device_id = ? AND di.removed_at IS NULL
+        LIMIT 1
+    ");
+    $stmt->execute([$deviceId]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+/**
+ * Instala uma câmera livre (com chip) num veículo sem câmera. Ponto único de
+ * escrita em `device_installations` — nenhum handler insere nela direto.
+ *
+ * Exige câmera com chip vinculado (`sim_cards.imei` apontando pra ela) porque
+ * essa é a ordem do fluxo: chip → câmera → veículo, nunca ao contrário.
+ * Sincroniza `devices.customer_id` com o dono do veículo — é o que mantém as
+ * dezenas de telas hoje escopadas por `devices.customer_id` funcionando sem
+ * reescrita nesta Fase 1 (ver PLANO — Fase 2 troca isso por escopo por
+ * período, ainda não implementada).
+ *
+ * @param PDO      $db
+ * @param int      $deviceId
+ * @param int      $vehicleId
+ * @param int|null $actorUserId
+ * @returns string|null Mensagem de erro, ou null em sucesso
+ */
+function install_device_on_vehicle(PDO $db, int $deviceId, int $vehicleId, ?int $actorUserId): ?string
+{
+    $db->beginTransaction();
+    try {
+        $dev = $db->prepare("SELECT d.id, d.imei, d.is_active, s.imei AS chip_imei
+                              FROM devices d
+                              LEFT JOIN sim_cards s ON s.imei = d.imei
+                              WHERE d.id = ? FOR UPDATE");
+        $dev->execute([$deviceId]);
+        $dev = $dev->fetch(PDO::FETCH_ASSOC);
+        if (!$dev || !$dev['is_active']) {
+            $db->rollBack();
+            return 'Câmera não encontrada ou inativa.';
+        }
+        if (empty($dev['chip_imei'])) {
+            $db->rollBack();
+            return 'Esta câmera ainda não tem chip vinculado. Vincule um chip em /equipamentos antes de instalar num veículo.';
+        }
+
+        $vehicle = $db->prepare("SELECT id, customer_id, vehicle_type, is_active FROM vehicles WHERE id = ? FOR UPDATE");
+        $vehicle->execute([$vehicleId]);
+        $vehicle = $vehicle->fetch(PDO::FETCH_ASSOC);
+        if (!$vehicle || !$vehicle['is_active']) {
+            $db->rollBack();
+            return 'Veículo não encontrado ou inativo.';
+        }
+
+        $openDev = $db->prepare("SELECT id FROM device_installations WHERE device_id = ? AND removed_at IS NULL FOR UPDATE");
+        $openDev->execute([$deviceId]);
+        if ($openDev->fetch()) {
+            $db->rollBack();
+            return 'Esta câmera já está instalada em outro veículo — desinstale-a primeiro.';
+        }
+
+        $openVeh = $db->prepare("SELECT id FROM device_installations WHERE vehicle_id = ? AND removed_at IS NULL FOR UPDATE");
+        $openVeh->execute([$vehicleId]);
+        if ($openVeh->fetch()) {
+            $db->rollBack();
+            return 'Este veículo já tem uma câmera instalada — troque ou desinstale primeiro.';
+        }
+
+        $ins = $db->prepare("
+            INSERT INTO device_installations (device_id, vehicle_id, customer_id, installed_at, installed_by)
+            VALUES (?, ?, ?, NOW(), ?)
+        ");
+        $ins->execute([$deviceId, $vehicleId, $vehicle['customer_id'], $actorUserId]);
+
+        // `devices.vehicle_type` continua sendo a fonte que /rastreamento e o
+        // relatório de deslocamento leem (não reescritos nesta fase) — sem
+        // sincronizar aqui, todo veículo cadastrado a partir da v4.11.0
+        // perderia o ícone no mapa em silêncio assim que instalasse uma
+        // câmera, porque o tipo passou a morar em `vehicles`.
+        $db->prepare("UPDATE devices SET customer_id = ?, vehicle_type = ? WHERE id = ?")
+           ->execute([$vehicle['customer_id'], $vehicle['vehicle_type'], $deviceId]);
+
+        $db->commit();
+        return null;
+    } catch (Exception $e) {
+        $db->rollBack();
+        return 'Erro ao instalar câmera: ' . $e->getMessage();
+    }
+}
+
+/**
+ * Desinstala a câmera corrente de um veículo (fecha a instalação aberta). A
+ * câmera fica livre para outro veículo; o chip continua com ela — só a
+ * desativação da câmera libera o chip (ver `equipamentos.php`).
+ *
+ * @param PDO      $db
+ * @param int      $vehicleId
+ * @param int|null $actorUserId
+ * @returns string|null Mensagem de erro, ou null em sucesso
+ */
+function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserId): ?string
+{
+    $stmt = $db->prepare("
+        UPDATE device_installations
+        SET removed_at = NOW(), removed_by = ?
+        WHERE vehicle_id = ? AND removed_at IS NULL
+    ");
+    $stmt->execute([$actorUserId, $vehicleId]);
+    if ($stmt->rowCount() === 0) {
+        return 'Este veículo não tem câmera instalada.';
+    }
+    return null;
+}
+
+/**
  * Rótulo de exibição de um chip nos seletores de `/ativos` e `/ativos/novo`.
  *
  * @param array $chip Linha de `sim_cards` (carrier, msisdn, iccid)

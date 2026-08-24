@@ -1,19 +1,25 @@
 <?php
 /**
- * JIMI Webhook System — Detalhe do Ativo v3.1.0
- * Endpoint: /ativos/{imei}
+ * JIMI Webhook System — Detalhe do Ativo (Veículo) v4.11.0
+ * Endpoint: /ativos/{vehicle_id}
  *
  * 9 abas com sidebar lateral: Visão Geral, Ao Vivo, Trajetos,
- * Alertas, Log, Relatórios, Vídeo, Comandos, Configurações.
+ * Alertas, Log, Relatórios, Vídeo, Comandos, Configurações — todas
+ * IMEI-cêntricas por baixo (telemetria/comandos são por câmera, não por
+ * veículo). O que mudou na v4.11.0: a URL e a identidade da página são do
+ * VEÍCULO — o IMEI usado nas abas é resolvido pela instalação ABERTA
+ * (device_installations), e pode não existir (veículo sem câmera).
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_once __DIR__ . '/../includes/command_response.php'; // leitura única da resposta de comando
 require_once __DIR__ . '/../includes/maintenance.php'; // latest_odometer()
 require_login();
 
 $customer_id = get_customer_id();
-$imei = $_GET['imei'] ?? '';
+$rawId = trim($_GET['vehicle_id'] ?? '');
+$vehicleId = ctype_digit($rawId) ? (int)$rawId : 0;
 $tab  = $_GET['tab'] ?? 'visao-geral';
 
 $db = Database::getInstance()->getConnection();
@@ -28,42 +34,110 @@ function fmt_brt_dt($dt) {
     return $d->format('d/m/Y H:i:s');
 }
 
-// Carregar dados do ativo
-try {
-    $asset = $db->prepare("
-        SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
-               s.is_online, s.total_distance_km AS total_distance, s.total_gps_count, s.total_alarm_count,
-               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-               COALESCE(dm.protocol, '') AS protocol
-        FROM devices d
-        LEFT JOIN device_statistics s ON d.imei = s.imei
-        LEFT JOIN device_models dm ON d.device_model_id = dm.id
-        WHERE d.imei = ? AND d.customer_id = ?
+$vehicle = null;
+if ($vehicleId > 0) {
+    $vehicleStmt = $db->prepare("SELECT * FROM vehicles WHERE id = ? AND customer_id = ?");
+    $vehicleStmt->execute([$vehicleId, $customer_id]);
+    $vehicle = $vehicleStmt->fetch(PDO::FETCH_ASSOC);
+}
+
+// Compatibilidade: links publicados antes da v4.11.0 (relatórios, /chips,
+// /parametros) apontam pro IMEI da câmera, não pro id do veículo — a URL
+// mudou de identidade nesta versão (ver router.php). Resolve pelo veículo que
+// tem essa câmera instalada AGORA e redireciona pra URL canônica, em vez de
+// quebrar todo link publicado antes.
+if (!$vehicle && preg_match('/^\d{14,17}$/', $rawId)) {
+    $byImei = $db->prepare("
+        SELECT v.id FROM vehicles v
+        JOIN device_installations di ON di.vehicle_id = v.id AND di.removed_at IS NULL
+        JOIN devices d ON d.id = di.device_id
+        WHERE d.imei = ? AND v.customer_id = ?
     ");
-    $asset->execute([$imei, $customer_id]);
-    $asset = $asset->fetch(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-    $asset = $db->prepare("
-        SELECT d.*, NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status,
-               NULL as is_online, NULL as total_distance, NULL as total_gps_count, NULL as total_alarm_count,
-               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-               COALESCE(dm.protocol, '') AS protocol
-        FROM devices d
-        LEFT JOIN device_models dm ON d.device_model_id = dm.id
-        WHERE d.imei = ? AND d.customer_id = ?
-    ");
-    $asset->execute([$imei, $customer_id]);
-    $asset = $asset->fetch(PDO::FETCH_ASSOC);
+    $byImei->execute([$rawId, $customer_id]);
+    $foundId = $byImei->fetchColumn();
+    if ($foundId) {
+        $qs = $_GET; unset($qs['vehicle_id']);
+        header('Location: /ativos/' . $foundId . (count($qs) ? '?' . http_build_query($qs) : ''));
+        exit;
+    }
+}
+
+if (!$vehicle) {
+    http_response_code(404);
+    die('<h1>Veículo não encontrado</h1>');
+}
+
+// ── Instalar/Desinstalar câmera (ações da Fase 1 do fluxo chip→câmera→veículo) ──
+$installMsg = null;
+$installErr = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+    require_permission('ativos', 'edit');
+    $postAction = $_POST['action'] ?? '';
+    if ($postAction === 'install') {
+        $deviceId = (int)($_POST['device_id'] ?? 0);
+        $installErr = $deviceId
+            ? install_device_on_vehicle($db, $deviceId, $vehicleId, $_SESSION['user_id'] ?? null)
+            : 'Selecione uma câmera.';
+        if (!$installErr) $installMsg = 'Câmera instalada.';
+    } elseif ($postAction === 'uninstall') {
+        $installErr = uninstall_device_from_vehicle($db, $vehicleId, $_SESSION['user_id'] ?? null);
+        if (!$installErr) $installMsg = 'Câmera desinstalada — livre para outro veículo.';
+    }
+}
+
+$installation = get_open_installation_for_vehicle($db, $vehicleId);
+$imei = $installation['imei'] ?? null;
+$hasCamera = $imei !== null;
+
+// Carregar dados da câmera instalada, se houver
+$asset = null;
+if ($hasCamera) {
+    try {
+        $asset = $db->prepare("
+            SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
+                   s.is_online, s.total_distance_km AS total_distance, s.total_gps_count, s.total_alarm_count,
+                   COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+                   COALESCE(dm.protocol, '') AS protocol
+            FROM devices d
+            LEFT JOIN device_statistics s ON d.imei = s.imei
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            WHERE d.imei = ?
+        ");
+        $asset->execute([$imei]);
+        $asset = $asset->fetch(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $asset = $db->prepare("
+            SELECT d.*, NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status,
+                   NULL as is_online, NULL as total_distance, NULL as total_gps_count, NULL as total_alarm_count,
+                   COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+                   COALESCE(dm.protocol, '') AS protocol
+            FROM devices d
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            WHERE d.imei = ?
+        ");
+        $asset->execute([$imei]);
+        $asset = $asset->fetch(PDO::FETCH_ASSOC);
+    }
+}
+
+// Sem câmera instalada (ou nunca): monta um `$asset` mínimo a partir do
+// veículo, pra não espalhar `if ($hasCamera)` por cada uma das 9 abas — as
+// que dependem de câmera já degradam sozinhas (WHERE imei = NULL nunca casa,
+// e cada uma já tem estado vazio para "nenhum registro").
+if (!$asset) {
+    $asset = [
+        'imei' => null, 'device_name' => $vehicle['plate'], 'device_model' => null,
+        'last_latitude' => null, 'last_longitude' => null, 'last_speed' => null, 'last_acc_status' => null,
+        'is_online' => null, 'total_distance' => null, 'total_gps_count' => null, 'total_alarm_count' => null,
+        'model_display' => '-', 'protocol' => '', 'camera_count' => null, 'activation_date' => null,
+        'last_communication' => null,
+    ];
 }
 
 // v4.10.1 — odômetro atual (item 3, bônus do CLAUDE.md: total_distance era
 // coluna inexistente, o SELECT sempre caía no catch e o KPI mostrava zero).
-$currentOdometer = $asset ? latest_odometer($db, $imei) : null;
-
-if (!$asset) {
-    http_response_code(404);
-    die('<h1>Dispositivo não encontrado</h1>');
-}
+$currentOdometer = $hasCamera ? latest_odometer($db, $imei) : null;
 
 $hasGps = !empty($asset['last_latitude']) && $asset['last_latitude'] != 0;
 $dtLast = $asset['last_communication'] ? new DateTime($asset['last_communication'], $tz_utc) : null;
@@ -230,17 +304,31 @@ if ($tab === 'parametros') {
 }
 
 // ── Layout ─────────────────────────────────────────────
-$page_title    = htmlspecialchars($asset['device_name'] ?? $asset['imei']);
+$page_title    = htmlspecialchars($vehicle['plate']);
 $current_route = 'ativos';
 $body_class    = 'with-asset-sidebar';
 
-$asset_base_url = '/ativos/' . urlencode($imei);
+$asset_base_url = '/ativos/' . $vehicleId;
 include __DIR__ . '/../web/layout_base.php';
 
 // Asset sidebar (secondary nav)
 $current_tab = $tab;
 include __DIR__ . '/../web/layout_ativo_sidebar.php';
 
+// Abas abaixo são todas IMEI-cêntricas (telemetria/vídeo/comandos são da
+// CÂMERA, não do veículo) — sem câmera instalada elas não têm o que mostrar.
+// Visão Geral e Relatórios continuam (a primeira é onde mora o
+// instalar/desinstalar; a segunda só lê contadores que já saem zerados).
+$camOnlyTabs = ['ao-vivo', 'trajetos', 'alertas', 'log', 'video', 'comandos', 'configuracoes', 'parametros'];
+if (!$hasCamera && in_array($current_tab, $camOnlyTabs, true)):
+?>
+<div class="empty-state">
+    <h3>Nenhuma câmera instalada</h3>
+    <p>Este veículo ainda não tem câmera — instale uma na aba <strong>Visão Geral</strong>.</p>
+    <a href="/ativos/<?= $vehicleId ?>" class="btn btn-primary mt-16">Ir para Visão Geral</a>
+</div>
+<?php
+else:
 // ── Renderizar aba ─────────────────────────────────────
 // Despacha por `$current_tab`, não por `$tab`: a variável que atravessa um
 // include não pode ter nome genérico. Foi assim que a sidebar apagou as 9 abas
@@ -250,6 +338,112 @@ switch ($current_tab):
 // ═══ VISÃO GERAL ═══════════════════════════════════════
 case 'visao-geral':
 ?>
+
+<?php if ($installMsg): ?>
+<div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($installMsg) ?></div>
+<?php endif; ?>
+<?php if ($installErr): ?>
+<div class="card mb-16" style="border-color:#fce4eb;background:#fef2f5;color:var(--error);font-size:13px"><?= htmlspecialchars($installErr) ?></div>
+<?php endif; ?>
+
+<div class="card mb-16">
+    <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Câmera instalada</h4>
+    <?php if ($hasCamera): ?>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div>
+            <span class="text-mono" style="font-size:13px"><?= htmlspecialchars($imei) ?></span>
+            <span style="color:var(--muted);font-size:12px;display:block">
+                Instalada desde <?= fmt_brt_dt($installation['installed_at']) ?>
+            </span>
+        </div>
+        <form method="post" onsubmit="return confirm('Desinstalar a câmera deste veículo? Ela fica livre para outro veículo.')">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="uninstall">
+            <button class="btn btn-outline btn-sm" style="color:var(--error)">Desinstalar</button>
+        </form>
+    </div>
+    <?php else:
+        // Câmeras livres (sem instalação aberta) COM chip vinculado — é a
+        // ordem do fluxo: chip→câmera primeiro (em /equipamentos), veículo
+        // depois. Sem chip, nem aparece aqui (install_device_on_vehicle()
+        // recusaria de qualquer forma; a lista já reflete a regra).
+        $freeCamsStmt = $db->prepare("
+            SELECT d.id, d.imei, d.device_name, dm.model_name
+            FROM devices d
+            JOIN sim_cards s ON s.imei = d.imei AND s.is_active = 1
+            LEFT JOIN device_models dm ON d.device_model_id = dm.id
+            LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+            WHERE d.customer_id = ? AND d.is_active = 1 AND di.id IS NULL
+            ORDER BY d.device_name, d.imei
+        ");
+        $freeCamsStmt->execute([$customer_id]);
+        $freeCams = $freeCamsStmt->fetchAll(PDO::FETCH_ASSOC);
+    ?>
+    <?php if (empty($freeCams)): ?>
+    <p style="font-size:13px;color:var(--muted)">
+        Nenhuma câmera livre com chip vinculado. Cadastre ou libere uma em
+        <a href="/equipamentos">Equipamentos</a> — a câmera precisa ter um chip
+        vinculado antes de ser instalada num veículo.
+    </p>
+    <?php else: ?>
+    <form method="post" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="install">
+        <div class="form-group" style="margin:0;flex:1;min-width:220px">
+            <label>Câmera</label>
+            <select name="device_id" required>
+                <option value="">— Selecione —</option>
+                <?php foreach ($freeCams as $fc): ?>
+                <option value="<?= $fc['id'] ?>">
+                    <?= htmlspecialchars($fc['imei']) ?><?= $fc['device_name'] ? ' — ' . htmlspecialchars($fc['device_name']) : '' ?><?= $fc['model_name'] ? ' (' . htmlspecialchars($fc['model_name']) . ')' : '' ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <button class="btn btn-primary btn-sm">Instalar</button>
+    </form>
+    <?php endif; ?>
+    <?php endif; ?>
+</div>
+
+<?php
+    // Histórico de instalações — o coração da Fase 1: mostra o reuso
+    // sequencial da mesma câmera em veículos diferentes ao longo do tempo.
+    $histStmt = $db->prepare("
+        SELECT di.installed_at, di.removed_at, d.imei, d.device_name
+        FROM device_installations di
+        JOIN devices d ON d.id = di.device_id
+        WHERE di.vehicle_id = ?
+        ORDER BY di.installed_at DESC
+    ");
+    $histStmt->execute([$vehicleId]);
+    $installHistory = $histStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (count($installHistory) > 1 || (!$hasCamera && $installHistory)):
+    // Só quando há algo a mostrar além da instalação corrente já exibida acima
+    // (uma linha só, aberta, seria repetir a mesma informação de novo).
+?>
+<div class="card mb-16">
+    <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Histórico de instalações</h4>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Câmera</th><th>Instalada em</th><th>Desinstalada em</th></tr></thead>
+            <tbody>
+                <?php foreach ($installHistory as $h): ?>
+                <tr>
+                    <td>
+                        <span class="text-mono" style="font-size:12px"><?= htmlspecialchars($h['imei']) ?></span>
+                        <span style="font-size:11px;color:var(--muted);display:block"><?= htmlspecialchars($h['device_name'] ?: '') ?></span>
+                    </td>
+                    <td><?= fmt_brt_dt($h['installed_at']) ?></td>
+                    <td><?= $h['removed_at'] ? fmt_brt_dt($h['removed_at']) : '<span class="badge badge-success">Atual</span>' ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+<?php endif; ?>
+
 <div class="kpi-grid">
     <div class="kpi-item">
         <div class="kpi-item-label">Status</div>
@@ -1045,7 +1239,8 @@ function enviarParam(no, ehRede, rotulo, atual, padrao) {
 </script>
 <?php break; ?>
 
-<?php endswitch; ?>
+<?php endswitch;
+endif; // fi !$hasCamera && camOnlyTabs ?>
 
 </div><!-- close asset-content -->
 <?php include __DIR__ . '/../web/layout_base_close.php'; ?>

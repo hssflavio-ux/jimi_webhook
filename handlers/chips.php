@@ -42,6 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Preencha ao menos um campo (Operadora, Número ou ICCID).';
         } elseif ($id === 0 && $owner_id === null) {
             $error = 'Selecione o cliente do chip. Sua sessão está sem cliente definido — salvar assim deixaria o chip sem vínculo e invisível na lista.';
+        } elseif ($active === 0 && $imei !== '') {
+            // Fluxo correto: chip só desativa livre. Desativar em uso apagaria
+            // o vínculo em silêncio (o UPDATE abaixo gravaria is_active=0 E o
+            // imei junto) — o operador precisa desvincular primeiro, de
+            // propósito, para não perder de vista que a câmera ficou sem chip.
+            $error = 'Este chip está vinculado a uma câmera (IMEI ' . htmlspecialchars($imei) . '). Desvincule (selecione "Nenhum" em "IMEI (vinculado)") antes de desativar.';
         } else {
             try {
                 if ($id > 0) {

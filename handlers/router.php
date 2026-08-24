@@ -186,8 +186,12 @@ if (empty($segments)) {
         if ($second === 'novo') {
             $handler = 'ativos_novo.php';
         } elseif ($second) {
+            // v4.11.0 — a URL passou a ser o ID do VEÍCULO (vehicles.id), não
+            // mais o IMEI da câmera: um veículo pode existir sem câmera, ou
+            // trocar de câmera ao longo do tempo, e o IMEI deixou de
+            // identificar univocamente "qual ativo é esse" no cadastro.
             $handler = 'ativo_detalhe.php';
-            $params['imei'] = $second;
+            $params['vehicle_id'] = $second;
         } else {
             $handler = 'ativos.php';
         }

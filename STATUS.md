@@ -1,4 +1,59 @@
-# STATUS.md — Jimi Webhook System v4.9.40 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.11.0 (YUV Parity)
+
+> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0 pronta, NÃO publicada
+>
+> **Produção continua em `4.9.40`.** A v4.11.0 está no working tree, com migração
+> nova (`mysql/migration_v4.11.0.sql`) e `SYSTEM_VERSION` já bumpado — não
+> commitada nem publicada ainda.
+>
+> #### 🔑 Fase 1 do fluxo chip → câmera → veículo
+>
+> Pedido do dono do produto: a relação cadastral era ilógica — `devices` (a
+> câmera) sempre FOI o "ativo", com `device_name` ("Placa"), `vehicle_type` e
+> `activation_date` na mesma linha da câmera física. Não existia veículo sem
+> câmera, não existia histórico de duas instalações da mesma câmera em veículos
+> diferentes, e trocar a câmera de veículo reescrevia a identidade da própria
+> linha — o dado antigo desaparecia. `devices.sim_card_id` (FK de v4.0.0) nunca
+> foi escrita por código nenhum: todo o vínculo chip↔câmera sempre rodou por
+> `sim_cards.imei` (string, já com UNIQUE desde v4.10.4).
+>
+> Corrigido com duas tabelas novas: **`vehicles`** (o veículo, entidade própria,
+> pode existir sem câmera) e **`device_installations`** (histórico de qual
+> câmera esteve em qual veículo, de quando a quando — ponto único de escrita:
+> `install_device_on_vehicle()` / `uninstall_device_from_vehicle()`,
+> `includes/functions.php`, dentro de transação). `/equipamentos` cadastra só a
+> câmera (com chip); `/ativos` cadastra só o veículo; a instalação é ação
+> separada em `/ativos/{id}` — só oferece câmera que já tem chip. Migração faz
+> backfill 1:1 de toda `devices` com `customer_id` para `vehicles` +
+> `device_installations` (aberta se ativa, fechada em `updated_at` se já estava
+> soft-deletada) — nada some da grade.
+>
+> `/ativos/{id}` passou a usar o ID do veículo na URL (era o IMEI da câmera,
+> que deixou de identificar univocamente "qual ativo é esse"). Links antigos
+> por IMEI (relatórios, `/chips`, `/parametros`) continuam funcionando via
+> redirect de compatibilidade em `handlers/ativo_detalhe.php` — resolve pelo
+> veículo que tem aquele IMEI instalado AGORA.
+>
+> **Testado ponta a ponta** contra cópia local do banco (`jimi_test_bisect` +
+> réplica de `jimi_tracker` local, com backup prévio): criar chip → criar
+> câmera com o chip livre → chip some da lista de livres; criar veículo →
+> instalar só oferece a câmera com chip; tentar desativar câmera instalada
+> recusa; desinstalar libera a câmera; instalar a MESMA câmera num SEGUNDO
+> veículo confirma reuso sequencial (histórico do primeiro veículo mostra a
+> instalação fechada, o segundo mostra a aberta); desativar câmera livre libera
+> o chip automaticamente; desativar chip vinculado recusa, desativar chip livre
+> funciona. `php -l` limpo em todos os arquivos tocados.
+>
+> ⚠️ **Fase 2 (fora desta entrega, decisão do dono do produto):** `gps_data`,
+> `alarms`, `events`, `media_files`, `heartbeats` não têm `customer_id` próprio
+> — continuam escopados pelo dono ATUAL da câmera via JOIN em
+> `devices.customer_id`, não pelo período de instalação. Transferir uma câmera
+> de veículo/cliente ainda reatribui retroativamente o dono de todo o histórico
+> de telemetria daquele IMEI. `occurrences` já escapa disso (grava `customer_id`
+> como snapshot na criação, via `get_customer_id_for_imei()` em
+> `includes/occurrence_engine.php`) — é o padrão que a Fase 2 replica nas
+> demais tabelas, usando `device_installations` (criada nesta versão) para
+> resolver o dono correto no momento de cada evento.
 
 > ### 📍 ESTADO EM 21/08/2026 — v4.9.39 no ar; v4.9.40 pronta, NÃO publicada
 >

@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.11.0
+
+**Fase 1 da correção pedida pelo dono do produto: chip, câmera e veículo eram a mesma linha (`devices`) — sem estado, sem histórico, sem como reusar uma câmera em veículos diferentes ao longo do tempo.**
+
+### Added
+- **Tabela `vehicles`** (`mysql/migration_v4.11.0.sql`) — o veículo vira entidade própria (placa, tipo, cliente, status), independente de câmera. Existe sem câmera instalada.
+- **Tabela `device_installations`** — histórico de qual câmera esteve em qual veículo, de quando a quando. Ponto único de escrita: `install_device_on_vehicle()` / `uninstall_device_from_vehicle()` (`includes/functions.php`), dentro de transação — garante no máximo uma instalação aberta por câmera e por veículo.
+- **`/ativos/{id}`** (agora ID do veículo, não IMEI — ver Changed): ações "Instalar/Trocar Câmera" e "Desinstalar", card de histórico de instalações. Instalar só oferece câmeras livres com chip já vinculado — é a ordem do fluxo: chip → câmera → veículo, nunca ao contrário.
+- **`/equipamentos`**: ganhou o seletor de chip (chips livres + ativos) que faltava nesta tela; "Cliente" vira somente leitura quando a câmera está instalada (deriva do veículo); desativar só é permitido sem instalação aberta, e libera o chip automaticamente ao desativar.
+- **`/chips`**: não é mais possível desativar um chip vinculado a uma câmera — precisa desvincular primeiro.
+
+### Changed
+- **`/ativos`, `/ativos/novo`, `/ativos/{id}`** passam a ser telas de VEÍCULO (placa, tipo, cliente) — cadastro de câmera (IMEI, modelo, canais, chip) é só em `/equipamentos`. `/ativos/{id}` usa o id do veículo na URL (era o IMEI da câmera); links antigos por IMEI continuam funcionando via redirect de compatibilidade em `handlers/ativo_detalhe.php`.
+- **`devices.customer_id`** passa a significar "quem tem a câmera hoje" — sincronizado automaticamente ao instalar/desinstalar de um veículo, e só editável livremente em `/equipamentos` enquanto a câmera está livre.
+- **`devices.sim_card_id`** (FK de `migration_v4.0.0.sql`, nunca escrita por nenhum código) removida — o vínculo chip↔câmera sempre rodou por `sim_cards.imei` (já com `UNIQUE` desde a v4.10.4), e a coluna morta só confundia quem lesse o schema.
+
+### Not included (Fase 2, escopo separado)
+Relatórios e telemetria (`gps_data`, `alarms`, `events`, `media_files`, `heartbeats`) continuam escopados pelo dono ATUAL da câmera (`devices.customer_id`), não pelo período de instalação — essas tabelas não têm `customer_id` próprio. Transferir uma câmera de veículo/cliente ainda reatribui retroativamente o dono de todo o histórico de telemetria daquele IMEI. `device_installations` (criada nesta versão) é o que a Fase 2 vai consumir para corrigir isso, no mesmo padrão que `occurrences` já usa (`customer_id` gravado como snapshot na criação).
+
 ## [Unreleased] — 4.10.0
 
 **Item 5 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: ícone do veículo por tipo, colorido por estado, no mapa de `/rastreamento` — primeiro item entregue da rodada "YUV Parity — frota".**

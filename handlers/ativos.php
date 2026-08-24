@@ -1,4 +1,13 @@
 <?php
+/**
+ * JIMI Webhook System — Ativos (Veículos) v4.11.0
+ * Endpoint: /ativos
+ *
+ * Fase 1 do fluxo chip→câmera→veículo: esta grade é do VEÍCULO, entidade
+ * própria desde a migração v4.11.0 — câmera (imei/modelo/chip/canais) é
+ * cadastrada em /equipamentos; aqui só placa, tipo e o vínculo corrente com
+ * uma câmera (histórico completo fica em /ativos/{id}).
+ */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/vehicle_icons.php';
@@ -10,27 +19,52 @@ $tz_utc = new DateTimeZone('UTC');
 $tz_brt = new DateTimeZone('America/Sao_Paulo');
 
 $msg = '';
+$err = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
     // RBAC ação fina (v4.2.0 — Fase B2)
     require_permission('ativos', $action === 'delete' ? 'delete' : 'edit');
-    $imei   = $_POST['imei'] ?? '';
-    if ($action === 'delete' && $imei) {
-        $db->prepare("UPDATE devices SET is_active=0 WHERE imei=? AND customer_id=?")->execute([$imei, $customer_id]);
-        $msg = 'Dispositivo removido.';
-    } elseif ($action === 'edit' && $imei) {
-        $name   = trim($_POST['device_name'] ?? '');
-        $model  = (int)($_POST['device_model_id'] ?? 0);
-        $cam    = max(1, (int)($_POST['camera_count'] ?? 1));
+    $vehicleId = (int)($_POST['vehicle_id'] ?? 0);
+
+    if ($action === 'delete' && $vehicleId) {
+        // Só desativa veículo SEM câmera instalada — mesma regra aplicada a
+        // câmera/chip: desativar em uso deixaria a câmera "presa" a um
+        // veículo inexistente aos olhos do resto do sistema.
+        if (get_open_installation_for_vehicle($db, $vehicleId)) {
+            $err = 'Este veículo tem uma câmera instalada — desinstale-a antes de desativar.';
+        } else {
+            $db->prepare("UPDATE vehicles SET is_active=0 WHERE id=? AND customer_id=?")->execute([$vehicleId, $customer_id]);
+            $msg = 'Veículo removido.';
+        }
+    } elseif ($action === 'edit' && $vehicleId) {
+        $plate  = trim($_POST['plate'] ?? '');
         $vtype  = trim($_POST['vehicle_type'] ?? '');
         $vtype  = array_key_exists($vtype, VEHICLE_ICONS) ? $vtype : null;
-        $simCardId = (int)($_POST['sim_card_id'] ?? 0) ?: null;
-        $db->prepare("UPDATE devices SET device_name=?, device_model_id=?, camera_count=?, vehicle_type=? WHERE imei=? AND customer_id=?")
-           ->execute([$name, $model ?: null, $cam, $vtype, $imei, $customer_id]);
-        $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $customer_id);
-        $msg = 'Dispositivo atualizado.' . ($chipWarning ? ' ' . $chipWarning : '');
+        if ($plate === '') {
+            $err = 'Placa é obrigatória.';
+        } else {
+            $db->prepare("UPDATE vehicles SET plate=?, vehicle_type=? WHERE id=? AND customer_id=?")
+               ->execute([$plate, $vtype, $vehicleId, $customer_id]);
+            // Espelha em `devices.vehicle_type` (fonte que /rastreamento lê) se
+            // houver câmera instalada agora — mesma sincronização feita na
+            // instalação, em install_device_on_vehicle().
+            $db->prepare("
+                UPDATE devices d
+                JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+                SET d.vehicle_type = ?
+                WHERE di.vehicle_id = ?
+            ")->execute([$vtype, $vehicleId]);
+            $msg = 'Veículo atualizado.';
+        }
+    } elseif ($action === 'install' && $vehicleId) {
+        $deviceId = (int)($_POST['device_id'] ?? 0);
+        $errInstall = $deviceId ? install_device_on_vehicle($db, $deviceId, $vehicleId, $_SESSION['user_id'] ?? null) : 'Selecione uma câmera.';
+        if ($errInstall) { $err = $errInstall; } else { $msg = 'Câmera instalada.'; }
+    } elseif ($action === 'uninstall' && $vehicleId) {
+        $errUninstall = uninstall_device_from_vehicle($db, $vehicleId, $_SESSION['user_id'] ?? null);
+        if ($errUninstall) { $err = $errUninstall; } else { $msg = 'Câmera desinstalada — livre para outro veículo.'; }
     }
 }
 
@@ -39,13 +73,19 @@ $q = trim($_GET['q'] ?? '');
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
 
-$listWhere = 'WHERE d.customer_id=:cid';
+$listWhere = 'WHERE v.customer_id=:cid';
 $listParams = [':cid' => $customer_id];
 if ($q !== '') {
-    $listWhere .= ' AND (d.device_name LIKE :q1 OR d.imei LIKE :q2)';
+    $listWhere .= ' AND (v.plate LIKE :q1 OR d.imei LIKE :q2)';
     $listParams[':q1'] = "%$q%";
     $listParams[':q2'] = "%$q%";
 }
+
+$baseFrom = "
+    FROM vehicles v
+    LEFT JOIN device_installations di ON di.vehicle_id = v.id AND di.removed_at IS NULL
+    LEFT JOIN devices d ON d.id = di.device_id
+";
 
 // Export síncrono
 $export = $_GET['export'] ?? '';
@@ -55,33 +95,32 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $expRows = [];
     try {
         $expStmt = $db->prepare("
-            SELECT d.imei, d.device_name, d.camera_count, d.is_active, d.last_communication, d.activation_date,
+            SELECT v.plate, v.is_active, d.imei, d.device_name, d.last_communication,
                    COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
-            FROM devices d LEFT JOIN device_models dm ON d.device_model_id=dm.id
-            $listWhere ORDER BY d.is_active DESC, d.last_communication DESC
+            $baseFrom
+            LEFT JOIN device_models dm ON d.device_model_id=dm.id
+            $listWhere ORDER BY v.is_active DESC, d.last_communication DESC
             LIMIT " . SYNC_EXPORT_MAX_ROWS);
         $expStmt->execute($listParams);
-        while ($dev = $expStmt->fetch(PDO::FETCH_ASSOC)) {
+        while ($veh = $expStmt->fetch(PDO::FETCH_ASSOC)) {
             $expRows[] = [
-                $dev['device_name'] ?? '—',
-                $dev['imei'],
-                $dev['model_display'],
-                $dev['protocol'] ?: '—',
-                (int)($dev['camera_count'] ?? 1),
-                $dev['activation_date'] ?? '—',
-                $dev['last_communication'] ? fmt_brt($dev['last_communication']) : '—',
-                $dev['is_active'] ? 'Ativo' : 'Inativo',
+                $veh['plate'],
+                $veh['imei'] ?? '—',
+                $veh['model_display'],
+                $veh['protocol'] ?: '—',
+                $veh['last_communication'] ? fmt_brt($veh['last_communication']) : '—',
+                $veh['is_active'] ? 'Ativo' : 'Inativo',
             ];
         }
     } catch (Exception $e) {}
     stream_export($export, 'ativos',
-        ['Nome', 'IMEI', 'Modelo', 'Protocolo', 'Câmeras', 'Ativação', 'Última Comunicação', 'Status'],
+        ['Placa', 'IMEI', 'Modelo', 'Protocolo', 'Última Comunicação', 'Status'],
         $expRows, 'Ativos');
 }
 
 $totalRows = 0;
 try {
-    $countStmt = $db->prepare("SELECT COUNT(*) FROM devices d $listWhere");
+    $countStmt = $db->prepare("SELECT COUNT(*) $baseFrom $listWhere");
     $countStmt->execute($listParams);
     $totalRows = (int)$countStmt->fetchColumn();
 } catch (Exception $e) {}
@@ -89,156 +128,123 @@ $totalPages = max(1, (int)ceil($totalRows / $perPage));
 $offset = ($page - 1) * $perPage;
 
 try {
-    $devicesStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active, d.vehicle_type,
+    $vehiclesStmt = $db->prepare("
+        SELECT v.id, v.plate, v.vehicle_type, v.is_active,
+               d.id AS device_id, d.imei, d.device_name AS device_label, d.last_communication,
                s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online,
-               COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
-        FROM devices d LEFT JOIN device_statistics s ON d.imei=s.imei LEFT JOIN device_models dm ON d.device_model_id=dm.id
-        $listWhere ORDER BY d.is_active DESC, d.last_communication DESC
+               COALESCE(dm.model_name, d.device_model, NULL) AS model_display,
+               sc.msisdn AS chip_msisdn
+        $baseFrom
+        LEFT JOIN device_statistics s ON d.imei = s.imei
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN sim_cards sc ON sc.imei = d.imei AND sc.is_active = 1
+        $listWhere ORDER BY v.is_active DESC, d.last_communication DESC
         LIMIT $perPage OFFSET $offset
     ");
-    $devicesStmt->execute($listParams);
-    $devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
+    $vehiclesStmt->execute($listParams);
+    $vehicles = $vehiclesStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
-    $devicesStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active, d.vehicle_type,
-               NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status, NULL as is_online,
-               COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
-        FROM devices d LEFT JOIN device_models dm ON d.device_model_id=dm.id
-        $listWhere ORDER BY d.is_active DESC, d.last_communication DESC
-        LIMIT $perPage OFFSET $offset
-    ");
-    $devicesStmt->execute($listParams);
-    $devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
+    $vehicles = [];
 }
-
-$models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY protocol, model_name")->fetchAll(PDO::FETCH_ASSOC);
-
-// Chips (v4.10.4) — livres (para o <select> de edição) + os já vinculados
-// (indexados por IMEI, para a coluna de exibição e para pré-selecionar o
-// chip da PRÓPRIA linha no <select>, que senão não estaria entre os livres).
-$chipsAllStmt = $db->prepare("SELECT id, carrier, msisdn, iccid, imei FROM sim_cards WHERE customer_id = :cid AND is_active = 1");
-$chipsAllStmt->execute([':cid' => $customer_id]);
-$chipsAll = $chipsAllStmt->fetchAll(PDO::FETCH_ASSOC);
-$freeChips = array_values(array_filter($chipsAll, fn($c) => empty($c['imei'])));
-$chipByImei = [];
-foreach ($chipsAll as $c) { if (!empty($c['imei'])) $chipByImei[$c['imei']] = $c; }
 
 $page_title='Ativos'; $current_route='ativos';
 include __DIR__ . '/../web/layout_base.php';
 ?>
 
 <?php if ($msg): ?><div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
+<?php if ($err): ?><div class="card mb-16" style="border-color:#fce4eb;background:#fef2f5;color:var(--error);font-size:13px"><?= htmlspecialchars($err) ?></div><?php endif; ?>
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-24" style="gap:8px;flex-wrap:wrap;">
     <form method="GET" style="display:flex;gap:6px;">
-        <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar nome ou IMEI..."
-               style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:240px;">
+        <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar placa ou IMEI da câmera..."
+               style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:260px;">
         <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
     </form>
     <div style="display:flex;gap:6px;align-items:center;">
-        <span style="font-size:13px;color:var(--muted)"><?= $totalRows ?> dispositivo(s)</span>
+        <span style="font-size:13px;color:var(--muted)"><?= $totalRows ?> veículo(s)</span>
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
-        <a href="/ativos/novo" class="btn btn-primary">+ Novo Dispositivo</a>
+        <a href="/ativos/novo" class="btn btn-primary">+ Novo Veículo</a>
     </div>
 </div>
 
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Veículo</th><th>Chip</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
+        <thead><tr><th>Placa</th><th>Tipo</th><th>Câmera atual</th><th>Chip</th><th>Modelo</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:220px"></th></tr></thead>
         <tbody>
-            <?php foreach ($devices as $dev):
-                $off = !$dev['is_active'];
-                $dtLast = $dev['last_communication'] ? new DateTime($dev['last_communication'], $tz_utc) : null;
+            <?php foreach ($vehicles as $veh):
+                $off = !$veh['is_active'];
+                $hasCamera = !empty($veh['device_id']);
+                $dtLast = $veh['last_communication'] ? new DateTime($veh['last_communication'], $tz_utc) : null;
                 $isOnline = !$off && $dtLast && ((new DateTime('now', $tz_utc))->getTimestamp() - $dtLast->getTimestamp()) < 600;
-                $hasGps = !empty($dev['last_latitude']) && $dev['last_latitude'] != 0;
             ?>
-            <tr id="row-<?= $dev['imei'] ?>" style="<?= $off ? 'opacity:.5' : '' ?>">
+            <tr id="row-<?= $veh['id'] ?>" style="<?= $off ? 'opacity:.5' : '' ?>">
                 <td style="font-weight:500;color:var(--ink)">
-                    <?php /* Mesmo texto de vazio do resto do sistema: "Sem Nome" aqui e
-                             "(sem placa)" nas telas de operação eram dois nomes para o
-                             mesmo estado do mesmo campo. */ ?>
-                    <span class="view-name-<?= $dev['imei'] ?>"><?= htmlspecialchars(placa_do_device($dev['device_name'], $dev['imei'])) ?></span>
+                    <span class="view-plate-<?= $veh['id'] ?>"><?= htmlspecialchars($veh['plate']) ?></span>
                 </td>
-                <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
-                <td><span class="view-model-<?= $dev['imei'] ?>"><?= htmlspecialchars($dev['model_display']) ?></span></td>
                 <td>
-                    <span class="view-vtype-<?= $dev['imei'] ?>" style="display:flex;align-items:center;gap:6px;color:var(--muted)">
-                        <?php if ($dev['vehicle_type']): ?>
-                            <?= vehicle_icon_svg($dev['vehicle_type'], 'var(--body)', 16) ?>
+                    <span style="display:flex;align-items:center;gap:6px;color:var(--muted)">
+                        <?php if ($veh['vehicle_type']): ?>
+                            <?= vehicle_icon_svg($veh['vehicle_type'], 'var(--body)', 16) ?>
                         <?php endif; ?>
-                        <?= htmlspecialchars(vehicle_type_label($dev['vehicle_type'])) ?>
+                        <?= htmlspecialchars(vehicle_type_label($veh['vehicle_type'])) ?>
                     </span>
                 </td>
                 <td>
-                    <?php $rowChip = $chipByImei[$dev['imei']] ?? null; ?>
-                    <span class="view-chip-<?= $dev['imei'] ?>" style="<?= $rowChip ? '' : 'color:var(--muted)' ?>">
-                        <?= $rowChip ? htmlspecialchars(chip_label($rowChip)) : '—' ?>
-                    </span>
+                    <?php if ($hasCamera): ?>
+                    <span class="text-mono" style="font-size:12px"><?= htmlspecialchars($veh['imei']) ?></span>
+                    <span style="font-size:11px;color:var(--muted);display:block"><?= htmlspecialchars($veh['device_label'] ?: '') ?></span>
+                    <?php else: ?>
+                    <span style="color:var(--muted)">Sem câmera</span>
+                    <?php endif; ?>
                 </td>
-                <td><span class="view-cam-<?= $dev['imei'] ?>"><?= $dev['camera_count'] ?? 1 ?></span></td>
+                <td style="font-size:12px"><?= $veh['chip_msisdn'] ? htmlspecialchars($veh['chip_msisdn']) : '—' ?></td>
+                <td><?= htmlspecialchars($veh['model_display'] ?? '—') ?></td>
                 <td>
                     <?php if ($off): ?><span class="badge badge-error">Inativo</span>
+                    <?php elseif (!$hasCamera): ?><span class="badge" style="background:var(--surface-strong);color:var(--muted)">Sem câmera</span>
                     <?php elseif ($isOnline): ?><span class="badge badge-success">Online</span>
                     <?php else: ?><span class="badge" style="background:var(--surface-strong);color:var(--muted)">Offline</span><?php endif; ?>
-                    <?php if (!$off && $dev['last_acc_status']==1): ?><span class="badge badge-warning">Ligado</span><?php endif; ?>
+                    <?php if (!$off && $veh['last_acc_status']==1): ?><span class="badge badge-warning">Ligado</span><?php endif; ?>
                 </td>
-                <td><?= round($dev['last_speed'] ?? 0) ?> km/h</td>
+                <td><?= $hasCamera ? round($veh['last_speed'] ?? 0) : '—' ?><?= $hasCamera ? ' km/h' : '' ?></td>
                 <td><?php if ($dtLast) { $dtLast->setTimezone($tz_brt); echo $dtLast->format('d/m/Y H:i:s'); } else echo '-'; ?></td>
                 <td>
-                    <a href="/ativos/<?= urlencode($dev['imei']) ?>" class="btn btn-outline btn-sm">Abrir</a>
+                    <a href="/ativos/<?= $veh['id'] ?>" class="btn btn-outline btn-sm">Abrir</a>
                     <?php if (!$off): ?>
-                    <button class="btn btn-outline btn-sm" onclick="editRow('<?= $dev['imei'] ?>')">Editar</button>
-                    <form method="post" style="display:inline" onsubmit="return confirm('Remover este dispositivo?')"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><button class="btn btn-outline btn-sm" style="color:var(--error)">Remover</button></form>
+                    <button class="btn btn-outline btn-sm" onclick="editRow('<?= $veh['id'] ?>')">Editar</button>
+                    <?php if (!$hasCamera): ?>
+                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="vehicle_id" value="<?= $veh['id'] ?>"><button class="btn btn-outline btn-sm" style="color:var(--error)" onclick="return confirm('Remover este veículo?')">Remover</button></form>
+                    <?php endif; ?>
                     <?php endif; ?>
                 </td>
             </tr>
-            <tr id="edit-<?= $dev['imei'] ?>" style="display:none;background:var(--canvas-soft)">
-                <td><input type="text" id="edit-name-<?= $dev['imei'] ?>" value="<?= htmlspecialchars($dev['device_name'] ?? '') ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
-                <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
-                <td><select id="edit-model-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"><?php foreach ($models as $m): ?><option value="<?= $m['id'] ?>" <?= $dev['device_model_id']==$m['id']?'selected':'' ?>><?= $m['model_name'] ?></option><?php endforeach; ?></select></td>
-                <td>
-                    <select id="edit-vtype-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px">
-                        <option value="" <?= !$dev['vehicle_type'] ? 'selected' : '' ?>>Não informado</option>
+            <tr id="edit-<?= $veh['id'] ?>" style="display:none;background:var(--canvas-soft)">
+                <td><input type="text" id="edit-plate-<?= $veh['id'] ?>" value="<?= htmlspecialchars($veh['plate']) ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
+                <td colspan="2">
+                    <select id="edit-vtype-<?= $veh['id'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px">
+                        <option value="" <?= !$veh['vehicle_type'] ? 'selected' : '' ?>>Não informado</option>
                         <?php foreach (VEHICLE_ICONS as $vtKey => $vtInfo): ?>
-                        <option value="<?= htmlspecialchars($vtKey) ?>" <?= $dev['vehicle_type']===$vtKey?'selected':'' ?>><?= htmlspecialchars($vtInfo['label']) ?></option>
+                        <option value="<?= htmlspecialchars($vtKey) ?>" <?= $veh['vehicle_type']===$vtKey?'selected':'' ?>><?= htmlspecialchars($vtInfo['label']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </td>
-                <td>
-                    <select id="edit-chip-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px">
-                        <option value="">— Nenhum —</option>
-                        <?php
-                        // O chip da PRÓPRIA linha entra na lista mesmo não estando "livre"
-                        // (ele está ocupado por ESTE device) — senão desapareceria do select
-                        // assim que fosse vinculado, e a tela mentiria que não há chip.
-                        $rowOptions = $rowChip ? array_merge([$rowChip], $freeChips) : $freeChips;
-                        foreach ($rowOptions as $chip):
-                        ?>
-                        <option value="<?= $chip['id'] ?>" <?= ($rowChip && $rowChip['id'] === $chip['id']) ? 'selected' : '' ?>>
-                            <?= htmlspecialchars(chip_label($chip)) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                </td>
-                <td><input type="number" id="edit-cam-<?= $dev['imei'] ?>" value="<?= $dev['camera_count'] ?>" min="1" max="16" style="width:60px;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
-                <td colspan="4">
-                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><input type="hidden" id="edit-f-name-<?= $dev['imei'] ?>" name="device_name"><input type="hidden" id="edit-f-model-<?= $dev['imei'] ?>" name="device_model_id"><input type="hidden" id="edit-f-vtype-<?= $dev['imei'] ?>" name="vehicle_type"><input type="hidden" id="edit-f-chip-<?= $dev['imei'] ?>" name="sim_card_id"><input type="hidden" id="edit-f-cam-<?= $dev['imei'] ?>" name="camera_count"><button class="btn btn-primary btn-sm">Salvar</button></form>
-                    <button class="btn btn-outline btn-sm" onclick="cancelEdit('<?= $dev['imei'] ?>')">Cancelar</button>
+                <td colspan="6">
+                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="vehicle_id" value="<?= $veh['id'] ?>"><input type="hidden" id="edit-f-plate-<?= $veh['id'] ?>" name="plate"><input type="hidden" id="edit-f-vtype-<?= $veh['id'] ?>" name="vehicle_type"><button class="btn btn-primary btn-sm">Salvar</button></form>
+                    <button class="btn btn-outline btn-sm" onclick="cancelEdit('<?= $veh['id'] ?>')">Cancelar</button>
                 </td>
             </tr>
             <?php endforeach; ?>
-            <?php if (empty($devices)): ?>
-            <tr><td colspan="10"><div class="empty-state"><h3>Nenhum dispositivo</h3><p>Cadastre seu primeiro equipamento.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
+            <?php if (empty($vehicles)): ?>
+            <tr><td colspan="9"><div class="empty-state"><h3>Nenhum veículo</h3><p>Cadastre seu primeiro veículo.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
             <?php endif; ?>
         </tbody>
     </table>
 </div>
 <?php if ($totalPages > 1): ?>
 <div class="flex-between mt-16" style="font-size:13px;color:var(--muted);">
-    <span>Página <?= $page ?> de <?= $totalPages ?> (<?= $totalRows ?> dispositivos)</span>
+    <span>Página <?= $page ?> de <?= $totalPages ?> (<?= $totalRows ?> veículos)</span>
     <div style="display:flex;gap:4px;">
         <?php if ($page > 1): ?><a href="?<?= $expBase ?>&page=<?= $page-1 ?>" class="btn btn-outline btn-sm">&laquo;</a><?php endif; ?>
         <?php if ($page < $totalPages): ?><a href="?<?= $expBase ?>&page=<?= $page+1 ?>" class="btn btn-outline btn-sm">&raquo;</a><?php endif; ?>
@@ -246,25 +252,22 @@ include __DIR__ . '/../web/layout_base.php';
 </div>
 <?php endif; ?>
 <script>
-function editRow(imei) {
-    document.getElementById('row-'+imei).style.display = 'none';
-    var er = document.getElementById('edit-'+imei);
+function editRow(id) {
+    document.getElementById('row-'+id).style.display = 'none';
+    var er = document.getElementById('edit-'+id);
     er.style.display = '';
-    document.getElementById('edit-name-'+imei).focus();
+    document.getElementById('edit-plate-'+id).focus();
 }
-function cancelEdit(imei) {
-    document.getElementById('row-'+imei).style.display = '';
-    document.getElementById('edit-'+imei).style.display = 'none';
+function cancelEdit(id) {
+    document.getElementById('row-'+id).style.display = '';
+    document.getElementById('edit-'+id).style.display = 'none';
 }
 document.querySelectorAll('form').forEach(function(f) {
     f.addEventListener('submit', function() {
         if (f.querySelector('[name=action]') && f.querySelector('[name=action]').value === 'edit') {
-            var imei = f.querySelector('[name=imei]').value;
-            f.querySelector('[name=device_name]').value = document.getElementById('edit-name-'+imei).value;
-            f.querySelector('[name=device_model_id]').value = document.getElementById('edit-model-'+imei).value;
-            f.querySelector('[name=vehicle_type]').value = document.getElementById('edit-vtype-'+imei).value;
-            f.querySelector('[name=sim_card_id]').value = document.getElementById('edit-chip-'+imei).value;
-            f.querySelector('[name=camera_count]').value = document.getElementById('edit-cam-'+imei).value;
+            var id = f.querySelector('[name=vehicle_id]').value;
+            f.querySelector('[name=plate]').value = document.getElementById('edit-plate-'+id).value;
+            f.querySelector('[name=vehicle_type]').value = document.getElementById('edit-vtype-'+id).value;
         }
     });
 });
