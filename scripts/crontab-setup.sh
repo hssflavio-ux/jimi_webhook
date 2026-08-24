@@ -34,6 +34,12 @@ WORKER_ENTRIES=(
     # IoT Hub dentro do handler acopla o trafego dos devices a disponibilidade
     # do hub e vira tempestade quando uma frota reconecta junto.
     "scripts/param_sync_worker.php:param_sync.log:5 min:*/5 * * * *"
+    # v4.10.1 — lembretes de manutenção (item 3, PLANO_IMPLEMENTACAO_v4.10.md).
+    # Diário: dedupe é por DIA (last_notified_at), então rodar mais vezes no
+    # mesmo dia não muda nada além de custo. 06:10 fica fora do horário de
+    # log_cleanup.php (03:10) e não colide com schedule_dispatcher (:05 de
+    # cada hora).
+    "scripts/maintenance_worker.php:maintenance_worker.log:24 h (6h10):10 6 * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

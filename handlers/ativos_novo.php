@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/vehicle_icons.php';
 require_login();
 
 $customer_id = get_customer_id();
@@ -31,6 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $modelo_id   = (int)($_POST['device_model_id'] ?? 0);
     $cameras     = (int)($_POST['camera_count'] ?? 1);
     $ativacao    = trim($_POST['activation_date'] ?? '');
+    $vehicleType = trim($_POST['vehicle_type'] ?? '');
+    $vehicleType = array_key_exists($vehicleType, VEHICLE_ICONS) ? $vehicleType : null;
 
     // Dono do dispositivo — ver resolve_owner_customer_id(). Antes gravava
     // `$customer_id` cru: sessão sem cliente virava dispositivo com customer_id
@@ -63,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $db->prepare("
                 UPDATE devices
                 SET device_name = ?, customer_id = ?, device_model_id = ?, camera_count = ?,
-                    activation_date = ?, created_by = ?, is_active = 1
+                    activation_date = ?, vehicle_type = ?, created_by = ?, is_active = 1
                 WHERE id = ?
             ");
             $stmt->execute([
@@ -72,14 +75,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $modelo_id,
                 $cameras,
                 $ativacao ?: null,
+                $vehicleType,
                 $_SESSION['user_id'],
                 $existing['id']
             ]);
             $success = true;
         } else {
             $stmt = $db->prepare("
-                INSERT INTO devices (imei, device_name, customer_id, device_model_id, camera_count, activation_date, created_by, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                INSERT INTO devices (imei, device_name, customer_id, device_model_id, camera_count, activation_date, vehicle_type, created_by, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
             ");
             $stmt->execute([
                 $imei,
@@ -88,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $modelo_id,
                 $cameras,
                 $ativacao ?: null,
+                $vehicleType,
                 $_SESSION['user_id']
             ]);
             $success = true;
@@ -111,6 +116,23 @@ document.addEventListener("DOMContentLoaded", () => {
             cameraInput.value = selected.camera_count;
             cameraInput.max = selected.camera_count;
         }
+    });
+
+    const vtHidden = document.getElementById("vehicle_type");
+    document.querySelectorAll(".vehicle-type-opt").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            vtHidden.value = btn.dataset.value;
+            document.querySelectorAll(".vehicle-type-opt").forEach((b) => {
+                b.classList.remove("active");
+                b.style.borderColor = "var(--hairline)";
+                b.style.background = "var(--canvas)";
+                b.style.color = "var(--body)";
+            });
+            btn.classList.add("active");
+            btn.style.borderColor = "var(--primary)";
+            btn.style.background = "var(--primary-soft)";
+            btn.style.color = "var(--primary)";
+        });
     });
 });
 </script>';
@@ -197,6 +219,31 @@ include __DIR__ . '/../web/layout_base.php';
             <div class="form-group">
                 <label for="activation_date">Data de Ativação</label>
                 <input type="date" id="activation_date" name="activation_date">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Tipo de Veículo</label>
+            <small style="display:block;margin-bottom:8px;font-size:11px;color:var(--muted);line-height:1.45">
+                Usado só para desenhar o ícone do veículo no mapa de Rastreamento
+                (a cor do pin continua indicando o estado). Opcional.
+            </small>
+            <input type="hidden" id="vehicle_type" name="vehicle_type" value="<?= htmlspecialchars($_POST['vehicle_type'] ?? '') ?>">
+            <div id="vehicle-type-picker" style="display:flex;flex-wrap:wrap;gap:8px;">
+                <?php
+                $vtSelected = $_POST['vehicle_type'] ?? '';
+                $vtOptions = ['' => 'Não informado'] + array_map(fn($v) => $v['label'], VEHICLE_ICONS);
+                foreach ($vtOptions as $vtKey => $vtLabel):
+                ?>
+                <button type="button" class="vehicle-type-opt <?= $vtSelected === $vtKey ? 'active' : '' ?>"
+                        data-value="<?= htmlspecialchars($vtKey) ?>"
+                        style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px;min-width:76px;
+                               border:1px solid <?= $vtSelected === $vtKey ? 'var(--primary)' : 'var(--hairline)' ?>;
+                               border-radius:var(--radius-sm);background:<?= $vtSelected === $vtKey ? 'var(--primary-soft)' : 'var(--canvas)' ?>;
+                               color:<?= $vtSelected === $vtKey ? 'var(--primary)' : 'var(--body)' ?>;cursor:pointer;">
+                    <?= $vtKey === '' ? '<span style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;">—</span>' : vehicle_icon_svg($vtKey, 'currentColor', 24) ?>
+                    <span style="font-size:11px;"><?= htmlspecialchars($vtLabel) ?></span>
+                </button>
+                <?php endforeach; ?>
             </div>
         </div>
         <div class="flex-between mt-16">

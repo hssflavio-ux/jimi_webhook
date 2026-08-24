@@ -9,6 +9,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_once __DIR__ . '/../includes/command_response.php'; // leitura única da resposta de comando
+require_once __DIR__ . '/../includes/maintenance.php'; // latest_odometer()
 require_login();
 
 $customer_id = get_customer_id();
@@ -31,7 +32,7 @@ function fmt_brt_dt($dt) {
 try {
     $asset = $db->prepare("
         SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
-               s.is_online, s.total_distance, s.total_gps_count, s.total_alarm_count,
+               s.is_online, s.total_distance_km AS total_distance, s.total_gps_count, s.total_alarm_count,
                COALESCE(dm.model_name, d.device_model, '-') AS model_display,
                COALESCE(dm.protocol, '') AS protocol
         FROM devices d
@@ -54,6 +55,10 @@ try {
     $asset->execute([$imei, $customer_id]);
     $asset = $asset->fetch(PDO::FETCH_ASSOC);
 }
+
+// v4.10.1 — odômetro atual (item 3, bônus do CLAUDE.md: total_distance era
+// coluna inexistente, o SELECT sempre caía no catch e o KPI mostrava zero).
+$currentOdometer = $asset ? latest_odometer($db, $imei) : null;
 
 if (!$asset) {
     http_response_code(404);
@@ -262,6 +267,11 @@ case 'visao-geral':
         <div class="kpi-item-label">Distância Total</div>
         <div class="kpi-item-value"><?= number_format(($asset['total_distance'] ?? 0), 0) ?></div>
         <div class="kpi-item-delta">km acumulados</div>
+    </div>
+    <div class="kpi-item">
+        <div class="kpi-item-label">Odômetro Atual</div>
+        <div class="kpi-item-value"><?= $currentOdometer !== null ? number_format($currentOdometer, 0, ',', '.') : '—' ?></div>
+        <div class="kpi-item-delta">km (último ponto de GPS)</div>
     </div>
     <div class="kpi-item">
         <div class="kpi-item-label">Alarmes (24h)</div>

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/vehicle_icons.php';
 require_login();
 
 $customer_id = get_customer_id();
@@ -23,8 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name   = trim($_POST['device_name'] ?? '');
         $model  = (int)($_POST['device_model_id'] ?? 0);
         $cam    = max(1, (int)($_POST['camera_count'] ?? 1));
-        $db->prepare("UPDATE devices SET device_name=?, device_model_id=?, camera_count=? WHERE imei=? AND customer_id=?")
-           ->execute([$name, $model ?: null, $cam, $imei, $customer_id]);
+        $vtype  = trim($_POST['vehicle_type'] ?? '');
+        $vtype  = array_key_exists($vtype, VEHICLE_ICONS) ? $vtype : null;
+        $db->prepare("UPDATE devices SET device_name=?, device_model_id=?, camera_count=?, vehicle_type=? WHERE imei=? AND customer_id=?")
+           ->execute([$name, $model ?: null, $cam, $vtype, $imei, $customer_id]);
         $msg = 'Dispositivo atualizado.';
     }
 }
@@ -85,7 +88,7 @@ $offset = ($page - 1) * $perPage;
 
 try {
     $devicesStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active,
+        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active, d.vehicle_type,
                s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online,
                COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
         FROM devices d LEFT JOIN device_statistics s ON d.imei=s.imei LEFT JOIN device_models dm ON d.device_model_id=dm.id
@@ -96,7 +99,7 @@ try {
     $devices = $devicesStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $devicesStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active,
+        SELECT d.imei, d.device_name, d.device_model, d.last_communication, d.activation_date, d.camera_count, d.device_model_id, d.is_active, d.vehicle_type,
                NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status, NULL as is_online,
                COALESCE(dm.model_name, d.device_model, '-') AS model_display, COALESCE(dm.protocol, '') AS protocol
         FROM devices d LEFT JOIN device_models dm ON d.device_model_id=dm.id
@@ -132,7 +135,7 @@ include __DIR__ . '/../web/layout_base.php';
 
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
+        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Veículo</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
         <tbody>
             <?php foreach ($devices as $dev):
                 $off = !$dev['is_active'];
@@ -149,6 +152,14 @@ include __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
                 <td><span class="view-model-<?= $dev['imei'] ?>"><?= htmlspecialchars($dev['model_display']) ?></span></td>
+                <td>
+                    <span class="view-vtype-<?= $dev['imei'] ?>" style="display:flex;align-items:center;gap:6px;color:var(--muted)">
+                        <?php if ($dev['vehicle_type']): ?>
+                            <?= vehicle_icon_svg($dev['vehicle_type'], 'var(--body)', 16) ?>
+                        <?php endif; ?>
+                        <?= htmlspecialchars(vehicle_type_label($dev['vehicle_type'])) ?>
+                    </span>
+                </td>
                 <td><span class="view-cam-<?= $dev['imei'] ?>"><?= $dev['camera_count'] ?? 1 ?></span></td>
                 <td>
                     <?php if ($off): ?><span class="badge badge-error">Inativo</span>
@@ -170,15 +181,23 @@ include __DIR__ . '/../web/layout_base.php';
                 <td><input type="text" id="edit-name-<?= $dev['imei'] ?>" value="<?= htmlspecialchars($dev['device_name'] ?? '') ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
                 <td class="text-mono"><?= htmlspecialchars($dev['imei']) ?></td>
                 <td><select id="edit-model-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"><?php foreach ($models as $m): ?><option value="<?= $m['id'] ?>" <?= $dev['device_model_id']==$m['id']?'selected':'' ?>><?= $m['model_name'] ?></option><?php endforeach; ?></select></td>
+                <td>
+                    <select id="edit-vtype-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px">
+                        <option value="" <?= !$dev['vehicle_type'] ? 'selected' : '' ?>>Não informado</option>
+                        <?php foreach (VEHICLE_ICONS as $vtKey => $vtInfo): ?>
+                        <option value="<?= htmlspecialchars($vtKey) ?>" <?= $dev['vehicle_type']===$vtKey?'selected':'' ?>><?= htmlspecialchars($vtInfo['label']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
                 <td><input type="number" id="edit-cam-<?= $dev['imei'] ?>" value="<?= $dev['camera_count'] ?>" min="1" max="16" style="width:60px;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
                 <td colspan="4">
-                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><input type="hidden" id="edit-f-name-<?= $dev['imei'] ?>" name="device_name"><input type="hidden" id="edit-f-model-<?= $dev['imei'] ?>" name="device_model_id"><input type="hidden" id="edit-f-cam-<?= $dev['imei'] ?>" name="camera_count"><button class="btn btn-primary btn-sm">Salvar</button></form>
+                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><input type="hidden" id="edit-f-name-<?= $dev['imei'] ?>" name="device_name"><input type="hidden" id="edit-f-model-<?= $dev['imei'] ?>" name="device_model_id"><input type="hidden" id="edit-f-vtype-<?= $dev['imei'] ?>" name="vehicle_type"><input type="hidden" id="edit-f-cam-<?= $dev['imei'] ?>" name="camera_count"><button class="btn btn-primary btn-sm">Salvar</button></form>
                     <button class="btn btn-outline btn-sm" onclick="cancelEdit('<?= $dev['imei'] ?>')">Cancelar</button>
                 </td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($devices)): ?>
-            <tr><td colspan="8"><div class="empty-state"><h3>Nenhum dispositivo</h3><p>Cadastre seu primeiro equipamento.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
+            <tr><td colspan="9"><div class="empty-state"><h3>Nenhum dispositivo</h3><p>Cadastre seu primeiro equipamento.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
             <?php endif; ?>
         </tbody>
     </table>
@@ -209,6 +228,7 @@ document.querySelectorAll('form').forEach(function(f) {
             var imei = f.querySelector('[name=imei]').value;
             f.querySelector('[name=device_name]').value = document.getElementById('edit-name-'+imei).value;
             f.querySelector('[name=device_model_id]').value = document.getElementById('edit-model-'+imei).value;
+            f.querySelector('[name=vehicle_type]').value = document.getElementById('edit-vtype-'+imei).value;
             f.querySelector('[name=camera_count]').value = document.getElementById('edit-cam-'+imei).value;
         }
     });

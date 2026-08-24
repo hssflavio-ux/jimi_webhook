@@ -9,6 +9,7 @@ define('HANDLER_NAME', 'pushhb');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/maintenance.php'; // update_engine_hours()
 
 class PushHeartbeatHandler extends WebhookHandler {
     public function __construct() { parent::__construct(HANDLER_NAME); }
@@ -38,7 +39,11 @@ class PushHeartbeatHandler extends WebhookHandler {
         $temperature= $item['temperature'] ?? null;
         $voltage    = $item['voltage']     ?? null;
         $status     = $item['status']      ?? 'NORMAL';
-        
+
+        // Horímetro (item 3, v4.10.1) — mesma ressalva de pushgps.php: campo
+        // ainda não confirmado contra device real.
+        $engineHours = $item['horimetro'] ?? $item['engineHours'] ?? $item['engine_hours'] ?? $item['hourmeter'] ?? null;
+
         $stmt = $this->db->prepare("
             INSERT INTO heartbeats 
             (imei, heartbeat_time, battery, gsm_signal, acc, oil_ele, gps_pos, 
@@ -67,7 +72,9 @@ class PushHeartbeatHandler extends WebhookHandler {
         $this->callProcedure('update_device_stats_after_heartbeat', [
             $imei, $heartbeatTime, $battery, $gsmSignal
         ]);
-        
+
+        update_engine_hours($this->db, $imei, $engineHours);
+
         return true;
     }
 }

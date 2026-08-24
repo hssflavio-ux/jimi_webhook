@@ -9,6 +9,8 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/fleet_state.php';
+require_once __DIR__ . '/../includes/vehicle_icons.php';
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -18,37 +20,64 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 
 $customers = report_customer_options($db);
 $selCustomerId = $_GET['customer_id'] ?? ($customerId ?? ($customers[0]['id'] ?? 1));
+$nowUtc = gmdate('Y-m-d H:i:s');
 
+// Estado calculado com includes/fleet_state.php — mesma fonte de
+// rel_status_frota.php, para "online" não ter uma segunda definição
+// divergente só nesta tela (ver CLAUDE.md, seção de gotchas de estado).
 $devices = [];
 try {
     $devStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.last_communication,
+        SELECT d.imei, d.device_name, d.vehicle_type,
                dm.model_name,
-               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+               ds.last_gps_time,
+               seg.state AS seg_state
         FROM devices d
         LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        LEFT JOIN device_state_segments seg ON seg.imei = d.imei AND seg.ended_at IS NULL
         WHERE d.customer_id = :cid AND d.is_active = 1
-        ORDER BY is_online DESC, d.device_name ASC
+        ORDER BY d.device_name ASC
     ");
     $devStmt->execute([':cid' => $selCustomerId]);
-    $devices = $devStmt->fetchAll();
+    foreach ($devStmt->fetchAll() as $row) {
+        $row['current_state'] = resolve_current_state($row['seg_state'] ?? null, $row['last_gps_time'] ?? null, $nowUtc);
+        $row['is_online'] = $row['current_state'] !== 'offline';
+        $devices[] = $row;
+    }
+    usort($devices, function ($a, $b) {
+        return ($b['is_online'] <=> $a['is_online']) ?: strcmp($a['device_name'] ?? '', $b['device_name'] ?? '');
+    });
 } catch (Exception $e) {}
 
-// Latest positions
+// Latest positions — device_statistics (cache já mantido pelos workers de
+// ingestão) em vez de reabrir gps_data por device a cada request.
 $positions = [];
 try {
     $posStmt = $db->prepare("
-        SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time, g.acc AS ignition,
-               COALESCE(d.device_name, g.imei) as device_name,
-               CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END as is_online
+        SELECT d.imei, COALESCE(d.device_name, d.imei) AS device_name, d.vehicle_type, d.speed_limit_kmh,
+               c.default_speed_limit_kmh,
+               ds.last_latitude AS latitude, ds.last_longitude AS longitude, ds.last_speed AS speed,
+               ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition,
+               seg.state AS seg_state
         FROM devices d
-        LEFT JOIN gps_data g ON g.id = (
-            SELECT g2.id FROM gps_data g2 WHERE g2.imei = d.imei AND g2.latitude != 0 ORDER BY g2.gps_time DESC LIMIT 1
-        )
+        LEFT JOIN customers c ON c.id = d.customer_id
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        LEFT JOIN device_state_segments seg ON seg.imei = d.imei AND seg.ended_at IS NULL
         WHERE d.customer_id = :cid AND d.is_active = 1
     ");
     $posStmt->execute([':cid' => $selCustomerId]);
-    $positions = $posStmt->fetchAll();
+    foreach ($posStmt->fetchAll() as $row) {
+        $state = resolve_current_state($row['seg_state'] ?? null, $row['gps_time'] ?? null, $nowUtc);
+        $limit = resolve_speed_limit($row['speed_limit_kmh'], $row['default_speed_limit_kmh']);
+        // "excesso" sobrepõe movimento/ocioso — nunca offline/parado, que já
+        // não têm velocidade real associada.
+        if ($state !== 'offline' && (int)$row['ignition'] === 1 && (float)$row['speed'] > $limit) {
+            $state = 'excesso';
+        }
+        $row['state'] = $state;
+        $positions[] = $row;
+    }
 } catch (Exception $e) {}
 
 // D2 (v4.2.0 — YUV): modo AJAX para auto-refresh sem reload
@@ -57,7 +86,8 @@ if (!empty($_GET['ajax'])) {
     echo json_encode(['code' => 0, 'positions' => array_map(function ($p) {
         return ['imei' => $p['imei'], 'lat' => (float)$p['latitude'], 'lng' => (float)$p['longitude'],
                 'name' => $p['device_name'], 'speed' => (float)$p['speed'], 'ignition' => $p['ignition'],
-                'online' => (bool)$p['is_online'], 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
+                'state' => $p['state'], 'vehicleType' => $p['vehicle_type'],
+                'online' => $p['state'] !== 'offline', 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
     }, $positions)], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -68,6 +98,7 @@ $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 #tracking-map{height:calc(100vh - 140px);border-radius:var(--radius-lg);border:1px solid var(--hairline);}
+.map-wrap{padding:4px;position:relative;}
 .device-list-item{cursor:pointer;padding:10px 12px;border-bottom:1px solid var(--hairline-soft);display:flex;align-items:center;gap:10px;transition:background .1s;}
 .device-list-item:hover{background:var(--canvas-soft);}
 .device-list-item.selected{background:var(--primary-soft);border-left:3px solid var(--primary);}
@@ -75,6 +106,17 @@ $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist
 .device-dot.online{background:var(--success);}
 .device-dot.offline{background:var(--muted-soft);}
 .left-panel{max-height:calc(100vh - 140px);overflow-y:auto;}
+/* Pin do veículo (item 5, v4.10) — o SVG fica branco, quem muda por estado é
+   o fundo do círculo. leaflet-div-icon tem fundo/borda padrão que precisam
+   ser zerados aqui. */
+.leaflet-div-icon.vehicle-pin-wrap{background:transparent;border:none;}
+.vehicle-pin{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+             border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
+#fleet-legend{position:absolute;bottom:24px;left:16px;z-index:1000;background:var(--canvas);
+              border:1px solid var(--hairline);border-radius:var(--radius-sm);padding:8px 12px;
+              font-size:11px;color:var(--body);box-shadow:0 1px 4px rgba(0,0,0,.15);}
+#fleet-legend .legend-row{display:flex;align-items:center;gap:6px;padding:2px 0;white-space:nowrap;}
+#fleet-legend .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -117,16 +159,34 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 
     <!-- Mapa -->
-    <div style="padding:4px;">
+    <div class="map-wrap">
         <div id="tracking-map"></div>
+        <div id="fleet-legend">
+            <?php
+            $legendStates = ['movimento', 'ocioso', 'parado', 'excesso', 'offline'];
+            $legendColors = array_merge(FLEET_STATE_COLORS, ['excesso' => '#f4b000']);
+            $legendLabels = array_merge(FLEET_STATE_LABELS, ['excesso' => 'Excesso de velocidade']);
+            foreach ($legendStates as $lst):
+            ?>
+            <div class="legend-row">
+                <span class="legend-dot" style="background:<?= htmlspecialchars($legendColors[$lst]) ?>"></span>
+                <span><?= htmlspecialchars($legendLabels[$lst]) ?></span>
+            </div>
+            <?php endforeach; ?>
+        </div>
     </div>
 </div>
 
 <script>
+var FLEET_STATE_COLORS = <?= json_encode(array_merge(FLEET_STATE_COLORS, ['excesso' => '#f4b000'])) ?>;
+var FLEET_STATE_LABELS = <?= json_encode(array_merge(FLEET_STATE_LABELS, ['excesso' => 'Excesso de velocidade'])) ?>;
+var VEHICLE_ICONS = <?= json_encode(vehicle_icons_js_catalog(), JSON_UNESCAPED_SLASHES) ?>;
+
 var mapData = <?= json_encode(array_map(function($p) {
     return ['imei'=>$p['imei'],'lat'=>(float)$p['latitude'],'lng'=>(float)$p['longitude'],
+            'state'=>$p['state'],'vehicleType'=>$p['vehicle_type'],
             'name'=>$p['device_name'],'speed'=>(float)$p['speed'],'ignition'=>$p['ignition'],
-            'online'=>(bool)$p['is_online'],'time'=>fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
+            'online'=>$p['state'] !== 'offline','time'=>fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
 }, $positions)) ?>;
 
 var map = L.map('tracking-map');
@@ -137,14 +197,39 @@ var bounds = [];
 // Balão identifica o veículo pela PLACA (p.name = devices.device_name), nunca
 // pelo IMEI: quem opera a frota reconhece a placa, não o número do rastreador.
 function popupHtml(p) {
-    return '<b>Placa: ' + (p.name || p.imei) + '</b><br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
+    var stateLabel = FLEET_STATE_LABELS[p.state] || '';
+    return '<b>Placa: ' + (p.name || p.imei) + '</b><br>Estado: ' + stateLabel +
+           '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
+}
+
+// Pin = círculo colorido por estado (FLEET_STATE_COLORS) + ícone branco do
+// tipo de veículo (Tabler Icons, ver includes/vehicle_icons.php). Sem tipo
+// cadastrado, o pin fica só o círculo — comportamento anterior preservado.
+function vehicleIconHtml(type, color) {
+    var icon = VEHICLE_ICONS[type];
+    if (!icon) return '';
+    var attrs = icon.stroke
+        ? 'fill="none" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+        : 'fill="' + color + '"';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" ' + attrs + '>' + icon.paths + '</svg>';
+}
+
+function pinIcon(state, type) {
+    var color = FLEET_STATE_COLORS[state] || '#5b616e';
+    var svg = vehicleIconHtml(type, '#fff');
+    return L.divIcon({
+        className: 'vehicle-pin-wrap',
+        html: '<div class="vehicle-pin" style="background:' + color + '">' + svg + '</div>',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+        popupAnchor: [0, -13]
+    });
 }
 
 mapData.forEach(function(p) {
     if (p.lat && p.lng && p.lat !== 0) {
         bounds.push([p.lat, p.lng]);
-        var color = p.online ? '#05b169' : '#a8acb3';
-        var m = L.circleMarker([p.lat, p.lng], {radius:6, color:color, fillColor:color, fillOpacity:0.6, weight:1})
+        var m = L.marker([p.lat, p.lng], {icon: pinIcon(p.state, p.vehicleType)})
             .addTo(map)
             .bindPopup(popupHtml(p));
         markers[p.imei] = m;
@@ -190,14 +275,13 @@ setInterval(function() {
         if (!resp || resp.code !== 0) return;
         (resp.positions || []).forEach(function(p) {
             if (!p.lat || p.lat === 0) return;
-            var color = p.online ? '#05b169' : '#a8acb3';
             var m = markers[p.imei];
             if (m) {
                 m.setLatLng([p.lat, p.lng]);
-                m.setStyle({color: color, fillColor: color});
+                m.setIcon(pinIcon(p.state, p.vehicleType));
                 m.setPopupContent(popupHtml(p));
             } else {
-                markers[p.imei] = L.circleMarker([p.lat, p.lng], {radius:6, color:color, fillColor:color, fillOpacity:0.6, weight:1})
+                markers[p.imei] = L.marker([p.lat, p.lng], {icon: pinIcon(p.state, p.vehicleType)})
                     .addTo(map).bindPopup(popupHtml(p));
             }
         });

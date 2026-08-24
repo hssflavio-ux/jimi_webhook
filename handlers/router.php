@@ -71,7 +71,7 @@ if (empty($segments)) {
     $third = $segments[2] ?? null;
 
     $ajaxRoutes = ['camerasdata','commandstatus','sendcommand','mediadata','trackdata','hbdata','devicemodels',
-                   'ocorrenciasdata','exportardata','notificacoesdata','solicitarvideo'];
+                   'ocorrenciasdata','exportardata','notificacoesdata','solicitarvideo','dashboarddata'];
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
                       'pushevent'];
@@ -89,7 +89,7 @@ if (empty($segments)) {
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
-                     'midia','parametros','firmwares'];
+                     'midia','parametros','firmwares','manutencoes','painel'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -121,6 +121,7 @@ if (empty($segments)) {
             'posicoes'     => 'rel_posicoes.php',
             'deslocamento' => 'rel_deslocamento.php',
             'deslocamento/rota' => 'rel_deslocamento_rota.php',
+            'deslocamento/replay' => 'rel_deslocamento_replay.php',
             'desatualizados' => 'rel_desatualizados.php',
             'alarmes'      => 'rel_alarmes.php',
             'ocorrencias'  => 'rel_ocorrencias.php',
@@ -238,6 +239,10 @@ $screenByHandler = [
     'rel_posicoes.php'          => 'relatorios',
     'rel_deslocamento.php'      => 'relatorios',
     'rel_deslocamento_rota.php' => 'relatorios',
+    // v4.10.2 — item 6 do PLANO_IMPLEMENTACAO_v4.10.md. Sem tela nova na
+    // matriz de propósito: é a mesma permissão de 'relatorios', igual a
+    // rota estática que já existia.
+    'rel_deslocamento_replay.php' => 'relatorios',
     'rel_desatualizados.php'    => 'relatorios',
     'rel_alarmes.php'           => 'relatorios',
     // Ação do relatório de alarmes (reenvio de vídeo), não tela nova: herda a
@@ -263,6 +268,15 @@ $screenByHandler = [
     'equipamentos.php'          => 'equipamentos',
     'grupos_permissao.php'      => 'grupos-permissao',
     'motoristas.php'            => 'motoristas',
+    // v4.10.1 — item 3 do PLANO_IMPLEMENTACAO_v4.10.md. Entra aqui E em
+    // `$screens` (grupos_permissao.php) — lição repetida quatro vezes no
+    // CLAUDE.md (checklist/wiki v4.8.5, config-notificacoes/config-smtp
+    // v4.8.9): só no router = tela impossível de conceder; só na matriz = o
+    // view não é verificado por ninguém.
+    'manutencoes.php'           => 'manutencoes',
+    // v4.10.3 — item 7 do PLANO_IMPLEMENTACAO_v4.10.md. `dashboarddata.php` é
+    // AJAX (entra em $ajaxRoutes, não aqui).
+    'painel.php'                 => 'painel',
     'config_ocorrencias.php'    => 'config-ocorrencias',
     // v4.8.9: as duas telas de config de notificação estavam na matriz de
     // grupos_permissao.php e FORA daqui. `config_smtp.php` se protegia sozinho

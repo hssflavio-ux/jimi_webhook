@@ -9,6 +9,7 @@ define('HANDLER_NAME', 'pushgps');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/maintenance.php'; // update_engine_hours()
 
 class PushGPSHandler extends WebhookHandler {
     /** Cache por requisição: evita reconsultar o mesmo motorista a cada item do lote. */
@@ -109,6 +110,12 @@ class PushGPSHandler extends WebhookHandler {
         $sosStatus      = $item['sosStatus']      ?? $item['sos'] ?? null;
         $temperature    = $item['temperature']    ?? null;
         $transparentData = $item['transparentData'] ?? null;
+
+        // Horímetro (item 3, v4.10.1) — nome de campo NÃO confirmado contra
+        // device real ainda (docs/PLANO_IMPLEMENTACAO_v4.10.md §Pendências).
+        // Tenta os nomes mais prováveis; se nenhum vier, update_engine_hours()
+        // é chamado com null e não faz nada — sem risco para a ingestão.
+        $engineHours = $item['horimetro'] ?? $item['engineHours'] ?? $item['engine_hours'] ?? $item['hourmeter'] ?? null;
         
         // Validar coordenadas
         if (!is_valid_coordinate($latitude, $longitude)) {
@@ -176,7 +183,9 @@ class PushGPSHandler extends WebhookHandler {
             $imei, $gpsTime, $latitude, $longitude,
             $speed, $distance, $gsm, $acc
         ]);
-        
+
+        update_engine_hours($this->db, $imei, $engineHours);
+
         return true;
     }
     

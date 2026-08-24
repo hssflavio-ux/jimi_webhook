@@ -446,6 +446,9 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.9.31" "mysql/migration_v4.9.31.sql" "reenvio de video de alarme religa ao alarme certo"
     run_migration "4.9.32" "mysql/migration_v4.9.32.sql" "firmware lido do device + cadastro de URLs de atualizacao"
     run_migration "4.9.37" "mysql/migration_v4.9.37.sql" "download vira estado: pendente / pronto / ja baixado"
+    run_migration "4.10.0" "mysql/migration_v4.10.0.sql" "devices.vehicle_type p/ icone do mapa (Tabler Icons)"
+    run_migration "4.10.1" "mysql/migration_v4.10.1.sql" "manutencao preventiva + lembrete de documento do motorista"
+    run_migration "4.10.3" "mysql/migration_v4.10.3.sql" "dashboard_layouts p/ painel widgetizado (/painel)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

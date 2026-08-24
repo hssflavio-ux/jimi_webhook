@@ -29,9 +29,18 @@ if (!isset($customers))     $customers     = get_available_customers($user['id']
 // ── YUV Navigation (v4.0.0): principal + accordion groups ──
 $navPrincipal = [
     ['route' => 'resumo',        'label' => 'Resumo',        'icon' => 'grid',     'href' => '/'],
+    // v4.10.3 — item 7 do PLANO_IMPLEMENTACAO_v4.10.md. Ao lado do Resumo, de
+    // propósito: NÃO substitui `resumo.php` (que fica intocado) — é a
+    // alternativa widgetizada e editável, opt-in, lado a lado.
+    ['route' => 'painel',        'label' => 'Painel',        'icon' => 'layout-dashboard', 'href' => '/painel'],
     ['route' => 'rastreamento',  'label' => 'Rastreamento',  'icon' => 'map',      'href' => '/rastreamento'],
     ['route' => 'bi',            'label' => 'BI',            'icon' => 'chart',    'href' => '/bi'],
     ['route' => 'ocorrencias',   'label' => 'Dashboard',     'icon' => 'alert',    'href' => '/ocorrencias/dashboard'],
+    // v4.10.1 — item 3 do PLANO_IMPLEMENTACAO_v4.10.md. Fica em $navPrincipal
+    // (não em $navBottom, reservado a telas que mandam instrução ao
+    // equipamento) porque Manutenção é consulta/CRUD de uso corriqueiro, do
+    // mesmo perfil de quem abre Resumo ou Rastreamento.
+    ['route' => 'manutencoes',   'label' => 'Manutenção',    'icon' => 'wrench',   'href' => '/manutencoes'],
 ];
 
 $navGroups = [
@@ -161,6 +170,8 @@ function nav_icon($name) {
         'book'    => '<path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>',
         'sliders'  => '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
         'chevron-down' => '<polyline points="6 9 12 15 18 9"/>',
+        'wrench'   => '<path d="M7 10h3v-3l-3.5 -3.5a6 6 0 0 1 8 8l6 6a2 2 0 0 1 -3 3l-6 -6a6 6 0 0 1 -8 -8l3.5 3.5"/>',
+        'layout-dashboard' => '<path d="M5 4h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1"/><path d="M5 16h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1"/><path d="M15 12h4a1 1 0 0 1 1 1v6a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-6a1 1 0 0 1 1 -1"/><path d="M15 4h4a1 1 0 0 1 1 1v2a1 1 0 0 1 -1 1h-4a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1"/>',
     ];
     return $icons[$name] ?? '';
 }

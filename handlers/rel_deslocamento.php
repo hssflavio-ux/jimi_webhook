@@ -378,7 +378,10 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
-                <td><a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a></td>
+                <td>
+                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a>
+                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>" target="_blank" class="btn btn-outline btn-sm">Replay</a>
+                </td>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>

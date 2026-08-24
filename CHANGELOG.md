@@ -5,6 +5,104 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.10.0
+
+**Item 5 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: ícone do veículo por tipo, colorido por estado, no mapa de `/rastreamento` — primeiro item entregue da rodada "YUV Parity — frota".**
+
+### Added
+- **`devices.vehicle_type`** — tipo de veículo (`carro`/`van`/`caminhao`/`onibus`/`moto`/`trator`), opcional, cadastrado em `/ativos/novo` (seletor visual com ícone) e editável na grade de `/ativos`. `NULL` (padrão de todo device existente, sem backfill) mantém o comportamento anterior: pin sem ícone, só o círculo colorido.
+- **`includes/vehicle_icons.php`** — catálogo de ícones [Tabler Icons](https://tabler.io/icons) (MIT, sem CDN nova — só os `<path>` embutidos como string PHP, mesmo padrão de `nav_icon()`). O SVG é sempre de UMA cor, decidida pelo chamador; a variação por estado do veículo é o fundo do pin, não o ícone.
+- **`/rastreamento`**: marcador do mapa passa de `L.circleMarker` (2 cores) para `L.divIcon` — círculo colorido por estado (`movimento`/`ocioso`/`parado`/`offline`/**`excesso`**, novo) com o ícone branco do tipo de veículo centrado dentro. Estado calculado com `includes/fleet_state.php` (`resolve_current_state()`), a mesma fonte de `/relatorios/status-frota` — o limiar de offline que era 5 min ad-hoc nesta tela passa a ser os 30 min (`OFFLINE_GAP_SECONDS`) usados no resto do produto. Legenda nova no canto do mapa.
+
+### Changed
+- `handlers/ativos.php` e `handlers/ativos_novo.php` ganham a coluna/seletor "Veículo".
+
+## [Unreleased] — 4.10.3
+
+**Item 7 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: painel widgetizado por usuário — quarto e último item entregue da rodada "YUV Parity — frota" (itens 5, 3, 6, 7).**
+
+### Added
+- **`/painel`** (tela nova, item próprio na sidebar, ao lado de "Resumo") —
+  dashboard com 13 widgets reaproveitando as mesmas consultas de
+  `handlers/resumo.php` (`includes/dashboard_widgets.php`), em layout
+  configurável por usuário: mostrar/ocultar + reordenar (↑/↓), sem biblioteca
+  de drag-and-drop nova. `handlers/resumo.php` **não foi alterado em nenhuma
+  linha** — `/` continua servindo os mesmos KPIs fixos de sempre.
+- **`dashboard_layouts`** (migração) — layout por usuário (`user_id`) com
+  fallback a um **padrão global único do sistema** (`user_id IS NULL`, não
+  por cliente — decisão do plano) e, na ausência de qualquer linha, ao
+  catálogo hardcoded de 9 widgets.
+- **`/dashboarddata`** (AJAX) — `GET` devolve o layout efetivo; `POST` grava
+  o layout do PRÓPRIO usuário autenticado, validado contra o catálogo
+  (`dashboard_sanitize_layout()`: só chaves conhecidas, sem duplicata) —
+  mesmo ponto de validação usado tanto na leitura quanto na escrita.
+
+### Verificação
+- Migração aplicada duas vezes (idempotente). Ciclo completo no MySQL local:
+  `/painel` com o catálogo padrão (9 widgets, todos renderizando sem erro),
+  edição salvando um layout de 3 widgets via `/dashboarddata` e o `/painel`
+  imediatamente refletindo só esses três, fallback ao padrão global
+  confirmado com um segundo usuário sem layout próprio (exatamente os 2
+  widgets do global, nem um a mais), sanitização confirmada contra chaves
+  inválidas/duplicadas (`DROP TABLE users`, `<script>…</script>` descartados
+  sem erro), gate de `reseller_view` testado nos dois sentidos (aparece só
+  para `user_type='revendedor'`), e **`/` conferido byte a byte quanto à
+  ausência de qualquer marca do painel novo** (regressão zero em
+  `resumo.php`). CSRF do `POST /dashboarddata` testado e confirmado — uma
+  anomalia inicial (POST sem token aceito) só reproduziu quando duas
+  requisições share a mesma conexão keep-alive dentro do MESMO script; em
+  chamadas isoladas (inclusive em dois processos separados) a rejeição 403
+  foi consistente nas três vezes — artefato do servidor de desenvolvimento
+  embutido do PHP (`php -S`, single-thread), não do código.
+
+## [Unreleased] — 4.10.2
+
+**Item 6 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: replay do deslocamento — terceiro item entregue da rodada "YUV Parity — frota".**
+
+### Added
+- **`/relatorios/deslocamento/replay?trip_id=`** (tela nova, sem migração) —
+  reproduz uma viagem já registrada: marcador se move pelo percurso
+  (interpolação linear entre os pontos de GPS amostrados, `requestAnimationFrame`),
+  com play/pause, velocidade 0.5×/1×/2×/4×, e leitura de hora/velocidade/
+  distância percorrida atualizada quadro a quadro. Link "Replay" ao lado de
+  "Ver rota" na grade de `/relatorios/deslocamento` (só na modalidade por
+  viagem — o fechamento diário pode agregar viagens com buracos entre elas,
+  e reproduzir um buraco não faz sentido).
+- **Linha do tempo em SVG** com a mesma mecânica de `handlers/video_playback.php`
+  (roda do mouse para zoom ancorado no cursor, arraste para pan, `pointerdown`/
+  `pointermove`/`setPointerCapture`, guarda contra confundir arraste com
+  clique) adaptada para uma única faixa com sparkline de velocidade no lugar
+  dos blocos de vídeo por canal — clique na linha faz *seek*.
+- **Marcador reaproveita o ícone do veículo do item 5** (`includes/vehicle_icons.php`):
+  se o ativo da viagem tiver `vehicle_type` cadastrado, o pin do replay mostra
+  o mesmo ícone Tabler do mapa de `/rastreamento`; sem tipo cadastrado, cai no
+  círculo azul sem ícone (mesmo comportamento de fallback).
+
+### Verificação
+- Migração N/A (tela sem schema novo).
+- Verificado com viagem real do MySQL local (`trips.id=17`, 5 pontos de GPS):
+  HTTP sem `Warning`/`Fatal error`; a lógica JS (interpolação, zoom/pan,
+  conversão de fuso do playhead) foi extraída do HTML renderizado e executada
+  em Node com DOM/Leaflet simulados — interpolação no meio de um segmento
+  bateu exatamente com a matemática esperada, round-trip pixel↔tempo exato,
+  clamp de zoom mínimo (10s) respeitado, e o `readout` de hora bateu com o
+  horário BRT esperado ao segundo. `trip_id` inexistente devolve erro
+  amigável, não 500. **Não verificado**: renderização visual real no
+  navegador (mesma limitação dos itens 5 e 3 nesta sessão).
+
+## [Unreleased] — 4.10.1
+
+**Item 3 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: manutenção preventiva por métrica + lembrete de vencimento de documento do motorista — segundo item entregue da rodada "YUV Parity — frota".**
+
+### Added
+- **`maintenance_reminders`** — lembrete de manutenção por `odometro`/`horas_ignicao`/`horimetro`/`data`, opcionalmente vinculado a um ativo e/ou motorista. Tela nova **`/manutencoes`** (item dedicado na sidebar, `$navPrincipal`), com aba **Manutenção** (CRUD + "Registrar concluído") e aba **Documentos** (liga/desliga o lembrete de CNH/toxicológico por motorista — `drivers.remind_cnh`/`remind_tox`, novos).
+- **`scripts/maintenance_worker.php`** (cron diário, 06:10) — notifica (`kind='lembrete'`) quando um item entra em `próximo` (≤200 km / ≤10h / ≤7 dias do vencimento) ou `vencido`. Dedupe **por dia** via `last_notified_at`/`cnh_notified_at`/`tox_notified_at`: `notify()` só dedupe o e-mail numa janela curta, nunca o sino — sem essas colunas o worker recriaria a notificação todo dia em que o item continuasse vencido.
+- **`devices.engine_hours`** — horímetro reportado pelo equipamento; `pushgps.php`/`pushhb.php` tentam capturá-lo (`horimetro`/`engineHours`/`engine_hours`/`hourmeter`, nome ainda **não confirmado** contra device real) e só gravam quando > 0.
+
+### Fixed
+- 🔴 **O KPI "Distância Total" de `/ativos/{imei}` sempre mostrou 0.** A query referenciava `device_statistics.total_distance` — coluna que não existe (o nome real é `total_distance_km`) — e caía sempre no `catch`, que hardcodeava `NULL`. Corrigido; a aba Visão Geral ganhou também **Odômetro Atual** (`latest_odometer()`, `includes/maintenance.php`).
+- 🔴 **Bug pego na verificação manual antes mesmo de chegar a produção**: o cálculo de vencimento por odômetro/horímetro derivava o "baseline" do valor **atual** quando `last_done_km`/`last_done_hours` estava vazio — o que faz o vencimento "perseguir" o odômetro e o item **nunca vencer**. Corrigido: o baseline só vem de `last_done_km`/`last_done_hours`, gravado uma vez na criação do lembrete (assume "serviço feito agora") e só reescrito por "Registrar concluído".
+
 ## [Unreleased] — 4.9.40
 
 **A pergunta era se a planilha do JC371 tinha um comando de parar o playback. Não tem — e a busca achou 18 sintaxes ausentes do catálogo, uma delas descartada por engano há três versões.**
