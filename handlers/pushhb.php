@@ -44,16 +44,22 @@ class PushHeartbeatHandler extends WebhookHandler {
         // ainda não confirmado contra device real.
         $engineHours = $item['horimetro'] ?? $item['engineHours'] ?? $item['engine_hours'] ?? $item['hourmeter'] ?? null;
 
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei().
+        $ownership = resolve_installation_for_imei($this->db, $imei);
+
         $stmt = $this->db->prepare("
-            INSERT INTO heartbeats 
-            (imei, heartbeat_time, battery, gsm_signal, acc, oil_ele, gps_pos, 
+            INSERT INTO heartbeats
+            (imei, customer_id, vehicle_id, heartbeat_time, battery, gsm_signal, acc, oil_ele, gps_pos,
              remote_lock, power_status, fortify, temperature, voltage, status, extra_data)
-            VALUES 
-            (:imei, :time, :bat, :gsm, :acc, :oil, :gps, 
+            VALUES
+            (:imei, :customer_id, :vehicle_id, :time, :bat, :gsm, :acc, :oil, :gps,
              :lock, :pwr, :fort, :temp, :volt, :stat, :extra)
         ");
         $stmt->execute([
             ':imei' => $imei,
+            ':customer_id' => $ownership['customer_id'],
+            ':vehicle_id' => $ownership['vehicle_id'],
             ':time' => $heartbeatTime,
             ':bat'  => $battery,
             ':gsm'  => $gsmSignal,

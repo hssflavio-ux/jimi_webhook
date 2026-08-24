@@ -85,8 +85,8 @@ try {
         SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                COALESCE(d.device_name, g.imei) as device_name
         FROM gps_data g
-        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-        WHERE g.latitude != 0 AND g.longitude != 0
+        LEFT JOIN devices d ON d.imei = g.imei
+        WHERE g.customer_id = :cid AND g.latitude != 0 AND g.longitude != 0
           AND ABS(g.latitude) > 0.0001 AND ABS(g.longitude) > 0.0001
           AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
         ORDER BY g.gps_time DESC LIMIT 500
@@ -117,8 +117,7 @@ if ($spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
                 SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60,
                 COUNT(*) as total
             FROM gps_data g
-            JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-            WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
+            WHERE g.customer_id = :cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
         ");
         $speedStmt->execute([':cid' => $customerId ?? 1]);
         $speedDist = $speedStmt->fetch();
@@ -136,8 +135,7 @@ $idleCount = 0;
 try {
     $idleStmt = $db->prepare("
         SELECT COUNT(DISTINCT g.imei) FROM gps_data g
-        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-        WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1 AND g.speed = 0
+        WHERE g.customer_id = :cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1 AND g.speed = 0
     ");
     $idleStmt->execute([':cid' => $customerId ?? 1]);
     $idleCount = (int)$idleStmt->fetchColumn();
@@ -241,9 +239,8 @@ try {
     $stmt = $db->prepare("
         SELECT " . sprintf($bucketFmt, 'a.alarm_time') . " as bk, COUNT(*) as cnt
         FROM alarms a
-        JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
         $diagJoins
-        WHERE a.alarm_time >= :ts AND ($diagExpr) = 0
+        WHERE a.customer_id = :cid AND a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY bk
     ");
     $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
@@ -277,9 +274,9 @@ try {
     $stmt = $db->prepare("
         SELECT COALESCE(d.device_name, a.imei) as name, COUNT(*) as cnt
         FROM alarms a
-        JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+        LEFT JOIN devices d ON d.imei = a.imei
         $diagJoins
-        WHERE a.alarm_time >= :ts AND ($diagExpr) = 0
+        WHERE a.customer_id = :cid AND a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY a.imei, name ORDER BY cnt DESC LIMIT 3
     ");
     $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);

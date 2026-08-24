@@ -96,7 +96,13 @@ function process_alarm_to_occurrence(array $alarm): ?int
 
     $mediaId = link_media_to_occurrence($db, $imei, $alarmTime, $alarm);
 
-    $occId = create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId);
+    // Fase 2 do fluxo chip→câmera→veículo: snapshot de qual VEÍCULO estava
+    // com esta câmera no momento do alarme, ao lado do $customerId já
+    // resolvido acima. Mesma câmera em veículo diferente depois não
+    // reatribui esta ocorrência.
+    $vehicleId = resolve_installation_for_imei($db, $imei)['vehicle_id'];
+
+    $occId = create_occurrence($db, $customerId, $branchId, $imei, $driverId, $occType, $risk, $alarmTime, $alarmId, $mediaId, $vehicleId);
 
     // Notificação (v4.4.0): só no ramo de ocorrência NOVA. No ramo de
     // agrupamento (acima) a janela de dedup do perfil já absorveu a rajada,
@@ -240,18 +246,19 @@ function update_occurrence(PDO $db, int $occId, string $alarmTime, $alarmId, arr
     }
 }
 
-function create_occurrence(PDO $db, ?int $customerId, ?int $branchId, string $imei, $driverId, string $alarmType, string $risk, string $alarmTime, $alarmId, $mediaFileId = null): ?int
+function create_occurrence(PDO $db, ?int $customerId, ?int $branchId, string $imei, $driverId, string $alarmType, string $risk, string $alarmTime, $alarmId, $mediaFileId = null, ?int $vehicleId = null): ?int
 {
     $stmt = $db->prepare(
         "INSERT INTO occurrences
-         (customer_id, branch_id, imei, driver_id, alarm_type, risk,
+         (customer_id, vehicle_id, branch_id, imei, driver_id, alarm_type, risk,
           status, first_alarm_at, last_alarm_at, alarm_count, media_file_id)
          VALUES
-         (:cid, :bid, :imei, :did, :atype, :risk,
+         (:cid, :vid, :bid, :imei, :did, :atype, :risk,
           'aguardando', :fat, :lat, 1, :mid)"
     );
     $stmt->execute([
         ':cid'   => $customerId,
+        ':vid'   => $vehicleId,
         ':bid'   => $branchId,
         ':imei'  => $imei,
         ':did'   => $driverId,

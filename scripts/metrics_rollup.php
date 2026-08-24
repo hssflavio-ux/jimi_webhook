@@ -67,7 +67,7 @@ foreach ($customers as $cust) {
             SUM(CASE WHEN alarm_time >= :d7 THEN 1 ELSE 0 END) as d7,
             SUM(CASE WHEN alarm_time >= :d30 THEN 1 ELSE 0 END) as d30
         FROM alarms a
-        JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+        WHERE a.customer_id = :cid
     ");
     $alarms->execute([':cid' => $cid, ':t0' => $todayUtc, ':t0b' => $todayUtc, ':y0' => $yesterdayUtc, ':d7' => $d7Utc, ':d30' => $d30Utc]);
     $alarms = $alarms->fetch();
@@ -100,8 +100,8 @@ foreach ($customers as $cust) {
             SUM(CASE WHEN speed > 20 AND speed <= 60 THEN 1 ELSE 0 END) as ate60,
             SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60
         FROM gps_data g
-        JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-        WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+        WHERE g.customer_id = :cid
+          AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
           AND g.acc = 1
     ");
     $spd->execute([':cid' => $cid]);

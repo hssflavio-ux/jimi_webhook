@@ -45,10 +45,12 @@ $isAdmin    = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') ==
 $customerId = get_customer_id();
 $scope      = report_customer_scope(null, $isAdmin, $customerId);
 
-$sql    = "SELECT a.id FROM alarms a JOIN devices d ON d.imei = a.imei WHERE a.id = :id";
+// Fase 2 do fluxo chip→câmera→veículo: dono GRAVADO no alarme (snapshot do
+// momento), não o dono ATUAL da câmera.
+$sql    = "SELECT a.id FROM alarms a WHERE a.id = :id";
 $params = [':id' => $alarmId];
 if ($scope !== null) {
-    $sql .= " AND d.customer_id = :cid";
+    $sql .= " AND a.customer_id = :cid";
     $params[':cid'] = $scope;
 }
 $st = $db->prepare($sql);

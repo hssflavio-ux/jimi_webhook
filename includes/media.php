@@ -315,17 +315,23 @@ function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $ev
     }
 
     try {
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei().
+        $ownership = resolve_installation_for_imei($db, $imei);
+
         // `download_status` nasce 'disponivel' porque o device só anuncia o
         // arquivo depois de subi-lo; e o tipo sai da EXTENSÃO, não de um campo
         // do alarme — `file_type` é ENUM e não aceita palpite (v4.9.8).
         $ins = $db->prepare(
             "INSERT INTO media_files
-                (imei, file_name, file_type, file_size, file_url, source_type,
+                (imei, customer_id, vehicle_id, file_name, file_type, file_size, file_url, source_type,
                  event_time, channel, download_status)
-             VALUES (:i, :n, :t, 0, :u, :s, :e, :c, 'disponivel')"
+             VALUES (:i, :cid, :vid, :n, :t, 0, :u, :s, :e, :c, 'disponivel')"
         );
         $ins->execute([
             ':i' => $imei,
+            ':cid' => $ownership['customer_id'],
+            ':vid' => $ownership['vehicle_id'],
             ':n' => basename($fileUrl),
             ':t' => detect_media_type($fileUrl),
             ':u' => $fileUrl,

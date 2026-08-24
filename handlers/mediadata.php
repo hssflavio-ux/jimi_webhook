@@ -37,8 +37,9 @@ try {
     $offset = max((int)($_GET['offset'] ?? 0), 0);
 
     // ── 1. Arquivos de mídia (pushfileupload / pushftpfileupload) ─────────────
-    // Multi-tenant: sempre restrito aos IMEIs do cliente da sessão
-    $whereMedia = 'WHERE imei IN (SELECT imei FROM devices WHERE customer_id = :cid)';
+    // Multi-tenant: dono GRAVADO no arquivo (Fase 2 do fluxo
+    // chip→câmera→veículo — snapshot do momento), não o dono ATUAL da câmera.
+    $whereMedia = 'WHERE customer_id = :cid';
     $paramsMedia = [':limit' => $limit, ':offset' => $offset, ':cid' => $customerId];
     if ($imei) {
         $whereMedia .= ' AND imei = :imei';

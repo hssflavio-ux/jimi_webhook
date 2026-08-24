@@ -26,6 +26,11 @@ class PushFileUploadHandler extends WebhookHandler {
             return false;
         }
 
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei(). Uma vez
+        // só para todos os arquivos do lote (mesmo IMEI, mesmo instante).
+        $ownership = resolve_installation_for_imei($this->db, $imei);
+
         // Campos documentados: fileName, gateTime, result (SUCCESS/FAILURE)
         $fileNameRaw = $item['fileName'] ?? $item['file'] ?? null;
         $result      = $item['result'] ?? 'UNKNOWN';
@@ -58,12 +63,14 @@ class PushFileUploadHandler extends WebhookHandler {
             try {
                 $stmt = $this->db->prepare("
                     INSERT INTO media_files
-                    (imei, file_name, file_type, file_url, source_type, event_time, channel, download_status, raw_data)
-                    VALUES (:imei, :fname, :ftype, :url, 'pushfileupload', :etime, :ch, :ds, :raw)
+                    (imei, customer_id, vehicle_id, file_name, file_type, file_url, source_type, event_time, channel, download_status, raw_data)
+                    VALUES (:imei, :cid, :vid, :fname, :ftype, :url, 'pushfileupload', :etime, :ch, :ds, :raw)
                 ");
                 $status = ($result === 'SUCCESS') ? 'disponivel' : 'erro';
                 $stmt->execute([
                     ':imei'  => $imei,
+                    ':cid'   => $ownership['customer_id'],
+                    ':vid'   => $ownership['vehicle_id'],
                     ':fname' => $fileName,
                     ':ftype' => $fileType,
                     ':url'   => $fileName,

@@ -61,8 +61,7 @@ try {
         SELECT GREATEST(
             COALESCE((SELECT MAX(last_communication) FROM devices WHERE customer_id = ?), '2000-01-01 00:00:00'),
             COALESCE((SELECT MAX(a.created_at) FROM alarms a
-                      JOIN devices d ON a.imei = d.imei
-                      WHERE d.customer_id = ?), '2000-01-01 00:00:00')
+                      WHERE a.customer_id = ?), '2000-01-01 00:00:00')
         ) AS last_hit
     ");
     $stApi->execute([$customerId, $customerId]);

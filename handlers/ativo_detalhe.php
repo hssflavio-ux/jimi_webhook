@@ -154,12 +154,15 @@ require_once __DIR__ . '/../includes/media.php';
 // ── Dados por aba ──────────────────────────────────────
 
 // aba: visao-geral
-$alarms24h = $db->prepare("SELECT COUNT(*) FROM alarms WHERE imei = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
-$alarms24h->execute([$imei]);
+// Fase 2 do fluxo chip→câmera→veículo: por VEÍCULO, não por IMEI — a mesma
+// câmera já pode ter passado por outro veículo, e essas 4 abas descrevem o
+// histórico DESTE veículo, não de tudo que essa câmera já viu.
+$alarms24h = $db->prepare("SELECT COUNT(*) FROM alarms WHERE vehicle_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+$alarms24h->execute([$vehicleId]);
 $alarms24h = $alarms24h->fetchColumn();
 
-$events24h = $db->prepare("SELECT COUNT(*) FROM events WHERE imei = ? AND event_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
-$events24h->execute([$imei]);
+$events24h = $db->prepare("SELECT COUNT(*) FROM events WHERE vehicle_id = ? AND event_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)");
+$events24h->execute([$vehicleId]);
 $events24h = $events24h->fetchColumn();
 
 // aba: trajetos
@@ -167,9 +170,9 @@ $tracks = [];
 if ($tab === 'trajetos') {
     $trackStmt = $db->prepare("
         SELECT gps_time, latitude, longitude, speed, direction, altitude, satellites, acc
-        FROM gps_data WHERE imei = ? ORDER BY gps_time DESC LIMIT 100
+        FROM gps_data WHERE vehicle_id = ? ORDER BY gps_time DESC LIMIT 100
     ");
-    $trackStmt->execute([$imei]);
+    $trackStmt->execute([$vehicleId]);
     $tracks = $trackStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 // Endereços do histórico em um lote (v4.8.0) — substitui as colunas de coordenada
@@ -191,7 +194,7 @@ if ($tab === 'alertas') {
                COALESCE(atc.severity, atb.severity, 'info') AS severity
         FROM alarms a
         {$alarmJoins}
-        WHERE a.imei = ?
+        WHERE a.vehicle_id = ?
           -- Sem os eventos de diagnóstico (v4.9.9): esta aba responde o que
           -- aconteceu com o VEICULO, e as falhas de armazenamento deste
           -- equipamento sozinhas enchiam as 100 linhas do LIMIT. Para conferir
@@ -200,7 +203,7 @@ if ($tab === 'alertas') {
           AND {$alarmDiag} = 0
         ORDER BY a.created_at DESC LIMIT 100
     ");
-    $alarmStmt->execute([$imei]);
+    $alarmStmt->execute([$vehicleId]);
     $alarms = $alarmStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -208,14 +211,14 @@ if ($tab === 'alertas') {
 $logs = [];
 if ($tab === 'log') {
     $logStmt = $db->prepare("
-        (SELECT 'GPS' AS source, gps_time AS event_time, CONCAT('Lat:', latitude, ' Lng:', longitude, ' Spd:', speed, 'km/h') AS detail FROM gps_data WHERE imei = ? ORDER BY gps_time DESC LIMIT 50)
+        (SELECT 'GPS' AS source, gps_time AS event_time, CONCAT('Lat:', latitude, ' Lng:', longitude, ' Spd:', speed, 'km/h') AS detail FROM gps_data WHERE vehicle_id = ? ORDER BY gps_time DESC LIMIT 50)
         UNION ALL
-        (SELECT 'Heartbeat' AS source, heartbeat_time AS event_time, CONCAT('Bateria:', battery, '% GSM:', gsm_signal, ' Temp:', temperature, '°C') AS detail FROM heartbeats WHERE imei = ? ORDER BY heartbeat_time DESC LIMIT 50)
+        (SELECT 'Heartbeat' AS source, heartbeat_time AS event_time, CONCAT('Bateria:', battery, '% GSM:', gsm_signal, ' Temp:', temperature, '°C') AS detail FROM heartbeats WHERE vehicle_id = ? ORDER BY heartbeat_time DESC LIMIT 50)
         UNION ALL
-        (SELECT 'Evento' AS source, event_time, CONCAT(event_type, IF(description IS NOT NULL, CONCAT(' — ', description), '')) AS detail FROM events WHERE imei = ? ORDER BY event_time DESC LIMIT 50)
+        (SELECT 'Evento' AS source, event_time, CONCAT(event_type, IF(description IS NOT NULL, CONCAT(' — ', description), '')) AS detail FROM events WHERE vehicle_id = ? ORDER BY event_time DESC LIMIT 50)
         ORDER BY event_time DESC LIMIT 50
     ");
-    $logStmt->execute([$imei, $imei, $imei]);
+    $logStmt->execute([$vehicleId, $vehicleId, $vehicleId]);
     $logs = $logStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -230,8 +233,8 @@ if ($tab === 'comandos') {
 // aba: video (media files)
 $mediaFiles = [];
 if ($tab === 'video') {
-    $mediaStmt = $db->prepare("SELECT id, file_type, file_name, file_url, file_size, created_at FROM media_files WHERE imei = ? ORDER BY created_at DESC LIMIT 50");
-    $mediaStmt->execute([$imei]);
+    $mediaStmt = $db->prepare("SELECT id, file_type, file_name, file_url, file_size, created_at FROM media_files WHERE vehicle_id = ? ORDER BY created_at DESC LIMIT 50");
+    $mediaStmt->execute([$vehicleId]);
     $mediaFiles = $mediaStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
@@ -315,12 +318,15 @@ include __DIR__ . '/../web/layout_base.php';
 $current_tab = $tab;
 include __DIR__ . '/../web/layout_ativo_sidebar.php';
 
-// Abas abaixo são todas IMEI-cêntricas (telemetria/vídeo/comandos são da
-// CÂMERA, não do veículo) — sem câmera instalada elas não têm o que mostrar.
-// Visão Geral e Relatórios continuam (a primeira é onde mora o
-// instalar/desinstalar; a segunda só lê contadores que já saem zerados).
-$camOnlyTabs = ['ao-vivo', 'trajetos', 'alertas', 'log', 'video', 'comandos', 'configuracoes', 'parametros'];
-if (!$hasCamera && in_array($current_tab, $camOnlyTabs, true)):
+// Só as abas de OPERAÇÃO AO VIVO (que falam com o equipamento físico agora)
+// exigem câmera instalada. Trajetos/Alertas/Log/Vídeo passaram a filtrar por
+// `vehicle_id` (Fase 2 do fluxo chip→câmera→veículo) — são o HISTÓRICO deste
+// veículo, e continuam válidas mesmo depois de a câmera ser desinstalada
+// (era o próprio ponto da mudança: não perder de vista o passado do
+// veículo). Visão Geral e Relatórios também ficam de fora — a primeira é
+// onde mora o instalar/desinstalar, a segunda só lê contadores.
+$liveOnlyTabs = ['ao-vivo', 'comandos', 'configuracoes', 'parametros'];
+if (!$hasCamera && in_array($current_tab, $liveOnlyTabs, true)):
 ?>
 <div class="empty-state">
     <h3>Nenhuma câmera instalada</h3>

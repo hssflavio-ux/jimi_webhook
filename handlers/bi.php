@@ -58,12 +58,13 @@ if ($generated) {
 
         // Escopo multi-tenant pelo ponto único (ver report_customer_scope):
         // para não-admin o `?customer_id` da URL é ignorado, não validado.
-        // 🔴 `alarms` NÃO TEM `customer_id` — o ramo do admin filtrava por
-        // `a.customer_id` e derrubava a consulta inteira em "Unknown column".
-        // O cliente vem de `devices`, que é onde ele existe.
+        // Fase 2 do fluxo chip→câmera→veículo (v4.12.0): `alarms` ganhou
+        // `customer_id` próprio (snapshot do dono no momento do alarme) — o
+        // filtro deixou de precisar de `devices` (antes o dono só existia lá,
+        // e SEMPRE o dono ATUAL da câmera, não o de quando o alarme chegou).
         $scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
         if ($scopeCust !== null) {
-            $aWhere .= ' AND d.customer_id = :cid';
+            $aWhere .= ' AND a.customer_id = :cid';
             $oWhere .= ' AND o.customer_id = :cid';
             $aParams[':cid'] = $scopeCust;
             $oParams[':cid'] = $scopeCust;
@@ -105,7 +106,6 @@ if ($generated) {
         $alarmsByType = $db->prepare("
             SELECT ($alarmExpr) AS alarm_label, COUNT(*) AS cnt
             FROM alarms a
-            LEFT JOIN devices d ON d.imei = a.imei
             $alarmJoins
             WHERE a.alarm_time BETWEEN :df AND :dt AND ($diagExpr) = 0 $aWhere
             GROUP BY alarm_label ORDER BY cnt DESC LIMIT 10
@@ -129,7 +129,6 @@ if ($generated) {
         $alarmsByDay = $db->prepare("
             SELECT DATE(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00')) AS dt, COUNT(*) AS cnt
             FROM alarms a
-            LEFT JOIN devices d ON d.imei = a.imei
             $alarmJoins
             WHERE a.alarm_time BETWEEN :df AND :dt AND ($diagExpr) = 0 $aWhere
             GROUP BY dt ORDER BY dt

@@ -148,13 +148,18 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             } else {
                 // Sem pedido pendente: upload que não nasceu desta tela (console
                 // do IoTHub, anexo de alarme). Continua entrando como linha nova.
+                // Snapshot do dono no momento do evento (Fase 2 do fluxo
+                // chip→câmera→veículo) — ver resolve_installation_for_imei().
+                $ownership = resolve_installation_for_imei($this->db, $imei);
                 $stmt = $this->db->prepare("
                     INSERT INTO media_files
-                    (imei, file_name, file_type, file_size, file_url, source_type, event_time, channel, download_status, raw_data)
-                    VALUES (:imei, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :ch, :ds, :raw)
+                    (imei, customer_id, vehicle_id, file_name, file_type, file_size, file_url, source_type, event_time, channel, download_status, raw_data)
+                    VALUES (:imei, :cid, :vid, :fname, :ftype, :fsize, :url, 'pushftpfileupload', :etime, :ch, :ds, :raw)
                 ");
                 $stmt->execute([
                     ':imei'  => $imei,
+                    ':cid'   => $ownership['customer_id'],
+                    ':vid'   => $ownership['vehicle_id'],
                     ':fname' => $fileName,
                     ':ftype' => $fileType,
                     ':fsize' => $fileSize,

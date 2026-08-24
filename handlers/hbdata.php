@@ -53,17 +53,21 @@ try {
         exit;
     }
 
+    // Fase 2 do fluxo chip→câmera→veículo: além do IMEI já filtrado pelo
+    // dono ATUAL acima, o `customer_id` GRAVADO no heartbeat (snapshot do
+    // momento) — senão um período em que esta câmera esteve com outro
+    // cliente vazaria o histórico dela pra quem tem a câmera agora.
     $placeholders = implode(',', array_fill(0, count($imeis), '?'));
     $stmt = $db->prepare("
         SELECT imei, heartbeat_time, battery, gsm_signal, temperature,
                voltage, status, acc, oil_ele, gps_pos, remote_lock,
                power_status, fortify
         FROM heartbeats
-        WHERE imei IN ($placeholders)
+        WHERE imei IN ($placeholders) AND customer_id = ?
         ORDER BY heartbeat_time DESC
         LIMIT $limit
     ");
-    $stmt->execute(array_values($imeis));
+    $stmt->execute(array_merge(array_values($imeis), [$customerId]));
     $heartbeats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     echo json_encode([

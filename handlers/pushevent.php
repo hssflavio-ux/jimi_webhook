@@ -75,18 +75,24 @@ class PushEventHandler extends WebhookHandler {
         
         // Salvar no banco
         try {
+            // Snapshot do dono no momento do evento (Fase 2 do fluxo
+            // chip→câmera→veículo) — ver resolve_installation_for_imei().
+            $ownership = resolve_installation_for_imei($this->db, $imei);
+
             $stmt = $this->db->prepare("
                 INSERT INTO events (
-                    imei, event_type, event_code, event_time, 
+                    imei, customer_id, vehicle_id, event_type, event_code, event_time,
                     latitude, longitude, event_data, description
                 ) VALUES (
-                    :imei, :type, :code, :time, 
+                    :imei, :customer_id, :vehicle_id, :type, :code, :time,
                     :lat, :lon, :data, :desc
                 )
             ");
-            
+
             $stmt->execute([
                 ':imei' => $imei,
+                ':customer_id' => $ownership['customer_id'],
+                ':vehicle_id' => $ownership['vehicle_id'],
                 ':type' => $eventType,
                 ':code' => $eventCode,
                 ':time' => $eventTime,

@@ -654,14 +654,19 @@ try {
                     (int)$partes[1], (int)$partes[2], (int)$partes[0]
                 ) + FILELIST_OFFSET_SEGUNDOS);
             }
+            // Snapshot do dono no momento do pedido (Fase 2 do fluxo
+            // chip→câmera→veículo) — ver resolve_installation_for_imei().
+            $ownership = resolve_installation_for_imei($db, $imei);
             $db->prepare("
                 INSERT INTO media_files
-                    (imei, file_name, file_type, file_size, file_url, source_type,
+                    (imei, customer_id, vehicle_id, file_name, file_type, file_size, file_url, source_type,
                      event_time, channel, download_status, raw_data)
-                VALUES (:imei, :fname, 'video', 0, NULL, :origem,
+                VALUES (:imei, :cid, :vid, :fname, 'video', 0, NULL, :origem,
                         :etime, :ch, 'solicitado', :raw)
             ")->execute([
                 ':imei'   => $imei,
+                ':cid'    => $ownership['customer_id'],
+                ':vid'    => $ownership['vehicle_id'],
                 ':fname'  => strtoupper($mv[1]) . ' CH' . (int)$mv[3] . ' — aguardando a câmera [' . $mv[2] . ']',
                 ':origem' => 'extracao_' . strtolower($mv[1]),
                 ':etime'  => $etime,
@@ -684,14 +689,19 @@ try {
             $ts  = preg_match('/^\d{12}$/', $ini)
                  ? DateTime::createFromFormat('ymdHis', $ini, new DateTimeZone('UTC'))
                  : false;
+            // Snapshot do dono no momento do pedido (Fase 2 do fluxo
+            // chip→câmera→veículo) — ver resolve_installation_for_imei().
+            $ownership = resolve_installation_for_imei($db, $imei);
             $db->prepare("
                 INSERT INTO media_files
-                    (imei, file_name, file_type, file_size, file_url, source_type,
+                    (imei, customer_id, vehicle_id, file_name, file_type, file_size, file_url, source_type,
                      event_time, channel, download_status, raw_data)
-                VALUES (:imei, :fname, 'video', 0, NULL, 'extracao_37382',
+                VALUES (:imei, :cid, :vid, :fname, 'video', 0, NULL, 'extracao_37382',
                         :etime, :ch, 'solicitado', :raw)
             ")->execute([
                 ':imei'  => $imei,
+                ':cid'   => $ownership['customer_id'],
+                ':vid'   => $ownership['vehicle_id'],
                 ':fname' => 'Extração CH' . (int)($c['channel'] ?? 0)
                           . ' — aguardando a câmera [' . ($instructionId37382 ?? '') . ']',
                 ':etime' => $ts ? $ts->format('Y-m-d H:i:s') : null,

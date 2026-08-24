@@ -63,12 +63,15 @@ if ($arquivo === '' || $arquivo !== $pedido) {
 // verificação continua aceitando as duas: os alarmes já gravados antes dela
 // não deixam de ser do cliente por isso.
 try {
+    // Fase 2 do fluxo chip→câmera→veículo: dono GRAVADO no arquivo/alarme
+    // (snapshot do momento em que chegou), não o dono ATUAL da câmera —
+    // senão trocar a câmera de cliente destrancaria vídeo antigo pra quem
+    // tem a câmera agora, e trancaria pra quem era dono quando foi gravado.
     $stmt = $db->prepare("
         SELECT 1
           FROM media_files mf
-          JOIN devices d ON d.imei = mf.imei
          WHERE mf.file_url = :f
-           AND (:cid IS NULL OR d.customer_id = :cid2)
+           AND (:cid IS NULL OR mf.customer_id = :cid2)
          LIMIT 1");
     $stmt->execute([':f' => $arquivo, ':cid' => $cid, ':cid2' => $cid]);
     $autorizado = (bool)$stmt->fetchColumn();
@@ -77,9 +80,8 @@ try {
         $stmt = $db->prepare("
             SELECT 1
               FROM alarms a
-              JOIN devices d ON d.imei = a.imei
              WHERE a.file_url = :f
-               AND (:cid IS NULL OR d.customer_id = :cid2)
+               AND (:cid IS NULL OR a.customer_id = :cid2)
              LIMIT 1");
         $stmt->execute([':f' => $arquivo, ':cid' => $cid, ':cid2' => $cid]);
         $autorizado = (bool)$stmt->fetchColumn();

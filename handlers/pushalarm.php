@@ -204,8 +204,12 @@ class PushAlarmHandler extends WebhookHandler {
         // 5. PERSISTÊNCIA COMPLETA (TODAS as 45 colunas)
         // =====================================================================
         try {
+            // Snapshot do dono no momento do evento (Fase 2 do fluxo
+            // chip→câmera→veículo) — ver resolve_installation_for_imei().
+            $ownership = resolve_installation_for_imei($this->db, $imei);
+
             $sql = "INSERT INTO alarms (
-                        imei, alarm_type, alert_type, alarm_subtype, 
+                        imei, customer_id, vehicle_id, alarm_type, alert_type, alarm_subtype,
                         standard_alarm_bitmask, alarm_name, alert_value,
                         alarm_serial_no, msg_class, fence_id, 
                         driver_id, driver_name,
@@ -220,7 +224,7 @@ class PushAlarmHandler extends WebhookHandler {
                         version, description, voltage,
                         raw_data, created_at
                     ) VALUES (
-                        :imei, :alarm_type, :alert_type, :alarm_subtype,
+                        :imei, :customer_id, :vehicle_id, :alarm_type, :alert_type, :alarm_subtype,
                         :std_bitmask, :alarm_name, :alert_value,
                         :alarm_serial_no, :msg_class, :fence_id,
                         :driver_id, :driver_name,
@@ -260,6 +264,8 @@ class PushAlarmHandler extends WebhookHandler {
             $insertedAlarmId = 0; // capturado logo após o INSERT — CALL de procedure reseta lastInsertId()
             $stmt->execute([
                 ':imei'            => $imei,
+                ':customer_id'     => $ownership['customer_id'],
+                ':vehicle_id'      => $ownership['vehicle_id'],
                 ':alarm_type'      => (string)$mainType,
                 ':alert_type'      => $rawAlertType !== null ? (string)$rawAlertType : null,
                 ':alarm_subtype'   => $subType,

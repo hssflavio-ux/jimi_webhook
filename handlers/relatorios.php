@@ -52,7 +52,9 @@ $total = 0;
 $columns = [];
 
 if ($reportType === 'alarmes') {
-    $where = "d.customer_id = :cid";
+    // Fase 2 do fluxo chip→câmera→veículo: dono GRAVADO no alarme (snapshot
+    // do momento), não o dono ATUAL da câmera.
+    $where = "a.customer_id = :cid";
     $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
     $where .= " AND a.created_at >= :df AND a.created_at <= :dt";
     if ($imeiFilter) { $where .= " AND a.imei = :imei"; $params[':imei'] = $imeiFilter; }
@@ -90,7 +92,9 @@ if ($reportType === 'alarmes') {
     $columns = ['Data/Hora', 'Placa', 'Alarme', 'Protocolo', 'Severidade', 'Velocidade', 'Mapa'];
 
 } elseif ($reportType === 'trajetos') {
-    $where = "d.customer_id = :cid";
+    // Fase 2 do fluxo chip→câmera→veículo: dono GRAVADO no ponto (snapshot
+    // do momento), não o dono ATUAL da câmera.
+    $where = "g.customer_id = :cid";
     $params = [':cid' => $customer_id, ':df' => $dateFrom . ' 00:00:00', ':dt' => $dateTo . ' 23:59:59'];
     $where .= " AND g.gps_time >= :df AND g.gps_time <= :dt";
     if ($imeiFilter) { $where .= " AND g.imei = :imei"; $params[':imei'] = $imeiFilter; }

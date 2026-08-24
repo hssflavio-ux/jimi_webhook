@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.0
+
+**Fase 2 da correção pedida pelo dono do produto: fecha o requisito que a Fase 1 (v4.11.0) deixou em aberto — "quando uma câmera é reinstalada num novo veículo, o dono do carro só vê os dados do seu veículo".**
+
+### Added
+- **`resolve_installation_for_imei()`** (`includes/functions.php`) — ponto único que resolve o dono (cliente + veículo) de um IMEI no momento em que é chamado, usado só na INGESTÃO (nunca na leitura).
+- **`gps_data`, `alarms`, `events`, `heartbeats`, `media_files`** ganham `customer_id`/`vehicle_id` (`mysql/migration_v4.12.0.sql`); `occurrences` ganha `vehicle_id` (já tinha `customer_id`, gravado como snapshot desde sempre — o padrão que esta versão generaliza). Cada webhook (`pushgps`, `pushalarm`, `pushevent`, `pushhb`, upload de mídia em `pushfileupload`/`pushftpfileupload`/`sendcommand`/`includes/media.php`) grava o dono do momento, não o atual.
+- Backfill exato de todo o histórico existente: como a Fase 1 acabou de nascer, cada câmera tinha no máximo uma instalação — nenhuma trocou de veículo ainda.
+
+### Changed
+- ~20 pontos de leitura (relatórios, painel, dashboard, download/playback de vídeo, `/midia`) passam a escopar por cliente pelo valor GRAVADO na linha, não mais reconsultando o dono ATUAL da câmera via JOIN em `devices`.
+- **`handlers/ativo_detalhe.php`**: as abas Trajetos/Alertas/Log/Vídeo passam a filtrar por `vehicle_id`, não por `imei` — a mesma câmera reinstalada noutro veículo não mistura mais o histórico dos dois. Como consequência, essas abas voltaram a funcionar mesmo com o veículo sem câmera instalada no momento (mostram o histórico que já é dele); só as abas de operação AO VIVO (Ao Vivo, Comandos, Configurações, Parâmetros) continuam exigindo câmera instalada.
+
+### Fixed (achados durante a Fase 2, fora do escopo original)
+- 🔴 **`handlers/rel_posicoes.php` não validava que o `?imei=` da URL pertencesse ao cliente da sessão** — bastava trocar o parâmetro para ver a posição de qualquer cliente. Fechado escopando pelo `customer_id` gravado no ponto.
+- 🔴 **`handlers/trackdata.php` e `handlers/hbdata.php`** (endpoints AJAX do mapa ao vivo) validavam o IMEI contra o dono ATUAL da câmera, mas liam o histórico inteiro sem limite de período — um período em que a câmera esteve com outro cliente vazava. Fechado com o mesmo `customer_id` gravado.
+- 🔴 **`handlers/midia.php`** (servidor de arquivo de vídeo) autorizava pelo dono ATUAL da câmera — mesma falha de período, agora corrigida pelo dono gravado no arquivo/alarme.
+
 ## [Unreleased] — 4.11.0
 
 **Fase 1 da correção pedida pelo dono do produto: chip, câmera e veículo eram a mesma linha (`devices`) — sem estado, sem histórico, sem como reusar uma câmera em veículos diferentes ao longo do tempo.**

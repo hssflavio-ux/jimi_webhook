@@ -60,6 +60,16 @@ if ($generated && $selImei) {
         $where .= $timeSql;
         $params = [':imei' => $selImei, ':df' => $utcFrom, ':dt' => $utcTo] + $timeParams;
 
+        // 🔒 Escopo multi-tenant — faltava aqui: a query só filtrava por
+        // `imei`, então trocar o parâmetro `?imei=` na URL mostrava a posição
+        // de QUALQUER cliente. Fase 2 do fluxo chip→câmera→veículo: usa o
+        // dono GRAVADO no ponto (snapshot do momento), não o atual da câmera.
+        $scopeCust = report_customer_scope(null, $isAdmin, $customerId);
+        if ($scopeCust !== null) {
+            $where .= ' AND g.customer_id = :cid';
+            $params[':cid'] = $scopeCust;
+        }
+
         if ($interval === 'sampled') {
             $where .= ' AND MOD(g.id, 10) = 0';
         }

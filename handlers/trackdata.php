@@ -52,17 +52,22 @@ try {
         exit;
     }
 
+    // Fase 2 do fluxo chip→câmera→veículo: além do IMEI já confirmado do
+    // dono ATUAL acima, o `customer_id` GRAVADO no ponto (snapshot do
+    // momento) — senão um período em que esta câmera esteve com outro
+    // cliente vazaria a rota dela pra quem tem a câmera agora.
     $stmt = $db->prepare("
         SELECT imei, gps_time, latitude, longitude, speed, direction,
                satellites, acc, altitude, mileage, gps_mode,
                distance_from_previous, created_at AS server_time
         FROM gps_data
-        WHERE imei = :imei
+        WHERE imei = :imei AND customer_id = :cid
           AND gps_time BETWEEN :start AND :end
         ORDER BY gps_time ASC
         LIMIT :limit
     ");
     $stmt->bindValue(':imei', $imei, PDO::PARAM_STR);
+    $stmt->bindValue(':cid', $customerId, PDO::PARAM_INT);
     $stmt->bindValue(':start', $start, PDO::PARAM_STR);
     $stmt->bindValue(':end', $end, PDO::PARAM_STR);
     $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);

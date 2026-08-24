@@ -211,8 +211,8 @@ function dashboard_speed_dist(PDO $db, int $cid): array
                        SUM(CASE WHEN speed>0 AND speed<=20 THEN 1 ELSE 0 END) ate20,
                        SUM(CASE WHEN speed>20 AND speed<=60 THEN 1 ELSE 0 END) ate60,
                        SUM(CASE WHEN speed>60 THEN 1 ELSE 0 END) acima60
-                FROM gps_data g JOIN devices d ON d.imei=g.imei AND d.customer_id=:cid
-                WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
+                FROM gps_data g
+                WHERE g.customer_id=:cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
             ");
             $stmt->execute([':cid' => $cid]);
             $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -256,8 +256,8 @@ function dashboard_render_idle(PDO $db, int $cid, bool $isReseller, string $peri
 {
     $idle = 0;
     try {
-        $stmt = $db->prepare("SELECT COUNT(DISTINCT g.imei) FROM gps_data g JOIN devices d ON d.imei=g.imei AND d.customer_id=:cid
-                               WHERE g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc=1 AND g.speed=0");
+        $stmt = $db->prepare("SELECT COUNT(DISTINCT g.imei) FROM gps_data g
+                               WHERE g.customer_id=:cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc=1 AND g.speed=0");
         $stmt->execute([':cid' => $cid]);
         $idle = (int)$stmt->fetchColumn();
     } catch (Throwable $e) {}
@@ -322,8 +322,8 @@ function dashboard_render_heatmap(PDO $db, int $cid, bool $isReseller, string $p
         $stmt = $db->prepare("
             SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed,
                    COALESCE(d.device_name, g.imei) as device_name
-            FROM gps_data g JOIN devices d ON d.imei = g.imei AND d.customer_id = :cid
-            WHERE g.latitude != 0 AND g.longitude != 0 AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
+            FROM gps_data g LEFT JOIN devices d ON d.imei = g.imei
+            WHERE g.customer_id = :cid AND g.latitude != 0 AND g.longitude != 0 AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
             ORDER BY g.gps_time DESC LIMIT 500
         ");
         $stmt->execute([':cid' => $cid]);
@@ -373,8 +373,8 @@ function dashboard_render_ts_alarms(PDO $db, int $cid, bool $isReseller, string 
     try {
         $stmt = $db->prepare("
             SELECT " . sprintf($bucketFmt, 'a.alarm_time') . " as bk, COUNT(*) as cnt
-            FROM alarms a JOIN devices d ON d.imei=a.imei AND d.customer_id=:cid $diagJoins
-            WHERE a.alarm_time >= :ts AND ($diagExpr) = 0 GROUP BY bk
+            FROM alarms a $diagJoins
+            WHERE a.customer_id=:cid AND a.alarm_time >= :ts AND ($diagExpr) = 0 GROUP BY bk
         ");
         $stmt->execute([':cid' => $cid, ':ts' => $startUtc]);
         while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -428,8 +428,8 @@ function dashboard_render_top_plates(PDO $db, int $cid, bool $isReseller, string
     try {
         $stmt = $db->prepare("
             SELECT COALESCE(d.device_name, a.imei) as name, COUNT(*) as cnt
-            FROM alarms a JOIN devices d ON d.imei=a.imei AND d.customer_id=:cid $diagJoins
-            WHERE a.alarm_time >= :ts AND ($diagExpr) = 0
+            FROM alarms a LEFT JOIN devices d ON d.imei=a.imei $diagJoins
+            WHERE a.customer_id=:cid AND a.alarm_time >= :ts AND ($diagExpr) = 0
             GROUP BY a.imei, name ORDER BY cnt DESC LIMIT 3
         ");
         $stmt->execute([':cid' => $cid, ':ts' => $startUtc]);

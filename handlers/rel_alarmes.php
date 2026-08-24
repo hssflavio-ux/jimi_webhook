@@ -85,7 +85,11 @@ $params = [':df' => $utcFrom, ':dt' => $utcTo];
 // Para não-admin o ?customer_id da URL é ignorado; antes ele era obedecido.
 $scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
 if ($scopeCust !== null) {
-    $where .= ' AND d.customer_id = :cid';
+    // Fase 2 do fluxo chip→câmera→veículo: escopo pelo dono GRAVADO no
+    // alarme (snapshot do momento em que chegou), não pelo dono ATUAL da
+    // câmera — senão transferir uma câmera de cliente reatribuiria
+    // retroativamente todo o histórico de alarmes dela.
+    $where .= ' AND a.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
 // Filtro por PLACA (o campo é `imei` na URL por retrocompatibilidade com

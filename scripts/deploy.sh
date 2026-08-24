@@ -451,6 +451,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.10.3" "mysql/migration_v4.10.3.sql" "dashboard_layouts p/ painel widgetizado (/painel)"
     run_migration "4.10.4" "mysql/migration_v4.10.4.sql" "UNIQUE em sim_cards.imei — trava vinculo chip:equipamento 1:1"
     run_migration "4.11.0" "mysql/migration_v4.11.0.sql" "vehicles + device_installations — fase 1 do fluxo chip->camera->veiculo"
+    run_migration "4.12.0" "mysql/migration_v4.12.0.sql" "customer_id/vehicle_id em gps_data/alarms/events/heartbeats/media_files/occurrences — fase 2"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

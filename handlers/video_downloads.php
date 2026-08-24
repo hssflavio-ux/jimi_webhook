@@ -78,7 +78,10 @@ if (count($filtroImeis) === 1) {
 $where = 'WHERE 1=1';
 $params = [];
 if ($scopeCust !== null) {
-    $where .= ' AND d.customer_id = :cid';
+    // Fase 2 do fluxo chip→câmera→veículo: dono GRAVADO no arquivo
+    // (snapshot do momento), não o dono ATUAL da câmera — senão trocar a
+    // câmera de cliente reatribuiria a fila de downloads inteira.
+    $where .= ' AND mf.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
 if ($filtroImeis) {

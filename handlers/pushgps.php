@@ -128,11 +128,16 @@ class PushGPSHandler extends WebhookHandler {
         
         // Calcular distância desde último ponto GPS
         $distance = $this->calculateDistance($imei, $latitude, $longitude);
-        
+
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei(). A
+        // LEITURA nunca reconsulta isto; lê a coluna gravada aqui.
+        $ownership = resolve_installation_for_imei($this->db, $imei);
+
         // Inserir GPS no banco
         $stmt = $this->db->prepare("
             INSERT INTO gps_data (
-                imei, gps_time, gateway_time, 
+                imei, customer_id, vehicle_id, gps_time, gateway_time,
                 latitude, longitude, speed, direction,
                 satellites, gps_mode, gsm_signal, mileage,
                 battery, distance_from_previous, acc,
@@ -144,7 +149,7 @@ class PushGPSHandler extends WebhookHandler {
                 door_status, sos_status, temperature, transparent_data,
                 raw_data
             ) VALUES (
-                :imei, :gps_time, :gateway_time,
+                :imei, :customer_id, :vehicle_id, :gps_time, :gateway_time,
                 :latitude, :longitude, :speed, :direction,
                 :satellites, :gps_mode, :gsm_signal, :mileage,
                 :battery, :distance, :acc,
@@ -157,9 +162,11 @@ class PushGPSHandler extends WebhookHandler {
                 :raw_data
             )
         ");
-        
+
         $stmt->execute([
-            ':imei' => $imei, ':gps_time' => $gpsTime, ':gateway_time' => $gatewayTime,
+            ':imei' => $imei,
+            ':customer_id' => $ownership['customer_id'], ':vehicle_id' => $ownership['vehicle_id'],
+            ':gps_time' => $gpsTime, ':gateway_time' => $gatewayTime,
             ':latitude' => $latitude, ':longitude' => $longitude,
             ':speed' => $speed, ':direction' => $direction,
             ':satellites' => $satellites, ':gps_mode' => $gpsMode,

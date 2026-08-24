@@ -731,6 +731,36 @@ function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserI
 }
 
 /**
+ * Resolve o dono (cliente + veículo) de um IMEI NO MOMENTO EM QUE É CHAMADA —
+ * ponto único usado tanto na ingestão dos webhooks (para gravar como
+ * snapshot em `gps_data`/`alarms`/`events`/`heartbeats`/`media_files`/
+ * `occurrences.vehicle_id`) quanto no backfill da migração v4.12.0. A leitura
+ * (relatórios, painel, `/ativos/{id}`) NUNCA chama esta função — ela lê o
+ * valor já gravado na linha, para não reabrir o mesmo buraco que existia
+ * antes da Fase 2 (dono corrente ≠ dono de quando o evento aconteceu).
+ *
+ * @param PDO    $db
+ * @param string $imei
+ * @returns array{customer_id:int|null, vehicle_id:int|null} Ambos null se a câmera não tem instalação aberta (livre ou nunca instalada)
+ */
+function resolve_installation_for_imei(PDO $db, string $imei): array
+{
+    $stmt = $db->prepare("
+        SELECT di.customer_id, di.vehicle_id
+        FROM device_installations di
+        JOIN devices d ON d.id = di.device_id
+        WHERE d.imei = ? AND di.removed_at IS NULL
+        LIMIT 1
+    ");
+    $stmt->execute([$imei]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return [
+        'customer_id' => $row['customer_id'] ?? null,
+        'vehicle_id'  => $row['vehicle_id'] ?? null,
+    ];
+}
+
+/**
  * Rótulo de exibição de um chip nos seletores de `/ativos` e `/ativos/novo`.
  *
  * @param array $chip Linha de `sim_cards` (carrier, msisdn, iccid)

@@ -171,20 +171,26 @@ if ($requested && $selImei) {
     // uma gravação de ontem produz arquivo carimbado hoje. O instante REAL sai
     // do NOME, logo abaixo, e o que cair fora da janela pedida é descartado.
     $margem = 2 * 86400;
+    // Fase 2 do fluxo chip→câmera→veículo: além do IMEI (já validado contra
+    // o cliente ATUAL da câmera acima), o `customer_id` GRAVADO no arquivo
+    // — senão um período em que esta câmera esteve com outro cliente
+    // vazaria vídeo daquele cliente para quem tem a câmera agora.
+    $mediaScopeSql = $scopeCust !== null ? ' AND customer_id = :cid' : '';
     $stmtMedia = $db->prepare("
         SELECT id, file_name, file_url, file_type, file_size, event_time, channel,
                download_status, downloaded_at, created_at
         FROM media_files
         WHERE imei = :imei
           AND event_time BETWEEN :df AND :dt
+          {$mediaScopeSql}
         ORDER BY event_time DESC
         LIMIT 800
     ");
-    $stmtMedia->execute([
+    $stmtMedia->execute(array_merge([
         ':imei' => $selImei,
         ':df'   => gmdate('Y-m-d H:i:s', strtotime($utcFrom . ' UTC') - $margem),
         ':dt'   => gmdate('Y-m-d H:i:s', strtotime($utcTo . ' UTC') + $margem),
-    ]);
+    ], $scopeCust !== null ? [':cid' => $scopeCust] : []));
     $mediaFiles = $stmtMedia->fetchAll();
 
     // ── 3) Blocos e arquivos, prontos para o navegador ──────────────────────

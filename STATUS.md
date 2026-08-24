@@ -1,10 +1,11 @@
-# STATUS.md — Jimi Webhook System v4.11.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.0 (YUV Parity)
 
-> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0 pronta, NÃO publicada
+> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0 commitada (não publicada), v4.12.0 pronta
 >
-> **Produção continua em `4.9.40`.** A v4.11.0 está no working tree, com migração
-> nova (`mysql/migration_v4.11.0.sql`) e `SYSTEM_VERSION` já bumpado — não
-> commitada nem publicada ainda.
+> **Produção continua em `4.9.40`.** v4.11.0 (Fase 1) já commitada
+> (`a4c55fb`), não publicada. v4.12.0 (Fase 2) está no working tree, com
+> migração nova (`mysql/migration_v4.12.0.sql`) e `SYSTEM_VERSION` já
+> bumpado — ainda não commitada.
 >
 > #### 🔑 Fase 1 do fluxo chip → câmera → veículo
 >
@@ -44,16 +45,46 @@
 > o chip automaticamente; desativar chip vinculado recusa, desativar chip livre
 > funciona. `php -l` limpo em todos os arquivos tocados.
 >
-> ⚠️ **Fase 2 (fora desta entrega, decisão do dono do produto):** `gps_data`,
-> `alarms`, `events`, `media_files`, `heartbeats` não têm `customer_id` próprio
-> — continuam escopados pelo dono ATUAL da câmera via JOIN em
-> `devices.customer_id`, não pelo período de instalação. Transferir uma câmera
-> de veículo/cliente ainda reatribui retroativamente o dono de todo o histórico
-> de telemetria daquele IMEI. `occurrences` já escapa disso (grava `customer_id`
-> como snapshot na criação, via `get_customer_id_for_imei()` em
-> `includes/occurrence_engine.php`) — é o padrão que a Fase 2 replica nas
-> demais tabelas, usando `device_installations` (criada nesta versão) para
-> resolver o dono correto no momento de cada evento.
+> #### 🔑 Fase 2 — isolamento de dados por período de instalação
+>
+> Fecha o requisito que a Fase 1 deixou em aberto: *"quando a câmera é
+> reinstalada num novo veículo, o dono do carro só vê os dados do seu
+> veículo"*. `gps_data`, `alarms`, `events`, `heartbeats`, `media_files`
+> ganharam `customer_id`/`vehicle_id` (`occurrences` ganhou só `vehicle_id` —
+> já tinha `customer_id` como snapshot desde sempre, e é o padrão que esta
+> fase generaliza). Cada webhook grava o dono do MOMENTO via
+> `resolve_installation_for_imei()` (`includes/functions.php`); a leitura
+> nunca reconsulta — lê o valor já gravado. Backfill do histórico existente é
+> EXATO (não aproximado): a Fase 1 acabou de nascer, então cada câmera tinha
+> no máximo uma instalação.
+>
+> **~20 pontos de leitura** trocaram de "JOIN devices + filtro pelo dono
+> atual" para "filtro pelo dono gravado na própria linha" — relatórios,
+> painel, dashboard, download/playback de vídeo, `/midia`.
+> **`handlers/ativo_detalhe.php`**: as 4 abas históricas (Trajetos, Alertas,
+> Log, Vídeo) passaram de `WHERE imei = ?` para `WHERE vehicle_id = ?` — é a
+> mudança que efetivamente separa o histórico de dois veículos que
+> compartilharam a mesma câmera. Consequência que quase passou despercebida:
+> a trava da Fase 1 ("sem câmera instalada, esconde a aba") escondia essas 4
+> abas também — errado agora, porque elas são do HISTÓRICO do veículo, não da
+> câmera atual. Corrigido: só **Ao Vivo/Comandos/Configurações/Parâmetros**
+> (operação sobre o equipamento físico) continuam exigindo câmera instalada.
+>
+> 🔴 **Três achados de tenant leak, fora do escopo original, corrigidos no
+> caminho:** `rel_posicoes.php` não validava que `?imei=` da URL pertencesse
+> ao cliente da sessão (bastava trocar o parâmetro); `trackdata.php` e
+> `hbdata.php` (AJAX do mapa ao vivo) validavam o IMEI mas liam o histórico
+> sem limite de período; `midia.php` (servidor de vídeo) autorizava pelo dono
+> ATUAL da câmera. Os três tinham a MESMA forma: checar posse atual não
+> impede vazar dado de um período em que a posse era de outro cliente.
+>
+> **Testado ponta a ponta** contra réplica local: câmera QA instalada no
+> veículo A (cliente 1) → ponto de GPS via `/pushgps` real → gravado com
+> `customer_id=1, vehicle_id=A`. Desinstalada de A, instalada no veículo B
+> (cliente 2) → segundo ponto → gravado com `customer_id=2, vehicle_id=B`.
+> Confirmado: `/ativos/{A}` mostra só o primeiro ponto (mesmo sem câmera
+> instalada agora), consulta direta por `vehicle_id=B` mostra só o segundo.
+> `php -l` limpo em todos os ~27 arquivos tocados.
 
 > ### 📍 ESTADO EM 21/08/2026 — v4.9.39 no ar; v4.9.40 pronta, NÃO publicada
 >
