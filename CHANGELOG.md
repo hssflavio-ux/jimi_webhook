@@ -17,6 +17,20 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Changed
 - `handlers/ativos.php` e `handlers/ativos_novo.php` ganham a coluna/seletor "Veículo".
 
+## [Unreleased] — 4.10.4
+
+**Falha de lógica reportada pelo dono do produto: chip é 1:1 com equipamento, mas nada garantia isso — e o cadastro pedia o vínculo na direção errada.**
+
+### Fixed
+- 🔴 **`sim_cards.imei` só tinha índice comum, não `UNIQUE`** — dois chips podiam apontar para o mesmo equipamento sem erro nenhum, e o `<select>` de equipamento em `/chips` deixava escolher qualquer um, mesmo já vinculado a outro chip. Adicionada `UNIQUE KEY uk_sim_imei` (`mysql/migration_v4.10.4.sql`) como trava de banco — a migração se recusa a criá-la se já existir duplicata (mostra as linhas em conflito em vez de decidir sozinha qual apagar).
+- 🔴 **O cadastro de equipamento (`/ativos/novo`, `/ativos`) não tinha campo de chip nenhum** — o único jeito de vincular era pela tela de Chips, escolhendo o equipamento; o caminho operacional certo é o inverso (o chip já existe no estoque; ao cadastrar a câmera, escolhe-se um chip **livre** para ela). As duas telas ganharam o campo **"Chip (SIM)"**, listando só chips sem equipamento vinculado (mais o próprio chip já vinculado, ao editar). `/chips` continua existindo para gestão de estoque, mas agora com a mesma restrição — filtra o `<select>` de equipamento para excluir os que já têm outro chip.
+
+### Added
+- **`link_sim_card_to_device()`** (`includes/functions.php`) — ponto único de escrita do vínculo chip↔equipamento, usado pelas três telas. Desvincula o chip atual antes de tentar o novo (troca explícita nunca deixa o equipamento preso a um chip que o usuário decidiu trocar) e é resiliente a corrida entre dois cadastros simultâneos disputando o mesmo chip (`UPDATE ... WHERE imei IS NULL` — 0 linhas afetadas vira aviso ao usuário, não erro silencioso).
+
+### Verificação
+- Testado no navegador (extensão do Chrome conectada nesta sessão): criado um equipamento escolhendo um chip livre → o chip some da lista de livres na MESMA resposta (bug de ordenação pego e corrigido: a query de chips livres rodava ANTES do vínculo ser gravado); editado o mesmo equipamento trocando de chip → o antigo volta a aparecer como livre, o novo passa a mostrar o IMEI vinculado; tentativa direta via SQL de forçar duplicata rejeitada pelo banco (`Duplicate entry ... for key 'sim_cards.uk_sim_imei'`); `/chips` confirmado excluindo o equipamento já vinculado do próprio `<select>`.
+
 ## [Unreleased] — 4.10.3
 
 **Item 7 do `docs/PLANO_IMPLEMENTACAO_v4.10.md`: painel widgetizado por usuário — quarto e último item entregue da rodada "YUV Parity — frota" (itens 5, 3, 6, 7).**

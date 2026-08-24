@@ -123,16 +123,30 @@ try {
 } catch (Exception $e) {}
 $totalPages = max(1, (int)ceil($totalRows / $perPage));
 
-$devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
-$devStmt->execute([':cid' => $customer_id]);
-$devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
-
 $editChip = null;
 if (!empty($_GET['edit'])) {
     $stmt = $db->prepare("SELECT * FROM sim_cards WHERE id = ?");
     $stmt->execute([(int)$_GET['edit']]);
     $editChip = $stmt->fetch(PDO::FETCH_ASSOC);
 }
+
+// v4.10.4 — o vínculo é 1:1: um equipamento com chip só pode aparecer aqui se
+// for o vínculo DESTE chip (edição) — nunca um equipamento de outro chip. A
+// direção recomendada para vincular é pelo cadastro do equipamento
+// (/ativos, /ativos/novo — "Chip (SIM)"); este <select> continua existindo
+// para gestão de estoque a partir do chip, mas com a MESMA regra de exclusão.
+$editId = $editChip['id'] ?? 0;
+$currentImei = $editChip['imei'] ?? '';
+$devStmt = $db->prepare("
+    SELECT imei, device_name FROM devices d
+    WHERE d.customer_id = :cid AND d.is_active = 1
+      AND (d.imei = :cur OR d.imei NOT IN (
+            SELECT imei FROM sim_cards WHERE imei IS NOT NULL AND imei <> '' AND id <> :eid
+      ))
+    ORDER BY d.device_name
+");
+$devStmt->execute([':cid' => $customer_id, ':cur' => $currentImei, ':eid' => $editId]);
+$devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title    = 'Chips';
 $current_route = 'chips';
@@ -231,6 +245,11 @@ include __DIR__ . '/../web/layout_base.php';
             </div>
             <div class="form-group">
                 <label>IMEI (vinculado)</label>
+                <small style="display:block;margin-bottom:6px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Só aparecem equipamentos sem outro chip vinculado. O caminho recomendado é
+                    o inverso — escolher o chip ao cadastrar/editar o equipamento em
+                    <a href="/ativos">Ativos</a>.
+                </small>
                 <select name="imei">
                     <option value="">Nenhum</option>
                     <?php foreach ($devices as $dev): ?>

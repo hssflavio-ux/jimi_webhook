@@ -449,6 +449,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.10.0" "mysql/migration_v4.10.0.sql" "devices.vehicle_type p/ icone do mapa (Tabler Icons)"
     run_migration "4.10.1" "mysql/migration_v4.10.1.sql" "manutencao preventiva + lembrete de documento do motorista"
     run_migration "4.10.3" "mysql/migration_v4.10.3.sql" "dashboard_layouts p/ painel widgetizado (/painel)"
+    run_migration "4.10.4" "mysql/migration_v4.10.4.sql" "UNIQUE em sim_cards.imei — trava vinculo chip:equipamento 1:1"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

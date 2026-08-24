@@ -524,6 +524,78 @@ function resolve_owner_customer_id($requested, bool $isAdmin, $sessionCustomerId
 }
 
 /**
+ * Vincula (ou desvincula) um chip a um equipamento — ponto ÚNICO de escrita
+ * do relacionamento 1:1 chip↔equipamento (v4.10.4).
+ *
+ * O vínculo mora em `sim_cards.imei`, não numa coluna do lado de `devices`
+ * (`devices.sim_card_id` existe na tabela mas não é lido nem escrito em
+ * lugar nenhum do código — legado morto; não usar). Antes desta versão só
+ * `handlers/chips.php` escrevia esse campo, escolhendo QUALQUER equipamento
+ * num `<select>` sem checar se ele já tinha outro chip — o cadastro de
+ * equipamento (`handlers/ativos_novo.php`/`ativos.php`) nem tinha campo de
+ * chip. As duas telas agora chamam esta função, e a `UNIQUE KEY uk_sim_imei`
+ * (`mysql/migration_v4.10.4.sql`) é o backstop: mesmo um bug futuro nesta
+ * função não consegue gravar dois chips no mesmo IMEI.
+ *
+ * @param PDO      $db        Conexão ativa
+ * @param int|null $simCardId `sim_cards.id` a vincular; null/0 = só desvincula o atual
+ * @param string   $imei      Equipamento
+ * @param int      $ownerId   `customer_id` dono do chip (escopo da checagem de posse)
+ * @returns string|null Aviso a mostrar ao usuário, ou null se tudo correu bem
+ */
+function link_sim_card_to_device(PDO $db, ?int $simCardId, string $imei, int $ownerId): ?string
+{
+    $simCardId = $simCardId ?: null;
+
+    $stmt = $db->prepare("SELECT id FROM sim_cards WHERE imei = ? LIMIT 1");
+    $stmt->execute([$imei]);
+    $current = $stmt->fetchColumn();
+    $currentId = $current !== false ? (int)$current : null;
+
+    if ($currentId === $simCardId) {
+        return null; // já é o vínculo pedido — nada a fazer
+    }
+
+    // Desvincula o chip atual ANTES de tentar o novo — mesmo que o novo falhe
+    // (perdeu a corrida de outro cadastro simultâneo), o equipamento não fica
+    // preso a um chip que o usuário explicitamente trocou.
+    if ($currentId !== null) {
+        $db->prepare("UPDATE sim_cards SET imei = NULL WHERE id = ?")->execute([$currentId]);
+    }
+
+    if ($simCardId === null) {
+        return null;
+    }
+
+    // `AND (imei IS NULL OR imei='')` é a checagem de corrida: se outro
+    // cadastro vinculou este chip entre o carregamento do formulário e este
+    // POST, a linha não casa e rowCount() vem 0 — sem isso o segundo POST
+    // simplesmente roubaria o chip do primeiro, driblando a UNIQUE key (ela
+    // impediria um UPDATE para um IMEI já ocupado, não um chip já ocupado
+    // recebendo outro IMEI).
+    $upd = $db->prepare("
+        UPDATE sim_cards SET imei = ?
+        WHERE id = ? AND customer_id = ? AND (imei IS NULL OR imei = '')
+    ");
+    $upd->execute([$imei, $simCardId, $ownerId]);
+    if ($upd->rowCount() === 0) {
+        return 'O chip selecionado não estava mais livre (outro cadastro pode tê-lo vinculado enquanto você preenchia o formulário) — o equipamento foi salvo sem chip.';
+    }
+    return null;
+}
+
+/**
+ * Rótulo de exibição de um chip nos seletores de `/ativos` e `/ativos/novo`.
+ *
+ * @param array $chip Linha de `sim_cards` (carrier, msisdn, iccid)
+ * @returns string
+ */
+function chip_label(array $chip): string
+{
+    return trim(($chip['carrier'] ?: '—') . ' · ' . ($chip['msisdn'] ?: ($chip['iccid'] ?: 'sem número')));
+}
+
+/**
  * SQL que resolve o NOME do alarme na leitura — joins + expressão.
  *
  * `pushalarm.php` resolve o nome UMA vez, quando o webhook chega, e grava o

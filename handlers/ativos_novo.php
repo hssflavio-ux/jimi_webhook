@@ -34,6 +34,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $ativacao    = trim($_POST['activation_date'] ?? '');
     $vehicleType = trim($_POST['vehicle_type'] ?? '');
     $vehicleType = array_key_exists($vehicleType, VEHICLE_ICONS) ? $vehicleType : null;
+    $simCardId   = (int)($_POST['sim_card_id'] ?? 0) ?: null;
+    $chipWarning = null;
 
     // Dono do dispositivo — ver resolve_owner_customer_id(). Antes gravava
     // `$customer_id` cru: sessão sem cliente virava dispositivo com customer_id
@@ -79,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['user_id'],
                 $existing['id']
             ]);
+            $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $owner_id);
             $success = true;
         } else {
             $stmt = $db->prepare("
@@ -95,10 +98,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $vehicleType,
                 $_SESSION['user_id']
             ]);
+            $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $owner_id);
             $success = true;
         }
     }
 }
+
+// Chips LIVRES (v4.10.4) — o cadastro de equipamento é onde o chip já
+// existente no estoque é escolhido, nunca digitado aqui. Só entram os que
+// ainda não estão vinculados a nenhum IMEI (ver link_sim_card_to_device()).
+// Roda DEPOIS do bloco de POST de propósito: se o request acabou de linkar
+// um chip, a lista tem de refletir isso na mesma resposta — buscar antes do
+// POST mostraria o chip recém-consumido como livre até o próximo reload.
+$chipWhere = $is_admin ? '1=1' : 's.customer_id = :cid';
+$chipParams = $is_admin ? [] : [':cid' => $customer_id];
+$chipsStmt = $db->prepare("
+    SELECT s.id, s.carrier, s.msisdn, s.iccid, c.name AS customer_name
+    FROM sim_cards s LEFT JOIN customers c ON c.id = s.customer_id
+    WHERE $chipWhere AND s.is_active = 1 AND (s.imei IS NULL OR s.imei = '')
+    ORDER BY s.carrier, s.msisdn
+");
+$chipsStmt->execute($chipParams);
+$freeChips = $chipsStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title    = 'Novo Dispositivo';
 $current_route = 'ativos';
@@ -152,6 +173,11 @@ include __DIR__ . '/../web/layout_base.php';
     <a href="/ativos/<?= urlencode($imei) ?>" style="color:var(--success);font-weight:500">Ver detalhes</a>
     &nbsp;|&nbsp;
     <a href="/ativos/novo" style="color:var(--success)">Cadastrar outro</a>
+</div>
+<?php endif; ?>
+<?php if (!empty($chipWarning)): ?>
+<div class="card mb-24" style="border-color:#ffe082;background:#fff8e1;color:#7c5a00;font-size:13px">
+    <?= htmlspecialchars($chipWarning) ?>
 </div>
 <?php endif; ?>
 
@@ -244,6 +270,26 @@ include __DIR__ . '/../web/layout_base.php';
                     <span style="font-size:11px;"><?= htmlspecialchars($vtLabel) ?></span>
                 </button>
                 <?php endforeach; ?>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="sim_card_id">Chip (SIM)</label>
+                <select id="sim_card_id" name="sim_card_id">
+                    <option value="">— Nenhum —</option>
+                    <?php foreach ($freeChips as $chip):
+                        $chipLabel = chip_label($chip);
+                        if ($is_admin && $chip['customer_name']) $chipLabel .= ' (' . $chip['customer_name'] . ')';
+                    ?>
+                    <option value="<?= $chip['id'] ?>" <?= (string)($_POST['sim_card_id'] ?? '') === (string)$chip['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($chipLabel) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Só aparecem chips ainda sem equipamento vinculado.
+                    <?= empty($freeChips) ? 'Nenhum chip livre agora — cadastre um em <a href="/chips">Chips</a>.' : '' ?>
+                </small>
             </div>
         </div>
         <div class="flex-between mt-16">

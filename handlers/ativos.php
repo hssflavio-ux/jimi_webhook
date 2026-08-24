@@ -26,9 +26,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $cam    = max(1, (int)($_POST['camera_count'] ?? 1));
         $vtype  = trim($_POST['vehicle_type'] ?? '');
         $vtype  = array_key_exists($vtype, VEHICLE_ICONS) ? $vtype : null;
+        $simCardId = (int)($_POST['sim_card_id'] ?? 0) ?: null;
         $db->prepare("UPDATE devices SET device_name=?, device_model_id=?, camera_count=?, vehicle_type=? WHERE imei=? AND customer_id=?")
            ->execute([$name, $model ?: null, $cam, $vtype, $imei, $customer_id]);
-        $msg = 'Dispositivo atualizado.';
+        $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $customer_id);
+        $msg = 'Dispositivo atualizado.' . ($chipWarning ? ' ' . $chipWarning : '');
     }
 }
 
@@ -112,6 +114,16 @@ try {
 
 $models = $db->query("SELECT id, model_name, protocol, camera_count FROM device_models ORDER BY protocol, model_name")->fetchAll(PDO::FETCH_ASSOC);
 
+// Chips (v4.10.4) — livres (para o <select> de edição) + os já vinculados
+// (indexados por IMEI, para a coluna de exibição e para pré-selecionar o
+// chip da PRÓPRIA linha no <select>, que senão não estaria entre os livres).
+$chipsAllStmt = $db->prepare("SELECT id, carrier, msisdn, iccid, imei FROM sim_cards WHERE customer_id = :cid AND is_active = 1");
+$chipsAllStmt->execute([':cid' => $customer_id]);
+$chipsAll = $chipsAllStmt->fetchAll(PDO::FETCH_ASSOC);
+$freeChips = array_values(array_filter($chipsAll, fn($c) => empty($c['imei'])));
+$chipByImei = [];
+foreach ($chipsAll as $c) { if (!empty($c['imei'])) $chipByImei[$c['imei']] = $c; }
+
 $page_title='Ativos'; $current_route='ativos';
 include __DIR__ . '/../web/layout_base.php';
 ?>
@@ -135,7 +147,7 @@ include __DIR__ . '/../web/layout_base.php';
 
 <div class="table-wrap">
     <table>
-        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Veículo</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
+        <thead><tr><th>Placa</th><th>IMEI</th><th>Modelo</th><th>Veículo</th><th>Chip</th><th>Câmeras</th><th>Status</th><th>Velocidade</th><th>Última Com.</th><th style="width:180px"></th></tr></thead>
         <tbody>
             <?php foreach ($devices as $dev):
                 $off = !$dev['is_active'];
@@ -158,6 +170,12 @@ include __DIR__ . '/../web/layout_base.php';
                             <?= vehicle_icon_svg($dev['vehicle_type'], 'var(--body)', 16) ?>
                         <?php endif; ?>
                         <?= htmlspecialchars(vehicle_type_label($dev['vehicle_type'])) ?>
+                    </span>
+                </td>
+                <td>
+                    <?php $rowChip = $chipByImei[$dev['imei']] ?? null; ?>
+                    <span class="view-chip-<?= $dev['imei'] ?>" style="<?= $rowChip ? '' : 'color:var(--muted)' ?>">
+                        <?= $rowChip ? htmlspecialchars(chip_label($rowChip)) : '—' ?>
                     </span>
                 </td>
                 <td><span class="view-cam-<?= $dev['imei'] ?>"><?= $dev['camera_count'] ?? 1 ?></span></td>
@@ -189,15 +207,31 @@ include __DIR__ . '/../web/layout_base.php';
                         <?php endforeach; ?>
                     </select>
                 </td>
+                <td>
+                    <select id="edit-chip-<?= $dev['imei'] ?>" style="width:100%;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px">
+                        <option value="">— Nenhum —</option>
+                        <?php
+                        // O chip da PRÓPRIA linha entra na lista mesmo não estando "livre"
+                        // (ele está ocupado por ESTE device) — senão desapareceria do select
+                        // assim que fosse vinculado, e a tela mentiria que não há chip.
+                        $rowOptions = $rowChip ? array_merge([$rowChip], $freeChips) : $freeChips;
+                        foreach ($rowOptions as $chip):
+                        ?>
+                        <option value="<?= $chip['id'] ?>" <?= ($rowChip && $rowChip['id'] === $chip['id']) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars(chip_label($chip)) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
                 <td><input type="number" id="edit-cam-<?= $dev['imei'] ?>" value="<?= $dev['camera_count'] ?>" min="1" max="16" style="width:60px;padding:4px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:4px"></td>
                 <td colspan="4">
-                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><input type="hidden" id="edit-f-name-<?= $dev['imei'] ?>" name="device_name"><input type="hidden" id="edit-f-model-<?= $dev['imei'] ?>" name="device_model_id"><input type="hidden" id="edit-f-vtype-<?= $dev['imei'] ?>" name="vehicle_type"><input type="hidden" id="edit-f-cam-<?= $dev['imei'] ?>" name="camera_count"><button class="btn btn-primary btn-sm">Salvar</button></form>
+                    <form method="post" style="display:inline"><?= csrf_field() ?><input type="hidden" name="action" value="edit"><input type="hidden" name="imei" value="<?= $dev['imei'] ?>"><input type="hidden" id="edit-f-name-<?= $dev['imei'] ?>" name="device_name"><input type="hidden" id="edit-f-model-<?= $dev['imei'] ?>" name="device_model_id"><input type="hidden" id="edit-f-vtype-<?= $dev['imei'] ?>" name="vehicle_type"><input type="hidden" id="edit-f-chip-<?= $dev['imei'] ?>" name="sim_card_id"><input type="hidden" id="edit-f-cam-<?= $dev['imei'] ?>" name="camera_count"><button class="btn btn-primary btn-sm">Salvar</button></form>
                     <button class="btn btn-outline btn-sm" onclick="cancelEdit('<?= $dev['imei'] ?>')">Cancelar</button>
                 </td>
             </tr>
             <?php endforeach; ?>
             <?php if (empty($devices)): ?>
-            <tr><td colspan="9"><div class="empty-state"><h3>Nenhum dispositivo</h3><p>Cadastre seu primeiro equipamento.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
+            <tr><td colspan="10"><div class="empty-state"><h3>Nenhum dispositivo</h3><p>Cadastre seu primeiro equipamento.</p><a href="/ativos/novo" class="btn btn-primary mt-16">Cadastrar</a></div></td></tr>
             <?php endif; ?>
         </tbody>
     </table>
@@ -229,6 +263,7 @@ document.querySelectorAll('form').forEach(function(f) {
             f.querySelector('[name=device_name]').value = document.getElementById('edit-name-'+imei).value;
             f.querySelector('[name=device_model_id]').value = document.getElementById('edit-model-'+imei).value;
             f.querySelector('[name=vehicle_type]').value = document.getElementById('edit-vtype-'+imei).value;
+            f.querySelector('[name=sim_card_id]').value = document.getElementById('edit-chip-'+imei).value;
             f.querySelector('[name=camera_count]').value = document.getElementById('edit-cam-'+imei).value;
         }
     });
