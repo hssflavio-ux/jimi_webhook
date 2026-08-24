@@ -207,18 +207,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':act' => $isActive, ':per' => !empty($peripherals) ? json_encode($peripherals) : null,
                         ':imei' => $editImei,
                     ], $scopeParams));
-                    if ($stmt->rowCount() === 0) {
-                        // 0 linhas = fora do escopo, ou nada mudou. Só o primeiro é erro,
-                        // mas confundir "não é seu" com "salvo" é pior que o falso alarme.
-                        $chk = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei" . $scopeSql);
-                        $chk->execute(array_merge([':imei' => $editImei], $scopeParams));
-                        if ((int)$chk->fetchColumn() === 0) {
-                            $message = 'Equipamento não encontrado no seu escopo de cliente.';
-                            $messageType = 'error';
-                        } else {
-                            $message = 'Equipamento atualizado.';
-                            $messageType = 'success';
-                        }
+                    // `rowCount()` do UPDATE NÃO serve pra decidir "está no escopo":
+                    // o MySQL conta como 0 linhas afetadas quando nenhuma COLUNA
+                    // do SET muda de valor — o que é o caso normal de "só troquei
+                    // o chip" (nenhum campo de `devices` na query acima muda). Um
+                    // `if ($stmt->rowCount() === 0)` aqui pulava
+                    // `link_sim_card_to_device()` inteiro sempre que o chip fosse
+                    // a ÚNICA mudança: a tela dizia "atualizado" e o vínculo
+                    // ficava intocado, em silêncio. Escopo se confere com um
+                    // SELECT, nunca com o efeito colateral do UPDATE.
+                    $chk = $db->prepare("SELECT COUNT(*) FROM devices WHERE imei = :imei" . $scopeSql);
+                    $chk->execute(array_merge([':imei' => $editImei], $scopeParams));
+                    if ((int)$chk->fetchColumn() === 0) {
+                        $message = 'Equipamento não encontrado no seu escopo de cliente.';
+                        $messageType = 'error';
                     } else {
                         // Desativou agora (estava ativa, câmera livre, confirmado
                         // acima): libera o chip — cascade pedido pelo dono do

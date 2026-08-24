@@ -5,6 +5,14 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.1
+
+**Correção pedida pelo dono do produto: o cadastro de chip ainda deixava vincular câmera na direção errada.**
+
+### Fixed
+- 🔴 **`handlers/chips.php` ainda tinha um `<select>` de câmera no formulário do chip** — dava pra vincular dos dois lados (chip escolhendo câmera, e câmera escolhendo chip), quando a regra é só uma direção: o vínculo se propõe no cadastro da CÂMERA (`/equipamentos`, "Chip (SIM)"), nunca no do chip. Removido — o formulário do chip agora só MOSTRA a câmera vinculada (texto somente leitura, com link para editar em `/equipamentos`); não oferece mais escolha nenhuma. `handlers/chips.php` não chama mais `link_sim_card_to_device()` em nenhuma hipótese.
+- 🔴 **Achado no caminho: trocar SÓ o chip de uma câmera (nenhum outro campo) não gravava nada, sem erro nenhum.** `handlers/equipamentos.php` decidia se estava "fora do escopo do cliente" pelo `rowCount()` do `UPDATE devices` — mas o MySQL conta 0 linhas afetadas quando nenhuma COLUNA do `SET` muda de valor, que é exatamente o caso de "só troquei o chip" (nenhum campo de `devices` na query muda). Com `rowCount() === 0`, o código pulava `link_sim_card_to_device()` inteiro e ainda mostrava "Equipamento atualizado" — o vínculo ficava intocado em silêncio, nos dois sentidos (vincular e desvincular). Corrigido: o escopo agora se confere com um `SELECT` dedicado, nunca com o efeito colateral do `UPDATE`.
+
 ## [Unreleased] — 4.12.0
 
 **Fase 2 da correção pedida pelo dono do produto: fecha o requisito que a Fase 1 (v4.11.0) deixou em aberto — "quando uma câmera é reinstalada num novo veículo, o dono do carro só vê os dados do seu veículo".**

@@ -31,35 +31,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $carrier = trim($_POST['carrier'] ?? '');
         $msisdn  = trim($_POST['msisdn'] ?? '');
         $iccid   = trim($_POST['iccid'] ?? '');
-        $imei    = trim($_POST['imei'] ?? '');
         $active  = isset($_POST['is_active']) ? 1 : 0;
 
         // `sim_cards.customer_id` é nullable: sessão sem cliente gravava chip órfão
         // com "criado com sucesso" — mesmo defeito do cadastro de equipamento.
         $owner_id = resolve_owner_customer_id($_POST['customer_id'] ?? null, $is_admin, $customer_id);
 
+        // O vínculo chip↔câmera só se mexe pelo cadastro da CÂMERA
+        // (/equipamentos, `link_sim_card_to_device()`) — nunca daqui. Por
+        // isso o `imei` atual vem do BANCO, não de um campo do formulário: o
+        // chip não tem mais como propor a própria vinculação.
+        $currentImei = null;
+        if ($id > 0) {
+            $chk = $db->prepare("SELECT imei FROM sim_cards WHERE id = ?");
+            $chk->execute([$id]);
+            $currentImei = $chk->fetchColumn() ?: null;
+        }
+
         if (empty($carrier) && empty($msisdn) && empty($iccid)) {
             $error = 'Preencha ao menos um campo (Operadora, Número ou ICCID).';
         } elseif ($id === 0 && $owner_id === null) {
             $error = 'Selecione o cliente do chip. Sua sessão está sem cliente definido — salvar assim deixaria o chip sem vínculo e invisível na lista.';
-        } elseif ($active === 0 && $imei !== '') {
-            // Fluxo correto: chip só desativa livre. Desativar em uso apagaria
-            // o vínculo em silêncio (o UPDATE abaixo gravaria is_active=0 E o
-            // imei junto) — o operador precisa desvincular primeiro, de
-            // propósito, para não perder de vista que a câmera ficou sem chip.
-            $error = 'Este chip está vinculado a uma câmera (IMEI ' . htmlspecialchars($imei) . '). Desvincule (selecione "Nenhum" em "IMEI (vinculado)") antes de desativar.';
+        } elseif ($active === 0 && $currentImei) {
+            // Fluxo correto: chip só desativa livre. O operador precisa
+            // desvincular primeiro, em /equipamentos, para não perder de
+            // vista que a câmera ficou sem chip.
+            $error = 'Este chip está vinculado à câmera de IMEI ' . $currentImei . '. Desvincule em /equipamentos (edite a câmera e selecione "Nenhum" em Chip) antes de desativar.';
         } else {
             try {
                 if ($id > 0) {
-                    $sql = "UPDATE sim_cards SET carrier=?, msisdn=?, iccid=?, imei=?, is_active=? WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
-                    $params = [$carrier, $msisdn, $iccid, $imei ?: null, $active, $id];
+                    // `imei` NUNCA entra no SET — preserva o vínculo como está.
+                    $sql = "UPDATE sim_cards SET carrier=?, msisdn=?, iccid=?, is_active=? WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
+                    $params = [$carrier, $msisdn, $iccid, $active, $id];
                     if (!$is_admin) $params[] = $customer_id;
                     $stmt = $db->prepare($sql);
                     $stmt->execute($params);
                     $success = 'Chip atualizado.';
                 } else {
-                    $stmt = $db->prepare("INSERT INTO sim_cards (customer_id, carrier, msisdn, iccid, imei, is_active) VALUES (?, ?, ?, ?, ?, ?)");
-                    $stmt->execute([$owner_id, $carrier, $msisdn, $iccid, $imei ?: null, $active]);
+                    // Chip novo nasce sempre livre — vincular é ação do
+                    // cadastro de equipamento, nunca deste formulário.
+                    $stmt = $db->prepare("INSERT INTO sim_cards (customer_id, carrier, msisdn, iccid, is_active) VALUES (?, ?, ?, ?, ?)");
+                    $stmt->execute([$owner_id, $carrier, $msisdn, $iccid, $active]);
                     $success = 'Chip criado com sucesso.';
                 }
             } catch (PDOException $e) {
@@ -131,28 +143,17 @@ $totalPages = max(1, (int)ceil($totalRows / $perPage));
 
 $editChip = null;
 if (!empty($_GET['edit'])) {
-    $stmt = $db->prepare("SELECT * FROM sim_cards WHERE id = ?");
+    // Vínculo é só de LEITURA aqui — quem muda é /equipamentos. O join
+    // traz o nome da câmera só pra exibir, nunca pra reoferecer escolha.
+    $stmt = $db->prepare("
+        SELECT s.*, d.device_name
+        FROM sim_cards s
+        LEFT JOIN devices d ON d.imei = s.imei
+        WHERE s.id = ?
+    ");
     $stmt->execute([(int)$_GET['edit']]);
     $editChip = $stmt->fetch(PDO::FETCH_ASSOC);
 }
-
-// v4.10.4 — o vínculo é 1:1: um equipamento com chip só pode aparecer aqui se
-// for o vínculo DESTE chip (edição) — nunca um equipamento de outro chip. A
-// direção recomendada para vincular é pelo cadastro do equipamento
-// (/ativos, /ativos/novo — "Chip (SIM)"); este <select> continua existindo
-// para gestão de estoque a partir do chip, mas com a MESMA regra de exclusão.
-$editId = $editChip['id'] ?? 0;
-$currentImei = $editChip['imei'] ?? '';
-$devStmt = $db->prepare("
-    SELECT imei, device_name FROM devices d
-    WHERE d.customer_id = :cid AND d.is_active = 1
-      AND (d.imei = :cur OR d.imei NOT IN (
-            SELECT imei FROM sim_cards WHERE imei IS NOT NULL AND imei <> '' AND id <> :eid
-      ))
-    ORDER BY d.device_name
-");
-$devStmt->execute([':cid' => $customer_id, ':cur' => $currentImei, ':eid' => $editId]);
-$devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 
 $page_title    = 'Chips';
 $current_route = 'chips';
@@ -249,22 +250,25 @@ include __DIR__ . '/../web/layout_base.php';
                 <label>ICCID</label>
                 <input type="text" name="iccid" value="<?= htmlspecialchars($editChip['iccid'] ?? '') ?>" placeholder="8955...">
             </div>
+            <?php if ($editChip): ?>
             <div class="form-group">
-                <label>IMEI (vinculado)</label>
-                <small style="display:block;margin-bottom:6px;font-size:11px;color:var(--muted);line-height:1.45">
-                    Só aparecem equipamentos sem outro chip vinculado. O caminho recomendado é
-                    o inverso — escolher o chip ao cadastrar/editar o equipamento em
-                    <a href="/ativos">Ativos</a>.
+                <label>Câmera vinculada</label>
+                <?php if (!empty($editChip['imei'])): ?>
+                <input type="text" readonly style="background:var(--canvas-soft)"
+                       value="<?= htmlspecialchars($editChip['imei']) ?><?= $editChip['device_name'] ? ' — ' . htmlspecialchars($editChip['device_name']) : '' ?>">
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Só de leitura aqui. Para trocar ou desvincular, edite a câmera em
+                    <a href="/equipamentos?action=editar&imei=<?= urlencode($editChip['imei']) ?>">Equipamentos</a>.
                 </small>
-                <select name="imei">
-                    <option value="">Nenhum</option>
-                    <?php foreach ($devices as $dev): ?>
-                    <option value="<?= htmlspecialchars($dev['imei']) ?>" <?= (($editChip['imei'] ?? '') === $dev['imei']) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($dev['device_name'] ?: $dev['imei']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
+                <?php else: ?>
+                <input type="text" readonly style="background:var(--canvas-soft)" value="Nenhuma — chip livre">
+                <small style="display:block;margin-top:4px;font-size:11px;color:var(--muted);line-height:1.45">
+                    Para vincular, escolha este chip ao cadastrar ou editar uma câmera em
+                    <a href="/equipamentos">Equipamentos</a>.
+                </small>
+                <?php endif; ?>
             </div>
+            <?php endif; ?>
             <div class="form-group" style="display:flex;align-items:center;gap:8px">
                 <input type="checkbox" name="is_active" id="chip-active" value="1" <?= (!isset($editChip) || ($editChip['is_active'] ?? 1)) ? 'checked' : '' ?> style="width:auto">
                 <label for="chip-active" style="margin:0;text-transform:none;font-size:14px;cursor:pointer">Ativo</label>

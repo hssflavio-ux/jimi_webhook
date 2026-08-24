@@ -527,15 +527,19 @@ function resolve_owner_customer_id($requested, bool $isAdmin, $sessionCustomerId
  * Vincula (ou desvincula) um chip a um equipamento — ponto ÚNICO de escrita
  * do relacionamento 1:1 chip↔equipamento (v4.10.4).
  *
- * O vínculo mora em `sim_cards.imei`, não numa coluna do lado de `devices`
- * (`devices.sim_card_id` existe na tabela mas não é lido nem escrito em
- * lugar nenhum do código — legado morto; não usar). Antes desta versão só
- * `handlers/chips.php` escrevia esse campo, escolhendo QUALQUER equipamento
- * num `<select>` sem checar se ele já tinha outro chip — o cadastro de
- * equipamento (`handlers/ativos_novo.php`/`ativos.php`) nem tinha campo de
- * chip. As duas telas agora chamam esta função, e a `UNIQUE KEY uk_sim_imei`
- * (`mysql/migration_v4.10.4.sql`) é o backstop: mesmo um bug futuro nesta
- * função não consegue gravar dois chips no mesmo IMEI.
+ * O vínculo mora em `sim_cards.imei` — `devices.sim_card_id`, a FK que
+ * existia até a v4.10.x, nunca foi lida nem escrita por código nenhum e foi
+ * removida na migração v4.11.0 (legado morto).
+ *
+ * 🔴 Chamada SÓ por `handlers/equipamentos.php` (v4.11.1). O cadastro de chip
+ * (`handlers/chips.php`) NÃO tem mais campo pra isso, de propósito — o dono
+ * do produto pediu para o vínculo só existir na direção câmera→chip (a
+ * câmera escolhe um chip livre; nunca o chip escolhendo uma câmera). Antes
+ * disso, `chips.php` também tinha um `<select>` de equipamento, e escolher
+ * por ali era o caminho errado só desencorajado por um texto de ajuda — dava
+ * pra vincular dos dois lados. A `UNIQUE KEY uk_sim_imei`
+ * (`mysql/migration_v4.10.4.sql`) continua sendo o backstop: mesmo um bug
+ * futuro nesta função não consegue gravar dois chips no mesmo IMEI.
  *
  * @param PDO      $db        Conexão ativa
  * @param int|null $simCardId `sim_cards.id` a vincular; null/0 = só desvincula o atual
@@ -761,7 +765,8 @@ function resolve_installation_for_imei(PDO $db, string $imei): array
 }
 
 /**
- * Rótulo de exibição de um chip nos seletores de `/ativos` e `/ativos/novo`.
+ * Rótulo de exibição de um chip no seletor "Chip (SIM)" de `/equipamentos` —
+ * único lugar do cadastro onde o vínculo chip↔câmera é escolhido.
  *
  * @param array $chip Linha de `sim_cards` (carrier, msisdn, iccid)
  * @returns string

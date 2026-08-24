@@ -1,11 +1,28 @@
-# STATUS.md — Jimi Webhook System v4.12.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.1 (YUV Parity)
 
-> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0 commitada (não publicada), v4.12.0 pronta
+> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0+v4.12.0 commitadas (não publicadas); v4.12.1 pronta
 >
-> **Produção continua em `4.9.40`.** v4.11.0 (Fase 1) já commitada
-> (`a4c55fb`), não publicada. v4.12.0 (Fase 2) está no working tree, com
-> migração nova (`mysql/migration_v4.12.0.sql`) e `SYSTEM_VERSION` já
-> bumpado — ainda não commitada.
+> **Produção continua em `4.9.40`.** v4.11.0 (Fase 1, `a4c55fb`) e v4.12.0
+> (Fase 2, `21e1a59`) já commitadas, não publicadas. v4.12.1 (correção de
+> dinâmica do cadastro, abaixo) está no working tree, sem migração nova —
+> ainda não commitada.
+>
+> #### 🔧 v4.12.1 — vínculo chip↔câmera só numa direção
+>
+> Dono do produto apontou: `handlers/chips.php` ainda deixava escolher a
+> câmera no formulário do CHIP — dava pra vincular dos dois lados, quando a
+> regra é só uma direção (a câmera escolhe o chip, nunca o inverso). Removido
+> o `<select>` de câmera de `chips.php`; o formulário só mostra a câmera
+> vinculada, texto somente leitura. **Achado no caminho, mais sério que o
+> pedido original:** trocar SÓ o chip de uma câmera em `/equipamentos` (nenhum
+> outro campo) não gravava nada, sem erro — o código usava `rowCount()` do
+> `UPDATE devices` pra decidir "está no escopo do cliente", e o MySQL conta 0
+> linhas quando nenhuma coluna do `SET` muda de valor (exatamente o caso de
+> "só o chip mudou"). A tela dizia "atualizado" e o vínculo ficava intocado,
+> nos dois sentidos. Corrigido: escopo agora é um `SELECT` dedicado, nunca o
+> efeito colateral do `UPDATE`. Testado ponta a ponta via HTTP (linkar só-o-
+> chip, desvincular só-o-chip, cada um como ÚNICA mudança no POST) — os dois
+> agora persistem.
 >
 > #### 🔑 Fase 1 do fluxo chip → câmera → veículo
 >
