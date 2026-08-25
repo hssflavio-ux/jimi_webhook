@@ -1,10 +1,31 @@
-# STATUS.md — Jimi Webhook System v4.12.9 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.10 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.7; v4.12.8 e v4.12.9 prontas para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.9; v4.12.10 pronta para deploy
 >
-> **Produção está em `4.12.7`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.8 e v4.12.9 (abaixo) resolvem juntas o "Voltar ao
-> relatório" do Deslocamento e estão prontas para deploy.
+> **Produção está em `4.12.9`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.12.10 (abaixo) corrige o contador On/Off do header e está
+> pronta para deploy.
+>
+> #### 🔧 v4.12.10 — contador On/Off do sino sempre inflava o "On"
+>
+> Dono do produto reportou que a sinalização On/Off ao lado do sino de
+> notificações parecia errada. Achado: `handlers/camerasdata.php` (que
+> alimenta esse contador no header) lia `device_statistics.is_online` — uma
+> coluna que as stored procedures de alarme/gps/heartbeat/evento só gravam
+> como `1`, nunca de volta a `0`. Câmera que comunicou uma vez fica "Online"
+> PARA SEMPRE nessa coluna. Medido em produção: câmera de teste sem
+> comunicar há 17.196 min (~12 dias) ainda com `is_online = 1`. O resto do
+> sistema já evita essa coluna (`equipamentos.php`, `dashboard_widgets.php`
+> calculam por `TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5`;
+> `rastreamento.php`/`video_aovivo.php` classificam ao vivo) — só
+> `camerasdata.php` lia a coluna estática. Corrigido com a mesma expressão
+> de 5 minutos, nas duas variantes da query (principal e fallback).
+> `ativo_detalhe.php`/`ativos.php` também selecionam a mesma coluna estática
+> mas não a exibem em tela nenhuma — não corrigidos por não terem efeito
+> visível, só documentado para não virar bug ativo se alguém passar a
+> renderizá-la.
+> `php -l` limpo; testado em produção (8 câmeras do cliente 1: contagem foi
+> de 8 On/0 Off para 7 On/1 Off, batendo com a real).
 >
 > #### 🔧 v4.12.9 — Rota/Replay do Deslocamento saem da nova janela
 >

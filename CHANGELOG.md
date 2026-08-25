@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.10
+
+**Correção pedida pelo dono do produto: o contador On/Off ao lado do sino de notificações está incorreto.**
+
+### Fixed
+- 🔴 **`handlers/camerasdata.php` lia `device_statistics.is_online` — coluna que só é gravada como 1 e NUNCA volta a 0.** As stored procedures de alarme/gps/heartbeat/evento (`mysql/jimi_tracker.sql`) fazem `is_online = 1` em todo `ON DUPLICATE KEY UPDATE`; nenhum ponto do sistema jamais grava 0 nela. Resultado: uma câmera que comunicou uma vez fica "Online" PARA SEMPRE nessa coluna, mesmo dias depois de calada — o contador do header (`fleet-on`/`fleet-off`, alimentado por este endpoint) inflava o "On" e nunca contava ninguém como "Off" enquanto o dispositivo já tivesse conectado alguma vez. Medido em produção: câmera de teste sem comunicar há 17.196 min (~12 dias) ainda com `is_online = 1`. Todo o resto do sistema já evitava essa coluna e calculava online por `TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5` (`equipamentos.php`, `dashboard_widgets.php`) ou por classificação ao vivo (`rastreamento.php`, `video_aovivo.php`) — só `camerasdata.php` lia a coluna estática. Corrigido substituindo `s.is_online` pela mesma expressão de 5 minutos usada em `equipamentos.php`, nas duas variantes da consulta (principal e fallback).
+- `ativo_detalhe.php` e `ativos.php` também selecionam `s.is_online` da mesma coluna estática, mas o valor não é usado em nenhuma tela — não corrigido por não ter efeito visível; documentado aqui para não ser reintroduzido como bug ativo se alguém passar a renderizá-lo.
+
+### Verificação
+- `php -l` limpo em `handlers/camerasdata.php`.
+- Query corrigida testada em produção: a câmera parada há 12 dias passa de `is_online=1` (coluna estática) para `is_online=0` (calculado); contagem do cliente de teste vai de 8 On/0 Off para 7 On/1 Off.
+
 ## [Unreleased] — 4.12.9
 
 **Complemento da 4.12.8, a pedido do dono do produto: parar de abrir Rota/Replay do Deslocamento em nova janela.**

@@ -81,10 +81,21 @@ try {
     }
 
     // ── 2. Dispositivos (sempre filtrado pelo cliente da sessão, apenas ativos) ─
+    //
+    // 🔴 `is_online` vem CALCULADO por `last_communication`, nunca da coluna
+    // `device_statistics.is_online`. Essa coluna só é gravada como 1 pelas
+    // stored procedures de alarme/gps/heartbeat/evento — nenhum ponto do
+    // sistema jamais grava 0 nela — então uma câmera que comunicou uma vez
+    // fica "online" para sempre nessa coluna, mesmo dias depois de calada.
+    // Medido em produção: uma câmera com 17196 min (12 dias) sem comunicar
+    // ainda com `is_online = 1`, inflando o contador On/Off ao lado do sino.
+    // Mesmo critério (5 min) já usado em handlers/equipamentos.php e
+    // includes/dashboard_widgets.php — ver `TIMESTAMPDIFF(MINUTE, ...) <= 5`.
     try {
         $stmt = $db->prepare("
             SELECT d.imei, d.device_name, d.last_communication,
-                   s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status, s.is_online
+                   s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
+                   CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END AS is_online
             FROM devices d
             LEFT JOIN device_statistics s ON d.imei = s.imei
             WHERE d.is_active = 1 AND d.customer_id = ?
@@ -94,7 +105,8 @@ try {
     } catch (Exception $e) {
         $stmt = $db->prepare("
             SELECT d.imei, d.device_name, d.last_communication,
-                   NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status, NULL as is_online
+                   NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status,
+                   CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END AS is_online
             FROM devices d
             WHERE d.is_active = 1 AND d.customer_id = ?
             ORDER BY d.last_communication DESC
