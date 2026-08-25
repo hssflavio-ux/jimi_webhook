@@ -141,7 +141,13 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
             return ['ok' => true, 'msg' => 'Vídeo solicitado. Ele aparece aqui quando a câmera terminar de enviar.',
                     'comando' => $cmd, 'resposta' => $ultima];
         }
-        if (!preg_match('/(length error|parameter [A-Z] error|command error)/i', $ultima)) {
+        // ⚠️ 25/08/2026 — Telecom (JC371, 865478070654829) recusou os 29
+        // pedidos do dia com "Error:Number of parameters errors!" (plural,
+        // sem letra de parâmetro) — forma que o regex original não cobria, e
+        // o loop desistia no EVIDEO sem nunca tentar o HVIDEO. Confirma o
+        // padrão do cabeçalho do arquivo: cada firmware recusa com um texto
+        // levemente diferente para o mesmo motivo (arity errada).
+        if (!preg_match('/(length error|parameters?\s*[A-Z]?\s*errors?|command error)/i', $ultima)) {
             break;  // não é incompatibilidade de firmware — insistir não ajuda
         }
     }
