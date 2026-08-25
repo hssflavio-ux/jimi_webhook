@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.6
+
+**Correção pedida pelo dono do produto: no `/painel`, o mapa de posições não mostrava rastro nenhum dos veículos, e a legenda do gráfico "Velocidade da Frota" saía monocromática.**
+
+### Fixed
+- 🔴 **`dashboard_render_heatmap()` (`includes/dashboard_widgets.php`) — a consulta SEMPRE falhava, e o `catch` silencioso escondia o erro.** `SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, ... ORDER BY g.gps_time` sem `g.gps_time` no SELECT é rejeitado pelo MySQL (erro 3065: `ORDER BY` sobre coluna ausente do SELECT é incompatível com `DISTINCT`) — não depende de `sql_mode`, é regra fixa do MySQL para `DISTINCT`. O widget nunca teve um único ponto no mapa, em nenhum cliente, desde que foi criado (v4.10.3): a query sempre lançava exceção, o `catch (Throwable $e) {}` engolia, e `$rows` ficava `[]`. A mesma consulta em `handlers/resumo.php` (de onde este widget foi copiado) já inclui `g.gps_time` no SELECT — só a cópia para o painel perdeu a coluna. Corrigido replicando a coluna; testado em produção: 180 linhas retornadas onde antes dava erro 3065 silencioso.
+- **`dashboard_render_speed_dist()` — legenda sem cor nenhuma, todos os `■` no cinza padrão do texto.** As barras do gráfico (`Parados/≤20/≤60/>60`) já usavam `var(--muted-soft)/--primary/--warning/--error`; os `<span>` da legenda logo abaixo, que deveriam repetir a mesma cor de cada faixa (como em `handlers/resumo.php`, a versão original de onde este widget foi copiado), saíram sem nenhum `style="color:...`" — os quatro apareciam idênticos, monocromáticos. Corrigido replicando a mesma cor de cada span da barra na etiqueta correspondente.
+
+### Verificação
+- `php -l` limpo em `includes/dashboard_widgets.php`.
+- Query corrigida testada diretamente em produção (customer_id=1): 180 linhas, sem erro.
+
 ## [Unreleased] — 4.12.5
 
 **Investigação pedida pelo dono do produto: veículo placa "Telecom" (câmera JC371/JT-T, IMEI 865478070654829) não subia vídeo dos eventos DMS/ADAS.**

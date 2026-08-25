@@ -1,11 +1,35 @@
-# STATUS.md — Jimi Webhook System v4.12.5 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.6 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.4; v4.12.5 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.5; v4.12.6 pronta para deploy
 >
-> **Produção está em `4.12.4`** (confirmado por `/ping`) — a nota anterior deste
-> arquivo ("produção continua em 4.9.40") ficou desatualizada, o deploy já tinha
-> acontecido quando foi escrita. v4.12.5 (abaixo) corrige o disparo automático
-> de vídeo e está pronta para deploy.
+> **Produção está em `4.12.5`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.12.6 (abaixo) corrige o widget de mapa e a legenda de
+> velocidade do `/painel` e está pronta para deploy.
+>
+> #### 🔧 v4.12.6 — mapa do `/painel` sem rastro nenhum + legenda monocromática
+>
+> Dono do produto reportou dois defeitos visuais no `/painel`: o "Mapa de
+> Posições Recentes" não mostrava rastro nenhum dos veículos, e a legenda do
+> gráfico "Velocidade da Frota" saía toda na mesma cor. Achados em
+> `includes/dashboard_widgets.php`:
+>
+> - 🔴 **`dashboard_render_heatmap()` — consulta SEMPRE falhava, silenciada pelo
+>   `catch`.** `SELECT DISTINCT ... ORDER BY g.gps_time` sem `g.gps_time` no
+>   SELECT é erro 3065 do MySQL (`ORDER BY` sobre coluna ausente do SELECT é
+>   incompatível com `DISTINCT`) — regra fixa, não depende de `sql_mode`. O
+>   widget nunca teve um ponto sequer no mapa desde que foi criado (v4.10.3): a
+>   query sempre lançava exceção e o `catch (Throwable $e) {}` engolia, sem
+>   log nenhum. A mesma consulta em `handlers/resumo.php` (de onde este widget
+>   foi copiado) já tem `g.gps_time` no SELECT — só a cópia perdeu a coluna.
+>   Testado em produção: 180 linhas onde antes dava erro 3065 silencioso.
+> - **`dashboard_render_speed_dist()` — legenda sem `color:` nenhum.** As
+>   barras já usavam `var(--muted-soft)/--primary/--warning/--error`; os
+>   `<span>` da legenda (que em `handlers/resumo.php`, a versão original,
+>   repetem a mesma cor de cada faixa) saíram sem estilo — os quatro
+>   apareciam idênticos, cinza-padrão do texto. Corrigido replicando a cor de
+>   cada span da barra na etiqueta correspondente.
+>
+> `php -l` limpo.
 >
 > #### 🔧 v4.12.5 — vídeo de evento DMS/ADAS nunca subia (frota JT/T inteira)
 >

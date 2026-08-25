@@ -309,8 +309,10 @@ function dashboard_render_speed_dist(PDO $db, int $cid, bool $isReseller, string
         . '<div style="width:' . $p60 . '%;background:var(--warning);">' . $p60 . '%</div>'
         . '<div style="width:' . $p60p . '%;background:var(--error);">' . $p60p . '%</div></div>'
         . '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">'
-        . '<span>■ Parados ' . $s['speed_parados'] . '</span><span>■ ≤20 ' . $s['speed_ate20'] . '</span>'
-        . '<span>■ ≤60 ' . $s['speed_ate60'] . '</span><span>■ &gt;60 ' . $s['speed_acima60'] . '</span></div>';
+        . '<span style="color:var(--muted-soft);">■ Parados ' . $s['speed_parados'] . '</span>'
+        . '<span style="color:var(--primary);">■ ≤20 ' . $s['speed_ate20'] . '</span>'
+        . '<span style="color:var(--warning);">■ ≤60 ' . $s['speed_ate60'] . '</span>'
+        . '<span style="color:var(--error);">■ &gt;60 ' . $s['speed_acima60'] . '</span></div>';
 }
 
 function dashboard_render_model_status(PDO $db, int $cid, bool $isReseller, string $periodo): string
@@ -348,8 +350,12 @@ function dashboard_render_heatmap(PDO $db, int $cid, bool $isReseller, string $p
 {
     $rows = [];
     try {
+        // `g.gps_time` tem de estar no SELECT: MySQL recusa (erro 3065) ORDER BY
+        // sobre coluna ausente do SELECT quando há DISTINCT — o catch abaixo
+        // engolia esse erro em silêncio e o widget sempre renderizava vazio.
+        // Ver a mesma consulta em handlers/resumo.php, que já inclui a coluna.
         $stmt = $db->prepare("
-            SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed,
+            SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                    COALESCE(d.device_name, g.imei) as device_name
             FROM gps_data g LEFT JOIN devices d ON d.imei = g.imei
             WHERE g.customer_id = :cid AND g.latitude != 0 AND g.longitude != 0 AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
