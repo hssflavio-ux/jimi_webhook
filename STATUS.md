@@ -1,11 +1,32 @@
-# STATUS.md — Jimi Webhook System v4.12.4 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.5 (YUV Parity)
 
-> ### 📍 ESTADO EM 24-25/08/2026 — v4.9.40 no ar; v4.11.0 a v4.12.3 no `origin/main`; v4.12.4 pronta
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.4; v4.12.5 pronta para deploy
 >
-> **Produção continua em `4.9.40`.** v4.11.0 a v4.12.3 (fases 1/2 do fluxo
-> chip→câmera→veículo, correção do vínculo chip↔câmera, BI e widgets do
-> painel) já estão em `origin/main`, commitadas e enviadas. v4.12.4 (abaixo)
-> está no working tree, sem migração — ainda não commitada.
+> **Produção está em `4.12.4`** (confirmado por `/ping`) — a nota anterior deste
+> arquivo ("produção continua em 4.9.40") ficou desatualizada, o deploy já tinha
+> acontecido quando foi escrita. v4.12.5 (abaixo) corrige o disparo automático
+> de vídeo e está pronta para deploy.
+>
+> #### 🔧 v4.12.5 — vídeo de evento DMS/ADAS nunca subia (frota JT/T inteira)
+>
+> Dono do produto reportou que a câmera do veículo placa "Telecom" (JC371/JT-T,
+> IMEI 865478070654829) não subia vídeo dos eventos. Achado em produção: o
+> disparo automático (`queue_event_video_request()`,
+> `includes/occurrence_engine.php`) recusava TODA ocorrência DMS/ADAS com
+> `"Auto-vídeo: alarme sem alarmLabel de anexo — solicitação não enviada"` no
+> log. Causa: o IoT Hub manda `alarmLabel` como 16 bytes separados por vírgula
+> (`"30,36,35,...,05,00"`), não como string hex contígua de 32 chars — a doc
+> oficial descreve o formato errado. `ctype_xdigit()` falha por causa das
+> vírgulas. Confirmado por consulta em `commands`: **zero** comandos
+> `auto_video`/37384 emitidos desde que o proNo foi corrigido — não é defeito
+> só dessa câmera, é a frota JT/T inteira, desde que o recurso foi escrito.
+> Mesmo bug quebrava em segundo lugar `link_upload_by_alarm_label()`
+> (`pushfileupload.php`): o label extraído do NOME do arquivo (hex contínuo)
+> nunca batia contra `alarms.alarm_label` (com vírgulas), então até o vídeo que
+> chega pelo caminho de auto-upload da câmera só linkava pelo fallback
+> impreciso de janela ±3min. Corrigido tirando as vírgulas no ÚNICO ponto de
+> extração, em `handlers/pushalarm.php`. Retroativo: alarmes já gravados
+> continuam com o `alarm_label` antigo (com vírgula) — não houve backfill.
 >
 > #### 🔧 v4.12.4 — balão de `/rastreamento` com Estado contradizendo Ignição/Velocidade
 >

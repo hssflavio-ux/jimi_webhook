@@ -162,7 +162,19 @@ class PushAlarmHandler extends WebhookHandler {
         // 3. CAMPOS ESPECÍFICOS JTT (Heritage v6.2 + Expansão v7.0)
         // =====================================================================
         if ($msgClass == 1) {
-            $alarmLabel    = $msg['alarmLabel'] ?? $msg['alarmId'] ?? null;
+            // O IoT Hub manda os 16 bytes do alarmLabel separados por vírgula
+            // ("30,36,35,...,05,00"), não como string hex contígua de 32
+            // caracteres — a doc oficial descreve o segundo formato, que não é
+            // o que chega (mesma classe de erro do resto da doc da Jimi; ver
+            // CLAUDE.md). Sem tirar as vírgulas aqui, no PONTO ÚNICO onde o
+            // valor entra, dois consumidores downstream quebram em silêncio:
+            // o ctype_xdigit() de queue_event_video_request() (disparo
+            // automático de vídeo, proNo 37384) rejeita todo alarme achando
+            // que não há anexo, e link_upload_by_alarm_label() nunca acha
+            // igualdade contra o label contínuo extraído do NOME do arquivo
+            // em pushfileupload.php. Medido em produção 25/08/2026: zero
+            // comandos 37384 emitidos desde que o proNo foi corrigido.
+            $alarmLabel    = str_replace(',', '', $msg['alarmLabel'] ?? $msg['alarmId'] ?? '') ?: null;
             $alarmId       = $msg['alarmId'] ?? null;
             $alarmSerialNo = isset($msg['alarmSerialNo']) ? (int)$msg['alarmSerialNo'] : null;
             $standardAlmVal = isset($msg['standardAlarmValue']) ? (int)$msg['standardAlarmValue'] : null;

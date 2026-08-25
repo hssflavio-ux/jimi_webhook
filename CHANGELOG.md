@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.5
+
+**Investigação pedida pelo dono do produto: veículo placa "Telecom" (câmera JC371/JT-T, IMEI 865478070654829) não subia vídeo dos eventos DMS/ADAS.**
+
+### Fixed
+- 🔴 **`handlers/pushalarm.php` gravava `alarm_label` no formato errado, e isso desligava o disparo automático de vídeo na frota JT/T inteira, não só nessa câmera.** O IoT Hub manda o `alarmLabel` como os 16 bytes separados por vírgula (`"30,36,35,...,05,00"`), não como string hex contígua de 32 caracteres — a doc oficial descreve o segundo formato, que não é o que chega. `queue_event_video_request()` (`includes/occurrence_engine.php`) valida o label com `ctype_xdigit()`, que falha por causa das vírgulas: toda ocorrência DMS/ADAS caía no ramo "alarme sem alarmLabel de anexo — solicitação não enviada" e o comando 37384 (Alarm Attachment Upload) nunca era emitido. Medido em produção: zero comandos `auto_video`/37384 desde que o proNo foi corrigido (os 3 registros históricos usam o proNo antigo 34818, já documentado como não funcional). Mesmo bug quebrava em segundo lugar `link_upload_by_alarm_label()` (`pushfileupload.php`), que compara `alarms.alarm_label` (com vírgulas) contra o label contínuo extraído do NOME do arquivo — nunca casava, então até o vídeo que chega pelo caminho de auto-upload da câmera só linkava pelo fallback impreciso de janela ±3min. Corrigido tirando as vírgulas no ÚNICO ponto de extração (`$alarmLabel = str_replace(',', '', ...)`), antes de o valor alimentar qualquer um dos dois consumidores.
+
+### Verificação
+- `php -l` limpo em `handlers/pushalarm.php`.
+- Reproduzido em produção: alarmes reais do IMEI acima e de outro IMEI JT/T mostram o mesmo formato com vírgula; concatenar os 16 tokens produz hex válido de 32 chars, batendo com o formato que `pushfileupload.php` já extrai do nome do arquivo.
+
 ## [Unreleased] — 4.12.4
 
 **Correção pedida pelo dono do produto: o balão do veículo em `/rastreamento` mostrava "Estado: Parado (ignição desligada)" ao lado de "Ignição: Ligada" e velocidade real (ex.: 65 km/h) — dado contraditório no mesmo balão.**
