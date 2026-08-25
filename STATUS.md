@@ -1,10 +1,33 @@
-# STATUS.md — Jimi Webhook System v4.12.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.4 (YUV Parity)
 
-> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0/v4.12.0/v4.12.1 no `origin/main` (não publicadas); v4.12.2/v4.12.3 prontas
+> ### 📍 ESTADO EM 24-25/08/2026 — v4.9.40 no ar; v4.11.0 a v4.12.3 no `origin/main`; v4.12.4 pronta
 >
-> **Produção continua em `4.9.40`.** As três versões anteriores já estão em
-> `origin/main` (commitadas e enviadas pelo dono do produto). v4.12.2 e
-> v4.12.3 (abaixo) estão no working tree, sem migração — ainda não commitadas.
+> **Produção continua em `4.9.40`.** v4.11.0 a v4.12.3 (fases 1/2 do fluxo
+> chip→câmera→veículo, correção do vínculo chip↔câmera, BI e widgets do
+> painel) já estão em `origin/main`, commitadas e enviadas. v4.12.4 (abaixo)
+> está no working tree, sem migração — ainda não commitada.
+>
+> #### 🔧 v4.12.4 — balão de `/rastreamento` com Estado contradizendo Ignição/Velocidade
+>
+> Dono do produto reportou o balão do veículo mostrando `Estado: Parado
+> (ignição desligada)` ao lado de `Ignição: Ligada` e velocidade real (3, 65,
+> 49 km/h em três amostras de 6 minutos). Causa: "Estado" vinha do segmento
+> aberto em `device_state_segments`, regravado só a cada 15 min pelo cron
+> `scripts/state_builder.php`; "Ignição"/"Vel", do MESMO balão, vinham de
+> `device_statistics` — atualizado a cada push de GPS, em tempo real. Um
+> veículo que liga e sai andando entre duas rodadas do cron fica com o
+> segmento em `parado` enquanto os outros dois campos já mostram a
+> realidade — os três campos do balão descrevendo instantes diferentes.
+> Corrigido com `resolve_live_state()` (`includes/fleet_state.php`): classifica
+> pelo ÚLTIMO PONTO (`classify_point()` sobre `device_statistics`), não pelo
+> segmento — os três campos passam a vir sempre da mesma leitura.
+> `resolve_current_state()` (baseada em segmento) segue em uso, de propósito,
+> nos relatórios batch (`rel_paradas`, `rel_ociosidade`, `rel_status_frota`),
+> que precisam do segmento para "Tempo no estado" — não foram tocados.
+> Reproduzido o cenário exato do relato via `resolve_current_state()` vs
+> `resolve_live_state()` isolados: o antigo devolve `parado`, o novo devolve
+> `movimento`; comportamento de `offline` conferido idêntico entre os dois.
+> `php -l` limpo.
 >
 > #### 🔧 v4.12.3 — 3 defeitos nos widgets do painel (`/painel`)
 >

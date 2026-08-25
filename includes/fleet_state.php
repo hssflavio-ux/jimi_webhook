@@ -186,6 +186,46 @@ function resolve_current_state(?string $segState, ?string $lastGpsTime, ?string 
 }
 
 /**
+ * Resolve o estado CORRENTE de um equipamento a partir do ÚLTIMO PONTO
+ * conhecido (`device_statistics`), para telas AO VIVO — nunca do segmento.
+ *
+ * 🔴 `resolve_current_state()` confia no segmento aberto, que só é
+ * regravado pelo cron de 15 em 15 min (`scripts/state_builder.php`).
+ * `device_statistics.last_acc_status`/`last_speed`, ao contrário, são
+ * atualizados a cada push de GPS — em tempo real. No intervalo entre duas
+ * rodadas do cron, um veículo que ligou e saiu andando às 14:06 continua
+ * com o segmento aberto em `parado` até a próxima rodada (~14:15), enquanto
+ * `device_statistics` já mostra ignição ligada e velocidade real. O balão
+ * de `/rastreamento` lê Estado do segmento e Ignição/Velocidade do
+ * `device_statistics` — misturar as duas fontes produz exatamente
+ * "Estado: Parado (ignição desligada)" ao lado de "Ignição: Ligada" e
+ * "Vel: 65 km/h", os três campos de UM MESMO balão descrevendo instantes
+ * diferentes. Aqui os três sempre vêm da mesma leitura, então nunca
+ * divergem entre si — o preço é não ter a MESMA definição de "estado" que
+ * os relatórios batch (`rel_paradas`, `rel_ociosidade`, `rel_status_frota`),
+ * que precisam do segmento para fechar duração/histórico; essas telas
+ * continuam com `resolve_current_state()` de propósito.
+ *
+ * @param string|null           $lastGpsTime UTC do último ponto do equipamento
+ * @param int|string|bool|null  $acc         Ignição do último ponto (device_statistics.last_acc_status)
+ * @param float|string|null     $speed       Velocidade do último ponto (device_statistics.last_speed)
+ * @param string|null           $now         UTC de referência (default: agora)
+ * @returns string movimento|ocioso|parado|offline
+ */
+function resolve_live_state(?string $lastGpsTime, $acc, $speed, ?string $now = null): string
+{
+    if ($lastGpsTime === null || $lastGpsTime === '') {
+        return 'offline';
+    }
+    $nowTs  = strtotime($now ?? gmdate('Y-m-d H:i:s'));
+    $lastTs = strtotime($lastGpsTime);
+    if ($lastTs === false || ($nowTs - $lastTs) >= OFFLINE_GAP_SECONDS) {
+        return 'offline';
+    }
+    return classify_point($acc, $speed);
+}
+
+/**
  * Limite de velocidade vigente para um equipamento.
  *
  * Precedência equipamento → cliente → global. `0` é tratado como "não

@@ -22,26 +22,27 @@ $customers = report_customer_options($db);
 $selCustomerId = $_GET['customer_id'] ?? ($customerId ?? ($customers[0]['id'] ?? 1));
 $nowUtc = gmdate('Y-m-d H:i:s');
 
-// Estado calculado com includes/fleet_state.php — mesma fonte de
-// rel_status_frota.php, para "online" não ter uma segunda definição
-// divergente só nesta tela (ver CLAUDE.md, seção de gotchas de estado).
+// Estado calculado com includes/fleet_state.php::resolve_live_state() — a
+// partir do ÚLTIMO PONTO (device_statistics), não do segmento aberto. Esta
+// tela é AO VIVO (auto-refresh 30s) e mistura Estado com Ignição/Velocidade
+// no mesmo balão; resolve_current_state() (usada pelos relatórios batch)
+// lê o segmento, que só é regravado a cada 15 min pelo cron
+// state_builder.php — ver o comentário de resolve_live_state() no motivo.
 $devices = [];
 try {
     $devStmt = $db->prepare("
         SELECT d.imei, d.device_name, d.vehicle_type,
                dm.model_name,
-               ds.last_gps_time,
-               seg.state AS seg_state
+               ds.last_gps_time, ds.last_acc_status AS ignition, ds.last_speed AS speed
         FROM devices d
         LEFT JOIN device_models dm ON d.device_model_id = dm.id
         LEFT JOIN device_statistics ds ON ds.imei = d.imei
-        LEFT JOIN device_state_segments seg ON seg.imei = d.imei AND seg.ended_at IS NULL
         WHERE d.customer_id = :cid AND d.is_active = 1
         ORDER BY d.device_name ASC
     ");
     $devStmt->execute([':cid' => $selCustomerId]);
     foreach ($devStmt->fetchAll() as $row) {
-        $row['current_state'] = resolve_current_state($row['seg_state'] ?? null, $row['last_gps_time'] ?? null, $nowUtc);
+        $row['current_state'] = resolve_live_state($row['last_gps_time'] ?? null, $row['ignition'] ?? null, $row['speed'] ?? null, $nowUtc);
         $row['is_online'] = $row['current_state'] !== 'offline';
         $devices[] = $row;
     }
@@ -58,17 +59,15 @@ try {
         SELECT d.imei, COALESCE(d.device_name, d.imei) AS device_name, d.vehicle_type, d.speed_limit_kmh,
                c.default_speed_limit_kmh,
                ds.last_latitude AS latitude, ds.last_longitude AS longitude, ds.last_speed AS speed,
-               ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition,
-               seg.state AS seg_state
+               ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition
         FROM devices d
         LEFT JOIN customers c ON c.id = d.customer_id
         LEFT JOIN device_statistics ds ON ds.imei = d.imei
-        LEFT JOIN device_state_segments seg ON seg.imei = d.imei AND seg.ended_at IS NULL
         WHERE d.customer_id = :cid AND d.is_active = 1
     ");
     $posStmt->execute([':cid' => $selCustomerId]);
     foreach ($posStmt->fetchAll() as $row) {
-        $state = resolve_current_state($row['seg_state'] ?? null, $row['gps_time'] ?? null, $nowUtc);
+        $state = resolve_live_state($row['gps_time'] ?? null, $row['ignition'] ?? null, $row['speed'] ?? null, $nowUtc);
         $limit = resolve_speed_limit($row['speed_limit_kmh'], $row['default_speed_limit_kmh']);
         // "excesso" sobrepõe movimento/ocioso — nunca offline/parado, que já
         // não têm velocidade real associada.

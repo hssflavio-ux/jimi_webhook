@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.4
+
+**Correção pedida pelo dono do produto: o balão do veículo em `/rastreamento` mostrava "Estado: Parado (ignição desligada)" ao lado de "Ignição: Ligada" e velocidade real (ex.: 65 km/h) — dado contraditório no mesmo balão.**
+
+### Fixed
+- 🔴 **`handlers/rastreamento.php` misturava duas fontes de estado com velocidades de atualização diferentes.** "Estado" vinha do segmento aberto em `device_state_segments` (regravado só a cada 15 min pelo cron `scripts/state_builder.php`); "Ignição" e "Vel", do mesmo balão, vinham de `device_statistics` (atualizado em tempo real, a cada push de GPS). Um veículo que ligou e saiu andando entre duas rodadas do cron ficava com o segmento ainda em `parado` enquanto os outros dois campos já mostravam a realidade — produzindo exatamente o sintoma reportado.
+- **`includes/fleet_state.php`** ganha **`resolve_live_state()`**: classifica o estado pelo ÚLTIMO PONTO conhecido (`classify_point()` sobre `device_statistics.last_acc_status`/`last_speed`), não pelo segmento — os três campos do balão passam a vir sempre da mesma leitura, nunca divergem entre si. `resolve_current_state()` (baseada em segmento) segue em uso, de propósito, nos relatórios batch (`rel_paradas`, `rel_ociosidade`, `rel_status_frota`), que precisam do segmento para fechar duração/histórico — trocá-los pelo resolvedor novo sem redefinir o que "Tempo no estado" passaria a significar reintroduziria a mesma classe de contradição ali.
+
+### Verificação
+- Reproduzido o cenário exato do relato (segmento aberto em `parado`, último ponto com ignição ligada e 65 km/h): `resolve_current_state()` devolve `parado` (o defeito), `resolve_live_state()` devolve `movimento` (correto). Comportamento de `offline` (por silêncio de comunicação) conferido idêntico entre as duas funções. `php -l` limpo nos dois arquivos.
+
 ## [Unreleased] — 4.12.3
 
 **Correção pedida pelo dono do produto: verificar se todos os widgets do painel widgetizado (`/painel`) funcionam corretamente, com a mesma metodologia usada no BI (dados fictícios simulados + prints publicados para revisão).**
