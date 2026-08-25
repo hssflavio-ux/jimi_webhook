@@ -115,6 +115,15 @@ $extra_head = '<style>
 .ia-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;}
 .ia-preview{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all;}
 .ia-result{font-size:11px;margin-top:6px;}
+.ia-cell-par{grid-column:span 2;}
+.ia-par-body{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;}
+.ia-sub-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
+.ia-sub-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--primary,#0052ff);}
+.ia-sub:last-child{border-left:1px solid var(--hairline,#e5e7eb);padding-left:24px;}
+@media (max-width:700px){
+    .ia-par-body{grid-template-columns:1fr;}
+    .ia-sub:last-child{border-left:none;padding-left:0;border-top:1px solid var(--hairline,#e5e7eb);padding-top:14px;margin-top:14px;}
+}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -174,19 +183,66 @@ function iaMontarGrade() {
     if (!imei) return;
 
     var modelo = sel.selectedOptions[0].dataset.modelo;
-    var itens = CATALOGO_IA.filter(function (x) { return x.m.indexOf(modelo) >= 0; })
-        .sort(function (a, b) { return a.n.localeCompare(b.n); });
+    var itens = CATALOGO_IA.filter(function (x) { return x.m.indexOf(modelo) >= 0; });
 
     if (!itens.length) { document.getElementById('ia-sem-comando').style.display = 'block'; return; }
 
+    // EVENTSET,<código> (sensibilidade) e EVENTALERT,<código> (alerta) são o
+    // par que configura o MESMO evento — sempre mexidos juntos na prática.
+    // Agrupa os dois num quadro só quando o catálogo tem os dois lados do
+    // mesmo código; o que não tem par (ex.: DMSSP, ADASSW, ou um EVENTALERT
+    // sem EVENTSET correspondente como ASCE/AFIS) continua com quadro próprio.
+    var porCodigo = {};
+    var avulsos = [];
     itens.forEach(function (x) {
-        var card = iaMontarCard(imei, x);
-        grid.appendChild(card.cel);
-        iaCartoesAtuais.push(card);
+        var cod = iaCodigoEvento(x);
+        if (!cod) { avulsos.push(x); return; }
+        porCodigo[cod] = porCodigo[cod] || {};
+        if (x.c === 'EVENTSET') porCodigo[cod].set = x; else porCodigo[cod].alert = x;
+    });
+    var grupos = [];
+    Object.keys(porCodigo).forEach(function (cod) {
+        var par = porCodigo[cod];
+        if (par.set && par.alert) {
+            grupos.push({ tipo: 'par', rotulo: iaRotuloEvento(par.set), set: par.set, alert: par.alert });
+        } else {
+            avulsos.push(par.set || par.alert);
+        }
+    });
+    avulsos.forEach(function (x) { grupos.push({ tipo: 'solo', rotulo: iaRotuloEvento(x), item: x }); });
+    grupos.sort(function (a, b) { return a.rotulo.localeCompare(b.rotulo); });
+
+    grupos.forEach(function (g) {
+        if (g.tipo === 'par') {
+            var card = iaMontarCardPar(imei, g);
+            grid.appendChild(card.cel);
+            iaCartoesAtuais.push({ x: g.set, cel: card.cel, result: card.resultSet });
+            iaCartoesAtuais.push({ x: g.alert, cel: card.cel, result: card.resultAlert });
+        } else {
+            var card = iaMontarCard(imei, g.item);
+            grid.appendChild(card.cel);
+            iaCartoesAtuais.push(card);
+        }
     });
 
     var comConsulta = iaCartoesAtuais.filter(function (c) { return c.x.q; });
     document.getElementById('ia-ler-tudo-btn').style.display = comConsulta.length ? '' : 'none';
+}
+
+/** Código do evento embutido na sintaxe do catálogo (ex.: "EVENTSET,ALDW,P1#"
+ *  → "ALDW"), só para EVENTSET/EVENTALERT — é a chave de pareamento. */
+function iaCodigoEvento(x) {
+    if (x.c !== 'EVENTSET' && x.c !== 'EVENTALERT') return null;
+    var partes = x.s.split(',');
+    return partes.length > 1 ? partes[1] : null;
+}
+
+/** Nome do evento sem o prefixo "Sensibilidade — "/"Alerta — ", capitalizado
+ *  para servir de título do quadro combinado (e de chave de ordenação para
+ *  os quadros avulsos, que ficam intercalados por assunto). */
+function iaRotuloEvento(x) {
+    var s = x.n.replace(/^(Sensibilidade|Alerta)\s*—\s*/, '');
+    return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 /**
@@ -234,11 +290,94 @@ function iaLerTudo() {
         }
         var c = fila[i];
         status.textContent = 'Lendo ' + (i + 1) + ' de ' + fila.length + ': ' + c.x.n + ' (' + c.x.q + ')…';
-        iaEnviar(imei, c.x.q, c.cel, c.result);
+        iaEnviar(imei, c.x.q, c.result);
         i++;
         setTimeout(passo, CADENCIA_MS);
     };
     passo();
+}
+
+/**
+ * Corpo comum de um comando: valor conhecido, campos de parâmetro, preview,
+ * resultado e as ações (Ler agora/Aplicar). Devolve os nós já prontos para
+ * anexar e as referências (`inputs`/`result`) que os cartões — solo ou
+ * combinado — precisam guardar. Extraído para ser reaproveitado pelos dois
+ * lados de um quadro combinado (EVENTSET+EVENTALERT), que precisam de duas
+ * instâncias independentes de preview/inputs dentro do MESMO elemento pai.
+ */
+function iaMontarCorpo(imei, x) {
+    var frag = document.createDocumentFragment();
+
+    var conhecido = (ESTADO_IA[imei] || {})[x.s];
+    if (conhecido && conhecido.v) {
+        var kn = document.createElement('div');
+        kn.className = 'ia-known';
+        kn.innerHTML = 'Última leitura' + (conhecido.lido ? ' em ' + iaEsc(conhecido.lido) : '') +
+            ': <span class="mono">' + iaEsc(conhecido.v) + '</span>' +
+            (conhecido.ped ? '<br>Pedido pendente: <span class="mono">' + iaEsc(conhecido.ped) + '</span> — só confirma relendo.' : '');
+        frag.appendChild(kn);
+    }
+
+    var preview = document.createElement('div');
+    preview.className = 'ia-preview';
+
+    var inputs = [];
+    x.p.forEach(function (p) {
+        var box = document.createElement('div');
+        box.className = 'ia-param';
+        var top = document.createElement('div');
+        top.className = 'ia-param-top';
+        top.innerHTML = '<span class="ia-tag">' + iaEsc(p.p) + '</span><span class="ia-param-desc">' + iaEsc(p.d || '') + '</span>';
+        box.appendChild(top);
+
+        var inp = document.createElement('input');
+        inp.type = 'text';
+        inp.placeholder = p.v ? ('padrão: ' + p.v) : ('valor de ' + p.p);
+        inp.oninput = function () { iaAtualizarPreview(preview, x.s, inputs); };
+        box.appendChild(inp);
+        inputs.push(inp);
+
+        if (p.f) {
+            var mask = document.createElement('div');
+            mask.className = 'ia-mask';
+            mask.innerHTML = '<strong>Máscara:</strong> ' + iaEsc(p.f);
+            box.appendChild(mask);
+        }
+        frag.appendChild(box);
+    });
+
+    frag.appendChild(preview);
+
+    var result = document.createElement('div');
+    result.className = 'ia-result';
+    frag.appendChild(result);
+
+    var acts = document.createElement('div');
+    acts.className = 'ia-acts';
+    if (x.q) {
+        var btnLer = document.createElement('button');
+        btnLer.className = 'btn btn-outline btn-sm';
+        btnLer.textContent = 'Ler agora';
+        btnLer.title = x.qr === 'medido'
+            ? ('Envia ' + x.q + ' — confirmado em equipamento real')
+            : ('Envia ' + x.q + ' — forma de consulta ainda NÃO confirmada em equipamento; usar Ler tudo/Ler agora mede se funciona');
+        btnLer.onclick = function () { iaEnviar(imei, x.q, result); };
+        acts.appendChild(btnLer);
+    }
+    var btnAplicar = document.createElement('button');
+    btnAplicar.className = 'btn btn-primary btn-sm';
+    btnAplicar.textContent = 'Aplicar';
+    btnAplicar.onclick = function () {
+        var cmd = iaMontarComando(x.s, inputs);
+        if (cmd === null) { alert('Preencha todos os parâmetros antes de aplicar.'); return; }
+        if (!confirm('Enviar para o equipamento agora?\n\n' + cmd)) return;
+        iaEnviar(imei, cmd, result);
+    };
+    acts.appendChild(btnAplicar);
+    frag.appendChild(acts);
+
+    iaAtualizarPreview(preview, x.s, inputs);
+    return { frag: frag, inputs: inputs, result: result };
 }
 
 function iaMontarCard(imei, x) {
@@ -258,77 +397,63 @@ function iaMontarCard(imei, x) {
         cel.appendChild(desc);
     }
 
-    var conhecido = (ESTADO_IA[imei] || {})[x.s];
-    if (conhecido && conhecido.v) {
-        var kn = document.createElement('div');
-        kn.className = 'ia-known';
-        kn.innerHTML = 'Última leitura' + (conhecido.lido ? ' em ' + iaEsc(conhecido.lido) : '') +
-            ': <span class="mono">' + iaEsc(conhecido.v) + '</span>' +
-            (conhecido.ped ? '<br>Pedido pendente: <span class="mono">' + iaEsc(conhecido.ped) + '</span> — só confirma relendo.' : '');
-        cel.appendChild(kn);
-    }
+    var corpo = iaMontarCorpo(imei, x);
+    cel.appendChild(corpo.frag);
 
-    var inputs = [];
-    x.p.forEach(function (p, i) {
-        var box = document.createElement('div');
-        box.className = 'ia-param';
-        var top = document.createElement('div');
-        top.className = 'ia-param-top';
-        top.innerHTML = '<span class="ia-tag">' + iaEsc(p.p) + '</span><span class="ia-param-desc">' + iaEsc(p.d || '') + '</span>';
-        box.appendChild(top);
+    return { x: x, cel: cel, result: corpo.result };
+}
 
-        var inp = document.createElement('input');
-        inp.type = 'text';
-        inp.placeholder = p.v ? ('padrão: ' + p.v) : ('valor de ' + p.p);
-        inp.oninput = function () { iaAtualizarPreview(cel, x); };
-        box.appendChild(inp);
-        inputs.push(inp);
+/**
+ * Quadro combinado para um par EVENTSET (sensibilidade) + EVENTALERT
+ * (alerta) do mesmo evento — pedido do dono do produto (25/08/2026): os dois
+ * são configurados juntos na prática, então separá-los em dois cartões só
+ * obrigava a caçar o par certo na grade. Um cabeçalho com o nome do evento,
+ * duas colunas (uma por comando) lado a lado — cada uma com seu próprio
+ * "Última leitura", campos, preview e botões, exatamente como um cartão
+ * solo, só que compartilhando o quadro.
+ */
+function iaMontarCardPar(imei, g) {
+    var cel = document.createElement('div');
+    cel.className = 'ia-cell ia-cell-par';
 
-        if (p.f) {
-            var mask = document.createElement('div');
-            mask.className = 'ia-mask';
-            mask.innerHTML = '<strong>Máscara:</strong> ' + iaEsc(p.f);
-            box.appendChild(mask);
+    var head = document.createElement('div');
+    head.className = 'ia-head';
+    head.innerHTML = '<span class="ia-name">' + iaEsc(g.rotulo) + '</span>';
+    cel.appendChild(head);
+
+    var body = document.createElement('div');
+    body.className = 'ia-par-body';
+    cel.appendChild(body);
+
+    var resultSet, resultAlert;
+    [
+        { label: 'Sensibilidade', item: g.set },
+        { label: 'Alerta', item: g.alert },
+    ].forEach(function (parte) {
+        var x = parte.item;
+        var sub = document.createElement('div');
+        sub.className = 'ia-sub';
+
+        var subHead = document.createElement('div');
+        subHead.className = 'ia-sub-head';
+        subHead.innerHTML = '<span class="ia-sub-label">' + iaEsc(parte.label) + '</span><span class="ia-syn">' + iaEsc(x.c) + '</span>';
+        sub.appendChild(subHead);
+
+        if (x.d) {
+            var desc = document.createElement('div');
+            desc.className = 'ia-desc';
+            desc.textContent = x.d;
+            sub.appendChild(desc);
         }
-        cel.appendChild(box);
+
+        var corpo = iaMontarCorpo(imei, x);
+        sub.appendChild(corpo.frag);
+        body.appendChild(sub);
+
+        if (parte.label === 'Sensibilidade') resultSet = corpo.result; else resultAlert = corpo.result;
     });
-    cel._inputs = inputs;
-    cel._syn = x.s;
 
-    var preview = document.createElement('div');
-    preview.className = 'ia-preview';
-    cel.appendChild(preview);
-
-    var result = document.createElement('div');
-    result.className = 'ia-result';
-    cel.appendChild(result);
-
-    var acts = document.createElement('div');
-    acts.className = 'ia-acts';
-    if (x.q) {
-        var btnLer = document.createElement('button');
-        btnLer.className = 'btn btn-outline btn-sm';
-        btnLer.textContent = 'Ler agora';
-        btnLer.title = x.qr === 'medido'
-            ? ('Envia ' + x.q + ' — confirmado em equipamento real')
-            : ('Envia ' + x.q + ' — forma de consulta ainda NÃO confirmada em equipamento; usar Ler tudo/Ler agora mede se funciona');
-        btnLer.onclick = function () { iaEnviar(imei, x.q, cel, result); };
-        acts.insertAdjacentElement('afterbegin', btnLer);
-    }
-    var btnAplicar = document.createElement('button');
-    btnAplicar.className = 'btn btn-primary btn-sm';
-    btnAplicar.textContent = 'Aplicar';
-    btnAplicar.onclick = function () {
-        var cmd = iaMontarComando(x.s, inputs);
-        if (cmd === null) { alert('Preencha todos os parâmetros antes de aplicar.'); return; }
-        if (!confirm('Enviar para o equipamento agora?\n\n' + cmd)) return;
-        iaEnviar(imei, cmd, cel, result);
-    };
-    acts.appendChild(btnAplicar);
-    cel.appendChild(acts);
-
-    iaAtualizarPreview(cel, x);
-    return { x: x, cel: cel, result: result };
+    return { cel: cel, resultSet: resultSet, resultAlert: resultAlert };
 }
 
 function iaEsc(s) {
@@ -357,9 +482,8 @@ function iaMontarComando(syn, inputs) {
     return saida.join(',') + '#';
 }
 
-function iaAtualizarPreview(cel) {
-    var preview = cel.querySelector('.ia-preview');
-    var cmd = iaMontarComando(cel._syn, cel._inputs);
+function iaAtualizarPreview(preview, syn, inputs) {
+    var cmd = iaMontarComando(syn, inputs);
     preview.textContent = cmd || 'preencha os campos para ver o comando final';
 }
 
@@ -369,7 +493,7 @@ function iaAtualizarPreview(cel) {
  *  não aqui — assim a leitura enfileirada (equipamento offline) também fica
  *  registrada quando a resposta chegar, mesmo com esta aba já fechada.
  */
-function iaEnviar(imei, conteudo, cel, result) {
+function iaEnviar(imei, conteudo, result) {
     result.innerHTML = '<span style="color:var(--muted)">enviando…</span>';
     fetch('/sendcommand', {
         method: 'POST',
