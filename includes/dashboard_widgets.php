@@ -373,7 +373,11 @@ function dashboard_render_heatmap(PDO $db, int $cid, bool $isReseller, string $p
         var bounds=[], heatPoints=[];
         data.forEach(function(p){
             var lat=parseFloat(p.latitude), lng=parseFloat(p.longitude);
-            if (lat && lng && lat!==0){ bounds.push([lat,lng]); heatPoints.push([lat,lng,0.6]); }
+            if (lat && lng && lat!==0){
+                bounds.push([lat,lng]); heatPoints.push([lat,lng,0.6]);
+                L.circleMarker([lat,lng],{radius:3,color:"#0052ff",fillColor:"#0052ff",fillOpacity:0.25,weight:1})
+                    .addTo(map).bindPopup((p.device_name||p.imei) + "<br>" + (p.speed||0) + " km/h");
+            }
         });
         if (heatPoints.length>0 && typeof L.heatLayer==="function") L.heatLayer(heatPoints,{radius:22,blur:18,maxZoom:15}).addTo(map);
         if (bounds.length>0) map.fitBounds(bounds); else map.setView([-15.78,-47.93],5);

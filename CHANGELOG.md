@@ -5,6 +5,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.11
+
+**Pedido do dono do produto: o mapa do `/painel` ("Mapa de Posições Recentes") deve mostrar os pontos individuais de posição, igual ao mapa do `/` (Resumo), além da camada de calor.**
+
+### Changed
+- **`dashboard_render_heatmap()` (`includes/dashboard_widgets.php`) só desenhava a camada de calor (`L.heatLayer`).** `handlers/resumo.php`, de onde este widget foi copiado (v4.12.6 já tinha corrigido a query dele), também desenha um `L.circleMarker` por posição — ponto azul pequeno com popup (placa + velocidade) — e essa parte não tinha sido replicada. Adicionado o mesmo `circleMarker` dentro do `forEach` que já existia, com o mesmo estilo (`radius:3, color:#0052ff, fillOpacity:0.25`) e o mesmo popup.
+
+### Verificação
+- `php -l` limpo em `includes/dashboard_widgets.php`.
+
 ## [Unreleased] — 4.12.10
 
 **Correção pedida pelo dono do produto: o contador On/Off ao lado do sino de notificações está incorreto.**

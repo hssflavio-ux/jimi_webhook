@@ -1,10 +1,20 @@
-# STATUS.md — Jimi Webhook System v4.12.10 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.11 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.9; v4.12.10 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.10; v4.12.11 pronta para deploy
 >
-> **Produção está em `4.12.9`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.10 (abaixo) corrige o contador On/Off do header e está
-> pronta para deploy.
+> **Produção está em `4.12.10`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.12.11 (abaixo) traz o mapa do `/painel` para paridade visual
+> com o do Resumo e está pronta para deploy.
+>
+> #### 🔧 v4.12.11 — mapa do `/painel` sem os pontos individuais de posição
+>
+> Pedido do dono do produto: o "Mapa de Posições Recentes" do `/painel`
+> deveria mostrar os pontos, igual ao mapa do Resumo (`/`), além da camada
+> de calor. `dashboard_render_heatmap()` só desenhava `L.heatLayer`;
+> `handlers/resumo.php` (origem deste widget) também desenha um
+> `L.circleMarker` por posição — ponto azul com popup de placa+velocidade —
+> que não tinha sido copiado. Adicionado dentro do `forEach` já existente,
+> mesmo estilo e popup do Resumo. `php -l` limpo.
 >
 > #### 🔧 v4.12.10 — contador On/Off do sino sempre inflava o "On"
 >
