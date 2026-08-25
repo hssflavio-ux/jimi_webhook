@@ -115,13 +115,24 @@ try {
     $totalPages = max(1, ceil($totalRows / $perPage));
     $offset = ($page - 1) * $perPage;
 
+    // `has_media`/`repr_alarm_id`: a grade NUNCA mostrava se a ocorrência tinha
+    // vídeo — `has_media` já vinha no payload (só degrau 1, `media_file_id`) mas
+    // nenhum front-end a lia, e sem um alarm_id não dava pra oferecer "Pedir
+    // vídeo" aqui (só no detalhe). `has_media` agora cobre também o degrau 2
+    // (anexo declarado por QUALQUER alarme do grupo, mesma leitura de
+    // ocorrencias_dashboard.php) — o degrau 3 (janela ±3min) fica só no
+    // detalhe, é caso raro demais pra valer o custo numa consulta de lista.
     $dataStmt = $db->prepare("
         SELECT o.id, o.imei, o.alarm_type, o.risk, o.status, o.false_positive,
                o.first_alarm_at, o.last_alarm_at, o.alarm_count,
                o.driver_id, o.media_file_id,
                COALESCE(c.name, '—') as customer_name,
                COALESCE(dr.name, '—') as driver_name,
-               COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label
+               COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label,
+               (SELECT a2.id FROM occurrence_events oe2 JOIN alarms a2 ON a2.id = oe2.alarm_id
+                 WHERE oe2.occurrence_id = o.id ORDER BY a2.alarm_time DESC LIMIT 1) AS repr_alarm_id,
+               EXISTS (SELECT 1 FROM occurrence_events oe3 JOIN alarms a3 ON a3.id = oe3.alarm_id
+                        WHERE oe3.occurrence_id = o.id AND a3.file_url IS NOT NULL AND a3.file_url <> '') AS has_event_media
         FROM occurrences o
         LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN drivers dr ON dr.id = o.driver_id
@@ -144,7 +155,8 @@ try {
             'risk' => $r['risk'], 'status' => $r['status'],
             'false_positive' => (bool)$r['false_positive'], 'first_alarm_at' => $r['first_alarm_at'],
             'last_alarm_at' => $r['last_alarm_at'], 'alarm_count' => (int)$r['alarm_count'],
-            'has_media' => !empty($r['media_file_id']),
+            'has_media' => !empty($r['media_file_id']) || !empty($r['has_event_media']),
+            'repr_alarm_id' => $r['repr_alarm_id'] ? (int)$r['repr_alarm_id'] : null,
         ];
     }
 

@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.5
+
+**Dono do produto reportou que os eventos JT/T sem vídeo continuavam "sem aparecer nas telas" — a API já devolvia tudo, só que a grade principal de `/ocorrencias/dashboard` nunca mostrava nada sobre vídeo.**
+
+### Fixed
+- 🔴 **`ocorrenciasdata.php` já calculava `has_media` desde sempre, mas nenhuma tela lia o campo.** A grade principal (`updateTable()` em `ocorrencias_dashboard.php`) não tinha coluna de vídeo nenhuma — só o detalhe de cada ocorrência (que exige abrir uma por uma) mostrava isso. Confirmado direto na API (sessão temporária + curl no localhost): as 32 ocorrências de hoje da Telecom estavam todas lá, corretamente, só invisíveis quanto a vídeo na grade.
+- `has_media` também passou a considerar o degrau 2 da resolução de mídia (qualquer alarme do grupo com `file_url` próprio, mesma leitura que o detalhe já fazia) — antes só olhava `occurrences.media_file_id`, então uma ocorrência com vídeo saberia via `ocorrencias_dashboard.php?id=N` mas apareceria como "sem vídeo" na grade.
+
+### Added
+- 🆕 **Coluna "Vídeo" na grade principal de `/ocorrencias/dashboard`**: badge "Disponível" ou botão "Pedir vídeo" (mesmo `/solicitarvideo` de sempre) por ocorrência, usando o alarme mais recente do grupo (`repr_alarm_id`, subquery nova em `occurrence_events`). `pedirVideo()` saiu de dentro do `if($detailOcc)` do detalhe (onde só existia numa das duas renderizações da rota) para um `<script>` comum às duas — a grade principal precisava da mesma função e não tinha acesso a ela.
+
+### Verificação
+- `php -l` limpo em `handlers/ocorrenciasdata.php`, `handlers/ocorrencias_dashboard.php`.
+- Único ponto de definição de `pedirVideo()` confirmado por grep (antes duplicava risco de `function already declared` se algum dia as duas branches fossem emitidas juntas).
+
 ## [Unreleased] — 4.13.4
 
 **Câmera desativada continuava aparecendo no filtro de placa de `/relatorios/ocorrencias`, apesar da varredura da v4.12.7 — cobertura incompleta, não regressão.**

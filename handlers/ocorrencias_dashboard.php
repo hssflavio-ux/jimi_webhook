@@ -307,51 +307,6 @@ require_once __DIR__ . '/../web/layout_base.php';
     <?php endif; ?>
 </div>
 
-<script>
-/**
- * Pede à câmera o vídeo de um alarme que ficou sem ele (POST /solicitarvideo).
- * Mesmo endpoint/contrato de handlers/rel_alarmes.php — aqui cabe duplicar a
- * função em vez de compartilhar arquivo porque as duas telas não têm um JS
- * comum hoje, e o `btnId` extra existe porque esta tela pode desenhar DOIS
- * botões para o MESMO alarme (o card de mídia principal e a linha da grade
- * de "Alarmes Agrupados") — sem ele os dois disputariam o mesmo id.
- *
- * O pedido NÃO é instantâneo: a câmera regenera o trecho a partir do cartão e
- * sobe depois. Quem religa o arquivo ao alarme é match_pending_video(), no
- * webhook do "Upload de Vídeo Concluído" — por isso só confirmamos o pedido e
- * pedimos para recarregar mais tarde, em vez de fingir que já tem o vídeo.
- */
-function pedirVideo(alarmId, btnId) {
-    var btn = document.getElementById(btnId);
-    if (!btn || btn.disabled) return;
-    btn.disabled = true;
-    var antes = btn.innerHTML;
-    btn.innerHTML = 'Pedindo...';
-
-    fetch('/solicitarvideo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
-        body: JSON.stringify({ alarm_id: alarmId })
-    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-      .then(function (res) {
-        if (res.d && res.d.ok) {
-            btn.className = btn.className.replace('btn-outline', '') + ' badge-success';
-            btn.innerHTML = 'Solicitado';
-            btn.title = res.d.msg || 'Vídeo solicitado.';
-        } else {
-            btn.innerHTML = 'Não deu';
-            btn.title = (res.d && res.d.msg) ? res.d.msg : 'Falha ao solicitar.';
-            btn.disabled = false;
-            setTimeout(function () { btn.innerHTML = antes; }, 6000);
-        }
-      }).catch(function () {
-        btn.innerHTML = 'Erro de rede';
-        btn.disabled = false;
-        setTimeout(function () { btn.innerHTML = antes; }, 6000);
-      });
-}
-</script>
-
 <?php else: ?>
 <!-- ═══════════ DASHBOARD PRINCIPAL ═══════════ -->
 <div class="flex-between mb-16">
@@ -435,11 +390,12 @@ function pedirVideo(alarmId, btnId) {
                 <th>Risco</th>
                 <th>Status</th>
                 <th>Qtd</th>
+                <th>Vídeo</th>
                 <th style="text-align:center;">Ação</th>
             </tr>
         </thead>
         <tbody id="occurrence-tbody">
-            <tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted);">Carregando...</td></tr>
+            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">Carregando...</td></tr>
         </tbody>
     </table>
 </div>
@@ -542,7 +498,7 @@ function updateRiskBar(data) {
 function updateTable(data) {
     var tbody = document.getElementById('occurrence-tbody');
     if (!data.rows || data.rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted);">Nenhuma ocorrência encontrada</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">Nenhuma ocorrência encontrada</td></tr>';
         return;
     }
     var html = '';
@@ -553,6 +509,17 @@ function updateTable(data) {
     data.rows.forEach(function(r) {
         var date = new Date(r.last_alarm_at.replace(' ', 'T') + 'Z');
         var dateStr = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+        var videoCell;
+        if (r.has_media) {
+            videoCell = '<span class="badge badge-success">Disponível</span>';
+        } else if (r.repr_alarm_id) {
+            var btnId = 'rv-list-' + r.id;
+            videoCell = '<button type="button" class="badge" style="border:0;cursor:pointer;" id="' + btnId + '" ' +
+                'onclick="pedirVideo(' + r.repr_alarm_id + ', \'' + btnId + '\')" title="Pede o vídeo deste alarme de novo à câmera.">' +
+                '&#8635; Pedir vídeo</button>';
+        } else {
+            videoCell = '<span class="text-muted">—</span>';
+        }
         html += '<tr>' +
             '<td>' + esc(r.customer_name) + '</td>' +
             '<td><span class="text-mono">' + esc(r.device_label) + '</span></td>' +
@@ -562,6 +529,7 @@ function updateTable(data) {
             '<td><span class="badge ' + (riskClass[r.risk]||'badge') + '">' + esc(r.risk) + '</span></td>' +
             '<td><span class="badge ' + (statusClass[r.status]||'badge') + '">' + esc(statusLabel[r.status]||r.status) + '</span></td>' +
             '<td>' + r.alarm_count + '</td>' +
+            '<td>' + videoCell + '</td>' +
             '<td style="text-align:center;"><a href="?id=' + r.id + '" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Abrir</a></td>' +
             '</tr>';
     });
@@ -600,5 +568,52 @@ refreshData();
 startPolling();
 </script>
 <?php endif; ?>
+
+<script>
+/**
+ * Pede à câmera o vídeo de um alarme que ficou sem ele (POST /solicitarvideo).
+ * Compartilhada pelas DUAS renderizações desta rota — a grade principal
+ * (`updateTable()`, botão "Pedir vídeo" por ocorrência) e o detalhe/tratativa
+ * (card de mídia + grade "Alarmes Agrupados") — por isso fica FORA do
+ * if/else de `$detailOcc`: só uma das duas branches é emitida por request, e
+ * a outra ficaria sem a função definida. `btnId` existe porque a MESMA tela
+ * pode desenhar dois botões para o mesmo alarme (card de mídia + linha da
+ * grade de agrupados) — sem ele os dois disputariam o mesmo id.
+ *
+ * O pedido NÃO é instantâneo: a câmera regenera o trecho a partir do cartão e
+ * sobe depois. Quem religa o arquivo ao alarme é match_pending_video() (JIMI)
+ * ou link_upload_by_alarm_label() (JT/T) — por isso só confirmamos o pedido e
+ * pedimos para recarregar mais tarde, em vez de fingir que já tem o vídeo.
+ */
+function pedirVideo(alarmId, btnId) {
+    var btn = document.getElementById(btnId);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var antes = btn.innerHTML;
+    btn.innerHTML = 'Pedindo...';
+
+    fetch('/solicitarvideo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ alarm_id: alarmId })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.d && res.d.ok) {
+            btn.className = btn.className.replace('btn-outline', '') + ' badge-success';
+            btn.innerHTML = 'Solicitado';
+            btn.title = res.d.msg || 'Vídeo solicitado.';
+        } else {
+            btn.innerHTML = 'Não deu';
+            btn.title = (res.d && res.d.msg) ? res.d.msg : 'Falha ao solicitar.';
+            btn.disabled = false;
+            setTimeout(function () { btn.innerHTML = antes; }, 6000);
+        }
+      }).catch(function () {
+        btn.innerHTML = 'Erro de rede';
+        btn.disabled = false;
+        setTimeout(function () { btn.innerHTML = antes; }, 6000);
+      });
+}
+</script>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>
