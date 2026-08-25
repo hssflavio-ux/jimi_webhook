@@ -53,6 +53,7 @@ foreach ($catalogo as $syn => $d) {
     $catJs[] = [
         's' => $syn, 'c' => $d['cmd'], 'n' => $d['nome'], 'd' => $d['desc'],
         'm' => $d['modelos'], 'q' => $d['consulta'] ?? null,
+        'qr' => $d['consulta_ref'] ?? null,
         'proc' => $d['procedencia'] ?? 'planilha',
         'p' => array_map(fn($p) => ['p' => $p['p'], 'd' => $p['desc'], 'f' => $p['format'], 'v' => $p['default']], $d['params']),
         'e' => array_map(fn($e) => ['c' => $e['cmd'], 'd' => $e['desc']], $d['exemplos']),
@@ -138,19 +139,40 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div id="ia-sem-comando" class="card" style="padding:32px;text-align:center;color:var(--muted);display:none;">
     O catálogo não documenta comando de ADAS/DMS/velocidade para este modelo.
 </div>
+
+<div id="ia-ler-tudo-wrap" class="card mb-16" style="padding:14px 16px;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div>
+            <strong style="font-size:13px;color:var(--ink);">Ler tudo (cadência)</strong>
+            <p style="font-size:11px;color:var(--muted);margin:2px 0 0;max-width:640px;">
+                Dispara a leitura de cada comando deste modelo, um de cada vez, com um intervalo entre eles —
+                não é envio em paralelo. A maioria das formas de consulta abaixo ainda não foi confirmada em
+                equipamento real (tag "a confirmar"); esta é a própria forma de medir. Toda resposta de
+                verdade (não recusa, não fila) é gravada como o último valor conhecido do comando.
+            </p>
+        </div>
+        <button id="ia-ler-tudo-btn" class="btn btn-primary btn-sm" onclick="iaLerTudo()">Ler tudo agora</button>
+    </div>
+    <div id="ia-ler-tudo-status" style="font-size:11px;color:var(--muted);margin-top:8px;display:none;"></div>
+</div>
+
 <div id="ia-grid" class="ia-grid"></div>
 
 <script>
 var CATALOGO_IA = <?= json_encode($catJs, JSON_UNESCAPED_UNICODE) ?>;
 var ESTADO_IA = <?= json_encode($estado, JSON_UNESCAPED_UNICODE) ?>;
 
+var iaCartoesAtuais = [];   // [{x, cel, result}] do equipamento selecionado agora
+
 function iaMontarGrade() {
     var sel = document.getElementById('ia-device');
     var imei = sel.value;
     var grid = document.getElementById('ia-grid');
     grid.innerHTML = '';
+    iaCartoesAtuais = [];
     document.getElementById('ia-vazio').style.display = imei ? 'none' : 'block';
     document.getElementById('ia-sem-comando').style.display = 'none';
+    document.getElementById('ia-ler-tudo-wrap').style.display = 'none';
     if (!imei) return;
 
     var modelo = sel.selectedOptions[0].dataset.modelo;
@@ -160,8 +182,50 @@ function iaMontarGrade() {
     if (!itens.length) { document.getElementById('ia-sem-comando').style.display = 'block'; return; }
 
     itens.forEach(function (x) {
-        grid.appendChild(iaMontarCard(imei, x));
+        var card = iaMontarCard(imei, x);
+        grid.appendChild(card.cel);
+        iaCartoesAtuais.push(card);
     });
+
+    var comConsulta = iaCartoesAtuais.filter(function (c) { return c.x.q; });
+    document.getElementById('ia-ler-tudo-wrap').style.display = comConsulta.length ? 'block' : 'none';
+}
+
+/**
+ * Dispara a forma de consulta de cada comando deste modelo, UM DE CADA VEZ,
+ * com um intervalo entre os disparos — "em cadência", não em paralelo.
+ * Cada leitura usa o mesmo iaEnviar()/iaAcompanhar() dos cartões, então a
+ * resposta aparece no card correspondente assim que chegar, e é gravada em
+ * device_ia_config_state pelo mesmo caminho de sempre (sendcommand.php /
+ * pushinstructresponse.php) — nada de especial acontece aqui além do
+ * espaçamento entre os envios.
+ */
+function iaLerTudo() {
+    var imei = document.getElementById('ia-device').value;
+    if (!imei) return;
+    var fila = iaCartoesAtuais.filter(function (c) { return c.x.q; });
+    if (!fila.length) return;
+
+    var btn = document.getElementById('ia-ler-tudo-btn');
+    var status = document.getElementById('ia-ler-tudo-status');
+    btn.disabled = true;
+    status.style.display = 'block';
+
+    var i = 0;
+    var CADENCIA_MS = 2500;
+    var passo = function () {
+        if (i >= fila.length) {
+            status.textContent = 'Concluído — ' + fila.length + ' comando(s) disparado(s). As respostas continuam chegando nos cartões.';
+            btn.disabled = false;
+            return;
+        }
+        var c = fila[i];
+        status.textContent = 'Lendo ' + (i + 1) + ' de ' + fila.length + ': ' + c.x.n + ' (' + c.x.q + ')…';
+        iaEnviar(imei, c.x.q, c.cel, c.result);
+        i++;
+        setTimeout(passo, CADENCIA_MS);
+    };
+    passo();
 }
 
 function iaMontarCard(imei, x) {
@@ -233,9 +297,18 @@ function iaMontarCard(imei, x) {
         var btnLer = document.createElement('button');
         btnLer.className = 'btn btn-outline btn-sm';
         btnLer.textContent = 'Ler agora';
-        btnLer.title = 'Envia ' + x.q;
+        btnLer.title = x.qr === 'medido'
+            ? ('Envia ' + x.q + ' — confirmado em equipamento real')
+            : ('Envia ' + x.q + ' — forma de consulta ainda NÃO confirmada em equipamento; usar Ler tudo/Ler agora mede se funciona');
         btnLer.onclick = function () { iaEnviar(imei, x.q, cel, result); };
-        acts.appendChild(btnLer);
+        acts.insertAdjacentElement('afterbegin', btnLer);
+        if (x.qr !== 'medido') {
+            var selo = document.createElement('span');
+            selo.className = 'ia-badge-wiki';
+            selo.title = 'Forma de consulta deduzida do padrão do comando (VERBO#), ainda não confirmada em equipamento real';
+            selo.textContent = 'a confirmar';
+            acts.insertAdjacentElement('afterbegin', selo);
+        }
     }
     var btnAplicar = document.createElement('button');
     btnAplicar.className = 'btn btn-primary btn-sm';
@@ -250,7 +323,7 @@ function iaMontarCard(imei, x) {
     cel.appendChild(acts);
 
     iaAtualizarPreview(cel, x);
-    return cel;
+    return { x: x, cel: cel, result: result };
 }
 
 function iaEsc(s) {

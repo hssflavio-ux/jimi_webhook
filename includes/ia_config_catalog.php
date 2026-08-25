@@ -54,12 +54,33 @@
  *   desc         — o que o comando faz
  *   modelos      — em quais modelos da linha JC ele é documentado
  *   template     — sempre true aqui (todo comando desta tela tem parâmetro)
- *   consulta     — forma nua que LÊ o valor, quando documentada; null quando não há
+ *   consulta     — forma nua que LÊ o valor ('VERBO#'), quando existe; null quando não há
+ *   consulta_ref — procedência da CONSULTA (não do comando de escrita):
+ *                  'medido' (testada em câmera real), ou 'nao_confirmado'
  *   fonte        — planilha + linha/seção de onde veio
  *   procedencia  — 'planilha' (as 3 fontes acima) ou 'wiki' (fallback JC450/JC182)
  *   params[]     — cada um com 'p' (nome do placeholder), 'desc', 'format'
  *                  (a MÁSCARA — é o texto da tag de auxílio na tela) e 'default'
  *   exemplos[]   — pelo menos um comando pronto, da própria planilha
+ *
+ * ── `consulta`: só a PRIMEIRA entrada de cada verbo carrega a forma de
+ * leitura (mesma regra do `command_catalog.php` original para a família
+ * `EVENTSET`) — o subtipo do evento (`ALDW`, `AHMW`...) é PARÂMETRO do
+ * comando, não faz parte do verbo, então `EVENTSET#` (sem argumento) já
+ * pede tudo de uma vez, não uma leitura por evento.
+ *
+ * ⚠️ **21 das 22 formas de consulta aqui são `nao_confirmado`** — deduzidas
+ * mecanicamente (`VERBO#`, a mesma convenção que a planilha JC371 documenta
+ * para os comandos marcados em vermelho — mas o parser não conseguiu extrair
+ * a cor de forma confiável: a coluna inteira testou "avermelhada" por causa
+ * do estilo base da célula, não de um destaque manual). É EXATAMENTE o
+ * mesmo tipo de lacuna que `CHECK#`/`ADASxx`/`FILELIST` tinham antes de
+ * serem medidos em câmera real (ver `command_catalog.php`) — a tela
+ * "Configurações IA" tem um botão **Ler tudo (cadência)** que dispara essas
+ * 21 formas, uma por vez, contra o equipamento selecionado: é o próprio
+ * mecanismo de MEDIÇÃO. Toda vez que chegar uma resposta de verdade (não
+ * recusa, não timeout), promova `consulta_ref` para `'medido'` aqui. Só `DMSSW#`
+ * já nasce `'medido'` — herdado de `command_catalog.php`, testado antes.
  *
  * Total: 58 entradas — JC371 (42 no campo `modelos`, contando os
  * compartilhados com JC450/JC182) + JC400AD (16, G001–G015) + JC182 (6,
@@ -78,7 +99,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — excesso de velocidade',
         'desc' => 'Define o limite de velocidade e por quanto tempo acima dele gera o evento de excesso de velocidade.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha D001', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha D001', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Limite de velocidade', 'format' => 'OFF / 1–255 (km/h)', 'default' => '4'],
             ['p' => 'P2', 'desc' => 'Duração acima do limite para gerar o evento', 'format' => '0–600 (segundos)', 'default' => '5'],
@@ -89,7 +110,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — excesso de velocidade',
         'desc' => 'Define o intervalo de envio à plataforma e entre avisos de voz para o evento de excesso de velocidade.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null,
+        'consulta' => 'EVENTALERT#', 'consulta_ref' => 'nao_confirmado',
         // ⚠️ O cabeçalho da linha D002 usa o código "ADSD", mas os DOIS exemplos
         // da própria planilha usam "AOSD" (o mesmo código do EVENTSET acima,
         // da linha D001). Typo da planilha do fabricante — segui o exemplo, não
@@ -108,7 +129,7 @@ return [
         'cmd' => 'DMSVSP', 'nome' => 'Velocidade virtual para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS/DMS em bancada, sem o veículo em movimento.',
         'modelos' => ['JC371', 'JC450'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha D015', 'procedencia' => 'planilha',
+        'consulta' => 'DMSVSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha D015', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '0–120 (km/h)', 'default' => '—'],
         ],
@@ -123,7 +144,7 @@ return [
         'cmd' => 'DMSSP', 'nome' => 'Ativação de IA (velocidade/canal/área)',
         'desc' => 'Define a velocidade mínima de ativação, o canal de vídeo e a área de detecção do ADAS ou do DMS.',
         'modelos' => ['JC371', 'JC450'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E003', 'procedencia' => 'planilha',
+        'consulta' => 'DMSSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha E003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => 'ADAS / DMS', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Velocidade de ativação', 'format' => '10–120 (km/h)', 'default' => '60 (ADAS) / 30 (DMS)'],
@@ -142,7 +163,7 @@ return [
         'cmd' => 'DMSSW', 'nome' => 'Chave de funções de IA',
         'desc' => 'Ativa ou desativa uma função de IA específica (ADAS, DMS ou reconhecimento facial). Qualquer recurso de IA precisa estar habilitado aqui antes de ser usado.',
         'modelos' => ['JC371', 'JC400AD'], 'template' => true,
-        'consulta' => 'DMSSW#', 'fonte' => 'command_catalog.php (wiki) — ausente da planilha JC371', 'procedencia' => 'wiki',
+        'consulta' => 'DMSSW#', 'consulta_ref' => 'medido', 'fonte' => 'command_catalog.php (wiki) — ausente da planilha JC371', 'procedencia' => 'wiki',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função de IA', 'format' => '1=ADAS / 2=DMS / 3=FACE (reconhecimento facial)', 'default' => '1 e 2 ativos / 3 inativo'],
             ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desativar / 1=Ativar', 'default' => 'conforme a função'],
@@ -156,7 +177,7 @@ return [
         'cmd' => 'ADAS', 'nome' => 'Calibração — perfil do veículo',
         'desc' => 'Define os parâmetros de instalação da câmera conforme o tipo/porte do veículo.',
         'modelos' => ['JC371', 'JC450', 'JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E005', 'procedencia' => 'planilha',
+        'consulta' => 'ADAS#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha E005', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Tipo de veículo', 'format' => 'A=Carro de passeio / B=SUV ou caminhonete pequena / C=Caminhão pequeno (baú curto) / D=Caminhão médio (baú médio) / E=Caminhão grande (baú longo) / F=Caminhão médio (cabine estendida) / G=Caminhão grande (cabine estendida)', 'default' => 'A'],
         ],
@@ -636,7 +657,7 @@ return [
         'cmd' => 'DMS_SWITCH', 'nome' => 'Ativação, sensibilidade e velocidade do DMS',
         'desc' => 'Liga/desliga o DMS, define a sensibilidade geral e a velocidade a partir da qual o alinhamento facial começa.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G002', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_SWITCH#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G002', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação do DMS', 'format' => '0=Desligado / 1=Ligado', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Sensibilidade', 'format' => '1=Normal / 2=Agressiva', 'default' => '—'],
@@ -648,7 +669,7 @@ return [
         'cmd' => 'DMS_VOICE_CUSTOM', 'nome' => 'Filtro de repetição de voz por evento',
         'desc' => 'Período mínimo entre avisos de voz repetidos, um valor por tipo de evento de DMS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G003', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_VOICE_CUSTOM#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '0=desliga sempre / 10 / 30 / 60 (segundos)', 'default' => '5 (JC400D) / 5 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '0=desliga sempre / 10 / 30 / 60 (segundos)', 'default' => '5 (JC400D) / 5 (JC261)'],
@@ -663,7 +684,7 @@ return [
         'cmd' => 'DMS_ALERT_CUSTOM', 'nome' => 'Filtro de repetição de alerta por evento',
         'desc' => 'Período mínimo entre envios repetidos à plataforma, um valor por tipo de evento de DMS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G004', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_ALERT_CUSTOM#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G004', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '0=nunca envia / 180 / 600 / 1800 (segundos)', 'default' => '120 (JC400D) / 120 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '0=nunca envia / 180 / 600 / 1800 (segundos)', 'default' => '120 (JC400D) / 120 (JC261)'],
@@ -678,7 +699,7 @@ return [
         'cmd' => 'DMS_VIRTUAL_SPEED', 'nome' => 'Velocidade virtual para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS/DMS em bancada. Fica inválido após o próximo ACC OFF.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G005', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_VIRTUAL_SPEED#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G005', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '0–120 (km/h)', 'default' => '—']],
         'exemplos' => [['cmd' => 'DMS_VIRTUAL_SPEED,30', 'desc' => 'simula 30 km/h.']],
     ],
@@ -686,7 +707,7 @@ return [
         'cmd' => 'DMS_CONTINUITY', 'nome' => 'Duração de reconhecimento contínuo por evento',
         'desc' => 'Por quanto tempo o comportamento precisa persistir antes de disparar o evento, um valor por tipo.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G006', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_CONTINUITY#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G006', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '1–10 (segundos)', 'default' => '3 (JC400D) / 2 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '1–10 (segundos)', 'default' => '3 (JC400D) / 2 (JC261)'],
@@ -701,7 +722,7 @@ return [
         'cmd' => 'DMS_CALIB_ABNORMAL', 'nome' => 'Alerta de anomalia de alinhamento',
         'desc' => 'Quantas anomalias de alinhamento até gerar alerta, e se avisa por som/plataforma.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G007', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_CALIB_ABNORMAL#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G007', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Anomalias até gerar alerta', 'format' => '0=desativado / 1–10', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Notificar por som', 'format' => '0=não / 1=sim', 'default' => '—'],
@@ -713,7 +734,7 @@ return [
         'cmd' => 'DMS_SECOND_EVENT', 'nome' => 'Escalonamento para evento de nível 2',
         'desc' => 'Quantas ocorrências consecutivas do mesmo evento, numa janela de tempo, viram um alerta sonoro de nível 2.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G008', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_SECOND_EVENT#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G008', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Tipo de evento', 'format' => '1=Distração / 2=Olhos fechados / 3=Bocejo / 4=Ao telefone / 5=Fumando / 6=Rosto não detectado', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Ocorrências consecutivas', 'format' => '0=desativado / 1–10', 'default' => '—'],
@@ -731,7 +752,7 @@ return [
         'cmd' => 'ADASSW', 'nome' => 'Ativação geral do ADAS',
         'desc' => 'Liga/desliga o ADAS. Reinicia o equipamento 10 s após aplicar.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G009', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSW#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G009', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Ativação', 'format' => '0=Desligado / 1=Ligado', 'default' => '—']],
         'exemplos' => [['cmd' => 'ADASSW,1', 'desc' => 'liga o ADAS.']],
     ],
@@ -739,7 +760,7 @@ return [
         'cmd' => 'ADASSEP', 'nome' => 'Ativação por função de ADAS',
         'desc' => 'Liga/desliga individualmente cada função de ADAS. Requer ADASSW ligado antes.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G010', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSEP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G010', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desligado / 1=Ligado', 'default' => 'FCW:1 / HMW:1 / LDW:1'],
@@ -750,7 +771,7 @@ return [
         'cmd' => 'ADASPI', 'nome' => 'Filtro de repetição de alerta por função de ADAS',
         'desc' => 'Período mínimo entre envios repetidos à plataforma para o mesmo tipo de evento de ADAS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G011', 'procedencia' => 'planilha',
+        'consulta' => 'ADASPI#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G011', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Período', 'format' => '0–3600 (segundos)', 'default' => 'FCW:60 / HMW:60 / LDW:60'],
@@ -761,7 +782,7 @@ return [
         'cmd' => 'ADASVI', 'nome' => 'Filtro de repetição de voz por função de ADAS',
         'desc' => 'Período mínimo entre avisos de voz repetidos para o mesmo tipo de evento de ADAS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G012', 'procedencia' => 'planilha',
+        'consulta' => 'ADASVI#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G012', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Período', 'format' => '0–3600 (segundos)', 'default' => 'FCW:60 / HMW:60 / LDW:60'],
@@ -772,7 +793,7 @@ return [
         'cmd' => 'ADASSP', 'nome' => 'Velocidade mínima por função de ADAS',
         'desc' => 'Velocidade a partir da qual cada função de ADAS pode disparar.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G013', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G013', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW+HMW (colisão frontal / veículo próximo) / 2=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Velocidade mínima', 'format' => 'km/h', 'default' => 'FCW:30 / HMW:30 / LDW:60'],
@@ -786,7 +807,7 @@ return [
         'cmd' => 'ADASSEN', 'nome' => 'Sensibilidade de disparo por função de ADAS',
         'desc' => 'Sensibilidade específica de cada função de ADAS — o significado de P2/P3 muda conforme a função (P1).',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSEN#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=LDW (saída de faixa) / 2=FCW (colisão frontal) / 3=HMW (veículo muito próximo)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Sensibilidade (significado depende de P1)', 'format' => 'P1=1: −0,3 a 0,6 (padrão −0,1; negativo=antes da faixa, positivo=depois) / P1=2 ou 3: 0–10 s, tempo até possível colisão (padrão 1,5 s para FCW, 1,0 s para HMW)', 'default' => 'LDW: −0,1 / FCW: 1,5 / HMW: 1,0'],
@@ -802,7 +823,7 @@ return [
         'cmd' => 'ADASVSP', 'nome' => 'Velocidade virtual do ADAS para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS em bancada.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G015', 'procedencia' => 'planilha',
+        'consulta' => 'ADASVSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G015', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '10–120 (km/h)', 'default' => '—']],
         'exemplos' => [['cmd' => 'ADASVSP,60', 'desc' => 'simula 60 km/h.']],
     ],
@@ -815,7 +836,7 @@ return [
         'cmd' => 'SPEED', 'nome' => 'Evento de excesso de velocidade',
         'desc' => 'Ativa/desativa o evento de excesso de velocidade, define modo de alerta, limite e duração acima dele.',
         'modelos' => ['JC181'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC181 Command List V1.0.7, linha D003', 'procedencia' => 'planilha',
+        'consulta' => 'SPEED#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC181 Command List V1.0.7, linha D003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Modo de alerta', 'format' => '0=GPRS / 1=SMS+GPRS', 'default' => '—'],

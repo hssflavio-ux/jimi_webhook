@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.1
+
+**Pedido do dono do produto, complemento da 4.13.0: um comando que dispare em cadência a leitura de todos os parâmetros configurados na câmera, para análise.**
+
+### Added
+- 🆕 **Botão "Ler tudo (cadência)"** em `/configuracoes-ia` — dispara a forma de consulta de cada comando do modelo selecionado, um de cada vez (2,5s de intervalo, não em paralelo), reaproveitando `iaEnviar()`/`iaAcompanhar()` já existentes por card — sem endpoint novo.
+- **`includes/ia_config_catalog.php` ganhou forma de consulta (`VERBO#`) para 21 dos 22 verbos do catálogo** (antes só `DMSSW#` tinha, herdado e medido). O subtipo do evento (`ALDW`, `AHMW`...) é PARÂMETRO do comando, não o verbo — por isso só a PRIMEIRA entrada de cada verbo carrega a consulta (`EVENTSET#` já pede tudo de uma vez, não uma leitura por evento), mesma regra que `command_catalog.php` já aplicava à família `EVENTSET` original.
+- 🔴 **20 dessas 21 consultas são `consulta_ref: 'nao_confirmado'`** — deduzidas mecanicamente (`VERBO#`), não medidas. Tentei extrair a marcação "vermelho = aceita consulta" que a planilha JC371 documenta na própria aba, mas o parser de cor não distinguiu destaque manual do estilo base da coluna (quase toda a coluna testou "vermelha"). Em vez de inventar, o botão "Ler tudo" É o mecanismo de medição — mesmo caminho que resolveu `CHECK#`/`ADASxx`/`FILELIST` no passado: dispara contra equipamento real, e toda resposta de verdade (não recusa, não fila) promove o campo para `'medido'`. Card cuja consulta ainda não foi confirmada mostra o selo "a confirmar".
+
+### Verificação
+- `php -l` limpo; JS embutido extraído e checado com `node --check`.
+- Checagem estrutural do catálogo (todo campo obrigatório, placeholders batendo com `params`, toda `consulta` termina em `#`) — 0 problemas nas 58 entradas.
+- `tests/helpers/command_response.test.php`: 115/115.
+
 ## [Unreleased] — 4.13.0
 
 **Pedido do dono do produto: os comandos de parâmetro JT/T (33027 escrita, 33028/33030 leitura) não funcionam — problema de firmware do fabricante. Pausar essa área e criar uma tela nova, "Configurações IA", só com configuração de ADAS/DMS/velocidade, reprocessada do zero das planilhas oficiais (não copiada do catálogo de `/comandos`), com layout de quadros e a máscara de cada parâmetro como tag de auxílio. Esses comandos saem de `/comandos`, que passa a ter só configuração básica de equipamento.**

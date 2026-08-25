@@ -1,12 +1,29 @@
-# STATUS.md — Jimi Webhook System v4.13.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.13.1 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.11; v4.13.0 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.13.0; v4.13.1 pronta para deploy
 >
-> **Produção está em `4.12.11`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.13.0 (abaixo) é a mais substancial da sessão — nova área
-> "Configurações IA" + pausa da parametrização JT/T — e está pronta para
-> deploy. **Rodar `./scripts/deploy.sh` normalmente** (migração
-> `4.13.0` já está na lista explícita).
+> **Produção está em `4.13.0`** (confirmado por `/ping`, dono do produto já
+> deployou e aprovou a tela nova: "a tela ficou boa"). v4.13.1 (abaixo)
+> adiciona o botão "Ler tudo (cadência)" e está pronta para deploy.
+>
+> #### 🆕 v4.13.1 — botão "Ler tudo (cadência)" em Configurações IA
+>
+> Pedido do dono do produto: um comando que dispare, em cadência, a leitura
+> de todos os parâmetros configurados na câmera, pra análise. Adicionado o
+> botão em `/configuracoes-ia` — dispara a forma de consulta (`VERBO#`) de
+> cada comando do modelo, um de cada vez, 2,5s de intervalo. Pra isso,
+> `includes/ia_config_catalog.php` precisou ganhar forma de consulta pros
+> 21 verbos do catálogo (antes só `DMSSW#` tinha) — mas **20 dessas 21 são
+> `nao_confirmado`**: tentei extrair a marcação "vermelho = aceita consulta"
+> que a própria planilha JC371 documenta, e o parser de cor não distinguiu
+> destaque manual do estilo base da coluna (quase tudo testou "vermelho").
+> Em vez de inventar, assumi a dedução mecânica (`VERBO#`, mesma convenção
+> já usada pro `EVENTSET` no catálogo original) e deixei o próprio botão
+> "Ler tudo" como o MECANISMO DE MEDIÇÃO — mesmo caminho que resolveu
+> `CHECK#`/`ADASxx`/`FILELIST` no passado. Toda resposta de verdade (não
+> recusa, não fila) promove o campo pra `'medido'`; até lá, o card mostra
+> o selo "a confirmar". `php -l` limpo, JS extraído e validado com
+> `node --check`, checagem estrutural 0 problemas, suíte 115/115.
 >
 > #### 🆕 v4.13.0 — "Configurações IA" (ADAS/DMS/velocidade) + pausa do JT/T
 >
