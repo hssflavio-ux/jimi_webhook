@@ -595,19 +595,53 @@ function flush_pending_video_requests(): void
                 continue;
             }
 
-            $proNo  = (int)($req['pro_no'] ?? 37384);
-            $result = iothub_dispatch_command($req['imei'], $proNo, $req['content'], [
-                'operator' => 'auto_video',
-                'timeout'  => (int)(getenv('AUTO_VIDEO_TIMEOUT') ?: 35),
-            ]);
+            $proNo = (int)($req['pro_no'] ?? 37384);
+            // 0 = seletor de gateway JT/T (ver includes/iothub_command.php) —
+            // fixo porque queue_event_video_request() só agenda para device
+            // com dm.protocol === 'JTT'.
+            $result = iothub_send_instruct($req['imei'], $proNo, $req['content'], 0, 'autovideo');
+
+            // iothub_send_instruct() (v4.9.13) parou de gravar em `commands`
+            // sozinha — isso virou responsabilidade de cada chamador. Sem este
+            // INSERT o despacho até funciona, mas o dedupe por alarmLabel e o
+            // teto de 5/2min logo acima (que leem `commands WHERE
+            // operator='auto_video'`) ficam cegos, e a tela de Comandos nunca
+            // mostra o auto-vídeo.
+            $insertedId = null;
+            try {
+                $stmt = $db->prepare(
+                    "INSERT INTO commands
+                        (imei, command_content, command_type, status, operator,
+                         api_type, pro_no, request_id, server_flag_id, response_payload, response_time,
+                         created_at, updated_at)
+                     VALUES
+                        (:imei, :cmd, 'request', :status, 'auto_video',
+                         :api_type, :prono, :rid, '0', :resp, :rtime, NOW(), NOW())"
+                );
+                $stmt->execute([
+                    ':imei'     => $req['imei'],
+                    ':cmd'      => $req['content'],
+                    ':status'   => $result['status'],
+                    ':api_type' => "jtt_{$proNo}",
+                    ':prono'    => $proNo,
+                    ':rid'      => $result['request_id'],
+                    ':resp'     => $result['raw'] ?: null,
+                    ':rtime'    => ($result['status'] === 'executed') ? date('Y-m-d H:i:s') : null,
+                ]);
+                $insertedId = $db->lastInsertId();
+            } catch (Exception $e) {
+                Logger::error('Auto-vídeo: falha ao gravar em commands', [
+                    'imei' => $req['imei'], 'error' => $e->getMessage(),
+                ]);
+            }
 
             Logger::info("Auto-vídeo: {$proNo} despachado", [
                 'imei'          => $req['imei'],
                 'occurrence_id' => $req['occurrence_id'],
                 'alarm_label'   => $req['alarm_label'] ?? null,
-                'command_id'    => $result['command_id'],
+                'command_id'    => $insertedId,
                 'status'        => $result['status'],
-                'offline_queued'=> $result['offline_queued'],
+                'result_msg'    => $result['result_msg'],
             ]);
         } catch (Exception $e) {
             Logger::error('Auto-vídeo: falha no despacho', [

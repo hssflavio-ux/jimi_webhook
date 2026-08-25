@@ -224,7 +224,13 @@ require_once __DIR__ . '/../web/layout_base.php';
             </div>
             <?php else: ?>
             <div style="background:var(--canvas-soft);border-radius:var(--radius-md);padding:40px;text-align:center;color:var(--muted);">
-                Sem vídeo vinculado
+                <p style="margin:0 0 12px;">Sem vídeo vinculado</p>
+                <?php if (!empty($detailEvents[0]['alarm_id'])): ?>
+                <button type="button" class="btn btn-outline btn-sm" id="rv-main-<?= (int)$detailEvents[0]['alarm_id'] ?>"
+                        onclick="pedirVideo(<?= (int)$detailEvents[0]['alarm_id'] ?>, 'rv-main-<?= (int)$detailEvents[0]['alarm_id'] ?>')">
+                    &#8635; Solicitar vídeo
+                </button>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
@@ -244,7 +250,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td>
                     <?php if ($ev['file_url']): ?>
                     <a href="<?= htmlspecialchars(media_play_url($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
-                    <?php else: echo '—'; endif; ?>
+                    <?php else: ?>
+                    <button type="button" class="badge" style="border:0;cursor:pointer;"
+                            id="rv-row-<?= (int)$ev['alarm_id'] ?>"
+                            onclick="pedirVideo(<?= (int)$ev['alarm_id'] ?>, 'rv-row-<?= (int)$ev['alarm_id'] ?>')"
+                            title="Pede o vídeo deste alarme de novo à câmera.">
+                        &#8635; Pedir vídeo
+                    </button>
+                    <?php endif; ?>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -293,6 +306,51 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
     <?php endif; ?>
 </div>
+
+<script>
+/**
+ * Pede à câmera o vídeo de um alarme que ficou sem ele (POST /solicitarvideo).
+ * Mesmo endpoint/contrato de handlers/rel_alarmes.php — aqui cabe duplicar a
+ * função em vez de compartilhar arquivo porque as duas telas não têm um JS
+ * comum hoje, e o `btnId` extra existe porque esta tela pode desenhar DOIS
+ * botões para o MESMO alarme (o card de mídia principal e a linha da grade
+ * de "Alarmes Agrupados") — sem ele os dois disputariam o mesmo id.
+ *
+ * O pedido NÃO é instantâneo: a câmera regenera o trecho a partir do cartão e
+ * sobe depois. Quem religa o arquivo ao alarme é match_pending_video(), no
+ * webhook do "Upload de Vídeo Concluído" — por isso só confirmamos o pedido e
+ * pedimos para recarregar mais tarde, em vez de fingir que já tem o vídeo.
+ */
+function pedirVideo(alarmId, btnId) {
+    var btn = document.getElementById(btnId);
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    var antes = btn.innerHTML;
+    btn.innerHTML = 'Pedindo...';
+
+    fetch('/solicitarvideo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ alarm_id: alarmId })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (res.d && res.d.ok) {
+            btn.className = btn.className.replace('btn-outline', '') + ' badge-success';
+            btn.innerHTML = 'Solicitado';
+            btn.title = res.d.msg || 'Vídeo solicitado.';
+        } else {
+            btn.innerHTML = 'Não deu';
+            btn.title = (res.d && res.d.msg) ? res.d.msg : 'Falha ao solicitar.';
+            btn.disabled = false;
+            setTimeout(function () { btn.innerHTML = antes; }, 6000);
+        }
+      }).catch(function () {
+        btn.innerHTML = 'Erro de rede';
+        btn.disabled = false;
+        setTimeout(function () { btn.innerHTML = antes; }, 6000);
+      });
+}
+</script>
 
 <?php else: ?>
 <!-- ═══════════ DASHBOARD PRINCIPAL ═══════════ -->

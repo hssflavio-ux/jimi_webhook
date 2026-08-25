@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.3
+
+**Vídeo de evento nunca subia sozinho para nenhuma câmera JT/T, desde 12/08/2026 — achado analisando a câmera Telecom a pedido do dono do produto.**
+
+### Fixed
+- 🔴 **`flush_pending_video_requests()` (`includes/occurrence_engine.php`) chamava `iothub_dispatch_command()` — função que não existe.** A v4.9.13 (12/08/2026, `f1a8bae1`) renomeou esse despacho para `iothub_send_instruct()` com assinatura/retorno diferentes e atualizou os outros dois chamadores (`sendcommand.php`, `param_sync_worker.php`), mas não este. Como é `Error` de PHP (função indefinida) — não `Exception` —, o `catch` do laço não pega, e o processo morre em background, pós-`fastcgi_finish_request()`, sem log nenhum. Toda solicitação automática de vídeo de alarme (proNo 37384) falhava assim, silenciosamente, para a frota JT/T inteira, desde então. Confirmado em produção: `commands` nunca teve uma linha com `operator='auto_video'`. Corrigido chamando `iothub_send_instruct()` com a assinatura atual; como essa função não grava mais em `commands` sozinha (responsabilidade que passou para o chamador na v4.9.13), o `INSERT` voltou a existir aqui — sem ele o dedupe/anti-rajada da própria função, que leem `commands WHERE operator='auto_video'`, continuariam cegos mesmo com o despacho funcionando.
+
+### Added
+- 🆕 **Botão "Solicitar vídeo" em `/ocorrencias/dashboard`** (card de mídia da ocorrência e cada linha sem vídeo da grade "Alarmes Agrupados") — pede o anexo de novo à câmera via `/solicitarvideo` (endpoint já existente, usado por `rel_alarmes.php` desde a v4.9.31). Cobre o caso do gatilho automático acima ter falhado silenciosamente, ou de o vídeo genuinamente não ter chegado (sinal, câmera offline) sem exigir um worker de retry novo — o pedido manual reaproveita o mesmo comando (`EVIDEO`/`HVIDEO`, proNo 128) já formatado no backend. `handlers/solicitarvideo.php` passou a aceitar tanto `relatorios` quanto `ocorrencias_dashboard` como permissão de tela, já que agora tem dois chamadores.
+
+### Verificação
+- `php -l` limpo em `includes/occurrence_engine.php`, `handlers/ocorrencias_dashboard.php`, `handlers/solicitarvideo.php`.
+
 ## [Unreleased] — 4.13.2
 
 **Teste ao vivo da 4.13.1 (Chrome via IDE, sessão temporária de admin), pedido do dono do produto. Achado: as formas de consulta "a confirmar" estavam mesmo erradas, e o teste real corrigiu isso.**

@@ -22,7 +22,14 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_login();
 csrf_verify();
-require_permission('relatorios', 'view');   // mesma tela do rel_alarmes.php
+// Chamado por duas telas — rel_alarmes.php ('relatorios') e o botão "Solicitar
+// vídeo" de ocorrencias_dashboard.php ('ocorrencias_dashboard'); qualquer uma
+// das duas autoriza, senão quem só tem a segunda vê o botão e leva 403 nele.
+if (!can('relatorios', 'view') && !can('ocorrencias_dashboard', 'view')) {
+    http_response_code(403);
+    echo json_encode(['ok' => false, 'msg' => 'Seu grupo de permissão não autoriza esta ação.']);
+    exit;
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
