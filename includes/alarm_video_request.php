@@ -72,6 +72,19 @@ function avr_ts_do_nome(string $nome): ?int
 /**
  * Pede à câmera o vídeo de um alarme, e registra o pedido.
  *
+ * ── DOIS PROTOCOLOS, DOIS COMANDOS ──────────────────────────────────────────
+ * `EVIDEO`/`HVIDEO` (abaixo) são comandos do vocabulário **JIMI**
+ * (`device_models.protocol = 'JIMI'` — JC400D/JC400AD) — testados e medidos
+ * só contra essas duas câmeras (19/08/2026). Testado ao vivo em 25/08/2026
+ * contra a Telecom (JC371, protocolo **JTT**): `EVIDEO` recusado por aridade
+ * ("Number of parameters errors!") e `HVIDEO` nem é reconhecido — o
+ * catálogo (`command_catalog.php`) confirma os dois como `modelos:
+ * ['JC400AD','JC400D']`, nunca JC371/JC181/JC182/JC450. Para JT/T o comando
+ * certo é **`VIDEOUPLOAD`** (também proNo 128, texto) — existia numa versão
+ * anterior do dashboard (`docs/_arquivo_morto/archive/web/dashboard.js`,
+ * função `requestVideoUpload()`) que não sobreviveu à reescrita; resgatado
+ * aqui como `request_alarm_video_jtt()`.
+ *
  * @param int      $alarmId Alarme que ficou sem vídeo
  * @param int|null $userId  Quem pediu (para auditoria)
  * @returns array{ok:bool, msg:string, comando?:string, resposta?:string}
@@ -82,9 +95,11 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
 
     // `alarm_time` é UTC; a câmera nomeia o arquivo na hora LOCAL dela.
     $st = $db->prepare("
-        SELECT a.id, a.imei, a.file_url,
+        SELECT a.id, a.imei, a.file_url, a.alarm_label, dm.protocol,
                DATE_FORMAT(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00'), '%Y-%m-%d %H:%i:%s') AS local_ts
           FROM alarms a
+          LEFT JOIN devices d ON d.imei = a.imei
+          LEFT JOIN device_models dm ON dm.id = d.device_model_id
          WHERE a.id = :id
     ");
     $st->execute([':id' => $alarmId]);
@@ -102,6 +117,10 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
     $st->execute([':id' => $alarmId]);
     if ($st->fetchColumn()) {
         return ['ok' => false, 'msg' => 'Já há um pedido em andamento para este alarme.'];
+    }
+
+    if (($al['protocol'] ?? '') === 'JTT') {
+        return request_alarm_video_jtt($db, $al, $alarmId, $userId);
     }
 
     // Câmera: o sufixo `_I_`/`_F_` do nome antigo diz qual gravou o evento.
@@ -163,6 +182,73 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
         ':cmd'   => $tentativas[0],
         ':reply' => mb_substr($ultima, 0, 255),
         ':uid'   => $userId,
+    ]);
+    return ['ok' => false, 'msg' => 'A câmera recusou o pedido: ' . ($ultima ?: 'sem resposta.'),
+            'resposta' => $ultima];
+}
+
+/**
+ * Pede o anexo de um alarme JT/T via `VIDEOUPLOAD` (proNo 128, serverFlagId
+ * 0) — não confundir com o `EVIDEO`/`HVIDEO` de `request_alarm_video()`
+ * acima, que são JIMI e este device nem reconhece.
+ *
+ * Formato (resgatado do dashboard antigo, `docs/_arquivo_morto/…`):
+ *   VIDEOUPLOAD,<host do storage>,<porta>,<alarmLabel sem vírgula>,1-2-3
+ * `1-2-3` é fixo — pede os três canais possíveis do JC371 de uma vez, não um
+ * canal específico como no EVIDEO/HVIDEO.
+ *
+ * ⚠️ Ao contrário do EVIDEO ("…:OK!"), a resposta síncrona é só o ACK do
+ * comando — o upload em si acontece depois, por conta da câmera, e chega
+ * pelo MESMO caminho do anexo automático (`link_upload_by_alarm_label()` em
+ * `includes/occurrence_engine.php`, disparado no `/pushfileupload`), casando
+ * pelo `alarmLabel`. Por isso aqui não há ":OK" para farejar: qualquer
+ * status que não seja 'failed' (IoTHub aceitou/entregou) já é sucesso.
+ *
+ * @param PDO      $db      Conexão ativa
+ * @param array    $al      Linha de `alarms` (id, imei, alarm_label, local_ts)
+ * @param int      $alarmId Redundante com $al['id'], mantido por clareza
+ * @param int|null $userId  Quem pediu, para auditoria
+ * @returns array{ok:bool, msg:string, comando?:string, resposta?:string}
+ */
+function request_alarm_video_jtt(PDO $db, array $al, int $alarmId, ?int $userId): array
+{
+    $label = str_replace(',', '', (string)($al['alarm_label'] ?? ''));
+    if ($label === '') {
+        return ['ok' => false, 'msg' => 'Este alarme não tem alarmLabel — a câmera não anunciou anexo para ele.'];
+    }
+
+    $fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+    $fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
+    $fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
+    $cmd    = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$label},1-2-3";
+
+    $env    = iothub_send_instruct($al['imei'], 128, $cmd, 0, 'reenvio');
+    $ultima = trim((string)($env['result_msg'] ?? ''));
+
+    if ($env['status'] !== 'failed') {
+        $db->prepare("
+            INSERT INTO alarm_video_requests
+                (alarm_id, imei, requested_for, command, status, device_reply, requested_by)
+            VALUES (:aid, :imei, :ts, :cmd, 'pendente', :reply, :uid)
+        ")->execute([
+            ':aid'   => $alarmId,
+            ':imei'  => $al['imei'],
+            ':ts'    => $al['local_ts'],
+            ':cmd'   => $cmd,
+            ':reply' => mb_substr($ultima, 0, 255),
+            ':uid'   => $userId,
+        ]);
+        return ['ok' => true, 'msg' => 'Vídeo solicitado. Ele aparece aqui quando a câmera terminar de enviar.',
+                'comando' => $cmd, 'resposta' => $ultima];
+    }
+
+    $db->prepare("
+        INSERT INTO alarm_video_requests
+            (alarm_id, imei, requested_for, command, status, device_reply, requested_by)
+        VALUES (:aid, :imei, :ts, :cmd, 'recusado', :reply, :uid)
+    ")->execute([
+        ':aid' => $alarmId, ':imei' => $al['imei'], ':ts' => $al['local_ts'],
+        ':cmd' => $cmd, ':reply' => mb_substr($ultima, 0, 255), ':uid' => $userId,
     ]);
     return ['ok' => false, 'msg' => 'A câmera recusou o pedido: ' . ($ultima ?: 'sem resposta.'),
             'resposta' => $ultima];
