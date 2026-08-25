@@ -103,12 +103,19 @@ if ($generated) {
         // Top 10 eventos, rotulados pelo NOME.
         // Fora os eventos de DIAGNÓSTICO (v4.9.9): o BI descreve a operação.
         // Com eles, o "top 10 de alarmes" era a lista de defeitos de equipamento.
+        // 🔴 `GROUP BY alarm_label` (o ALIAS) quebra com `sql_mode=ONLY_FULL_GROUP_BY`
+        // — o padrão do MySQL desde 5.7 — porque `$alarmExpr` é um CASE sobre
+        // colunas de tabelas com LEFT JOIN (`atc.alarm_name_pt`/`atb.alarm_name_pt`)
+        // e o otimizador não aceita o alias como prova de dependência funcional.
+        // Repetir a EXPRESSÃO inteira no GROUP BY (não o alias) resolve: a
+        // consulta some pra qualquer host com o sql_mode padrão, viesse
+        // funcionando só onde alguém desligou `ONLY_FULL_GROUP_BY`.
         $alarmsByType = $db->prepare("
             SELECT ($alarmExpr) AS alarm_label, COUNT(*) AS cnt
             FROM alarms a
             $alarmJoins
             WHERE a.alarm_time BETWEEN :df AND :dt AND ($diagExpr) = 0 $aWhere
-            GROUP BY alarm_label ORDER BY cnt DESC LIMIT 10
+            GROUP BY ($alarmExpr) ORDER BY cnt DESC LIMIT 10
         ");
         $alarmsByType->execute($aParams);
         $chartData['alarms_by_type'] = $alarmsByType->fetchAll();
@@ -160,7 +167,11 @@ if ($generated) {
 }
 
 $customers = report_customer_options($db);
-$devices = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
+// `is_active = 1` faltava: o dropdown "Ativo" listava câmera desativada
+// junto com as em uso — o filtro nunca vai produzir dado nenhum pra uma
+// câmera desligada (alarms/gps_data não têm o que mostrar depois disso), e
+// ainda confunde o operador, que vê uma câmera "sumida" ainda na lista.
+$devices = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
 $devices->execute([':cid' => $customerId ?? 1]);
 $devices = $devices->fetchAll();
 

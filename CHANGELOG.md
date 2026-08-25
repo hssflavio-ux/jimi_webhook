@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.2
+
+**Correção pedida pelo dono do produto: a tela de BI (`/bi`) estava listando câmeras inativas no filtro "Ativo".**
+
+### Fixed
+- 🔴 **`handlers/bi.php` — filtro "Ativo" sem `is_active = 1`.** A consulta que monta o `<select>` listava toda câmera do cliente, ativa ou não — uma câmera desligada aparecia ao lado das em uso, sem produzir dado nenhum ao ser escolhida (e confundindo quem via uma câmera "sumida" ainda na lista).
+- 🔴 **Achado ao testar, mais sério que o pedido original: os 4 gráficos do BI nunca renderizavam sob `sql_mode=ONLY_FULL_GROUP_BY`** (o padrão do MySQL desde a 5.7). A consulta de "Top 10 Eventos" agrupava (`GROUP BY alarm_label`) pelo APELIDO de uma expressão `CASE` que lê colunas de duas tabelas em `LEFT JOIN` (`alarm_types` por dois caminhos possíveis) — o otimizador recusa isso como "não funcionalmente dependente" e a consulta inteira falhava, derrubando os OUTROS três gráficos junto (o `catch` era único para as quatro). Toda análise gerada mostrava "Não foi possível gerar os gráficos com estes filtros." Corrigido repetindo a expressão inteira no `GROUP BY` em vez do apelido — grupo pela expressão em si é sempre válido, independente das colunas de onde ela vem.
+
+### Verificação
+- 10 análises simuladas com dados fictícios (2 clientes, 6 câmeras — uma delas desativada de propósito —, 3 motoristas, 70 alarmes e 54 ocorrências em 45 dias), cobrindo filtro por cliente, por ativo, por motorista, por tipo de evento (simples e múltiplo), período curto, período sem dado nenhum, e visão consolidada sem filtro de cliente. Capturas de tela publicadas como Artifact temporário para revisão visual; nenhum dado real de cliente foi usado.
+
 ## [Unreleased] — 4.12.1
 
 **Correção pedida pelo dono do produto: o cadastro de chip ainda deixava vincular câmera na direção errada.**

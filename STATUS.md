@@ -1,11 +1,22 @@
-# STATUS.md — Jimi Webhook System v4.12.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.2 (YUV Parity)
 
-> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0+v4.12.0 commitadas (não publicadas); v4.12.1 pronta
+> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0/v4.12.0/v4.12.1 no `origin/main` (não publicadas); v4.12.2 pronta
 >
-> **Produção continua em `4.9.40`.** v4.11.0 (Fase 1, `a4c55fb`) e v4.12.0
-> (Fase 2, `21e1a59`) já commitadas, não publicadas. v4.12.1 (correção de
-> dinâmica do cadastro, abaixo) está no working tree, sem migração nova —
-> ainda não commitada.
+> **Produção continua em `4.9.40`.** As três versões anteriores já estão em
+> `origin/main` (commitadas e enviadas pelo dono do produto). v4.12.2 (abaixo)
+> está no working tree, sem migração — ainda não commitada.
+>
+> #### 🔧 v4.12.2 — BI listando câmera inativa + gráficos que nunca renderizavam
+>
+> Dono do produto reportou câmera inativa no filtro "Ativo" de `/bi`. Corrigido
+> (faltava `is_active = 1` na consulta do `<select>`) — e testando com dados
+> fictícios (10 análises simuladas, réplica local) apareceu um segundo defeito
+> mais sério: os 4 gráficos da tela NUNCA renderizavam, sempre com "Não foi
+> possível gerar os gráficos" — `GROUP BY alarm_label` agrupava pelo APELIDO de
+> um `CASE` que lê `alarm_types` via `LEFT JOIN`, e isso quebra sob
+> `sql_mode=ONLY_FULL_GROUP_BY` (padrão do MySQL desde 5.7). Corrigido
+> repetindo a expressão inteira no `GROUP BY`. Capturas das 10 análises
+> publicadas como Artifact temporário para revisão visual.
 >
 > #### 🔧 v4.12.1 — vínculo chip↔câmera só numa direção
 >
