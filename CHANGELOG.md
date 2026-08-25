@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.4
+
+**Câmera desativada continuava aparecendo no filtro de placa de `/relatorios/ocorrencias`, apesar da varredura da v4.12.7 — cobertura incompleta, não regressão.**
+
+### Fixed
+- 🔴 **`report_device_options()` (`includes/functions.php`) nunca filtrou por `is_active` — a v4.12.7 não a tocou.** Aquela varredura corrigiu 6 telas cuja consulta do dropdown de placa estava COPIADA inline (`rel_deslocamento.php`, `rel_alarmes.php`, `rel_posicoes.php`, `relatorios.php`, `exportar.php`, `rel_desatualizados.php`), mas esta função COMPARTILHADA — usada por `rel_ocorrencias.php`, `rel_geocercas.php`, `rel_velocidade.php`, `rel_ignicao.php`, `rel_status_frota.php`, `report_segments.php` — não é uma cópia da mesma query, então ficou de fora e continuou vazando as 5 câmeras inativas de produção (todas do mesmo cliente da Telecom) pra esses seis pontos. O comentário antigo da função ("relatório é histórico, não filtra por is_active") ficou defasado desde que a v4.12.7 decidiu o oposto para o mesmo dropdown nos outros seis arquivos — atualizado para refletir a decisão atual.
+- **`config_dispositivos.php`** (console de parâmetros 33027-33031) e **`video_downloads.php`** (fila de extração de vídeo) também listavam câmera inativa no seletor — achados na varredura completa desta sessão por `FROM devices` sem `is_active` no projeto inteiro (excluindo `equipamentos.php`, que é o cadastro e deve mesmo listar todas).
+
+### Verificação
+- Varredura de todo `FROM devices`/`SELECT imei, device_name` no projeto (handlers + includes); confirmado que os demais já filtravam (`bi.php`, `checklist_inspection.php`, `exportar.php`, `geocercas.php`, `manutencoes.php`, `relatorios.php`, `rel_alarmes.php`, `rel_deslocamento.php`, `rel_posicoes.php`, `rel_desatualizados.php`, `comandos.php`, `configuracoes_ia.php`, `video_aovivo.php`, `video_playback.php`, `parametros.php`, `rastreamento.php`, `camerasdata.php`, `rel_status_frota.php`) ou são agregação histórica por alarme (não dropdown — `dashboard_widgets.php`/`resumo.php` "Top placas com mais alarmes"), onde manter o inativo é o comportamento certo.
+- Confirmado em produção: 5 devices com `is_active=0`, todos do cliente "Frota Principal".
+- `php -l` limpo em `includes/functions.php`, `handlers/config_dispositivos.php`, `handlers/video_downloads.php`.
+
 ## [Unreleased] — 4.13.3
 
 **Vídeo de evento nunca subia sozinho para nenhuma câmera JT/T, desde 12/08/2026 — achado analisando a câmera Telecom a pedido do dono do produto.**

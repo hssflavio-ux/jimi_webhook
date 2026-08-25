@@ -995,9 +995,19 @@ function protocol_label(?string $proto): string {
  * acontece para admin de plataforma ("todos os clientes"), e aí a lista segue o
  * escopo de revendedor, se houver.
  *
- * Não filtra por `is_active`: relatório é histórico, e um equipamento
- * desativado ontem continua tendo posições, alarmes e paradas de anteontem.
- * Escondê-lo do filtro tornaria esses dados inalcançáveis pela tela.
+ * 🔴 Filtra por `is_active = 1` desde 25/08/2026. Até então esta função de
+ * propósito NÃO filtrava ("relatório é histórico, esconder tornaria dados
+ * antigos inalcançáveis") — mas a v4.12.7 já tinha decidido o contrário para
+ * o mesmo dropdown em `rel_deslocamento.php`/`rel_alarmes.php`/
+ * `rel_posicoes.php`/`relatorios.php`/`exportar.php` (cada um com a consulta
+ * copiada inline, com `is_active = 1`), e essa função COMPARTILHADA — usada
+ * por `rel_ocorrencias.php`, `rel_geocercas.php`, `rel_velocidade.php`,
+ * `rel_ignicao.php`, `rel_status_frota.php`, `report_segments.php` — ficou
+ * de fora da varredura porque não é uma cópia da mesma query, é uma função à
+ * parte. Câmera desativada continuou aparecendo nesses seis até o dono do
+ * produto reportar de novo, especificamente em Ocorrências. O filtro não tira
+ * acesso ao HISTÓRICO do equipamento — só ao dropdown; um relatório já aberto
+ * com `?imei=` de um equipamento desativado continua funcionando.
  *
  * @param PDO      $db        Conexão ativa
  * @param int|null $scopeCust Cliente do escopo (null = todos os permitidos)
@@ -1008,19 +1018,19 @@ function report_device_options(PDO $db, ?int $scopeCust = null, int $limit = 200
     $limit = max(1, $limit);
     try {
         if ($scopeCust !== null) {
-            $stmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid
+            $stmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1
                                   ORDER BY device_name, imei LIMIT $limit");
             $stmt->execute([':cid' => $scopeCust]);
             return $stmt->fetchAll();
         }
         $allowed = reseller_scope_ids();
         if ($allowed === null) {
-            return $db->query("SELECT imei, device_name FROM devices ORDER BY device_name, imei LIMIT $limit")->fetchAll();
+            return $db->query("SELECT imei, device_name FROM devices WHERE is_active = 1 ORDER BY device_name, imei LIMIT $limit")->fetchAll();
         }
         if (!$allowed) return [];
         // Ids já passaram por (int) em reseller_scope_ids() — ver report_customer_options()
         $in = implode(',', array_map('intval', $allowed));
-        return $db->query("SELECT imei, device_name FROM devices WHERE customer_id IN ($in)
+        return $db->query("SELECT imei, device_name FROM devices WHERE customer_id IN ($in) AND is_active = 1
                            ORDER BY device_name, imei LIMIT $limit")->fetchAll();
     } catch (Throwable $e) {
         return [];   // falha fechada: o seletor fica vazio, não completo

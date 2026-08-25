@@ -25,7 +25,7 @@ $devicesStmt = $db->prepare("
            COALESCE(dm.protocol, 'JIMI') AS protocol
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    WHERE d.customer_id = :cid
+    WHERE d.customer_id = :cid AND d.is_active = 1
     ORDER BY d.device_name
 ");
 $devicesStmt->execute([':cid' => $customer_id]);

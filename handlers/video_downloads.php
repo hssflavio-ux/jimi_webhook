@@ -40,7 +40,7 @@ $mostrarCliente = ($scopeCust === null);
 $devStmt = $db->prepare("
     SELECT d.imei, COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name
     FROM devices d
-    WHERE 1=1 " . ($scopeCust !== null ? ' AND d.customer_id = :cid' : '') . "
+    WHERE d.is_active = 1 " . ($scopeCust !== null ? ' AND d.customer_id = :cid' : '') . "
     ORDER BY d.device_name
 ");
 $devStmt->execute($scopeCust !== null ? [':cid' => $scopeCust] : []);
