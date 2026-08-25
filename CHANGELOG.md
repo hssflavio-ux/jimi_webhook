@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.7
+
+**Primeiro upload JT/T de verdade da sessão (VIDEOUPLOAD pós-fix) — e ele revelou mais um bug: o anexo de uma ocorrência foi ligado a OUTRA.**
+
+### Fixed
+- 🔴 **`pushfileupload.php`: o regex de nome de arquivo do anexo JT/T nunca batia.** A doc §1.8 descreve o nome como `{imei}_{alarmLabel}_{xy}.ext` com canal+sequência colados sem separador; o arquivo real medido em produção é `865478070654829_<label>_1_00.jpg` — **com `_` entre canal e sequência**. Sem esse `_` no regex, a extração de `alarmLabel` falhava sempre, e TODO anexo JT/T caía no fallback impreciso de janela ±3min (`link_upload_to_occurrence()`) em vez do casamento preciso por alarmLabel (`link_upload_by_alarm_label()`). Consequência observada ao vivo: os dois canais do mesmo alarme (`_1_`/`_2_`) chegaram no mesmo segundo — o primeiro ligou certo à ocorrência dona (por sorte, era a mais próxima no tempo); o segundo, já com aquela ocorrência preenchida, foi parar na ocorrência ABERTA mais próxima seguinte — de um alarme completamente diferente (`Fadiga` recebendo a foto de `Motorista Fumando`). Corrigido o regex (`_(\d+)_(\d+)\.` no lugar de `_(\d)(\d+)\.`); vínculo incorreto já gravado (ocorrência 117 → mídia 111) desfeito manualmente em produção.
+
+### Verificação
+- Testado o regex antigo vs. novo contra os dois nomes reais medidos: antigo não batia em nenhum dos dois, novo bate nos dois com canal/sequência corretos.
+- `php -l` limpo em `handlers/pushfileupload.php`.
+- Confirmado em produção: gatilho automático (`VIDEOUPLOAD`, pós fix da v4.13.6) produziu o primeiro upload JT/T bem-sucedido do histórico do banco — 2 fotos (`.jpg`, uma por canal) para a ocorrência 120. `occurrences.media_file_id` populado corretamente após a correção do vínculo.
+
 ## [Unreleased] — 4.13.6
 
 **Correção do dono do produto: 37384 não é o comando certo — é `VIDEOUPLOAD`, já documentado no dashboard antigo (arquivo morto).**

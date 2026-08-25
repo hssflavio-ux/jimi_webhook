@@ -48,12 +48,20 @@ class PushFileUploadHandler extends WebhookHandler {
 
             $fileType = detect_media_type($fileName);
 
-            // Anexos de alarme JT/T chegam nomeados {imei}_{alarmLabel}_{xy}.ext
-            // (doc §1.8): x = canal, y = sequência do arquivo. O label liga o
-            // arquivo ao alarme dono (alarms.alarm_label) e daí à ocorrência.
+            // Anexos de alarme JT/T chegam nomeados {imei}_{alarmLabel}_{canal}_{seq}.ext
+            // — MEDIDO em produção 25/08/2026 (Telecom, VIDEOUPLOAD):
+            // "865478070654829_<label>_1_00.jpg" / "..._2_00.jpg". A doc §1.8
+            // descreve "x = canal, y = sequência" como um bloco só (xy colado,
+            // sem separador) — ERRADA: sem o "_" entre canal e sequência este
+            // regex NUNCA batia, então TODO anexo caía no fallback impreciso de
+            // janela ±3min (link_upload_to_occurrence()) em vez do casamento
+            // preciso por alarmLabel — e já chegou a ligar o anexo de uma
+            // ocorrência à OUTRA (a mais próxima no tempo com media_file_id
+            // ainda vazio), não à dona de verdade. O label liga o arquivo ao
+            // alarme dono (alarms.alarm_label) e daí à ocorrência.
             $alarmLabel  = null;
             $fileChannel = $channel;
-            if (preg_match('/^\d{15,17}_([0-9A-Fa-f]{16,40})_(\d)(\d+)\.[A-Za-z0-9]+$/', $fileName, $m)) {
+            if (preg_match('/^\d{15,17}_([0-9A-Fa-f]{16,40})_(\d+)_(\d+)\.[A-Za-z0-9]+$/', $fileName, $m)) {
                 $alarmLabel = $m[1];
                 if ($fileChannel === null && (int)$m[2] > 0) {
                     $fileChannel = (int)$m[2];
