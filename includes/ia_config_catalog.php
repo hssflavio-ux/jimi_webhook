@@ -54,35 +54,50 @@
  *   desc         — o que o comando faz
  *   modelos      — em quais modelos da linha JC ele é documentado
  *   template     — sempre true aqui (todo comando desta tela tem parâmetro)
- *   consulta     — forma nua que LÊ o valor ('VERBO#'), quando existe; null quando não há
+ *   consulta     — forma nua que LÊ o valor; null quando não há
  *   consulta_ref — procedência da CONSULTA (não do comando de escrita):
- *                  'medido' (testada em câmera real), ou 'nao_confirmado'
+ *                  'medido' (testada em câmera real) ou 'inferido' (mesmo
+ *                  padrão de um comando MEDIDO no mesmo verbo/família, mas
+ *                  este código/campo específico não foi testado individualmente)
  *   fonte        — planilha + linha/seção de onde veio
  *   procedencia  — 'planilha' (as 3 fontes acima) ou 'wiki' (fallback JC450/JC182)
  *   params[]     — cada um com 'p' (nome do placeholder), 'desc', 'format'
  *                  (a MÁSCARA — é o texto da tag de auxílio na tela) e 'default'
  *   exemplos[]   — pelo menos um comando pronto, da própria planilha
  *
- * ── `consulta`: só a PRIMEIRA entrada de cada verbo carrega a forma de
- * leitura (mesma regra do `command_catalog.php` original para a família
- * `EVENTSET`) — o subtipo do evento (`ALDW`, `AHMW`...) é PARÂMETRO do
- * comando, não faz parte do verbo, então `EVENTSET#` (sem argumento) já
- * pede tudo de uma vez, não uma leitura por evento.
+ * ── `consulta` de `EVENTSET`/`EVENTALERT`: MEDIDA em 25/08/2026 contra a
+ * Telecom (JC371, 865478070654829) — a hipótese inicial era que só
+ * `EVENTSET#`/`EVENTALERT#` (verbo puro) fizessem sentido, por analogia com
+ * a família `EVENTSET` de `command_catalog.php`. **Errada**: a câmera
+ * recusou os dois ("Command was not recognized!"). A forma certa inclui o
+ * CÓDIGO do evento — `EVENTSET,ALDW#`, `EVENTALERT,ADCA#` etc. — e devolve
+ * só os valores daquele evento (`EVENTSET,ALDW#` → `EVENTSET,ALDW#,60`).
+ * Testados ao vivo: `ALDW`, `AOSD`, `ADCA`, `AFVS` nos dois verbos (8
+ * disparos, 8 respostas) — `consulta_ref: 'medido'`. Os outros 15 códigos de
+ * cada verbo seguem o mesmo padrão `CMD,CÓDIGO#`, não testados
+ * individualmente — `'inferido'`.
  *
- * ⚠️ **21 das 22 formas de consulta aqui são `nao_confirmado`** — deduzidas
- * mecanicamente (`VERBO#`, a mesma convenção que a planilha JC371 documenta
- * para os comandos marcados em vermelho — mas o parser não conseguiu extrair
- * a cor de forma confiável: a coluna inteira testou "avermelhada" por causa
- * do estilo base da célula, não de um destaque manual). É EXATAMENTE o
- * mesmo tipo de lacuna que `CHECK#`/`ADASxx`/`FILELIST` tinham antes de
- * serem medidos em câmera real (ver `command_catalog.php`) — a tela
- * "Configurações IA" tem um botão **Ler tudo (cadência)** que dispara essas
- * 21 formas, uma por vez, contra o equipamento selecionado: é o próprio
- * mecanismo de MEDIÇÃO. Toda vez que chegar uma resposta de verdade (não
- * recusa, não timeout), promova `consulta_ref` para `'medido'` aqui. Só `DMSSW#`
- * já nasce `'medido'` — herdado de `command_catalog.php`, testado antes.
+ * ── Também medidos em 25/08/2026 (Telecom JC371 + `864993060429173`
+ * JC400AD + `860112070347838` JC181): `DMSSP,ADAS#`/`DMSSP,DMS#` (a forma
+ * bare `DMSSP#` também foi recusada — precisa da função) e
+ * `ADAS,CALIBRATION#` (a forma antiga `ADAS#`, herdada de
+ * `command_catalog.php`, também estava errada — mesma recusa por número de
+ * parâmetros). `DMSVSP#`, `DMSSW#` (JC371 de 2 parâmetros E JC400AD de 1 —
+ * são registros DIFERENTES que respondem ao mesmo verbo bare, medido nos
+ * dois), `ADASSW#`, `DMS_SWITCH#`, `SPEED#` (JC181) — todos bare `CMD#`,
+ * todos confirmados. `ADASSEP#`/`ADASSEN#` respondem de verdade mas exigem
+ * `ADASSW` ligado primeiro ("Please Open Adas Switch" quando desligado) —
+ * a FORMA está confirmada, a câmera testada só estava com ADAS desligado.
+ * O resto da família `ADASxx`/`DMS_*` (G002–G015) segue o mesmo padrão bare
+ * `CMD#` dos que FORAM testados — `'inferido'`, não `'medido'`.
  *
- * Total: 58 entradas — JC371 (42 no campo `modelos`, contando os
+ * A tela "Configurações IA" tem um botão **Ler tudo (cadência)** que
+ * dispara cada consulta, uma por vez — é o que produziu essas medições, e
+ * continua sendo o mecanismo pra promover os `'inferido'` restantes pra
+ * `'medido'` conforme forem testados em mais câmeras/modelos.
+ *
+ * Total: 59 entradas, todas com forma de consulta (18 `medido`, 41
+ * `inferido`, 0 sem forma) — JC371 (43 no campo `modelos`, contando os
  * compartilhados com JC450/JC182) + JC400AD (16, G001–G015) + JC182 (6,
  * fallback do catálogo antigo) + JC450 (3, idem) + JC181 (1, SPEED). JC450 e
  * JC182 não somam entradas PRÓPRIAS — entram como modelo extra nas linhas do
@@ -99,7 +114,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — excesso de velocidade',
         'desc' => 'Define o limite de velocidade e por quanto tempo acima dele gera o evento de excesso de velocidade.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => 'EVENTSET#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha D001', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AOSD#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha D001', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Limite de velocidade', 'format' => 'OFF / 1–255 (km/h)', 'default' => '4'],
             ['p' => 'P2', 'desc' => 'Duração acima do limite para gerar o evento', 'format' => '0–600 (segundos)', 'default' => '5'],
@@ -110,7 +125,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — excesso de velocidade',
         'desc' => 'Define o intervalo de envio à plataforma e entre avisos de voz para o evento de excesso de velocidade.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => 'EVENTALERT#', 'consulta_ref' => 'nao_confirmado',
+        'consulta' => 'EVENTALERT,AOSD#', 'consulta_ref' => 'medido',
         // ⚠️ O cabeçalho da linha D002 usa o código "ADSD", mas os DOIS exemplos
         // da própria planilha usam "AOSD" (o mesmo código do EVENTSET acima,
         // da linha D001). Typo da planilha do fabricante — segui o exemplo, não
@@ -129,7 +144,7 @@ return [
         'cmd' => 'DMSVSP', 'nome' => 'Velocidade virtual para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS/DMS em bancada, sem o veículo em movimento.',
         'modelos' => ['JC371', 'JC450'], 'template' => true,
-        'consulta' => 'DMSVSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha D015', 'procedencia' => 'planilha',
+        'consulta' => 'DMSVSP#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha D015', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '0–120 (km/h)', 'default' => '—'],
         ],
@@ -144,7 +159,7 @@ return [
         'cmd' => 'DMSSP', 'nome' => 'Ativação de IA (velocidade/canal/área)',
         'desc' => 'Define a velocidade mínima de ativação, o canal de vídeo e a área de detecção do ADAS ou do DMS.',
         'modelos' => ['JC371', 'JC450'], 'template' => true,
-        'consulta' => 'DMSSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha E003', 'procedencia' => 'planilha',
+        'consulta' => 'DMSSP,ADAS#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => 'ADAS / DMS', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Velocidade de ativação', 'format' => '10–120 (km/h)', 'default' => '60 (ADAS) / 30 (DMS)'],
@@ -177,7 +192,7 @@ return [
         'cmd' => 'ADAS', 'nome' => 'Calibração — perfil do veículo',
         'desc' => 'Define os parâmetros de instalação da câmera conforme o tipo/porte do veículo.',
         'modelos' => ['JC371', 'JC450', 'JC400AD'], 'template' => true,
-        'consulta' => 'ADAS#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC371 Command List V1.0.1, linha E005', 'procedencia' => 'planilha',
+        'consulta' => 'ADAS,CALIBRATION#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E005', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Tipo de veículo', 'format' => 'A=Carro de passeio / B=SUV ou caminhonete pequena / C=Caminhão pequeno (baú curto) / D=Caminhão médio (baú médio) / E=Caminhão grande (baú longo) / F=Caminhão médio (cabine estendida) / G=Caminhão grande (cabine estendida)', 'default' => 'A'],
         ],
@@ -193,7 +208,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — saída de faixa (ADAS)',
         'desc' => 'Distância de cruzamento das rodas que dispara o evento de saída de faixa. Requer DMSSP com ADAS ativo antes.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E006', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ALDW#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E006', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade (distância de cruzamento das rodas)', 'format' => 'OFF / 10–100 (cm)', 'default' => '60']],
         'exemplos' => [['cmd' => 'EVENTSET,ALDW,60#', 'desc' => 'dispara a 60 cm de cruzamento.']],
     ],
@@ -201,7 +216,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — saída de faixa (ADAS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de saída de faixa.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E007', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ALDW#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E007', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -215,7 +230,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — distância insegura (ADAS)',
         'desc' => 'Limiar de tempo de risco de colisão por proximidade do veículo à frente. Requer DMSSP com ADAS ativo antes.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E008', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AHMW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E008', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade (limiar de tempo de risco)', 'format' => 'OFF / 500–10000 (ms)', 'default' => '1200']],
         'exemplos' => [['cmd' => 'EVENTSET,AHMW,1200#', 'desc' => 'limiar de 1200 ms.']],
     ],
@@ -223,7 +238,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — distância insegura (ADAS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de distância insegura.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E009', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AHMW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E009', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -237,7 +252,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — colisão frontal (ADAS)',
         'desc' => 'Limiar de tempo de risco de colisão frontal direta. Requer DMSSP com ADAS ativo antes.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E010', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AFCW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E010', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade (limiar de tempo de risco)', 'format' => 'OFF / 500–10000 (ms)', 'default' => '2500']],
         'exemplos' => [['cmd' => 'EVENTSET,AFCW,2500#', 'desc' => 'limiar de 2500 ms.']],
     ],
@@ -245,7 +260,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — colisão frontal (ADAS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de colisão frontal.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E011', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AFCW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E011', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -259,7 +274,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — colisão com pedestre (ADAS)',
         'desc' => 'Ativa/define a sensibilidade de disparo do risco de colisão com pedestre. Requer DMSSP com ADAS ativo antes.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E012', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,APCW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E012', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 500–10000 (ms)', 'default' => '5000']],
         'exemplos' => [['cmd' => 'EVENTSET,APCW,5000#', 'desc' => 'limiar de 5000 ms.']],
     ],
@@ -267,7 +282,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — colisão com pedestre (ADAS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de risco de colisão com pedestre.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E013', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,APCW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E013', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0/OFF=não reportar / 2–64800 (segundos)', 'default' => '120'],
@@ -281,7 +296,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — partida do veículo à frente (ADAS)',
         'desc' => 'Distância e tempo parado do veículo à frente que disparam o aviso de partida.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E014', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AFVS#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E014', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 0–64800 (ms)', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Tempo de partida (startup time)', 'format' => '1–600 (segundos)', 'default' => '60'],
@@ -294,7 +309,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — partida do veículo à frente (ADAS)',
         'desc' => 'Alerta de plataforma e voz quando o veículo à frente parte após parada.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E015', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AFVS#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E015', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Alerta na plataforma (2º campo, fixo pela planilha)', 'format' => '0 (fixo)', 'default' => '0'],
@@ -308,7 +323,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — anomalia de calibração (DMS)',
         'desc' => 'Tempo limite sem alinhamento correto do DMS que dispara o evento de anomalia de calibração.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E016', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ADCA#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E016', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Tempo limite para calibração', 'format' => 'OFF / 0–64800 (segundos)', 'default' => '60']],
         'exemplos' => [['cmd' => 'EVENTSET,ADCA,60#', 'desc' => 'limite de 60 s.']],
     ],
@@ -316,7 +331,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — anomalia de calibração (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para anomalia de calibração do DMS.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E017', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ADCA#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E017', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 1–64800 (segundos)', 'default' => '—'],
@@ -330,7 +345,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — fadiga/olhos fechados (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de olhos fechados para gerar o evento de fadiga.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E018', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ACEA#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E018', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima do fechamento dos olhos', 'format' => '1–255 (segundos)', 'default' => '2.5'],
@@ -341,7 +356,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — fadiga/olhos fechados (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de fadiga do motorista.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E020', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ACEA#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E020', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -356,7 +371,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — olhos fechados sustentados (DMS)',
         'desc' => 'Alerta de plataforma e voz para fechamento de olhos sustentado (usa a sensibilidade de ACEA).',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E021', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ASCE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E021', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Alerta na plataforma (2º campo, fixo pela planilha)', 'format' => '0 (fixo)', 'default' => '0'],
@@ -374,7 +389,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — distração (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de distração para gerar o evento.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E022', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ADW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E022', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima da distração', 'format' => '1–255 (segundos)', 'default' => '3'],
@@ -385,7 +400,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — bocejo (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de boca aberta para gerar o evento de bocejo.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E019', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ADDW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E019', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima de boca aberta', 'format' => '1–255 (segundos)', 'default' => '2.5'],
@@ -396,7 +411,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — bocejo/distração (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz — a planilha rotula esta linha como "distração" mas o código do comando (ADDW) é o de BOCEJO; não há EVENTALERT,ADW documentado à parte.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E023', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ADDW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E023', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -410,7 +425,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — fumo (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de fumo para gerar o evento.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E024', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ASW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E024', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima de fumo', 'format' => '1–255 (segundos)', 'default' => '5'],
@@ -421,7 +436,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — fumo (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de fumo.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E025', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ASW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E025', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -435,7 +450,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — uso de telefone (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de uso do telefone para gerar o evento.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E026', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ACPW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E026', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima de uso do telefone', 'format' => '1–255 (segundos)', 'default' => '5'],
@@ -446,7 +461,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — uso de telefone (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de uso do telefone.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E027', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ACPW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E027', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '120'],
@@ -460,7 +475,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — obstrução de lente (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de obstrução da lente para gerar o evento.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E028', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AMS#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E028', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
             ['p' => 'P2', 'desc' => 'Duração mínima da obstrução', 'format' => '1–255 (segundos)', 'default' => '5'],
@@ -471,7 +486,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — obstrução de lente (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de obstrução de lente.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E029', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AMS#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E029', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '14400'],
@@ -485,7 +500,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — óculos de sol (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de uso de óculos escuros para gerar o evento.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E030', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ASS#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E030', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Duração mínima com óculos de sol', 'format' => '1–255 (segundos)', 'default' => '60'],
@@ -496,7 +511,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — óculos de sol (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de óculos de sol detectado.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E031', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ASS#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E031', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '0'],
@@ -510,7 +525,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — bebida/comida (DMS)',
         'desc' => 'Nível de sensibilidade para gerar o evento de motorista bebendo/comendo.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E032', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ADA#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E032', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Intervalo entre avisos de voz', 'format' => '1–255 (segundos)', 'default' => '5'],
@@ -521,7 +536,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — bebida/comida (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para o evento de bebida/comida.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E033', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ADA#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E033', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '0'],
@@ -535,7 +550,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — rosto não detectado (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima sem detecção de rosto para gerar o evento.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E034', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ANDD#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E034', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixa / 2=Média / 3=Alta', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Duração mínima sem rosto detectado', 'format' => '1–255 (segundos)', 'default' => '60'],
@@ -546,7 +561,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — rosto não detectado (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz para perda de detecção facial.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E035', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ANDD#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E035', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '0'],
@@ -560,7 +575,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — reconhecimento facial (DMS)',
         'desc' => 'Sensibilidade de similaridade, duração e intervalo entre tentativas de reconhecimento facial.',
         'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E036', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AFIF#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E036', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade (similaridade)', 'format' => 'OFF / 1–100 (recomendado 40–60)', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Duração para reconhecimento malsucedido', 'format' => '1–255 (segundos)', 'default' => '180'],
@@ -572,7 +587,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — reconhecimento facial com sucesso (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz quando o reconhecimento facial dá certo.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E037', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AFIS#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E037', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '60'],
@@ -584,7 +599,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — falha no reconhecimento facial (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz quando o reconhecimento facial falha.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E038', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AFIF#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E038', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '60'],
@@ -598,7 +613,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — cinto de segurança apertado (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima para confirmar cinto apertado.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E039', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,AWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E039', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => 'OFF'],
             ['p' => 'P2', 'desc' => 'Duração mínima para gerar o evento', 'format' => '1–255 (segundos)', 'default' => '1'],
@@ -609,7 +624,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — cinto de segurança apertado (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz quando o cinto está apertado.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E040', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,AWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E040', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '60'],
@@ -621,7 +636,7 @@ return [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — sem cinto de segurança (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima para confirmar ausência de cinto.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E041', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTSET,ANWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E041', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '1'],
             ['p' => 'P2', 'desc' => 'Duração mínima para gerar o evento', 'format' => '1–255 (segundos)', 'default' => '60'],
@@ -632,7 +647,7 @@ return [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — sem cinto de segurança (DMS)',
         'desc' => 'Intervalo de envio à plataforma e de aviso de voz quando o motorista está sem cinto.',
         'modelos' => ['JC371'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC371 Command List V1.0.1, linha E042', 'procedencia' => 'planilha',
+        'consulta' => 'EVENTALERT,ANWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E042', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Alerta na plataforma', 'format' => '0 (fixo)', 'default' => '0'],
             ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '0=não reportar / 1=imediato / 2–64800 (segundos)', 'default' => '3600'],
@@ -649,7 +664,7 @@ return [
         'cmd' => 'DMSSW', 'nome' => 'Modo da subcâmera',
         'desc' => 'Define o modo da subcâmera do JC261. Reinicia o equipamento 10 s após aplicar.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => null, 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G001', 'procedencia' => 'planilha',
+        'consulta' => 'DMSSW#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G001', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Modo', 'format' => '0=Versão AHD / 3=Versão JC170', 'default' => '—']],
         'exemplos' => [['cmd' => 'DMSSW,3', 'desc' => 'muda para modo JC170.']],
     ],
@@ -657,7 +672,7 @@ return [
         'cmd' => 'DMS_SWITCH', 'nome' => 'Ativação, sensibilidade e velocidade do DMS',
         'desc' => 'Liga/desliga o DMS, define a sensibilidade geral e a velocidade a partir da qual o alinhamento facial começa.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_SWITCH#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G002', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_SWITCH#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G002', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação do DMS', 'format' => '0=Desligado / 1=Ligado', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Sensibilidade', 'format' => '1=Normal / 2=Agressiva', 'default' => '—'],
@@ -669,7 +684,7 @@ return [
         'cmd' => 'DMS_VOICE_CUSTOM', 'nome' => 'Filtro de repetição de voz por evento',
         'desc' => 'Período mínimo entre avisos de voz repetidos, um valor por tipo de evento de DMS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_VOICE_CUSTOM#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G003', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_VOICE_CUSTOM#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '0=desliga sempre / 10 / 30 / 60 (segundos)', 'default' => '5 (JC400D) / 5 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '0=desliga sempre / 10 / 30 / 60 (segundos)', 'default' => '5 (JC400D) / 5 (JC261)'],
@@ -684,7 +699,7 @@ return [
         'cmd' => 'DMS_ALERT_CUSTOM', 'nome' => 'Filtro de repetição de alerta por evento',
         'desc' => 'Período mínimo entre envios repetidos à plataforma, um valor por tipo de evento de DMS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_ALERT_CUSTOM#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G004', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_ALERT_CUSTOM#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G004', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '0=nunca envia / 180 / 600 / 1800 (segundos)', 'default' => '120 (JC400D) / 120 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '0=nunca envia / 180 / 600 / 1800 (segundos)', 'default' => '120 (JC400D) / 120 (JC261)'],
@@ -699,7 +714,7 @@ return [
         'cmd' => 'DMS_VIRTUAL_SPEED', 'nome' => 'Velocidade virtual para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS/DMS em bancada. Fica inválido após o próximo ACC OFF.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_VIRTUAL_SPEED#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G005', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_VIRTUAL_SPEED#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G005', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '0–120 (km/h)', 'default' => '—']],
         'exemplos' => [['cmd' => 'DMS_VIRTUAL_SPEED,30', 'desc' => 'simula 30 km/h.']],
     ],
@@ -707,7 +722,7 @@ return [
         'cmd' => 'DMS_CONTINUITY', 'nome' => 'Duração de reconhecimento contínuo por evento',
         'desc' => 'Por quanto tempo o comportamento precisa persistir antes de disparar o evento, um valor por tipo.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_CONTINUITY#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G006', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_CONTINUITY#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G006', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '1–10 (segundos)', 'default' => '3 (JC400D) / 2 (JC261)'],
             ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '1–10 (segundos)', 'default' => '3 (JC400D) / 2 (JC261)'],
@@ -722,7 +737,7 @@ return [
         'cmd' => 'DMS_CALIB_ABNORMAL', 'nome' => 'Alerta de anomalia de alinhamento',
         'desc' => 'Quantas anomalias de alinhamento até gerar alerta, e se avisa por som/plataforma.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_CALIB_ABNORMAL#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G007', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_CALIB_ABNORMAL#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G007', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Anomalias até gerar alerta', 'format' => '0=desativado / 1–10', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Notificar por som', 'format' => '0=não / 1=sim', 'default' => '—'],
@@ -734,7 +749,7 @@ return [
         'cmd' => 'DMS_SECOND_EVENT', 'nome' => 'Escalonamento para evento de nível 2',
         'desc' => 'Quantas ocorrências consecutivas do mesmo evento, numa janela de tempo, viram um alerta sonoro de nível 2.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'DMS_SECOND_EVENT#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G008', 'procedencia' => 'planilha',
+        'consulta' => 'DMS_SECOND_EVENT#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G008', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Tipo de evento', 'format' => '1=Distração / 2=Olhos fechados / 3=Bocejo / 4=Ao telefone / 5=Fumando / 6=Rosto não detectado', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Ocorrências consecutivas', 'format' => '0=desativado / 1–10', 'default' => '—'],
@@ -752,7 +767,7 @@ return [
         'cmd' => 'ADASSW', 'nome' => 'Ativação geral do ADAS',
         'desc' => 'Liga/desliga o ADAS. Reinicia o equipamento 10 s após aplicar.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASSW#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G009', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSW#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G009', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Ativação', 'format' => '0=Desligado / 1=Ligado', 'default' => '—']],
         'exemplos' => [['cmd' => 'ADASSW,1', 'desc' => 'liga o ADAS.']],
     ],
@@ -760,7 +775,7 @@ return [
         'cmd' => 'ADASSEP', 'nome' => 'Ativação por função de ADAS',
         'desc' => 'Liga/desliga individualmente cada função de ADAS. Requer ADASSW ligado antes.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASSEP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G010', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSEP#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G010', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desligado / 1=Ligado', 'default' => 'FCW:1 / HMW:1 / LDW:1'],
@@ -771,7 +786,7 @@ return [
         'cmd' => 'ADASPI', 'nome' => 'Filtro de repetição de alerta por função de ADAS',
         'desc' => 'Período mínimo entre envios repetidos à plataforma para o mesmo tipo de evento de ADAS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASPI#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G011', 'procedencia' => 'planilha',
+        'consulta' => 'ADASPI#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G011', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Período', 'format' => '0–3600 (segundos)', 'default' => 'FCW:60 / HMW:60 / LDW:60'],
@@ -782,7 +797,7 @@ return [
         'cmd' => 'ADASVI', 'nome' => 'Filtro de repetição de voz por função de ADAS',
         'desc' => 'Período mínimo entre avisos de voz repetidos para o mesmo tipo de evento de ADAS.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASVI#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G012', 'procedencia' => 'planilha',
+        'consulta' => 'ADASVI#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G012', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Período', 'format' => '0–3600 (segundos)', 'default' => 'FCW:60 / HMW:60 / LDW:60'],
@@ -793,7 +808,7 @@ return [
         'cmd' => 'ADASSP', 'nome' => 'Velocidade mínima por função de ADAS',
         'desc' => 'Velocidade a partir da qual cada função de ADAS pode disparar.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G013', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G013', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=FCW+HMW (colisão frontal / veículo próximo) / 2=LDW (saída de faixa)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Velocidade mínima', 'format' => 'km/h', 'default' => 'FCW:30 / HMW:30 / LDW:60'],
@@ -807,7 +822,7 @@ return [
         'cmd' => 'ADASSEN', 'nome' => 'Sensibilidade de disparo por função de ADAS',
         'desc' => 'Sensibilidade específica de cada função de ADAS — o significado de P2/P3 muda conforme a função (P1).',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASSEN#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014', 'procedencia' => 'planilha',
+        'consulta' => 'ADASSEN#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=LDW (saída de faixa) / 2=FCW (colisão frontal) / 3=HMW (veículo muito próximo)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Sensibilidade (significado depende de P1)', 'format' => 'P1=1: −0,3 a 0,6 (padrão −0,1; negativo=antes da faixa, positivo=depois) / P1=2 ou 3: 0–10 s, tempo até possível colisão (padrão 1,5 s para FCW, 1,0 s para HMW)', 'default' => 'LDW: −0,1 / FCW: 1,5 / HMW: 1,0'],
@@ -823,7 +838,7 @@ return [
         'cmd' => 'ADASVSP', 'nome' => 'Velocidade virtual do ADAS para simulação',
         'desc' => 'Simula uma velocidade para testar o ADAS em bancada.',
         'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASVSP#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G015', 'procedencia' => 'planilha',
+        'consulta' => 'ADASVSP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G015', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '10–120 (km/h)', 'default' => '—']],
         'exemplos' => [['cmd' => 'ADASVSP,60', 'desc' => 'simula 60 km/h.']],
     ],
@@ -836,7 +851,7 @@ return [
         'cmd' => 'SPEED', 'nome' => 'Evento de excesso de velocidade',
         'desc' => 'Ativa/desativa o evento de excesso de velocidade, define modo de alerta, limite e duração acima dele.',
         'modelos' => ['JC181'], 'template' => true,
-        'consulta' => 'SPEED#', 'consulta_ref' => 'nao_confirmado', 'fonte' => 'JC181 Command List V1.0.7, linha D003', 'procedencia' => 'planilha',
+        'consulta' => 'SPEED#', 'consulta_ref' => 'medido', 'fonte' => 'JC181 Command List V1.0.7, linha D003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Modo de alerta', 'format' => '0=GPRS / 1=SMS+GPRS', 'default' => '—'],

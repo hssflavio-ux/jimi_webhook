@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.2
+
+**Teste ao vivo da 4.13.1 (Chrome via IDE, sessão temporária de admin), pedido do dono do produto. Achado: as formas de consulta "a confirmar" estavam mesmo erradas, e o teste real corrigiu isso.**
+
+### Fixed
+- 🔴 **`ADAS,CALIBRATION#` e `DMSSP#` (as duas com maior confiança prévia — a segunda herdada de `command_catalog.php`) foram RECUSADAS pela câmera real** (Telecom, JC371, 865478070654829): `Error:Number of parameters errors!`. A forma certa precisa da função: `ADAS,CALIBRATION#` (o comando INTEIRO, não só `ADAS#`) e `DMSSP,ADAS#`/`DMSSP,DMS#`. Corrigido, `consulta_ref: 'medido'`.
+- 🔴 **`EVENTSET#`/`EVENTALERT#` (bare, sem código de evento) foram recusados**: `Command was not recognized!`. A forma certa inclui o CÓDIGO do evento — `EVENTSET,ALDW#`, `EVENTALERT,ADCA#` etc. — e devolve só os valores daquele evento (`EVENTSET,ALDW#` → `EVENTSET,ALDW#,60`, batendo com o padrão documentado). Testado ao vivo em 4 códigos nos dois verbos (`ALDW`, `AOSD`, `ADCA`, `AFVS` — 8 disparos, 8 respostas): `consulta_ref: 'medido'`. Os outros 15 códigos de cada verbo passam a ter consulta própria `CMD,CÓDIGO#` seguindo o mesmo padrão confirmado — `'inferido'` (não testados individualmente, mas mesma família de um comando que FOI testado — distinção que `device_param_catalog.doc_ref` já usa).
+- Também confirmados ao vivo (Telecom JC371 + `864993060429173` JC400AD + `860112070347838` JC181): `DMSVSP#`, `DMSSW#` (nos dois registros — JC371 de 2 parâmetros e JC400AD de 1, respondem ao mesmo verbo bare), `ADASSW#`, `DMS_SWITCH#`, `SPEED#`. `ADASSEP#`/`ADASSEN#` respondem de verdade mas exigem `ADASSW` ligado antes ("Please Open Adas Switch" quando desligado) — forma confirmada, câmera testada só estava com ADAS desligado.
+- `includes/ia_config_catalog.php`: as 59 entradas agora TODAS têm forma de consulta (18 `medido`, 41 `inferido`, 0 sem forma) — zero ficou com um "a confirmar" genérico sem pista nenhuma.
+
+### Verificação
+- Testado ao vivo via Chrome (extensão da IDE), sessão temporária de admin criada e removida ao final: seletor de equipamento lista os 8 dispositivos/6 modelos corretamente; botão "Ler agora" e "Ler tudo (cadência)" disparam, exibem a resposta em tempo real e a gravam em `device_ia_config_state` — confirmado por consulta direta ao banco depois do teste.
+- `php -l` limpo; suíte de comandos 115/115.
+
 ## [Unreleased] — 4.13.1
 
 **Pedido do dono do produto, complemento da 4.13.0: um comando que dispare em cadência a leitura de todos os parâmetros configurados na câmera, para análise.**

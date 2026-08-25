@@ -1,12 +1,38 @@
-# STATUS.md — Jimi Webhook System v4.13.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.13.2 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.13.0; v4.13.1 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.13.1; v4.13.2 pronta para deploy
 >
-> **Produção está em `4.13.0`** (confirmado por `/ping`, dono do produto já
-> deployou e aprovou a tela nova: "a tela ficou boa"). v4.13.1 (abaixo)
-> adiciona o botão "Ler tudo (cadência)" e está pronta para deploy.
+> **Produção está em `4.13.1`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.13.2 (abaixo) corrige as formas de consulta do catálogo de
+> IA a partir de teste AO VIVO em câmera real e está pronta para deploy.
 >
-> #### 🆕 v4.13.1 — botão "Ler tudo (cadência)" em Configurações IA
+> #### 🔧 v4.13.2 — formas de consulta corrigidas por teste ao vivo (Chrome)
+>
+> Dono do produto pediu para testar a 4.13.1 usando o Chrome da IDE contra
+> produção. Criei uma sessão de admin temporária (removida ao final),
+> selecionei a Telecom (JC371) e cliquei em "Ler agora" nas entradas
+> marcadas "a confirmar". Resultado: **as duas com maior confiança prévia
+> estavam erradas.** `ADAS,CALIBRATION#`/`DMSSP#` (a segunda herdada de
+> `command_catalog.php`) voltaram `Error:Number of parameters errors!` —
+> precisam da função (`ADAS,CALIBRATION#` inteiro, `DMSSP,ADAS#`/`DMSSP,DMS#`).
+> `EVENTSET#`/`EVENTALERT#` bare voltaram `Command was not recognized!` — a
+> forma certa leva o CÓDIGO do evento (`EVENTSET,ALDW#` → devolve
+> `EVENTSET,ALDW#,60`, batendo com o default documentado). Testei 4 códigos
+> nos dois verbos ao vivo (`ALDW`/`AOSD`/`ADCA`/`AFVS`, 8 disparos, 8
+> respostas) e generalizei o padrão confirmado pros outros 15 códigos de
+> cada verbo como `'inferido'` (mesma família de um comando MEDIDO, não
+> testado individualmente — distinção que `device_param_catalog.doc_ref`
+> já usa). Também confirmados: `DMSVSP#`, `DMSSW#` (JC371 e JC400AD),
+> `ADASSW#`, `DMS_SWITCH#`, `SPEED#` (JC181). `ADASSEP#`/`ADASSEN#`
+> respondem de verdade mas exigem ADAS ligado antes — forma confirmada,
+> câmera testada só estava com ADAS desligado ("Please Open Adas Switch").
+> Resultado: as 59 entradas do catálogo agora TODAS têm consulta (18
+> `medido`, 41 `inferido`, 0 sem forma nenhuma).
+>
+> Testado também o botão "Ler tudo (cadência)" em si — dispara em sequência
+> com status "Lendo N de 6: ...", desabilita o botão durante o disparo,
+> reabilita ao concluir. Confirmado por SELECT direto que as respostas
+> caem em `device_ia_config_state`. `php -l` limpo, suíte 115/115.
 >
 > Pedido do dono do produto: um comando que dispare, em cadência, a leitura
 > de todos os parâmetros configurados na câmera, pra análise. Adicionado o
