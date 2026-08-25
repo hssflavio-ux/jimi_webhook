@@ -1,10 +1,37 @@
-# STATUS.md — Jimi Webhook System v4.12.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.3 (YUV Parity)
 
-> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0/v4.12.0/v4.12.1 no `origin/main` (não publicadas); v4.12.2 pronta
+> ### 📍 ESTADO EM 24/08/2026 — v4.9.40 no ar; v4.11.0/v4.12.0/v4.12.1 no `origin/main` (não publicadas); v4.12.2/v4.12.3 prontas
 >
 > **Produção continua em `4.9.40`.** As três versões anteriores já estão em
-> `origin/main` (commitadas e enviadas pelo dono do produto). v4.12.2 (abaixo)
-> está no working tree, sem migração — ainda não commitada.
+> `origin/main` (commitadas e enviadas pelo dono do produto). v4.12.2 e
+> v4.12.3 (abaixo) estão no working tree, sem migração — ainda não commitadas.
+>
+> #### 🔧 v4.12.3 — 3 defeitos nos widgets do painel (`/painel`)
+>
+> Dono do produto pediu a mesma verificação já feita no BI: conferir os 13
+> widgets do painel widgetizado, um a um, com dados fictícios simulados.
+> Achados em `includes/dashboard_widgets.php`:
+>
+> - **`dashboard_outdated_kpis()` sem fallback ao vivo** — dos 4 KPIs do
+>   painel (dispositivos, ocorrências, velocidade, desatualizados), só este
+>   não caía para uma consulta ao vivo quando `metrics_snapshots` estava
+>   vazia. Sem o cron `scripts/metrics_rollup.php` já ter rodado, o widget
+>   "Desatualizados" mostrava **0 sempre** — indistinguível de frota em dia.
+>   Corrigido replicando a query do rollup como fallback.
+> - **`dashboard_render_reseller_view()` sem NENHUM escopo de revendedor** —
+>   as três consultas do ranking "Top 3" partiam de `FROM customers c` sem
+>   filtro; qualquer revendedor via clientes de OUTROS revendedores. Corrigido
+>   com `reseller_scope_ids()` (mesmo mecanismo de `/equipamentos`),
+>   distinguindo `null` (admin, sem restrição) de `[]` (revendedor sem
+>   cliente) — os dois tratados igual teria escondido o painel do admin.
+> - **Mesma função — "Top 3 por ocorrências" ignorava o período** (Hoje/7
+>   dias/Mês), único eixo do painel que não respeitava o seletor. Corrigido
+>   com `dashboard_series_window($periodo)`.
+>
+> Verificado com frota fictícia (5 câmeras, 4 veículos, 40 pontos de GPS, ~75
+> alarmes/48 ocorrências) sob 2 clientes de teste + sessão de revendedor
+> temporária, cobrindo os 3 períodos e o isolamento entre clientes. Capturas
+> publicadas como Artifact temporário; dados de teste removidos ao final.
 >
 > #### 🔧 v4.12.2 — BI listando câmera inativa + gráficos que nunca renderizavam
 >

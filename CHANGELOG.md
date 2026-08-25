@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.3
+
+**Correção pedida pelo dono do produto: verificar se todos os widgets do painel widgetizado (`/painel`) funcionam corretamente, com a mesma metodologia usada no BI (dados fictícios simulados + prints publicados para revisão).**
+
+### Fixed
+- 🔴 **`dashboard_outdated_kpis()` (`includes/dashboard_widgets.php`) — único KPI dos quatro sem fallback ao vivo.** Os outros três (dispositivos, ocorrências, velocidade) já caem para uma consulta ao vivo quando `metrics_snapshots` está vazia; este lia só a snapshot e, sem o cron `scripts/metrics_rollup.php` já ter rodado (banco novo, ambiente de dev, ou cron simplesmente falho), o widget "Desatualizados" mostrava **0 sempre** — indistinguível de "frota inteira em dia". Corrigido replicando a mesma consulta do rollup como fallback ao vivo.
+- 🔴 **`dashboard_render_reseller_view()` sem escopo de revendedor nenhum.** As três consultas do "ranking Top 3" partiam de `FROM customers c` sem filtro — qualquer revendedor via clientes de OUTROS revendedores no próprio painel gerencial. Corrigido com `reseller_scope_ids()` (mesmo mecanismo já usado em `/equipamentos`), distinguindo `null` (admin, sem restrição) de `[]` (revendedor sem cliente atribuído) — tratar os dois igual teria escondido o painel do admin.
+- **Mesma função — eixo "Top 3 por ocorrências" ignorava o seletor de período.** Único widget do painel que não respeitava Hoje/7 dias/Mês (contava sempre desde o início dos tempos). Corrigido usando `dashboard_series_window($periodo)`, mesma janela que os widgets vizinhos já usam.
+
+### Verificação
+- Frota fictícia simulada para 2 clientes de teste (5 câmeras — uma inativa —, 4 veículos, 2 motoristas, 40 pontos de GPS, ~75 alarmes/48 ocorrências em 4 semanas) e uma sessão de revendedor temporária, cobrindo os 3 períodos do seletor, isolamento entre clientes e escopo de revendedor. Capturas de tela publicadas como Artifact temporário para revisão visual; nenhum dado real de cliente foi usado, e os dados fictícios foram removidos do banco ao final.
+
 ## [Unreleased] — 4.12.2
 
 **Correção pedida pelo dono do produto: a tela de BI (`/bi`) estava listando câmeras inativas no filtro "Ativo".**

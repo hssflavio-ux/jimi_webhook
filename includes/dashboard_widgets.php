@@ -190,6 +190,35 @@ function dashboard_outdated_kpis(PDO $db, int $cid): array
             $out[$k] = $v !== false ? (int)$v : 0;
         } catch (Throwable $e) { $out[$k] = 0; }
     }
+    // 🔴 Ao contrário dos outros três KPIs (dispositivos, ocorrências,
+    // velocidade), este nunca teve fallback ao vivo — só lia
+    // `metrics_snapshots`. Enquanto o cron (`scripts/metrics_rollup.php`) não
+    // roda (banco novo, ambiente de dev, ou o cron simplesmente falhou), o
+    // widget "Desatualizados" mostra 0 SEMPRE, mesmo com câmera desatualizada
+    // de verdade — sem erro nenhum, indistinguível de "está tudo em dia".
+    // Mesma consulta do rollup, ao vivo.
+    if (array_sum($out) === 0) {
+        try {
+            $stmt = $db->prepare("
+                SELECT
+                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 0 AND 6 THEN 1 ELSE 0 END) as lt7d,
+                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 7 AND 29 THEN 1 ELSE 0 END) as gt7d,
+                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) >= 30 THEN 1 ELSE 0 END) as gt30d,
+                    SUM(CASE WHEN ds.last_gps_time IS NULL THEN 1 ELSE 0 END) as never
+                FROM devices d
+                LEFT JOIN device_statistics ds ON ds.imei = d.imei
+                WHERE d.customer_id = :cid AND d.is_active = 1
+            ");
+            $stmt->execute([':cid' => $cid]);
+            $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            $out = [
+                'outdated_lt7d'  => (int)($r['lt7d'] ?? 0),
+                'outdated_gt7d'  => (int)($r['gt7d'] ?? 0),
+                'outdated_gt30d' => (int)($r['gt30d'] ?? 0),
+                'outdated_never' => (int)($r['never'] ?? 0),
+            ];
+        } catch (Throwable $e) {}
+    }
     return $cache[$cid] = $out;
 }
 
@@ -481,15 +510,55 @@ function dashboard_render_top_drivers(PDO $db, int $cid, bool $isReseller, strin
 function dashboard_render_reseller_view(PDO $db, int $cid, bool $isReseller, string $periodo): string
 {
     if (!$isReseller) return '<p class="text-muted" style="font-size:12px;">Disponível só para o perfil revendedor.</p>';
+
+    // 🔴 As três consultas abaixo não tinham NENHUM escopo por revendedor —
+    // `FROM customers c` sem filtro mostrava o ranking com TODO cliente do
+    // sistema, inclusive os de outro revendedor. `reseller_scope_ids()` é o
+    // mesmo mecanismo que `/equipamentos` já usa: `null` = sem restrição
+    // (admin, mesmo com `user_type='revendedor'`) — só array VAZIO é
+    // "revendedor de verdade sem nenhum cliente atribuído". Tratar os dois
+    // igual (ex.: `?? []`) faria um admin ver "nenhum cliente" aqui.
+    $scopeIds = reseller_scope_ids();
+    $scopeSql = '';
+    if ($scopeIds !== null) {
+        if (empty($scopeIds)) {
+            return '<p class="text-muted" style="font-size:12px;">Nenhum cliente sob sua gestão.</p>';
+        }
+        $scopeSql = ' AND c.id IN (' . implode(',', array_map('intval', $scopeIds)) . ')';
+    }
+
+    // "Por ocorrências" ignorava `$periodo` — único widget do painel que não
+    // respeitava o seletor Hoje/7 dias/Mês (sempre "desde o início"). Mesma
+    // janela que `ts_occurrences`/`top_plates` já usam.
+    [$startUtc, , ] = dashboard_series_window($periodo);
+
     $axes = [
-        ['Top 3 por equipamentos ativos', "SELECT c.name, COUNT(d.id) as cnt FROM customers c LEFT JOIN devices d ON d.customer_id=c.id AND d.is_active=1 WHERE c.is_active=1 GROUP BY c.id ORDER BY cnt DESC LIMIT 3"],
-        ['Top 3 por ocorrências', "SELECT c.name, COUNT(o.id) as cnt FROM customers c JOIN occurrences o ON o.customer_id=c.id WHERE c.is_active=1 GROUP BY c.id ORDER BY cnt DESC LIMIT 3"],
-        ['Top 3 por desatualizados', "SELECT c.name, COUNT(*) as cnt FROM customers c JOIN devices d ON d.customer_id=c.id AND d.is_active=1 LEFT JOIN device_statistics ds ON ds.imei=d.imei WHERE c.is_active=1 AND (ds.last_gps_time IS NULL OR ds.last_gps_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) GROUP BY c.id ORDER BY cnt DESC LIMIT 3"],
+        ['Top 3 por equipamentos ativos',
+            "SELECT c.name, COUNT(d.id) as cnt FROM customers c
+             LEFT JOIN devices d ON d.customer_id=c.id AND d.is_active=1
+             WHERE c.is_active=1 $scopeSql
+             GROUP BY c.id ORDER BY cnt DESC LIMIT 3", []],
+        ['Top 3 por ocorrências',
+            "SELECT c.name, COUNT(o.id) as cnt FROM customers c
+             JOIN occurrences o ON o.customer_id=c.id AND o.first_alarm_at >= :ts
+             WHERE c.is_active=1 $scopeSql
+             GROUP BY c.id ORDER BY cnt DESC LIMIT 3", [':ts' => $startUtc]],
+        ['Top 3 por desatualizados',
+            "SELECT c.name, COUNT(*) as cnt FROM customers c
+             JOIN devices d ON d.customer_id=c.id AND d.is_active=1
+             LEFT JOIN device_statistics ds ON ds.imei=d.imei
+             WHERE c.is_active=1 $scopeSql
+               AND (ds.last_gps_time IS NULL OR ds.last_gps_time < DATE_SUB(NOW(), INTERVAL 7 DAY))
+             GROUP BY c.id ORDER BY cnt DESC LIMIT 3", []],
     ];
     $html = '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;">';
-    foreach ($axes as [$title, $sql]) {
+    foreach ($axes as [$title, $sql, $params]) {
         $rows = [];
-        try { $rows = $db->query($sql)->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) {}
+        try {
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {}
         $html .= '<div style="padding:12px;border:1px solid var(--hairline-soft);border-radius:var(--radius-sm);">'
             . '<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;">' . htmlspecialchars($title) . '</div>';
         if (empty($rows)) {
