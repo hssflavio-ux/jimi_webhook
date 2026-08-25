@@ -42,7 +42,7 @@ $alarmCategories = $db->query("SELECT DISTINCT category FROM alarm_types WHERE c
 $alarmSeverities = ['critical', 'warning', 'info'];
 
 // Dispositivos do cliente para dropdown
-$devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
+$devStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
 $devStmt->execute([':cid' => $customer_id]);
 $devices = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 

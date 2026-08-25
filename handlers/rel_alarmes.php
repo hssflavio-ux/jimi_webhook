@@ -72,7 +72,7 @@ $orderBy = match ($sort) {
 // IMEI). Carregado antes do export porque este roda antes da grade.
 $devices = [];
 try {
-    $dvStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name");
+    $dvStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
     $dvStmt->execute([':cid' => $customerId]);
     $devices = $dvStmt->fetchAll();
 } catch (Throwable $e) {}

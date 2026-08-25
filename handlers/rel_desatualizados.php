@@ -31,12 +31,15 @@ $detailBucket = $_GET['bucket'] ?? null;
 $nullsOrder = $order === 'ASC' ? 'DESC' : 'ASC';
 $detailOrderBy = "ORDER BY ds.last_gps_time IS NULL $nullsOrder, ds.last_gps_time $order";
 
-$where = '';
+// Câmera desativada nunca posiciona de novo — sem este filtro ela fica
+// PARA SEMPRE na faixa "Nunca posicionados"/">30 dias", inflando um relatório
+// que existe para apontar problema na frota ATIVA, não equipamento baixado.
+$where = 'WHERE d.is_active = 1';
 $params = [];
 // Escopo multi-tenant centralizado (v4.7.3) — ver report_customer_scope()
 $scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
 if ($scopeCust !== null) {
-    $where = 'WHERE d.customer_id = :cid';
+    $where .= ' AND d.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
 

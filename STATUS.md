@@ -1,10 +1,32 @@
-# STATUS.md — Jimi Webhook System v4.12.6 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.7 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.5; v4.12.6 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.6; v4.12.7 pronta para deploy
 >
-> **Produção está em `4.12.5`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.6 (abaixo) corrige o widget de mapa e a legenda de
-> velocidade do `/painel` e está pronta para deploy.
+> **Produção está em `4.12.6`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.12.7 (abaixo) tira câmera inativa de seis pontos que não
+> deveriam listá-la e está pronta para deploy.
+>
+> #### 🔧 v4.12.7 — câmera inativa aparecendo em 6 pontos do sistema
+>
+> Dono do produto reportou que o Relatório de Deslocamento listava câmeras
+> inativas no filtro de placa, e pediu para varrer o resto do sistema pelo
+> mesmo padrão. Achado: o dropdown `SELECT imei, device_name FROM devices
+> WHERE customer_id = :cid ORDER BY device_name` (sem `is_active = 1`) estava
+> copiado em `rel_deslocamento.php` (o relato), `rel_alarmes.php`,
+> `rel_posicoes.php`, `relatorios.php` e `exportar.php` — mesma classe de
+> bug já corrigida antes em `bi.php` ("o dropdown Ativo listava câmera
+> desativada"), só não replicada para esses cinco. Mais grave:
+> `rel_desatualizados.php` tinha o `$where` compartilhado por TODAS as
+> consultas da tela (contagem por faixa, grade completa, drill-down, os três
+> exports) sem filtro de `is_active` nenhum — câmera desativada não posiciona
+> nunca mais, então ficava PARA SEMPRE na faixa "Nunca posicionados"/">30
+> dias", ruído permanente num relatório que existe para apontar problema na
+> frota ATIVA. Testado em produção com a câmera `865478070649936`
+> (desativada, 21 viagens históricas — cliente com 13 câmeras, 8 ativas): o
+> dropdown do Deslocamento não a lista mais, e a base do Desatualizados cai
+> de 13 para 8 dispositivos.
+>
+> `php -l` limpo nos 6 arquivos.
 >
 > #### 🔧 v4.12.6 — mapa do `/painel` sem rastro nenhum + legenda monocromática
 >

@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.7
+
+**Correção pedida pelo dono do produto: o Relatório de Deslocamento listava câmeras inativas no filtro de placa. Verificado o resto do sistema pelo mesmo padrão.**
+
+### Fixed
+- 🔴 **Seis pontos com o mesmo defeito: seletor/relatório de câmera sem `is_active = 1`.** O padrão já tinha sido corrigido em `handlers/bi.php` ("o dropdown Ativo listava câmera desativada"), mas o mesmo `SELECT imei, device_name FROM devices WHERE customer_id = :cid ORDER BY device_name` — sem o filtro — estava copiado em mais cinco lugares:
+  - `handlers/rel_deslocamento.php` — dropdown "Placa" do Relatório de Deslocamento (o relato original).
+  - `handlers/rel_alarmes.php`, `handlers/rel_posicoes.php`, `handlers/relatorios.php`, `handlers/exportar.php` — mesmo dropdown "Placa"/"Device list" nos relatórios de Alarmes, Posições, na home de relatórios e no agendador de exportação.
+  - `handlers/rel_desatualizados.php` — mais grave que os dropdowns: o `$where` compartilhado por TODAS as consultas da tela (contagem por faixa, grade completa, drill-down, os três exports) não tinha filtro nenhum de `is_active`. Câmera desativada não posiciona nunca mais, então ficava PARA SEMPRE na faixa "Nunca posicionados"/">30 dias" — ruído permanente num relatório que existe para apontar problema na frota ATIVA. Testado em produção: cliente com 13 câmeras cadastradas, 8 ativas — as 5 inativas inflavam as faixas antes da correção.
+- Confirmado com dado real de produção (câmera `865478070649936`, desativada, com 21 viagens históricas): o dropdown de placa não a lista mais, e a query base do relatório de desatualizados a exclui.
+
+### Verificação
+- `php -l` limpo em todos os 6 arquivos.
+- Queries corrigidas testadas diretamente em produção: dropdown do Deslocamento não lista mais a câmera inativa; base do Desatualizados cai de 13 para 8 dispositivos.
+
 ## [Unreleased] — 4.12.6
 
 **Correção pedida pelo dono do produto: no `/painel`, o mapa de posições não mostrava rastro nenhum dos veículos, e a legenda do gráfico "Velocidade da Frota" saía monocromática.**

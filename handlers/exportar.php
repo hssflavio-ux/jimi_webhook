@@ -83,7 +83,7 @@ try {
 } catch (Exception $e) {}
 
 // Device list for export filter
-$devices = $db->prepare("SELECT imei, COALESCE(device_name, imei) as label FROM devices WHERE customer_id = :cid ORDER BY label");
+$devices = $db->prepare("SELECT imei, COALESCE(device_name, imei) as label FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY label");
 $devices->execute([':cid' => $customerId ?? 1]);
 $devices = $devices->fetchAll();
 

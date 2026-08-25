@@ -36,7 +36,7 @@ $generated = !empty($_GET['gerar']);
 
 // Lista de placas — carregada AQUI porque o export síncrono roda antes da
 // grade e precisa dela para pôr a PLACA (não o IMEI) no subtítulo do PDF.
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
+$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid AND d.is_active = 1 ORDER BY d.device_name");
 $devices->execute([':cid' => $customerId]);
 $devices = $devices->fetchAll();
 

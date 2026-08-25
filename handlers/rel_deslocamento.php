@@ -50,7 +50,7 @@ $totalPages = 1;
 
 // Lista de placas — carregada AQUI e não depois da grade, porque o export
 // síncrono roda antes e precisa dela para montar o subtítulo do PDF.
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid ORDER BY d.device_name");
+$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid AND d.is_active = 1 ORDER BY d.device_name");
 $devices->execute([':cid' => $customerId]);
 $devices = $devices->fetchAll();
 
