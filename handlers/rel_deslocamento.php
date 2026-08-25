@@ -371,7 +371,7 @@ $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td><?= (int)$r['viagens'] ?></td>
-                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a></td>
+                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a></td>
             </tr>
             <?php endforeach; ?>
             <?php else: ?>
@@ -386,8 +386,8 @@ $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
-                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a>
-                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Replay</a>
+                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
+                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Replay</a>
                 </td>
             </tr>
             <?php endforeach; endif; ?>

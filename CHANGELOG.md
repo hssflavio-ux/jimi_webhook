@@ -5,6 +5,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.9
+
+**Complemento da 4.12.8, a pedido do dono do produto: parar de abrir Rota/Replay do Deslocamento em nova janela.**
+
+### Changed
+- Removido `target="_blank"` dos três links ("Ver rota" no fechamento diário, "Ver rota" e "Replay" por viagem) em `rel_deslocamento.php`. Navegação passa a ser na mesma aba — o parâmetro `return` da 4.12.8 já resolve o "para onde volta", então não havia mais motivo para a aba extra. `rel_deslocamento_rota.php`/`rel_deslocamento_replay.php` não precisaram mudar: já não tinham `target="_blank"` no próprio link cruzado entre si.
+
+### Verificação
+- `php -l` limpo; conferido que nenhum dos três links mantém `target="_blank"`.
+
 ## [Unreleased] — 4.12.8
 
 **Correção pedida pelo dono do produto: no Relatório de Deslocamento, "Voltar ao relatório" (a partir da tela de Rota/Replay, aberta em nova janela) caía no formulário vazio, sem o filtro que o operador tinha aplicado.**

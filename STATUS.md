@@ -1,10 +1,18 @@
-# STATUS.md — Jimi Webhook System v4.12.8 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.9 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.7; v4.12.8 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.7; v4.12.8 e v4.12.9 prontas para deploy
 >
 > **Produção está em `4.12.7`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.8 (abaixo) corrige o "Voltar ao relatório" do Deslocamento
-> e está pronta para deploy.
+> deployou). v4.12.8 e v4.12.9 (abaixo) resolvem juntas o "Voltar ao
+> relatório" do Deslocamento e estão prontas para deploy.
+>
+> #### 🔧 v4.12.9 — Rota/Replay do Deslocamento saem da nova janela
+>
+> Complemento pedido pelo dono do produto na mesma sessão da 4.12.8: com o
+> `return` já resolvendo "para onde volta", não havia mais motivo para os
+> links "Ver rota" (fechamento diário e por viagem) e "Replay" abrirem em
+> nova janela. Removido `target="_blank"` dos três, em `rel_deslocamento.php`
+> — navegação passa a ser na mesma aba. `php -l` limpo.
 >
 > #### 🔧 v4.12.8 — "Voltar ao relatório" do Deslocamento perdia o filtro
 >
@@ -20,15 +28,6 @@
 > externo): só o Deslocamento tinha esse padrão — os demais "Ver Mapa" do
 > sistema apontam direto pro Maps, sem botão de volta.
 > `php -l` limpo; round-trip da URL simulado via `php -r`.
->
-> 💬 **Pendente de decisão do dono do produto**: ele sugeriu abrir Rota/Replay
-> de outra forma, não em nova janela (o `return` acima resolve o sintoma
-> relatado independente da escolha). Recomendação dada: navegação na MESMA
-> aba em vez de nova janela — essas telas já têm todo o retorno (`return`)
-> resolvido, então não há mais nada "perdido" ao trocar; um modal foi
-> descartado por ora — a tela de Rota tem cabeçalho de KPIs + mapa Leaflet
-> completo, e a de Replay ainda soma um scrubber SVG próprio, conteúdo
-> grande demais para um modal sem reescrever as duas telas do zero.
 >
 > #### 🔧 v4.12.7 — câmera inativa aparecendo em 6 pontos do sistema
 >
