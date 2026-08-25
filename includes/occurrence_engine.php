@@ -433,26 +433,30 @@ function link_upload_to_occurrence(PDO $db, string $imei, string $eventTime, int
 
 /**
  * Agenda a solicitação automática do vídeo do evento para o device de uma
- * ocorrência recém-criada, via proNo 37384 (0x9208, Alarm Attachment Upload).
+ * ocorrência recém-criada, via **`VIDEOUPLOAD`** (proNo 128, texto).
  *
- * Por que 37384: em câmeras JT/T (JC371/JC450/JC181…) o vídeo do evento
- * DMS/ADAS é um ANEXO do alarme identificado pelo alarmLabel que veio no
- * próprio push (doc "Alarm File Name" + §2.20). O device sobe o(s) arquivo(s)
- * para o attachment server do IoTHub (porta 21188) e o storage notifica via
- * /pushfileupload com fileName {imei}_{alarmLabel}_{xy}.mp4/.jpg.
- * O antigo 34818 (0x8802) apenas CONSULTA a multimídia 808 (fotos do 34817)
- * — em evento DMS retorna mediaItemsNum:0 e nenhum upload acontece.
+ * 🔴 NÃO é 37384 (0x9208, Alarm Attachment Upload) — essa era a escolha
+ * original, e o device chega a responder `_content: "ok"` sincronamente para
+ * ela, mas isso é só o ACK genérico do protocolo: nenhum upload de verdade
+ * acontece (confirmado em produção 25/08/2026 contra a Telecom — zero
+ * conexões da câmera no serviço de upload apesar do "ok"). `VIDEOUPLOAD` é o
+ * comando certo — já tinha sido implementado numa versão anterior do
+ * dashboard (`docs/_arquivo_morto/archive/web/dashboard.js`,
+ * `requestVideoUpload()`) que não sobreviveu à reescrita; é o MESMO comando
+ * que `includes/alarm_video_request.php` usa no caminho manual
+ * (`request_alarm_video_jtt()`) — os dois ficam consistentes agora.
+ *
+ * Formato: `VIDEOUPLOAD,<host do storage>,<porta>,<alarmLabel sem vírgula>,1-2-3`
+ * — `1-2-3` pede os três canais possíveis do JC371 de uma vez.
  *
  * Apenas AGENDA (fila em memória do request): o despacho HTTP ao IoTHub segura
  * a resposta por até 35s e não pode rodar dentro da transação do webhook —
  * quem envia é flush_pending_video_requests(), chamado pós-commit.
  *
  * Elegibilidade: device com modelo de protocolo JTT e camera_count >= 1
- * (37384 é instrução JT/T — devices JIMI sobem o vídeo sozinhos e o alarme
- * já chega com `file`, ADR-001). Requer alarmLabel válido no push.
+ * (devices JIMI sobem o vídeo sozinhos e o alarme já chega com `file`,
+ * ADR-001). Requer alarmLabel válido no push.
  * Kill-switch: AUTO_VIDEO_REQUEST=0 no .env.
- * Overrides .env: ATTACH_UPLOAD_IP / ATTACH_UPLOAD_PORT (default: IP de
- * ingest do vídeo — video_stream_config() — e porta 21188).
  *
  * @param PDO         $db           Conexão ativa
  * @param string      $imei         IMEI do device
@@ -492,7 +496,7 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
 
     // Sem alarmLabel não há anexo endereçável — alarmes sem mídia associada
     // (ex.: ignição, ociosidade) caem aqui e não geram solicitação.
-    $alarmLabel = trim((string)$alarmLabel);
+    $alarmLabel = str_replace(',', '', trim((string)$alarmLabel));
     if ($alarmLabel === '' || strlen($alarmLabel) < 16 || !ctype_xdigit($alarmLabel)) {
         Logger::info('Auto-vídeo: alarme sem alarmLabel de anexo — solicitação não enviada', [
             'imei' => $imei, 'occurrence_id' => $occurrenceId, 'alarm_label' => $alarmLabel ?: null,
@@ -500,29 +504,15 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
         return;
     }
 
-    // alarmNumber (doc §2.20): ascii-hex de [14 últimos dígitos do IMEI] +
-    // [cauda do alarmLabel após os 14 hex do terminal-ID: hora compacta +
-    // sequência + qtde de anexos + reservado]. Ex. validado na doc §1.13.
-    $alarmNumber = bin2hex(substr($imei, -14) . substr($alarmLabel, 14));
-
-    // Endereço do attachment server QUE O DEVICE ALCANÇA (não o do navegador):
-    // mesmo IP de ingest do vídeo ao vivo; porta 21188 = jimi-tracker-upload-process
-    $vsc  = video_stream_config();
-    $ip   = getenv('ATTACH_UPLOAD_IP') ?: $vsc['ingest_ip'];
-    $port = (int)(getenv('ATTACH_UPLOAD_PORT') ?: 21188);
-
-    $content = json_encode([
-        'serverLen'     => strlen($ip),
-        'serverAddress' => $ip,
-        'tcpPort'       => $port,
-        'udpPort'       => 0,
-        'alarmLabel'    => $alarmLabel,
-        'alarmNumber'   => $alarmNumber,
-    ], JSON_UNESCAPED_SLASHES);
+    $fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+    $fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
+    $fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
+    $content = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$alarmLabel},1-2-3";
 
     $GLOBALS['_pending_video_requests'][] = [
         'imei'          => $imei,
-        'pro_no'        => 37384,
+        'pro_no'        => 128,
+        'server_flag'   => 0, // JT/T — ver includes/iothub_command.php
         'content'       => $content,
         'alarm_label'   => $alarmLabel,
         'occurrence_id' => $occurrenceId,
@@ -535,6 +525,15 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
  * DEVE ser chamado FORA da transação do webhook (pós handle()/commit) — o
  * IoTHub pode segurar a resposta HTTP por até 35s aguardando o device, e esse
  * tempo não pode estender locks de alarms/occurrences.
+ *
+ * 🔴 `max_execution_time` (30s no php.ini) continua correndo pós-
+ * `fastcgi_finish_request()` — mesmo alerta de `handlers/filelist.php`. Um
+ * único `iothub_send_instruct()` já pode levar os 35s do próprio
+ * `CURLOPT_TIMEOUT`; sem estender aqui, um device lento/offline mata o
+ * processo ANTES do curl retornar — silencioso, sem log, é exatamente o
+ * defeito que deixou o gatilho automático inteiro morto por 13 dias (v4.9.13,
+ * `iothub_dispatch_command()` inexistente). `set_time_limit()` aqui não
+ * revive aquele bug, mas fecha o próximo da mesma família.
  *
  * Guardas anti-rajada:
  *   - dedupe por alarmLabel: o mesmo anexo nunca é solicitado 2x em 10 min
@@ -551,6 +550,10 @@ function flush_pending_video_requests(): void
         return;
     }
     $GLOBALS['_pending_video_requests'] = [];
+
+    // Teto do anti-rajada é 5/device/2min; folga para cobrir um lote com
+    // vários devices numa única chamada sem se aproximar do limite.
+    @set_time_limit(180);
 
     try {
         $db = Database::getInstance()->getConnection();
@@ -595,11 +598,9 @@ function flush_pending_video_requests(): void
                 continue;
             }
 
-            $proNo = (int)($req['pro_no'] ?? 37384);
-            // 0 = seletor de gateway JT/T (ver includes/iothub_command.php) —
-            // fixo porque queue_event_video_request() só agenda para device
-            // com dm.protocol === 'JTT'.
-            $result = iothub_send_instruct($req['imei'], $proNo, $req['content'], 0, 'autovideo');
+            $proNo  = (int)($req['pro_no'] ?? 128);
+            $sFlag  = (int)($req['server_flag'] ?? 0);
+            $result = iothub_send_instruct($req['imei'], $proNo, $req['content'], $sFlag, 'autovideo');
 
             // iothub_send_instruct() (v4.9.13) parou de gravar em `commands`
             // sozinha — isso virou responsabilidade de cada chamador. Sem este
@@ -616,15 +617,16 @@ function flush_pending_video_requests(): void
                          created_at, updated_at)
                      VALUES
                         (:imei, :cmd, 'request', :status, 'auto_video',
-                         :api_type, :prono, :rid, '0', :resp, :rtime, NOW(), NOW())"
+                         :api_type, :prono, :rid, :sfid, :resp, :rtime, NOW(), NOW())"
                 );
                 $stmt->execute([
                     ':imei'     => $req['imei'],
                     ':cmd'      => $req['content'],
                     ':status'   => $result['status'],
-                    ':api_type' => "jtt_{$proNo}",
+                    ':api_type' => ($proNo === 128) ? 'instruct' : "jtt_{$proNo}",
                     ':prono'    => $proNo,
                     ':rid'      => $result['request_id'],
+                    ':sfid'     => (string)$sFlag,
                     ':resp'     => $result['raw'] ?: null,
                     ':rtime'    => ($result['status'] === 'executed') ? date('Y-m-d H:i:s') : null,
                 ]);

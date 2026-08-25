@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.6
+
+**Correção do dono do produto: 37384 não é o comando certo — é `VIDEOUPLOAD`, já documentado no dashboard antigo (arquivo morto).**
+
+### Fixed
+- 🔴 **`queue_event_video_request()`/`flush_pending_video_requests()` (gatilho automático) trocaram de 37384 (0x9208, Alarm Attachment Upload) para `VIDEOUPLOAD` (proNo 128, texto).** 37384 chega a ser aceito pelo device (resposta síncrona `_content:"ok"`), mas isso é só o ACK genérico do protocolo — nenhum upload de verdade acontece (confirmado em produção: zero conexões da Telecom no serviço de upload apesar do "ok", contra dezenas de conexões reais de outro device no mesmo período). `VIDEOUPLOAD` é o mesmo comando que `request_alarm_video_jtt()` já usa no caminho manual desde a correção anterior — os dois ficam consistentes.
+- 🔴 **`flush_pending_video_requests()` ganhou `@set_time_limit(180)`.** `max_execution_time` (30s) continua correndo depois do `fastcgi_finish_request()` (mesmo alerta já documentado em `handlers/filelist.php`), e `iothub_send_instruct()` pode segurar até 35s por comando — sem estender, um device lento mata o processo em silêncio antes do curl retornar. É a mesma família do bug da v4.13.3 (função inexistente), só que na borda do tempo em vez do nome da função.
+
+### Verificação
+- `php -l` limpo em `includes/occurrence_engine.php`.
+- Pendente: confirmar em produção que `VIDEOUPLOAD` automático também não produz upload real da Telecom (mesmo padrão do manual) — reforça a hipótese de falha de hardware da câmera, não do software, mas só fecha depois do deploy + reteste.
+
 ## [Unreleased] — 4.13.5
 
 **Dono do produto reportou que os eventos JT/T sem vídeo continuavam "sem aparecer nas telas" — a API já devolvia tudo, só que a grade principal de `/ocorrencias/dashboard` nunca mostrava nada sobre vídeo.**
