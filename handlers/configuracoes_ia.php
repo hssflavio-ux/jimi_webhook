@@ -19,6 +19,7 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/fleet_state.php';  // presença: ponto único de "está online?"
 require_admin();
 
 $db = Database::getInstance()->getConnection();
@@ -37,14 +38,22 @@ $scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
 // wire JT/T 808 (ADR-001).
 $devices = $db->prepare("
     SELECT d.imei, COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name,
-           COALESCE(dm.model_name, d.device_model, '-') AS model_display
+           COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+           TIMESTAMPDIFF(MINUTE, " . device_last_seen_sql() . ", UTC_TIMESTAMP()) AS mudo_min
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
+    LEFT JOIN device_statistics ds ON ds.imei = d.imei
     WHERE d.is_active = 1 {$scopeSql}
     ORDER BY d.device_name
 ");
 $devices->execute($scopeParams);
 $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
+// Presença pelo ponto único (`device_presence()`) — mesma leitura de
+// handlers/comandos.php. "Ler tudo agora" dispara um comando por consulta do
+// catálogo; sem isso o operador só descobre que a câmera está offline depois
+// de ver cada cartão preso em "na fila".
+foreach ($devices as &$d) { $d['presenca'] = device_presence(isset($d['mudo_min']) ? (int)$d['mudo_min'] : null); }
+unset($d);
 
 // ── Catálogo (ver includes/ia_config_catalog.php) ──────────────────────────
 $catalogo = require __DIR__ . '/../includes/ia_config_catalog.php';
@@ -106,7 +115,6 @@ $extra_head = '<style>
 .ia-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;}
 .ia-preview{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all;}
 .ia-result{font-size:11px;margin-top:6px;}
-.ia-badge-wiki{font-size:9px;color:var(--warning,#b45309);border:1px solid currentColor;border-radius:4px;padding:0 4px;margin-left:4px;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -114,23 +122,28 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="page-header">
     <div>
         <h1 class="page-title">Configurações IA</h1>
-        <p class="page-sub">ADAS, DMS e velocidade — configuração por modelo de câmera. Comando de texto (proNo 128).</p>
     </div>
 </div>
 
 <div class="card mb-16" style="padding:16px 20px;">
-    <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">Equipamento</label>
-    <select id="ia-device" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:320px;" onchange="iaMontarGrade()">
-        <option value="">Selecione…</option>
-        <?php foreach ($devices as $d): ?>
-        <option value="<?= htmlspecialchars($d['imei']) ?>" data-modelo="<?= htmlspecialchars($d['model_display']) ?>">
-            <?= htmlspecialchars($d['device_name']) ?> — <?= htmlspecialchars($d['model_display']) ?> (<?= htmlspecialchars($d['imei']) ?>)
-        </option>
-        <?php endforeach; ?>
-    </select>
+    <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px;">Equipamento</label>
+            <select id="ia-device" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:320px;" onchange="iaMontarGrade()">
+                <option value="">Selecione…</option>
+                <?php foreach ($devices as $d): ?>
+                <option value="<?= htmlspecialchars($d['imei']) ?>" data-modelo="<?= htmlspecialchars($d['model_display']) ?>" data-presenca="<?= htmlspecialchars($d['presenca']['nivel']) ?>" data-presenca-rotulo="<?= htmlspecialchars($d['presenca']['rotulo']) ?>">
+                    <?= htmlspecialchars($d['device_name']) ?> — <?= htmlspecialchars($d['model_display']) ?> (<?= htmlspecialchars($d['imei']) ?>)
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <button id="ia-ler-tudo-btn" class="btn btn-primary btn-sm" style="display:none;" onclick="iaLerTudo()">Ler tudo agora</button>
+    </div>
     <?php if (!$devices): ?>
     <p style="font-size:12px;color:var(--muted);margin:8px 0 0;">Nenhum equipamento neste cliente.</p>
     <?php endif; ?>
+    <div id="ia-ler-tudo-status" style="font-size:11px;color:var(--muted);margin-top:8px;display:none;"></div>
 </div>
 
 <div id="ia-vazio" class="card" style="padding:32px;text-align:center;color:var(--muted);">
@@ -138,22 +151,6 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 <div id="ia-sem-comando" class="card" style="padding:32px;text-align:center;color:var(--muted);display:none;">
     O catálogo não documenta comando de ADAS/DMS/velocidade para este modelo.
-</div>
-
-<div id="ia-ler-tudo-wrap" class="card mb-16" style="padding:14px 16px;display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-        <div>
-            <strong style="font-size:13px;color:var(--ink);">Ler tudo (cadência)</strong>
-            <p style="font-size:11px;color:var(--muted);margin:2px 0 0;max-width:640px;">
-                Dispara a leitura de cada comando deste modelo, um de cada vez, com um intervalo entre eles —
-                não é envio em paralelo. A maioria das formas de consulta abaixo ainda não foi confirmada em
-                equipamento real (tag "a confirmar"); esta é a própria forma de medir. Toda resposta de
-                verdade (não recusa, não fila) é gravada como o último valor conhecido do comando.
-            </p>
-        </div>
-        <button id="ia-ler-tudo-btn" class="btn btn-primary btn-sm" onclick="iaLerTudo()">Ler tudo agora</button>
-    </div>
-    <div id="ia-ler-tudo-status" style="font-size:11px;color:var(--muted);margin-top:8px;display:none;"></div>
 </div>
 
 <div id="ia-grid" class="ia-grid"></div>
@@ -172,7 +169,8 @@ function iaMontarGrade() {
     iaCartoesAtuais = [];
     document.getElementById('ia-vazio').style.display = imei ? 'none' : 'block';
     document.getElementById('ia-sem-comando').style.display = 'none';
-    document.getElementById('ia-ler-tudo-wrap').style.display = 'none';
+    document.getElementById('ia-ler-tudo-btn').style.display = 'none';
+    document.getElementById('ia-ler-tudo-status').style.display = 'none';
     if (!imei) return;
 
     var modelo = sel.selectedOptions[0].dataset.modelo;
@@ -188,7 +186,7 @@ function iaMontarGrade() {
     });
 
     var comConsulta = iaCartoesAtuais.filter(function (c) { return c.x.q; });
-    document.getElementById('ia-ler-tudo-wrap').style.display = comConsulta.length ? 'block' : 'none';
+    document.getElementById('ia-ler-tudo-btn').style.display = comConsulta.length ? '' : 'none';
 }
 
 /**
@@ -199,12 +197,27 @@ function iaMontarGrade() {
  * device_ia_config_state pelo mesmo caminho de sempre (sendcommand.php /
  * pushinstructresponse.php) — nada de especial acontece aqui além do
  * espaçamento entre os envios.
+ *
+ * Comando para equipamento offline é fluxo suportado (o IoT Hub enfileira e
+ * entrega no reconecte, como em handlers/comandos.php) — mas "Ler tudo agora"
+ * dispara um comando por consulta do catálogo de uma vez, então ficar sem
+ * saber que a câmera está offline até ver cada cartão preso em "na fila" é
+ * pior aqui do que num envio único. Avisa e deixa o operador decidir.
  */
 function iaLerTudo() {
-    var imei = document.getElementById('ia-device').value;
+    var sel = document.getElementById('ia-device');
+    var imei = sel.value;
     if (!imei) return;
     var fila = iaCartoesAtuais.filter(function (c) { return c.x.q; });
     if (!fila.length) return;
+
+    var presenca = sel.selectedOptions[0].dataset.presenca;
+    if (presenca !== 'ok') {
+        var rotulo = sel.selectedOptions[0].dataset.presencaRotulo || 'sem contato recente';
+        if (!confirm('Este equipamento está ' + rotulo + ', não online agora.\n\n' +
+            'Os ' + fila.length + ' comando(s) vão para a fila do equipamento e só chegam quando ele reconectar.\n\n' +
+            'Continuar mesmo assim?')) return;
+    }
 
     var btn = document.getElementById('ia-ler-tudo-btn');
     var status = document.getElementById('ia-ler-tudo-status');
@@ -235,7 +248,6 @@ function iaMontarCard(imei, x) {
     var head = document.createElement('div');
     head.className = 'ia-head';
     head.innerHTML = '<span class="ia-name">' + iaEsc(x.n) +
-        (x.proc === 'wiki' ? '<span class="ia-badge-wiki" title="Sem planilha própria para este modelo — origem: wiki">wiki</span>' : '') +
         '</span><span class="ia-syn">' + iaEsc(x.c) + '</span>';
     cel.appendChild(head);
 
@@ -302,13 +314,6 @@ function iaMontarCard(imei, x) {
             : ('Envia ' + x.q + ' — forma de consulta ainda NÃO confirmada em equipamento; usar Ler tudo/Ler agora mede se funciona');
         btnLer.onclick = function () { iaEnviar(imei, x.q, cel, result); };
         acts.insertAdjacentElement('afterbegin', btnLer);
-        if (x.qr !== 'medido') {
-            var selo = document.createElement('span');
-            selo.className = 'ia-badge-wiki';
-            selo.title = 'Forma de consulta deduzida do padrão do comando (VERBO#), ainda não confirmada em equipamento real';
-            selo.textContent = 'a confirmar';
-            acts.insertAdjacentElement('afterbegin', selo);
-        }
     }
     var btnAplicar = document.createElement('button');
     btnAplicar.className = 'btn btn-primary btn-sm';
