@@ -74,6 +74,19 @@ include __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
+<!-- v4.13.0 — pausa temporária: os comandos JT/T 33027 (escrita) e 33028/33030
+     (leitura) não funcionam no firmware atual do fabricante. Nada foi
+     apagado — código, rotas e as três tabelas continuam intactos; é reversível
+     assim que o fabricante corrigir. Comandos de ADAS/DMS/velocidade (proNo
+     128) saíram desta área — ver /configuracoes-ia. -->
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+    ⚠️ <strong>Parametrização JT/T pausada</strong> — os comandos 33027 (escrita) e 33028/33030
+    (leitura) não estão funcionando no firmware atual do fabricante. A tela continua aqui
+    para consulta do que já foi lido antes, mas leitura e escrita novas ficam suspensas até
+    a correção. Configuração de ADAS/DMS/velocidade agora mora em
+    <a href="/configuracoes-ia">Configurações IA</a>.
+</div>
+
 <?php if ($erro): ?>
 <div class="card"><p style="color:var(--danger);font-size:13px;margin:0"><?= htmlspecialchars($erro) ?></p></div>
 <?php else: ?>

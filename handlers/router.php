@@ -105,6 +105,10 @@ if (empty($segments)) {
         // brigar com o Apache, e alinha com as irmãs config-*.
         'config-dispositivos' => 'config_dispositivos.php',
         'config-parametros'   => 'config_parametros.php',
+        // v4.13.0 — ADAS/DMS/velocidade saíram de /comandos e ganharam área
+        // própria (catálogo próprio, reprocessado das planilhas do
+        // fabricante). Ver includes/ia_config_catalog.php.
+        'configuracoes-ia'    => 'configuracoes_ia.php',
         'grupos-permissao'    => 'grupos_permissao.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',
@@ -308,6 +312,10 @@ $screenByHandler = [
     // em operação trocar o próprio firmware.
     'firmwares.php'             => 'firmwares',
     'config_parametros.php'     => 'config-parametros',
+    // v4.13.0 — mesma trava efetiva de 'parametros'/'firmwares':
+    // require_admin() dentro do handler, porque manda comando de texto pra
+    // equipamento em operação.
+    'configuracoes_ia.php'      => 'configuracoes-ia',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
 ];

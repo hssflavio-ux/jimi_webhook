@@ -117,6 +117,13 @@ foreach ($valores as $modelo => $porParam) {
 include __DIR__ . '/../web/layout_base.php';
 ?>
 
+<!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php. -->
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+    ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
+    não funcionam no firmware atual do fabricante. Este comparativo segue exibindo a última
+    leitura conhecida de cada câmera; ela não fica mais atualizada até a correção.
+</div>
+
 <div class="card" style="margin-bottom:16px">
     <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin:0 0 6px">Como este relatório compara</h4>
     <p style="font-size:12px;color:var(--muted);margin:0">

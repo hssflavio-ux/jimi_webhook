@@ -961,6 +961,15 @@ $ehAdmin = (get_jimi_user()['role'] ?? '') === 'admin';
 // Escrita exige a ação `edit` da tela de ativos — ver a nota do JS abaixo.
 $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 ?>
+<!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php.
+     O botão "Ler agora"/"Alterar" continua visível (o bloqueio de verdade é
+     em handlers/sendcommand.php), mas vai recusar até o fabricante corrigir. -->
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+    ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
+    não funcionam no firmware atual do fabricante. "Ler agora" e "Alterar" vão recusar até
+    a correção. Configuração de ADAS/DMS/velocidade agora mora em
+    <a href="/configuracoes-ia">Configurações IA</a>.
+</div>
 <div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
         <div>

@@ -129,6 +129,15 @@ $current_route = 'config-parametros';
 include __DIR__ . '/../web/layout_base.php';
 ?>
 
+<!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php.
+     O bloqueio de verdade é em handlers/sendcommand.php (33027/33028/33030) —
+     este aviso só explica por que "Aplicar" vai recusar. -->
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+    ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
+    não funcionam no firmware atual do fabricante. Perfis continuam editáveis aqui, mas
+    "Aplicar" vai recusar o envio até a correção.
+</div>
+
 <?php if ($erro): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--danger);margin:0;font-size:13px"><?= htmlspecialchars($erro) ?></p></div><?php endif; ?>
 <?php if ($ok): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--success);margin:0;font-size:13px"><?= htmlspecialchars($ok) ?></p></div><?php endif; ?>
 

@@ -100,6 +100,20 @@ if (!$imei || ($cmdContent === '' && $proNo !== 33028)) {
     exit;
 }
 
+// ── v4.13.0 — parametrização JT/T pausada (firmware do fabricante) ─────────
+//
+// 🔴 Bloqueio no PONTO ÚNICO de despacho, não em cada tela que poderia
+// chamá-lo (handlers/parametros.php, config_parametros.php e a aba
+// `parametros` de ativo_detalhe.php já mostram o aviso — isto aqui é a
+// garantia de que nenhum dos três, nem um link antigo, chega a mandar o
+// comando de verdade). NÃO apaga nada: tirar este bloco religa tudo.
+if (in_array($proNo, [33027, 33028, 33030], true)) {
+    http_response_code(409);
+    echo json_encode(['code' => 409, 'msg' =>
+        'Parametrização JT/T pausada até o fabricante corrigir o firmware (33027/33028/33030 não funcionam no momento).']);
+    exit;
+}
+
 // Validação de IMEI — 15 a 17 dígitos numéricos
 if (!preg_match('/^\d{15,17}$/', $imei)) {
     http_response_code(400);
@@ -589,6 +603,24 @@ try {
             }
         } catch (Throwable $e) {
             Logger::error('sendcommand: falha ao gravar firmware', [
+                'imei' => $imei, 'erro' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    // ── Configurações IA: resposta síncrona já grava o estado ───────────────
+    //
+    // v4.13.0 — mesmo padrão do firmware acima: quando o comando é um dos que
+    // `includes/ia_config_catalog.php` documenta (ADAS/DMS/velocidade), a
+    // resposta síncrona já basta para atualizar `device_ia_config_state`. O
+    // caminho offline (device sem contato) é coberto à parte, no callback de
+    // `handlers/pushinstructresponse.php`.
+    if ($proNo === 128 && $cmdContent !== '') {
+        try {
+            require_once __DIR__ . '/../includes/ia_config_state.php';
+            ia_config_capture($db, $imei, $cmdContent, $syncContent, (int)$insertedId);
+        } catch (Throwable $e) {
+            Logger::error('sendcommand: falha ao gravar estado de IA', [
                 'imei' => $imei, 'erro' => $e->getMessage(),
             ]);
         }

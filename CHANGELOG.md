@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.0
+
+**Pedido do dono do produto: os comandos de parâmetro JT/T (33027 escrita, 33028/33030 leitura) não funcionam — problema de firmware do fabricante. Pausar essa área e criar uma tela nova, "Configurações IA", só com configuração de ADAS/DMS/velocidade, reprocessada do zero das planilhas oficiais (não copiada do catálogo de `/comandos`), com layout de quadros e a máscara de cada parâmetro como tag de auxílio. Esses comandos saem de `/comandos`, que passa a ter só configuração básica de equipamento.**
+
+### Added
+- 🆕 **`includes/ia_config_catalog.php`** — catálogo próprio de comandos de ADAS/DMS/velocidade (58 entradas), reprocessado direto de `docs/JC 371 Command List V1.0.1.xlsx` (JC371: `DMSSP`, `ADAS,CALIBRATION`, `DMSVSP`, 19 pares `EVENTSET`/`EVENTALERT` por evento, mais o par de excesso de velocidade), `docs/JC400 & JC261 Command List V5.0.3.20230626.xlsx` (JC400AD/JC261: `DMSSW`, `DMS_SWITCH`, `DMS_VOICE_CUSTOM`, `DMS_ALERT_CUSTOM`, `DMS_VIRTUAL_SPEED`, `DMS_CONTINUITY`, `DMS_CALIB_ABNORMAL`, `DMS_SECOND_EVENT`, `ADASSW`, `ADASSEP`, `ADASPI`, `ADASVI`, `ADASSP`, `ADASSEN`, `ADASVSP`) e `docs/JC181_Command_List_V1.0.7_20250811.xlsx` (JC181: `SPEED` — sem chip de IA, sem ADAS/DMS). **Cada família de câmera usa vocabulário totalmente diferente para o mesmo conceito** — não existe sintaxe universal de ADAS/DMS no proNo 128. JC450/JC182 não têm planilha própria (a wiki é uma SPA em JS que o `WebFetch` não consegue renderizar); cobertura desses dois vem do que o catálogo antigo já confirmava, marcada `procedencia: 'wiki'`. Fora de escopo, de propósito: `EVENTSET,FACE` (CRUD de biblioteca facial) e colisão/vibração por acelerômetro (`CRASHALM`, `SENSOR`, `SHOCK`, `COLLIDE`…) — continuam em `/comandos`.
+- 🆕 **`handlers/configuracoes_ia.php`** (rota `/configuracoes-ia`, menu "Configurações IA", só admin) — quadros por comando (`.ia-cell`), filtrados pelo modelo do equipamento selecionado; cada parâmetro mostra a **máscara/formato** como tag de auxílio (o `format` do catálogo) e o padrão de fábrica; botões **Ler agora** (quando o comando tem forma de consulta) e **Aplicar**; envio via `/sendcommand` (proNo 128) + acompanhamento em `/commandstatus`, mesmo contrato de `handlers/comandos.php` — sem endpoint de despacho novo.
+- 🆕 **`device_ia_config_state`** (`mysql/migration_v4.13.0.sql`) — último valor lido/aplicado por câmera de cada comando do catálogo novo, no formato certo (chave de texto + vários parâmetros nomeados por comando), sem mexer em `device_param_catalog`/`device_params` (formato JT/T, chave numérica — incompatível, e continuam paradas, não apagadas). Gravado em `includes/ia_config_state.php` (`ia_config_capture()`), chamado tanto do caminho síncrono (`handlers/sendcommand.php`, device online) quanto do assíncrono/offline (`handlers/pushinstructresponse.php`) — mesmo padrão de `upsert_device_params()`. `ia_config_match_key()` casa o comando enviado contra o catálogo por FORMA (tokens literais iguais, `P<n>` casa qualquer valor), não por nome.
+
+### Changed
+- 🔴 **45 comandos saíram de `includes/command_catalog.php`** — `EVENTSET`/`EVENTALERT` de eventos ADAS/DMS, `DMSSP`, `DMSSW,P1,P2#`, `DMSVSP`, `ADAS,CALIBRATION`, `DMS_SWITCH`, `DMS_VOICE_CUSTOM`, `DMS_ALERT_CUSTOM`, `DMS_VIRTUAL_SPEED`, `DMS_CONTINUITY` — de 238 para 193 entradas. `/comandos` passa a oferecer só configuração básica (APN, ACC, STATUS, VERSION, CHECK, SERVER, REBOOT, UPDATE, FILELIST…). Cada comando mora em exatamente uma tela.
+- **Parametrização JT/T pausada, não apagada.** `handlers/parametros.php`, `handlers/config_parametros.php`, `handlers/rel_parametros.php` e a aba `parametros` de `handlers/ativo_detalhe.php` ganham um aviso explicando a pausa; nada de código, rota ou tabela foi removido — é reversível quando o fabricante corrigir o firmware. O bloqueio de verdade é num ponto único: `handlers/sendcommand.php` recusa `proNo` 33027/33028/33030 com HTTP 409, então nenhuma das quatro telas (nem um link antigo) chega a mandar o comando de verdade, mesmo que o aviso na tela seja perdido.
+
+### Verificação
+- `php -l` limpo em todos os arquivos novos/alterados.
+- `tests/helpers/command_response.test.php`: 115/115 — a contagem do cabeçalho de `command_catalog.php` (193/143/16) é conferida dinamicamente contra o array, não hardcoded.
+- Checagem estrutural do catálogo novo (script ad-hoc): todo campo obrigatório presente, e o número de placeholders `P<n>` no template bate exatamente com `count(params)` em todas as 58 entradas — 0 problemas.
+- `ia_config_match_key()` testado contra 7 casos (aplicação preenchida, consulta nua, `STATUS#` não casando com nada) — todos batem.
+
 ## [Unreleased] — 4.12.11
 
 **Pedido do dono do produto: o mapa do `/painel` ("Mapa de Posições Recentes") deve mostrar os pontos individuais de posição, igual ao mapa do `/` (Resumo), além da camada de calor.**

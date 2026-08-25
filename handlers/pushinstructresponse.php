@@ -98,6 +98,12 @@ class PushInstructResponseHandler extends WebhookHandler {
             //    que estava desligada quando alguém perguntou.
             $this->capturarFirmware($imei, $content, $response, $commandId);
 
+            // 5. E se era um comando de includes/ia_config_catalog.php
+            //    (ADAS/DMS/velocidade), o `_content` vira o último valor
+            //    conhecido em `device_ia_config_state`. Mesmo par de caminhos:
+            //    o síncrono está em sendcommand.php, este cobre a fila offline.
+            $this->capturarConfigIA($imei, $content, $commandId);
+
             Logger::info('InstructResponse registrado', [
                 'source' => $this->handlerName, 'imei' => $imei,
                 'status' => $status, 'msg_type' => $msgType
@@ -309,6 +315,39 @@ class PushInstructResponseHandler extends WebhookHandler {
             }
         } catch (Throwable $e) {
             Logger::error('InstructResponse: falha ao gravar firmware', [
+                'source' => $this->handlerName, 'imei' => $imei,
+                'erro'   => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Grava o estado quando o callback responde a um comando de
+     * includes/ia_config_catalog.php (ADAS/DMS/velocidade) — v4.13.0.
+     *
+     * ⚠️ MESMA DISCIPLINA de `capturarParametros()`/`capturarFirmware()`:
+     * decide pelo COMANDO correlacionado (`command_content`), não pelo
+     * formato da resposta — `ia_config_match_key()` casa a forma do comando
+     * enviado contra o catálogo. Sem comando correlacionado, não grava.
+     *
+     * @param string      $imei
+     * @param string|null $content   `_content` do callback (resposta do device)
+     * @param int|null    $commandId Linha de `commands` correlacionada
+     * @returns void
+     */
+    private function capturarConfigIA($imei, $content, $commandId) {
+        if ($commandId === null) return;
+
+        try {
+            $stmt = $this->db->prepare("SELECT pro_no, command_content FROM commands WHERE id = :id");
+            $stmt->execute([':id' => $commandId]);
+            $cmd = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$cmd || (int)($cmd['pro_no'] ?? 0) !== 128) return;
+
+            require_once __DIR__ . '/../includes/ia_config_state.php';
+            ia_config_capture($this->db, $imei, (string)$cmd['command_content'], $content, (int)$commandId);
+        } catch (Throwable $e) {
+            Logger::error('InstructResponse: falha ao gravar estado de IA', [
                 'source' => $this->handlerName, 'imei' => $imei,
                 'erro'   => $e->getMessage(),
             ]);

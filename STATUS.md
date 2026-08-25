@@ -1,10 +1,59 @@
-# STATUS.md — Jimi Webhook System v4.12.11 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.13.0 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.10; v4.12.11 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.11; v4.13.0 pronta para deploy
 >
-> **Produção está em `4.12.10`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.11 (abaixo) traz o mapa do `/painel` para paridade visual
-> com o do Resumo e está pronta para deploy.
+> **Produção está em `4.12.11`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.13.0 (abaixo) é a mais substancial da sessão — nova área
+> "Configurações IA" + pausa da parametrização JT/T — e está pronta para
+> deploy. **Rodar `./scripts/deploy.sh` normalmente** (migração
+> `4.13.0` já está na lista explícita).
+>
+> #### 🆕 v4.13.0 — "Configurações IA" (ADAS/DMS/velocidade) + pausa do JT/T
+>
+> Pedido do dono do produto: os comandos JT/T de parâmetro (33027 escrita,
+> 33028/33030 leitura) não funcionam — firmware do fabricante, fora do nosso
+> controle. Pediu para pausar essa área e criar uma tela nova, só com
+> configuração de ADAS/DMS/velocidade, reprocessada do zero das planilhas
+> oficiais (não copiada do catálogo de `/comandos`), no layout de "quadros"
+> da aba de parâmetros, com a máscara de cada campo como tag de auxílio —
+> esses comandos saem de `/comandos` de vez, ficam só na tela nova.
+>
+> **Achado central:** cada família de câmera usa um vocabulário de comando
+> TOTALMENTE diferente pro mesmo conceito de ADAS/DMS — não existe sintaxe
+> universal no proNo 128. JC371 usa `EVENTSET,<código>`/`EVENTALERT,<código>`
+> (um par por evento) + `DMSSP`/`DMSVSP`/`ADAS,CALIBRATION`; a família
+> JC400AD/JC261/JC400D usa `DMSSW`/`DMS_*`/`ADASxx`; JC181 não tem ADAS/DMS
+> nenhum (sem chip de visão) — só `SPEED` por GPS. Reprocessei as 3
+> planilhas (`docs/JC 371 Command List V1.0.1.xlsx`, `docs/JC400 & JC261
+> Command List V5.0.3.20230626.xlsx`, `docs/JC181_Command_List_V1.0.7_20250811.xlsx`)
+> com um parser `.xlsx` escrito na hora (`ZipArchive`+DOM, sem lib nova) —
+> 58 entradas no catálogo novo (`includes/ia_config_catalog.php`), cada uma
+> com a máscara/faixa exata da planilha. A wiki (`wiki-foconavia...`) é uma
+> SPA em JS que o `WebFetch` não renderiza (só devolve o título) — JC450/JC182
+> não têm planilha própria, então a cobertura deles vem do que
+> `command_catalog.php` já confirmava, marcada `procedencia: 'wiki'`
+> (confiança menor, mesma disciplina do `doc_ref` de `device_param_catalog`).
+>
+> 45 comandos SAÍRAM de `includes/command_catalog.php` (238 → 193 entradas) —
+> `/comandos` fica só com configuração básica. `handlers/sendcommand.php`
+> ganhou um bloqueio único: `proNo` 33027/33028/33030 devolve HTTP 409 — é
+> o que garante que nenhuma das 4 telas de Parâmetros JT/T (que só ganharam
+> um AVISO, nada foi apagado) consegue de fato mandar comando, mesmo que
+> alguém chegue lá por um link antigo.
+>
+> Tabela nova `device_ia_config_state` (não mexi em
+> `device_param_catalog`/`device_params` — formato incompatível, chave
+> numérica JT/T vs. chave de texto com vários parâmetros por comando;
+> ficam paradas, prontas pra voltar se o firmware for corrigido).
+>
+> `php -l` limpo; `tests/helpers/command_response.test.php` 115/115 (a
+> contagem do cabeçalho é conferida dinamicamente, não hardcoded); checagem
+> estrutural do catálogo novo (todo campo obrigatório presente, placeholders
+> batendo com `params`) e do casador de comando→catálogo, 0 problemas.
+>
+> ⚠️ **Não testado com envio real a câmera de produção** — só leitura/
+> renderização foram verificadas nesta sessão. Validação do envio de verdade
+> fica para o dono do produto, depois do deploy.
 >
 > #### 🔧 v4.12.11 — mapa do `/painel` sem os pontos individuais de posição
 >
