@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.12.8
+
+**Correção pedida pelo dono do produto: no Relatório de Deslocamento, "Voltar ao relatório" (a partir da tela de Rota/Replay, aberta em nova janela) caía no formulário vazio, sem o filtro que o operador tinha aplicado.**
+
+### Fixed
+- 🔴 **`report_back_button()` chamado com a URL base fixa, sem devolver o filtro.** `rel_deslocamento_rota.php` e `rel_deslocamento_replay.php` linkavam de volta para `/relatorios/deslocamento` sem query string nenhuma — modalidade, placa, período, página e ordenação eram todos perdidos, e o operador caía na tela "Selecione os filtros e clique em Gerar" mesmo tendo acabado de gerar uma grade. Corrigido com um parâmetro `return` (URL completa, já com toda a query string exceto `export`) que `rel_deslocamento.php` passa para os links "Ver rota" e "Replay"; as duas telas filhas usam esse valor no botão "Voltar ao relatório", validado por regex contra o próprio path (`^/relatorios/deslocamento(\?.*)?$`) para não virar redirecionamento aberto se alguém adulterar o parâmetro num link compartilhado.
+- Varrida a base por `target="_blank"` apontando para rota interna própria (não Google Maps externo, que não tem esse problema): só `rel_deslocamento.php` tinha esse padrão — os demais "Ver Mapa" do sistema (`rel_alarmes`, `rel_status_frota`, `rel_ignicao`, `rel_velocidade`, `rel_posicoes`, `rel_geocercas`, `rel_desatualizados`) apontam direto para `google.com/maps`, sem botão de volta próprio.
+
+### Verificação
+- `php -l` limpo nos 3 arquivos.
+- Simulado o round-trip da URL (`urlencode` → `$_GET['return']` → regex → href) via `php -r`: reconstrói exatamente `mode`, `imei`, `date_from`, `date_to`, `gerar`, `page` e `sort/order` originais.
+
 ## [Unreleased] — 4.12.7
 
 **Correção pedida pelo dono do produto: o Relatório de Deslocamento listava câmeras inativas no filtro de placa. Verificado o resto do sistema pelo mesmo padrão.**

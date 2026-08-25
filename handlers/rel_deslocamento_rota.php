@@ -20,6 +20,16 @@ $tripId = (int)($_GET['trip_id'] ?? 0);
 $selImei = $_GET['imei'] ?? '';
 $dia = $_GET['dia'] ?? '';
 
+// "Voltar ao relatório" precisa cair na grade JÁ GERADA, com o filtro que o
+// operador aplicou — não no formulário vazio. `return` vem de
+// rel_deslocamento.php (o único que aponta para cá) já como URL pronta;
+// validado contra o próprio path para não virar redirecionamento aberto se
+// alguém adulterar o parâmetro num link compartilhado.
+$returnTo = $_GET['return'] ?? '';
+if (!preg_match('#^/relatorios/deslocamento(\?.*)?$#', $returnTo)) {
+    $returnTo = '/relatorios/deslocamento';
+}
+
 $error = '';
 $imei = '';
 $utcFrom = $utcTo = null;
@@ -200,7 +210,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             · <?= fmt_brt($utcFrom) ?> → <?= fmt_brt($utcTo) ?>
         </span>
         <?php endif; ?>
-        <?= report_back_button('/relatorios/deslocamento', 'Voltar ao relatório') ?>
+        <?= report_back_button($returnTo, 'Voltar ao relatório') ?>
     </div>
 </div>
 

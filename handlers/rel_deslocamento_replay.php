@@ -27,6 +27,13 @@ $imei = '';
 $vehicleType = null;
 $deviceName = '';
 
+// "Voltar ao relatório" precisa cair na grade JÁ GERADA — ver a mesma nota
+// em rel_deslocamento_rota.php.
+$returnTo = $_GET['return'] ?? '';
+if (!preg_match('#^/relatorios/deslocamento(\?.*)?$#', $returnTo)) {
+    $returnTo = '/relatorios/deslocamento';
+}
+
 $sql = "SELECT t.*, COALESCE(d.device_name, t.imei) AS device_name, d.vehicle_type
         FROM trips t LEFT JOIN devices d ON d.imei = t.imei
         WHERE t.id = :id" . ($customerId ? " AND t.customer_id = :cid" : "");
@@ -164,8 +171,8 @@ require_once __DIR__ . '/../web/layout_base.php';
             · <?= fmt_brt($utcFrom) ?> → <?= fmt_brt($utcTo) ?>
         </span>
         <?php endif; ?>
-        <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$tripId ?>" class="btn btn-outline btn-sm">Ver rota (estática)</a>
-        <?= report_back_button('/relatorios/deslocamento', 'Voltar ao relatório') ?>
+        <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$tripId ?>&return=<?= urlencode($returnTo) ?>" class="btn btn-outline btn-sm">Ver rota (estática)</a>
+        <?= report_back_button($returnTo, 'Voltar ao relatório') ?>
     </div>
 </div>
 

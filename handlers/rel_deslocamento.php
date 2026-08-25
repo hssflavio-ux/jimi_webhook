@@ -253,7 +253,14 @@ $current_route = 'rel_deslocamento';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
+<?php
+$expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ);
+// Filtro (inclusive página/ordenação) para "Ver rota"/"Replay" devolverem à
+// tela com o resultado já gerado, não ao formulário vazio — ver
+// rel_deslocamento_rota.php e rel_deslocamento_replay.php.
+$backQ = $_GET; unset($backQ['export']);
+$returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
+?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Deslocamento</h2>
     <?php if ($generated): ?>
@@ -364,7 +371,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td><?= (int)$r['viagens'] ?></td>
-                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a></td>
+                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a></td>
             </tr>
             <?php endforeach; ?>
             <?php else: ?>
@@ -379,8 +386,8 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
-                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a>
-                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>" target="_blank" class="btn btn-outline btn-sm">Replay</a>
+                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Ver rota</a>
+                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" target="_blank" class="btn btn-outline btn-sm">Replay</a>
                 </td>
             </tr>
             <?php endforeach; endif; ?>

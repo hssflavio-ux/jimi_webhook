@@ -1,10 +1,34 @@
-# STATUS.md — Jimi Webhook System v4.12.7 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.12.8 (YUV Parity)
 
-> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.6; v4.12.7 pronta para deploy
+> ### 📍 ESTADO EM 25/08/2026 — produção em v4.12.7; v4.12.8 pronta para deploy
 >
-> **Produção está em `4.12.6`** (confirmado por `/ping`, dono do produto já
-> deployou). v4.12.7 (abaixo) tira câmera inativa de seis pontos que não
-> deveriam listá-la e está pronta para deploy.
+> **Produção está em `4.12.7`** (confirmado por `/ping`, dono do produto já
+> deployou). v4.12.8 (abaixo) corrige o "Voltar ao relatório" do Deslocamento
+> e está pronta para deploy.
+>
+> #### 🔧 v4.12.8 — "Voltar ao relatório" do Deslocamento perdia o filtro
+>
+> Dono do produto reportou: em `/relatorios/deslocamento`, "Ver rota"/"Replay"
+> abrem em nova janela; o botão "Voltar ao relatório" dessas telas linkava
+> para `/relatorios/deslocamento` sem query string — caía no formulário
+> vazio, perdendo modalidade/placa/período/página/ordenação que o operador
+> tinha acabado de gerar. Corrigido com um parâmetro `return` (URL completa
+> da grade, gerado por `rel_deslocamento.php`) que `rel_deslocamento_rota.php`
+> e `rel_deslocamento_replay.php` usam no botão de volta, validado por regex
+> contra o próprio path para não virar redirecionamento aberto.
+> Varrida a base por `target="_blank"` para rota PRÓPRIA (não Google Maps
+> externo): só o Deslocamento tinha esse padrão — os demais "Ver Mapa" do
+> sistema apontam direto pro Maps, sem botão de volta.
+> `php -l` limpo; round-trip da URL simulado via `php -r`.
+>
+> 💬 **Pendente de decisão do dono do produto**: ele sugeriu abrir Rota/Replay
+> de outra forma, não em nova janela (o `return` acima resolve o sintoma
+> relatado independente da escolha). Recomendação dada: navegação na MESMA
+> aba em vez de nova janela — essas telas já têm todo o retorno (`return`)
+> resolvido, então não há mais nada "perdido" ao trocar; um modal foi
+> descartado por ora — a tela de Rota tem cabeçalho de KPIs + mapa Leaflet
+> completo, e a de Replay ainda soma um scrubber SVG próprio, conteúdo
+> grande demais para um modal sem reescrever as duas telas do zero.
 >
 > #### 🔧 v4.12.7 — câmera inativa aparecendo em 6 pontos do sistema
 >
