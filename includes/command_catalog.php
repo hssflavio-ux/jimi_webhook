@@ -319,13 +319,14 @@ return [
   ],
   // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
   // linha D006 (a versão anterior desta entrada tinha só 4 parâmetros vazios,
-  // sem desc/format — a planilha real documenta 8). JC182 adicionado a pedido
-  // do dono do produto (confirmado em campo, 26/08/2026): é um dos 3 comandos
-  // EVENTSET que o JC182 responde nesta tela — ver EVENTSET,ACD abaixo, que é
-  // a MESMA função de colisão só que pelo dialeto EVENTSET/JT/T; COLLIDE é o
-  // dialeto "planilha JC181" da mesma câmera. Sem confirmação de qual dos dois
-  // dialetos o JC182 realmente aceita para colisão além do EVENTSET medido —
-  // mantido aqui por instrução direta do dono do produto, pendente de teste.
+  // sem desc/format — a planilha real documenta 8).
+  // v4.13.15 — JC182 REMOVIDO: chegou a ser adicionado (v4.13.12) por pedido
+  // do dono do produto, mas a planilha-fonte é explicitamente "applicable to
+  // JC181 series products" e nunca cita o JC182 em nenhuma linha. O dono do
+  // produto confirmou (26/08/2026) que o JC182, apesar do número de modelo
+  // maior, tem bem menos funções que o JC181 — o único código de colisão que
+  // ele de fato responde é `EVENTSET,ACD` (dialeto EVENTSET/JT/T, abaixo),
+  // não este `COLLIDE` de texto simples.
   'COLLIDE,P1,P2,P3,P4,P5,P6,P7,P8#' => [
     'cmd' => 'COLLIDE',
     'nome' => 'Colisão',
@@ -333,7 +334,6 @@ return [
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -1252,10 +1252,11 @@ return [
   // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
   // linha D010. A chave já indicava 3 parâmetros (A,T1,T2) mas só "A" tinha
   // desc/format — T1/T2 eram placeholders sem documentação nenhuma, e a
-  // planilha real tem 4 campos (exemplo "FATIGUE,ON,6,15,0" confirma). JC182
-  // adicionado a pedido do dono do produto (26/08/2026) — ver nota em COLLIDE
-  // acima sobre a mesma incerteza (JC182 responde ao EVENTSET equivalente
-  // medido; o dialeto FATIGUE puro ainda não foi confirmado nele em campo).
+  // planilha real tem 4 campos (exemplo "FATIGUE,ON,6,15,0" confirma).
+  // v4.13.15 — JC182 REMOVIDO: a planilha-fonte é exclusiva do JC181
+  // ("applicable to JC181 series products", nunca cita JC182); o dono do
+  // produto confirmou (26/08/2026) que o JC182 tem bem menos funções que o
+  // JC181, apesar do número de modelo maior.
   'FATIGUE,P1,P2,P3,P4#' => [
     'cmd' => 'FATIGUE',
     'nome' => 'Fadiga (direção por tempo excessivo)',
@@ -1263,9 +1264,8 @@ return [
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC182',
-      2 => 'JC400D',
-      3 => 'JC400AD',
+      1 => 'JC400D',
+      2 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
@@ -1899,9 +1899,11 @@ return [
   ],
   // v4.13.12 — NOVO. GFENCE não existia neste catálogo; adicionado a partir
   // de docs/JC181_Command_List_V1.0.7_20250811.xlsx, linhas D011 (círculo) e
-  // D012 (retângulo), a pedido do dono do produto — especificamente para
-  // JC182 (26/08/2026); JC181 REMOVIDO em v4.13.14, adicionado por engano
-  // (o pedido listou os comandos por modelo, e JC181 nunca foi citado).
+  // D012 (retângulo). v4.13.14 tentou atribuir ao JC182; v4.13.15 corrigiu de
+  // volta para JC181 — a planilha é exclusiva do JC181 ("applicable to JC181
+  // series products", nunca cita JC182), e o dono do produto confirmou
+  // (26/08/2026) que o JC182 tem bem menos funções que o JC181, apesar do
+  // número de modelo maior.
   // ⚠️ Cerca eletrônica
   // NO EQUIPAMENTO — é uma função DO FIRMWARE da câmera, não tem relação com
   // a tabela `geofences`/`/geocercas` da aplicação (essas são cercas
@@ -1922,7 +1924,7 @@ return [
     'desc' => 'Configura uma cerca eletrônica circular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
     'categoria' => 'alarme',
     'modelos' => [
-      0 => 'JC182',
+      0 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -1951,7 +1953,7 @@ return [
     'desc' => 'Configura uma cerca eletrônica retangular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
     'categoria' => 'alarme',
     'modelos' => [
-      0 => 'JC182',
+      0 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -2894,11 +2896,14 @@ return [
   // linha D002. A entrada antiga tinha só 2 parâmetros (A=ON/OFF, B=1-3); a
   // planilha real (modificada em V1.0.2/V1.0.5/V1.0.7) tem 5, e a semântica de
   // A mudou: não é mais ON/OFF, é o próprio nível de sensibilidade (0=OFF).
-  // `consulta_modelos` já citava JC182 (inconsistente com `modelos`, que não
-  // o tinha) — corrigido adicionando JC182 aqui também, a pedido do dono do
-  // produto (confirmado em campo, 26/08/2026). Ver nota em COLLIDE acima
-  // sobre a mesma incerteza quanto a qual dialeto (SENALM vs EVENTSET,AVD) o
-  // JC182 realmente aceita para vibração além do EVENTSET medido.
+  // v4.13.15 — JC182 REMOVIDO de `modelos` e `consulta_modelos` (o segundo já
+  // trazia JC182 de antes desta sessão — mesma classe de inconsistência
+  // documentada em CLAUDE.md, um campo desatualizado que o outro não
+  // acompanhou). A planilha-fonte é exclusiva do JC181 ("applicable to JC181
+  // series products", nunca cita JC182); o dono do produto confirmou
+  // (26/08/2026) que o JC182 tem bem menos funções que o JC181, apesar do
+  // número de modelo maior — o único código de vibração que ele de fato
+  // responde é `EVENTSET,AVD` (dialeto EVENTSET/JT/T, ver mais abaixo).
   'SENALM,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SENALM',
     'nome' => 'Vibração (veículo parado)',
@@ -2906,14 +2911,13 @@ return [
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC182',
-      2 => 'JC400D',
-      3 => 'JC400AD',
+      1 => 'JC400D',
+      2 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'SENALM#',
-    'consulta_modelos' => ['JC181', 'JC182', 'JC400AD', 'JC400D'],
+    'consulta_modelos' => ['JC181', 'JC400AD', 'JC400D'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
@@ -3102,8 +3106,12 @@ return [
   // de envio", que é na verdade o campo B) — a ORDEM dos 4 parâmetros já
   // estava certa, só o texto de ajuda invertia B com D. Confirmado pelo
   // exemplo oficial "SPEED,ON,0,90,10" (B=0 é forma de envio, não duração).
-  // JC182 adicionado a pedido do dono do produto (26/08/2026) — ver nota em
-  // COLLIDE acima sobre a mesma incerteza quanto ao dialeto real aceito.
+  // v4.13.15 — JC182 REMOVIDO: chegou a ser adicionado (v4.13.12) por pedido
+  // do dono do produto, mas a planilha-fonte é exclusiva do JC181
+  // ("applicable to JC181 series products", nunca cita JC182); confirmado
+  // pelo dono do produto (26/08/2026) que o JC182 tem bem menos funções que
+  // o JC181, apesar do número de modelo maior. Para velocidade, o JC182 usa
+  // `EVENTSET,AOSD` (ver includes/ia_config_catalog.php).
   'SPEED,A,B,C,D#' => [
     'cmd' => 'SPEED',
     'nome' => 'Excesso de velocidade',
@@ -3112,9 +3120,8 @@ return [
     'modelos' => [
       0 => 'JC450',
       1 => 'JC181',
-      2 => 'JC182',
-      3 => 'JC400D',
-      4 => 'JC400AD',
+      2 => 'JC400D',
+      3 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
@@ -3156,9 +3163,11 @@ return [
   ],
   // v4.13.12 — parâmetros preenchidos a partir de
   // docs/JC181_Command_List_V1.0.7_20250811.xlsx, linha D004 (a entrada
-  // anterior tinha os 5 placeholders sem nenhuma desc/format). JC182
-  // adicionado a pedido do dono do produto (26/08/2026) — ver nota em COLLIDE
-  // acima sobre a mesma incerteza quanto ao dialeto real aceito.
+  // anterior tinha os 5 placeholders sem nenhuma desc/format).
+  // v4.13.15 — JC182 REMOVIDO: a planilha-fonte é exclusiva do JC181
+  // ("applicable to JC181 series products", nunca cita JC182); confirmado
+  // pelo dono do produto (26/08/2026) que o JC182 tem bem menos funções que
+  // o JC181, apesar do número de modelo maior.
   'SPEEDCHECK,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SPEEDCHECK',
     'nome' => 'Frenagem brusca (detecção)',
@@ -3166,7 +3175,6 @@ return [
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -3264,8 +3272,11 @@ return [
   // planilha rotula P3 como "km/h" na coluna de unidade, mas descreve o campo
   // como limiar de ÂNGULO ("Angle threshold value") — provável erro de
   // digitação do fabricante, mantido como o texto da planilha diz (° é o
-  // esperado para ângulo, não km/h). JC182 adicionado a pedido do dono do
-  // produto (26/08/2026) — ver nota em COLLIDE acima sobre a mesma incerteza.
+  // esperado para ângulo, não km/h).
+  // v4.13.15 — JC182 REMOVIDO: a planilha-fonte é exclusiva do JC181
+  // ("applicable to JC181 series products", nunca cita JC182); confirmado
+  // pelo dono do produto (26/08/2026) que o JC182 tem bem menos funções que
+  // o JC181, apesar do número de modelo maior.
   'SWERVE,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SWERVE',
     'nome' => 'Curva brusca (detecção)',
@@ -3273,7 +3284,6 @@ return [
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,

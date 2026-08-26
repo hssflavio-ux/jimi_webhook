@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.15
+
+**Dono do produto corrigiu a v4.13.14: o erro estava invertido. A planilha de comandos JC181 é explicitamente "applicable to JC181 series products" e nunca cita o JC182 — apesar do número de modelo maior, o JC182 tem BEM MENOS funções que o JC181.**
+
+### Fixed
+- 🔴 **`SENALM`, `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE`, `GFENCE` (circular/retangular) e `SPEED` voltam a ser comandos do JC181, não do JC182** — em `includes/command_catalog.php` (removido JC182 dos 7 comandos) e em `includes/ia_config_catalog.php` (as mesmas 7 entradas mudaram de `modelos: ['JC182']` para `['JC181']`). Este era o terceiro erro consecutivo na mesma tarefa: v4.13.13 replicou o vocabulário do JC181 para os dois modelos; v4.13.14 tentou corrigir removendo o JC181 e deixando só o JC182 — na direção ERRADA. O JC182 mantém, nas duas telas, só os 2 códigos EVENTSET medidos em campo (`ACD`, `AVD`) + `AOSD` (velocidade, compartilhado com o JC371) — 3 comandos ao todo, consistente com o teste real de campo do início desta tarefa.
+
+### Verificação
+- `php -l` limpo em `includes/ia_config_catalog.php` e `includes/command_catalog.php`.
+- Catálogo recarregado via `php -r`: JC182 caiu para 3 entradas em `ia_config_catalog.php` (eram 11); JC181 subiu para 8 (era 1). Em `command_catalog.php`, os mesmos 7 comandos voltaram a ter só JC181 (mais JC400D/JC400AD/JC450 onde já tinham antes desta sessão). Total de entradas inalterado nos dois arquivos — só o modelo foi corrigido.
+
 ## [Unreleased] — 4.13.14
 
 **Dono do produto corrigiu a v4.13.13: os comandos de acelerômetro/GPS (senalm, speedcheck, swerve, collide, gfence, fatigue, EVENTSET,ACD/AVD) tinham sido replicados também para o JC181, mas o pedido listou os comandos especificamente por modelo — só o JC182 devia ganhá-los. E o texto "— dialeto planilha" nos cartões não comunica nada ao operador.**
