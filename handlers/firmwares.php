@@ -352,7 +352,7 @@ include __DIR__ . '/../web/layout_base.php';
             <tr>
                 <td><?= htmlspecialchars($r['model_name']) ?></td>
                 <td class="text-mono" style="font-size:12px"><?= htmlspecialchars($r['version']) ?></td>
-                <td class="text-mono" style="font-size:11px;word-break:break-all;max-width:340px"><?= htmlspecialchars($r['url']) ?></td>
+                <td class="text-mono" style="font-size:11px;white-space:normal;overflow-wrap:anywhere;max-width:340px"><?= htmlspecialchars($r['url']) ?></td>
                 <td style="font-size:12px;color:var(--muted)"><?= htmlspecialchars($r['notes'] ?? '—') ?></td>
                 <td><?= (int)$r['is_current'] ? '<span class="badge badge-success" style="font-size:10px">referência</span>' : '—' ?></td>
                 <td style="white-space:nowrap">
