@@ -14,13 +14,26 @@
  *     ADASxx, que sumiam até a v4.9.27 por isso).
  *   - `docs/JC181_Command_List_V1.0.7_20250811.xlsx`, aba "Command list"
  *     (EN), linha D003 — JC181.
- *   - JC450/JC182: **não têm planilha própria no `docs/`** e a wiki
- *     (`wiki-foconavia.newtectelemetria.com.br`) é uma SPA em JS que o
+ *   - `docs/JC450 series command list-EN V2.1.1.xlsx`, aba de comandos (EN),
+ *     linhas D004/G001–G021 — JC450 (adicionada em 26/08/2026; JC450 TEM
+ *     planilha própria, diferente do JC182 abaixo — a nota antiga dizia que
+ *     não tinha, estava desatualizada).
+ *   - JC182: **não tem planilha própria no `docs/`**. Cobertura vem de duas
+ *     fontes: (1) teste real de campo em 26/08/2026 (dono do produto,
+ *     `EVENTSET,ACD`/`AVD`/`AOSD` — os únicos 3 códigos EVENTSET que o
+ *     equipamento respondeu; os demais códigos ADAS/DMS herdados do JC371
+ *     por analogia foram REMOVIDOS desta tela nessa mesma data, pois o JC182
+ *     não tem câmera de IA/visão computacional) e (2)
+ *     `docs/JC181_Command_List_V1.0.7_20250811.xlsx` — o JC182 comparte o
+ *     vocabulário "de planilha" do JC181 (SENALM/SPEED/SPEEDCHECK/SWERVE/
+ *     COLLIDE/FATIGUE/GFENCE) por instrução direta do dono do produto,
+ *     mas esses ficam em `command_catalog.php`/`/comandos` — são
+ *     acelerômetro/GPS, não visão computacional (ver "Fora de escopo" abaixo).
+ *   - A wiki (`wiki-foconavia.newtectelemetria.com.br`) é uma SPA em JS que o
  *     WebFetch não consegue renderizar (só devolve o título da página,
- *     confirmado em 25/08/2026). Cobertura destes dois modelos vem do que já
- *     existia em `command_catalog.php` sob `categoria === 'ia'` com esses
- *     modelos listados — `procedencia: 'wiki'`, a mesma disciplina que o
- *     catálogo original já usa pra marcar confiança menor que `medido`.
+ *     confirmado em 25/08/2026 e de novo em 26/08/2026 para a página do
+ *     JC450) — nenhuma entrada deste arquivo vem da wiki além do que já
+ *     estava aqui por herança do catálogo antigo (`procedencia: 'wiki'`).
  *
  * ── Por que cada modelo tem um vocabulário DIFERENTE ────────────────────────
  * Não existe sintaxe universal de ADAS/DMS no proNo 128: JC371 usa
@@ -39,10 +52,17 @@
  *   - `EVENTSET,FACE` (JC371) — CRUD de biblioteca facial (upload/exclusão de
  *     foto), não é "parâmetro com máscara".
  *   - `CRASHALM`/`SENSOR`/`SHOCK`/`SENALM`/`DEFENSE*`/`RAPIDACC`/`RAPIDDEC`/
- *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) e `COLLIDE`/`SPEEDCHECK`/`SWERVE`
- *     (JC181) — colisão/vibração por ACELERÔMETRO e curva/frenagem brusca,
- *     não visão computacional nem excesso de velocidade. Continuam
- *     disponíveis em `/comandos`, sem mudança.
+ *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) e `COLLIDE`/`SPEEDCHECK`/`SWERVE`/
+ *     `FATIGUE`/`GFENCE` (JC181/JC182) — colisão/vibração por ACELERÔMETRO,
+ *     curva/frenagem brusca e cerca eletrônica NO EQUIPAMENTO, não visão
+ *     computacional nem excesso de velocidade. Continuam disponíveis em
+ *     `/comandos`, sem mudança (JC182 ganhou os mesmos em 26/08/2026, a
+ *     pedido do dono do produto — ver `command_catalog.php`).
+ *   - `EVENTSET,FACE,*` (JC450, G016–G019) — mesmo caso do JC371 acima, CRUD
+ *     de biblioteca facial.
+ *   - `COLLIDE`/`INSTALLANGLE` (JC450, D011/D012) — colisão por acelerômetro
+ *     e ângulo de instalação para o algoritmo dela; mesma política do
+ *     `COLLIDE` do JC181/JC182. Ficam em `/comandos`.
  *
  * ── Formato das entradas ─────────────────────────────────────────────────────
  * Mesmo espírito de `command_catalog.php` (array PHP, sem tabela de catálogo
@@ -96,12 +116,17 @@
  * continua sendo o mecanismo pra promover os `'inferido'` restantes pra
  * `'medido'` conforme forem testados em mais câmeras/modelos.
  *
- * Total: 59 entradas, todas com forma de consulta (18 `medido`, 41
- * `inferido`, 0 sem forma) — JC371 (43 no campo `modelos`, contando os
- * compartilhados com JC450/JC182) + JC400AD (16, G001–G015) + JC182 (6,
- * fallback do catálogo antigo) + JC450 (3, idem) + JC181 (1, SPEED). JC450 e
- * JC182 não somam entradas PRÓPRIAS — entram como modelo extra nas linhas do
- * JC371 que o catálogo antigo já confirmava (ver a nota no fim do arquivo).
+ * Total (26/08/2026): 70 entradas, todas com forma de consulta (18 `medido`,
+ * 52 `inferido`, 0 sem forma) — JC371 (43 no campo `modelos`) + JC400AD (14)
+ * + JC450 (18, 14 entradas PRÓPRIAS + 4 compartilhadas com JC371/JC400AD) +
+ * JC182 (1, `EVENTSET,AOSD` — compartilhada com JC371) + JC181 (1, `SPEED`).
+ * JC182 não soma entrada própria nenhuma: seu único comando de visão
+ * confirmado (velocidade) já é o mesmo do JC371. As outras 6 entradas do
+ * JC371 que o catálogo chegou a atribuir também ao JC182 (ALDW/AHMW/ADCA/
+ * ACEA/ANDD/AFIF) foram REMOVIDAS do JC182 em 26/08/2026 — teste real de
+ * campo mostrou que o equipamento não tem câmera de IA/visão computacional
+ * (só ACD/AVD/AOSD, e os dois primeiros são acelerômetro — ver
+ * `command_catalog.php`, fora do escopo desta tela).
  */
 
 return [
@@ -110,11 +135,22 @@ return [
     // JC371 — velocidade (D001/D002) e velocidade virtual de teste (D015)
     // ═══════════════════════════════════════════════════════════════════════
 
+    // v4.13.12 — JC182 confirmado pelo dono do produto em teste real de campo
+    // (26/08/2026): é um dos únicos 3 códigos EVENTSET que o JC182 responde
+    // (junto de ACD/colisão e AVD/vibração, ambos por acelerômetro — ver
+    // includes/command_catalog.php, fora de escopo desta tela por política já
+    // documentada acima). Os outros 6 códigos ADAS/DMS que este catálogo
+    // atribuía ao JC182 por analogia com o JC371 (ALDW/AHMW/ADCA/ACEA/ANDD/
+    // AFIF) foram REMOVIDOS do `modelos` desses códigos nesta mesma versão:
+    // o JC182 não tem câmera de IA/visão computacional, só este evento de
+    // velocidade (que não depende de visão) — mesma característica do JC181.
+    // Sem confirmação para o par EVENTALERT,AOSD neste modelo — por isso ele
+    // continua só em JC371 abaixo; o card do JC182 aparece "solo" na tela.
     'EVENTSET,AOSD,P1,P2#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — excesso de velocidade',
         'desc' => 'Define o limite de velocidade e por quanto tempo acima dele gera o evento de excesso de velocidade.',
-        'modelos' => ['JC371'], 'template' => true,
-        'consulta' => 'EVENTSET,AOSD#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha D001', 'procedencia' => 'planilha',
+        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'consulta' => 'EVENTSET,AOSD#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha D001; JC182 confirmado em campo 26/08/2026', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Limite de velocidade', 'format' => 'OFF / 1–255 (km/h)', 'default' => '4'],
             ['p' => 'P2', 'desc' => 'Duração acima do limite para gerar o evento', 'format' => '0–600 (segundos)', 'default' => '5'],
@@ -155,10 +191,15 @@ return [
     // JC371 — ativação geral de IA e calibração de veículo
     // ═══════════════════════════════════════════════════════════════════════
 
+    // v4.13.12 — JC450 REMOVIDO deste comando (estava aqui por analogia com o
+    // JC371, nunca confirmado): a planilha própria do JC450
+    // ("JC450 series command list-EN V2.1.1.xlsx", linha G004) documenta
+    // `DMSSP,A,B` com só 2 campos (função + velocidade) — sem canal nem área.
+    // Ver a entrada específica do JC450 na seção "JC450" mais abaixo.
     'DMSSP,P1,P2,P3,P4#' => [
         'cmd' => 'DMSSP', 'nome' => 'Ativação de IA (velocidade/canal/área)',
         'desc' => 'Define a velocidade mínima de ativação, o canal de vídeo e a área de detecção do ADAS ou do DMS.',
-        'modelos' => ['JC371', 'JC450'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'DMSSP,ADAS#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => 'ADAS / DMS', 'default' => '—'],
@@ -174,24 +215,36 @@ return [
     // ⚠️ Não consta na planilha JC371 (aba "Lista de Comandos") apesar de ser
     // documentado para JC371/JC400AD — fallback do catálogo antigo (wiki),
     // mesma disciplina do JC450/JC182 acima.
+    // v4.13.12 — JC450 adicionado: a planilha própria do JC450 (linha G011)
+    // confirma `DMSSW,A,B` com a MESMA forma de 2 parâmetros (A=1 ADAS/2 DMS,
+    // B=0 desativa/1 ativa) — só que, EXCLUSIVO deste modelo, B também aceita
+    // 2 quando A=2 (DMS): "JC171 (available when A=2 DMS)", um modo especial
+    // não documentado na planilha do JC371.
     'DMSSW,P1,P2#' => [
         'cmd' => 'DMSSW', 'nome' => 'Chave de funções de IA',
         'desc' => 'Ativa ou desativa uma função de IA específica (ADAS, DMS ou reconhecimento facial). Qualquer recurso de IA precisa estar habilitado aqui antes de ser usado.',
-        'modelos' => ['JC371', 'JC400AD'], 'template' => true,
-        'consulta' => 'DMSSW#', 'consulta_ref' => 'medido', 'fonte' => 'command_catalog.php (wiki) — ausente da planilha JC371', 'procedencia' => 'wiki',
+        'modelos' => ['JC371', 'JC400AD', 'JC450'], 'template' => true,
+        'consulta' => 'DMSSW#', 'consulta_ref' => 'medido', 'fonte' => 'command_catalog.php (wiki) — ausente da planilha JC371; confirmado na planilha JC450 V2.1.1, linha G011', 'procedencia' => 'wiki',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função de IA', 'format' => '1=ADAS / 2=DMS / 3=FACE (reconhecimento facial)', 'default' => '1 e 2 ativos / 3 inativo'],
-            ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desativar / 1=Ativar', 'default' => 'conforme a função'],
+            ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desativar / 1=Ativar / 2=modo "JC171" — só no JC450 e só quando P1=2 (DMS)', 'default' => 'conforme a função'],
         ],
         'exemplos' => [
             ['cmd' => 'DMSSW,1,0#', 'desc' => 'desativa o ADAS.'],
             ['cmd' => 'DMSSW,3,1#', 'desc' => 'ativa o reconhecimento facial.'],
         ],
     ],
+    // v4.13.12 — JC450 REMOVIDO deste comando (estava aqui por analogia com o
+    // JC371, nunca confirmado): a planilha própria do JC450 (linha G001)
+    // documenta `ADAS,CALIBRATION,A,B,C,D,E` com 5 MEDIDAS EM MILÍMETROS
+    // (altura, distâncias da lente ao para-choque/rodas/eixo) — nada a ver
+    // com a letra de tipo de veículo do JC371. JC400AD mantido: a consulta
+    // bare foi medida em câmera real nesta mesma sessão (25/08/2026, ver
+    // cabeçalho do arquivo). Ver a entrada específica do JC450 mais abaixo.
     'ADAS,CALIBRATION,P1#' => [
         'cmd' => 'ADAS', 'nome' => 'Calibração — perfil do veículo',
         'desc' => 'Define os parâmetros de instalação da câmera conforme o tipo/porte do veículo.',
-        'modelos' => ['JC371', 'JC450', 'JC400AD'], 'template' => true,
+        'modelos' => ['JC371', 'JC400AD'], 'template' => true,
         'consulta' => 'ADAS,CALIBRATION#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E005', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Tipo de veículo', 'format' => 'A=Carro de passeio / B=SUV ou caminhonete pequena / C=Caminhão pequeno (baú curto) / D=Caminhão médio (baú médio) / E=Caminhão grande (baú longo) / F=Caminhão médio (cabine estendida) / G=Caminhão grande (cabine estendida)', 'default' => 'A'],
@@ -207,7 +260,7 @@ return [
     'EVENTSET,ALDW,P1#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — saída de faixa (ADAS)',
         'desc' => 'Distância de cruzamento das rodas que dispara o evento de saída de faixa. Requer DMSSP com ADAS ativo antes.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'EVENTSET,ALDW#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E006', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade (distância de cruzamento das rodas)', 'format' => 'OFF / 10–100 (cm)', 'default' => '60']],
         'exemplos' => [['cmd' => 'EVENTSET,ALDW,60#', 'desc' => 'dispara a 60 cm de cruzamento.']],
@@ -229,7 +282,7 @@ return [
     'EVENTSET,AHMW,P1#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — distância insegura (ADAS)',
         'desc' => 'Limiar de tempo de risco de colisão por proximidade do veículo à frente. Requer DMSSP com ADAS ativo antes.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'EVENTSET,AHMW#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E008', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Sensibilidade (limiar de tempo de risco)', 'format' => 'OFF / 500–10000 (ms)', 'default' => '1200']],
         'exemplos' => [['cmd' => 'EVENTSET,AHMW,1200#', 'desc' => 'limiar de 1200 ms.']],
@@ -322,7 +375,7 @@ return [
     'EVENTSET,ADCA,P1#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — anomalia de calibração (DMS)',
         'desc' => 'Tempo limite sem alinhamento correto do DMS que dispara o evento de anomalia de calibração.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'EVENTSET,ADCA#', 'consulta_ref' => 'medido', 'fonte' => 'JC371 Command List V1.0.1, linha E016', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Tempo limite para calibração', 'format' => 'OFF / 0–64800 (segundos)', 'default' => '60']],
         'exemplos' => [['cmd' => 'EVENTSET,ADCA,60#', 'desc' => 'limite de 60 s.']],
@@ -344,7 +397,7 @@ return [
     'EVENTSET,ACEA,P1,P2#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — fadiga/olhos fechados (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima de olhos fechados para gerar o evento de fadiga.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'EVENTSET,ACEA#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E018', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixo / 2=Médio / 3=Alto', 'default' => '2'],
@@ -549,7 +602,7 @@ return [
     'EVENTSET,ANDD,P1,P2#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — rosto não detectado (DMS)',
         'desc' => 'Nível de sensibilidade e duração mínima sem detecção de rosto para gerar o evento.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
+        'modelos' => ['JC371'], 'template' => true,
         'consulta' => 'EVENTSET,ANDD#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E034', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1=Baixa / 2=Média / 3=Alta', 'default' => 'OFF'],
@@ -571,17 +624,23 @@ return [
     ],
 
     // DMS — Reconhecimento facial: sucesso (AFIS) / falha (AFIF)
+    // v4.13.12 — JC450 adicionado: a planilha própria do JC450 (linha G015)
+    // documenta a MESMA forma de 3 parâmetros (similaridade/duração/
+    // intervalo) — único ponto de convergência exata entre as duas planilhas
+    // nesta seção. ⚠️ O campo de intervalo (P3) muda de UNIDADE entre
+    // modelos: no JC371 é segundos, no JC450 a planilha diz "unit is
+    // minutes" — mesmo texto de comando, semântica diferente por modelo.
     'EVENTSET,AFIF,P1,P2,P3#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — reconhecimento facial (DMS)',
         'desc' => 'Sensibilidade de similaridade, duração e intervalo entre tentativas de reconhecimento facial.',
-        'modelos' => ['JC371', 'JC182'], 'template' => true,
-        'consulta' => 'EVENTSET,AFIF#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E036', 'procedencia' => 'planilha',
+        'modelos' => ['JC371', 'JC450'], 'template' => true,
+        'consulta' => 'EVENTSET,AFIF#', 'consulta_ref' => 'inferido', 'fonte' => 'JC371 Command List V1.0.1, linha E036; JC450 series command list V2.1.1, linha G015', 'procedencia' => 'planilha',
         'params' => [
-            ['p' => 'P1', 'desc' => 'Sensibilidade (similaridade)', 'format' => 'OFF / 1–100 (recomendado 40–60)', 'default' => 'OFF'],
+            ['p' => 'P1', 'desc' => 'Sensibilidade (similaridade)', 'format' => 'JC371: OFF / 1–100 (recomendado 40–60) — JC450: 0–100, 0 = desativado', 'default' => 'OFF / 0'],
             ['p' => 'P2', 'desc' => 'Duração para reconhecimento malsucedido', 'format' => '1–255 (segundos)', 'default' => '180'],
-            ['p' => 'P3', 'desc' => 'Intervalo entre tentativas', 'format' => '0=detecta só uma vez ao ligar / 1–255 (segundos)', 'default' => '0'],
+            ['p' => 'P3', 'desc' => 'Intervalo entre tentativas — ⚠️ unidade diferente por modelo', 'format' => 'JC371: 0=detecta só uma vez ao ligar / 1–255 (segundos) — JC450: 1–255 (minutos)', 'default' => 'JC371: 0 (s) / JC450: 1 (min)'],
         ],
-        'exemplos' => [['cmd' => 'EVENTSET,AFIF,50,30,10#', 'desc' => 'exemplo da planilha.']],
+        'exemplos' => [['cmd' => 'EVENTSET,AFIF,50,30,10#', 'desc' => 'exemplo da planilha do JC371.']],
     ],
     'EVENTALERT,AFIS,P1,P2,P3#' => [
         'cmd' => 'EVENTALERT', 'nome' => 'Alerta — reconhecimento facial com sucesso (DMS)',
@@ -818,18 +877,24 @@ return [
             ['cmd' => 'ADASSP,2,60', 'desc' => 'LDW a partir de 60 km/h.'],
         ],
     ],
+    // v4.13.12 — JC450 adicionado: a planilha própria do JC450 (linha G008)
+    // documenta o mesmo comando de 3 campos, mesma numeração de função (1/2/3),
+    // mas o SIGNIFICADO de P3 é diferente por modelo — no JC400AD é um valor
+    // fixo (1) só preenchido quando P1=1; no JC450 é um ENUM real de 3 níveis
+    // (baixo/médio/alto), também só quando P1=1. Documentado nos dois abaixo.
     'ADASSEN,P1,P2,P3#' => [
         'cmd' => 'ADASSEN', 'nome' => 'Sensibilidade de disparo por função de ADAS',
-        'desc' => 'Sensibilidade específica de cada função de ADAS — o significado de P2/P3 muda conforme a função (P1).',
-        'modelos' => ['JC400AD'], 'template' => true,
-        'consulta' => 'ADASSEN#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014', 'procedencia' => 'planilha',
+        'desc' => 'Sensibilidade específica de cada função de ADAS — o significado de P2/P3 muda conforme a função (P1) e, em parte, conforme o modelo.',
+        'modelos' => ['JC400AD', 'JC450'], 'template' => true,
+        'consulta' => 'ADASSEN#', 'consulta_ref' => 'medido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G014; JC450 series command list V2.1.1, linha G008', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Função', 'format' => '1=LDW (saída de faixa) / 2=FCW (colisão frontal) / 3=HMW (veículo muito próximo)', 'default' => '—'],
             ['p' => 'P2', 'desc' => 'Sensibilidade (significado depende de P1)', 'format' => 'P1=1: −0,3 a 0,6 (padrão −0,1; negativo=antes da faixa, positivo=depois) / P1=2 ou 3: 0–10 s, tempo até possível colisão (padrão 1,5 s para FCW, 1,0 s para HMW)', 'default' => 'LDW: −0,1 / FCW: 1,5 / HMW: 1,0'],
-            ['p' => 'P3', 'desc' => 'Auxiliar (só usado quando P1=1)', 'format' => 'P1=1: 1 (fixo) / P1=2 ou 3: não preencher', 'default' => '—'],
+            ['p' => 'P3', 'desc' => 'Auxiliar — só usado quando P1=1, e o significado muda por modelo', 'format' => 'JC400AD: 1 (fixo) — JC450: 0=baixo / 1=médio / 2=alto. Em ambos, não preencher quando P1=2 ou 3', 'default' => '—'],
         ],
         'exemplos' => [
-            ['cmd' => 'ADASSEN,1,-0.2,1', 'desc' => 'LDW, sensibilidade −0,2.'],
+            ['cmd' => 'ADASSEN,1,-0.2,1', 'desc' => 'LDW, sensibilidade −0,2 (exemplo JC400AD).'],
+            ['cmd' => 'ADASSEN,1,-0.111,2', 'desc' => 'LDW, sensibilidade −0,111, nível alto (exemplo JC450).'],
             ['cmd' => 'ADASSEN,2,2.0', 'desc' => 'FCW, 2,0 s.'],
             ['cmd' => 'ADASSEN,3,2.5', 'desc' => 'HMW, 2,5 s.'],
         ],
@@ -841,6 +906,246 @@ return [
         'consulta' => 'ADASVSP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC400 & JC261 Command List V5.0.3, linha G015', 'procedencia' => 'planilha',
         'params' => [['p' => 'P1', 'desc' => 'Velocidade simulada', 'format' => '10–120 (km/h)', 'default' => '—']],
         'exemplos' => [['cmd' => 'ADASVSP,60', 'desc' => 'simula 60 km/h.']],
+    ],
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // JC450 — ainda sem equipamento real instalado (26/08/2026). Tela deixada
+    // pronta a pedido do dono do produto: comandos de IA "semelhantes em
+    // funcionalidade aos do JC371", mas com sintaxe PRÓPRIA — o JC450 tem
+    // planilha oficial dedicada, diferente da do JC371/JC400AD.
+    //
+    // Fonte: `docs/JC450 series command list-EN V2.1.1.xlsx`, aba "AI
+    // Features" (linhas G001–G021) + D004 (velocidade). A wiki
+    // (`Configurações-JC450`) é a mesma SPA em JS que o WebFetch não consegue
+    // renderizar (confirmado 26/08/2026, mesma limitação já documentada no
+    // cabeçalho deste arquivo para JC450/JC182) — toda a cobertura abaixo vem
+    // exclusivamente da planilha.
+    //
+    // 🔴 NADA aqui foi testado contra hardware real — `consulta_ref` é
+    // sempre 'inferido' (nunca 'medido') nesta seção inteira, e a forma de
+    // CONSULTA (bare `CMD#`) é uma SUPOSIÇÃO por analogia com o resto do
+    // catálogo, não uma leitura da planilha (a planilha do JC450 declara a
+    // convenção "cabeçalho em vermelho = consultável" mas a extração usada
+    // aqui não preserva cor de fonte). Antes de usar em produção, confirmar
+    // com o primeiro equipamento JC450 real via o botão "Ler tudo".
+    //
+    // ⚠️ Comandos da família "AI Features" que ficam de FORA, mesma política
+    // do resto do arquivo: EVENTSET,FACE,* (G016–G019, CRUD de biblioteca
+    // facial) e VIDEOUPLOAD/D010 (pedido de vídeo, não parâmetro). COLLIDE
+    // (D011, colisão por acelerômetro) e INSTALLANGLE (D012) continuam em
+    // `command_catalog.php`/`/comandos` — JC450 já foi adicionado ao COLLIDE
+    // de lá nesta mesma versão.
+    //
+    // ⚠️ Vários campos da planilha do JC450 têm a mesma inconsistência
+    // "coluna Format subconta os campos que o Comment/Example documentam"
+    // já vista na planilha do JC181 (ver nota em GFENCE, command_catalog.php)
+    // — nesses casos o EXEMPLO da própria planilha foi seguido, não a coluna
+    // Format truncada; sinalizado caso a caso abaixo.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    'SPEED,P1#' => [
+        'cmd' => 'SPEED', 'nome' => 'Sensibilidade — excesso de velocidade',
+        'desc' => 'Define o limite de velocidade que dispara o evento de excesso de velocidade. A duração acima do limite é FIXA em 5 s — não configurável neste modelo (diferente do JC371/JC181, onde a duração é um parâmetro).',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'SPEED#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha D004', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Limite de velocidade', 'format' => '30–255 (km/h)', 'default' => '255'],
+        ],
+        'exemplos' => [['cmd' => 'SPEED,100#', 'desc' => 'dispara acima de 100 km/h mantidos por 5 s (tempo fixo).']],
+    ],
+    'DMSSP,P1,P2#' => [
+        'cmd' => 'DMSSP', 'nome' => 'Velocidade de ativação da IA',
+        'desc' => 'Define a velocidade mínima do veículo para o ADAS ou o DMS começar a gerar eventos. Sem canal nem área — diferente do DMSSP do JC371 (4 parâmetros).',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSSP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G004', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Função', 'format' => '1=ADAS / 2=DMS', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Velocidade de ativação', 'format' => 'km/h', 'default' => '57 (ADAS) / 28 (DMS)'],
+        ],
+        'exemplos' => [['cmd' => 'DMSSP,1,60#', 'desc' => 'ADAS a partir de 60 km/h.']],
+    ],
+    'FDMSVSP,P1,P2#' => [
+        'cmd' => 'FDMSVSP', 'nome' => 'Velocidade virtual PERMANENTE para IA',
+        'desc' => 'Fixa uma velocidade simulada de forma permanente (diferente de DMSVSP, que é só para teste pontual em bancada) — liga/desliga o modo e define o valor.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'FDMSVSP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G010', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P2', 'desc' => 'Velocidade simulada', 'format' => '10–120 (km/h)', 'default' => '—'],
+        ],
+        'exemplos' => [['cmd' => 'FDMSVSP,ON,40#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'ADAS,CALIBRATION,P1,P2,P3,P4,P5#' => [
+        'cmd' => 'ADAS', 'nome' => 'Calibração — medidas de instalação da câmera',
+        'desc' => 'Define as medidas físicas da instalação da câmera (em mm), usadas pelo algoritmo de ADAS. Totalmente diferente da calibração por tipo de veículo do JC371 (uma letra).',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'ADAS,CALIBRATION#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G001', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Altura de instalação da câmera', 'format' => '1–100000 (mm)', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Distância da lente ao para-choque', 'format' => '1–100000 (mm)', 'default' => '—'],
+            ['p' => 'P3', 'desc' => 'Distância da lente à roda esquerda', 'format' => '1–100000 (mm)', 'default' => '—'],
+            ['p' => 'P4', 'desc' => 'Distância da lente à roda direita', 'format' => '1–100000 (mm)', 'default' => '—'],
+            ['p' => 'P5', 'desc' => 'Distância da lente ao eixo', 'format' => '1–100000 (mm)', 'default' => '—'],
+        ],
+        'exemplos' => [['cmd' => 'ADAS,CALIBRATION,2900,200,1200,1200,2200#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'DMSCROP,P1,P2,P3,P4#' => [
+        'cmd' => 'DMSCROP', 'nome' => 'Área de detecção do DMS (recorte de vídeo)',
+        'desc' => 'Define a região do quadro de vídeo que o algoritmo de DMS analisa, por coordenadas.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSCROP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G009', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P2', 'desc' => 'Coordenada X inicial', 'format' => '0–1280', 'default' => '—'],
+            ['p' => 'P3', 'desc' => 'Coordenada Y inicial', 'format' => '0–720', 'default' => '—'],
+            ['p' => 'P4', 'desc' => 'Largura da área (eixo X)', 'format' => '0–1280', 'default' => '—'],
+        ],
+        'exemplos' => [['cmd' => 'DMSCROP,ON,640,0,640#', 'desc' => 'exemplo da planilha.']],
+    ],
+    // DMSPI/DMSVI: UM comando cobre TODOS os tipos de evento ADAS+DMS — o tipo
+    // é um parâmetro (P1), não um comando por evento como no JC371
+    // (EVENTALERT,<código>). ⚠️ Esta tabela de códigos é PRÓPRIA do
+    // DMSPI/DMSVI — não é a mesma numeração usada em DMSSEN/DMSSEP abaixo,
+    // mesmo repetindo os números 1–10 (armadilha: nomes/números iguais não
+    // implicam tabela igual entre comandos, nem entre modelos).
+    'DMSPI,P1,P2#' => [
+        'cmd' => 'DMSPI', 'nome' => 'Intervalo de envio à plataforma (por evento)',
+        'desc' => 'Define de quanto em quanto tempo um tipo de evento ADAS/DMS é reenviado à plataforma enquanto a condição persiste.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSPI#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G002', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Tipo de evento', 'format' => '1=FCW (colisão frontal) / 2=HMW (veículo muito próximo) / 3=LDW (saída de faixa) / 5=DFW (olhos fechados) / 6=YAWN (bocejo) / 7=FSW (distração) / 8=CALL (celular) / 9=SMOKE (fumo) / 10=YCW (sem rosto detectado)', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Intervalo de reenvio', 'format' => '1–64800 (segundos)', 'default' => '60 (todos os tipos)'],
+        ],
+        'exemplos' => [['cmd' => 'DMSPI,5,120#', 'desc' => 'exemplo da planilha — DFW reenviado a cada 120 s.']],
+    ],
+    'DMSVI,P1,P2#' => [
+        'cmd' => 'DMSVI', 'nome' => 'Intervalo de aviso de voz (por evento)',
+        'desc' => 'Define de quanto em quanto tempo o aviso de voz soa para um tipo de evento ADAS/DMS enquanto a condição persiste. Mesma tabela de códigos do DMSPI acima.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSVI#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G003', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Tipo de evento', 'format' => '1=FCW / 2=HMW / 3=LDW / 5=DFW / 6=YAWN / 7=FSW / 8=CALL / 9=SMOKE / 10=YCW (ver descrição completa em DMSPI)', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Intervalo entre avisos de voz', 'format' => '1–64800 (segundos)', 'default' => 'FCW: 30 / HMW: 10 / LDW: 5 / DFW: 5 / YAWN: 5 / FSW: 5 / CALL: 30 / SMOKE: 30 / YCW: 120'],
+        ],
+        'exemplos' => [['cmd' => 'DMSVI,1,10#', 'desc' => 'exemplo da planilha — FCW com voz a cada 10 s.']],
+    ],
+    'DMSSEP,P1,P2#' => [
+        'cmd' => 'DMSSEP', 'nome' => 'Ativação por tipo de evento ADAS/DMS',
+        'desc' => 'Ativa ou desativa individualmente um tipo de evento ADAS/DMS. Mesma tabela de códigos do DMSPI/DMSVI acima.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSSEP#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G005', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Tipo de evento', 'format' => '1=FCW / 2=HMW / 3=LDW / 5=DFW / 6=YAWN / 7=FSW / 8=CALL / 9=SMOKE / 10=YCW (ver descrição completa em DMSPI)', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Estado', 'format' => '0=Desativar / 1=Ativar', 'default' => 'todos ativos, exceto YCW (10) desativado'],
+        ],
+        'exemplos' => [['cmd' => 'DMSSEP,3,0#', 'desc' => 'exemplo da planilha — desativa LDW.']],
+    ],
+    // DMSSEN: sensibilidade por tipo de evento — ⚠️ TABELA DE CÓDIGOS PRÓPRIA
+    // (não é a do DMSPI/DMSVI/DMSSEP acima) e a ARIDADE/SIGNIFICADO de
+    // P2–P5 muda conforme P1. Documentado por completo aqui porque a tela
+    // não tem como desenhar um formulário condicional — o operador precisa
+    // ler esta descrição antes de preencher.
+    'DMSSEN,P1,P2,P3,P4,P5#' => [
+        'cmd' => 'DMSSEN', 'nome' => 'Sensibilidade de disparo por função de DMS',
+        'desc' => "Sensibilidade específica de cada função de DMS — P1 escolhe a função e MUDA o significado de P2–P5:\n"
+            . "P1=1 (olhos fechados): P2=tempo de detecção (1–10 s, padrão 2) · P3=limiar de sensibilidade (0–0,3, padrão 0,07, quanto maior mais sensível) · P4/P5 não usados.\n"
+            . "P1=2 (celular): P2=uso da boca aberta como condição (-1 a 1; <0 não usa, >0 usa; padrão -1) · P3=tempo de detecção (1–10 s, padrão 2) · P4=limiar (0,1–0,9, padrão 0,4, quanto menor mais sensível) · P5 não usado.\n"
+            . "P1=3 (fumo): P2=uso da boca aberta (-1 a 1, padrão 0,2) · P3=tempo de detecção (1–10 s, padrão 1,5) · P4=limiar (0,1–0,9, padrão 0,7) · P5=uso de faísca como condição (0/1, padrão 0).\n"
+            . "P1=4 (bocejo): P2=tempo de detecção (1–10 s, padrão 2) · P3=limiar (0,2–1,9, padrão 0,5) · P4/P5 não usados.\n"
+            . "P1=5 (distração): P2=tempo de detecção (1–10 s, padrão 2) · P3=ângulo esquerda/direita (5–60°, padrão 20/30) · P4=ângulo para baixo (5–30°, padrão 15/30) · P5 não usado.\n"
+            . "P1=7 (sem rosto): P2=tempo de detecção (1–30 s, padrão 10) · P3/P4/P5 não usados.\n"
+            . "P1=8 (calibração de rosto): P2=tempo de detecção (10–100 s, padrão 15) · P3/P4/P5 não usados.\n"
+            . "P1=10 (olhos fechados contínuo): P2=tempo de detecção (5–10 s, padrão 5) · P3/P4/P5 não usados.",
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMSSEN#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G007', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Função (define o significado de P2–P5 — ver descrição completa acima)', 'format' => '1=olhos fechados / 2=celular / 3=fumo / 4=bocejo / 5=distração / 7=sem rosto / 8=calibração de rosto / 10=olhos fechados contínuo', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Depende de P1 — ver descrição completa acima', 'format' => 'varia por função', 'default' => '—'],
+            ['p' => 'P3', 'desc' => 'Depende de P1 — deixar em branco se a função não usar (ver descrição completa acima)', 'format' => 'varia por função', 'default' => '—'],
+            ['p' => 'P4', 'desc' => 'Depende de P1 — deixar em branco se a função não usar (ver descrição completa acima)', 'format' => 'varia por função', 'default' => '—'],
+            ['p' => 'P5', 'desc' => 'Depende de P1 — deixar em branco se a função não usar (ver descrição completa acima)', 'format' => 'varia por função', 'default' => '—'],
+        ],
+        'exemplos' => [
+            ['cmd' => 'DMSSEN,1,5,0.1#', 'desc' => 'olhos fechados, detecção 5 s, limiar 0,1.'],
+            ['cmd' => 'DMSSEN,5,3,45,20#', 'desc' => 'distração, detecção 3 s, ângulos 45°/20°.'],
+        ],
+    ],
+    'DMS_CONTINUITY,P1,P2,P3,P4,P5,P6#' => [
+        'cmd' => 'DMS_CONTINUITY', 'nome' => 'Duração mínima por tipo de alerta DMS',
+        'desc' => 'Duração mínima que cada condição precisa persistir para gerar o alerta — um campo por tipo, na ordem fixa: olhos fechados, bocejo, distração, fumo, celular, sem rosto. Só tem efeito com DMSSW,2,2 ativo (ver DMSSW acima).',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMS_CONTINUITY#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G012', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '0–10 (segundos, 0 desativa)', 'default' => '3'],
+            ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '0–10 (segundos, 0 desativa)', 'default' => '3'],
+            ['p' => 'P3', 'desc' => 'Distração', 'format' => '0–10 (segundos, 0 desativa)', 'default' => '3'],
+            ['p' => 'P4', 'desc' => 'Fumo', 'format' => '0–10 (segundos, 0 desativa)', 'default' => '3'],
+            ['p' => 'P5', 'desc' => 'Celular', 'format' => '0–10 (segundos, 0 desativa)', 'default' => '3'],
+            ['p' => 'P6', 'desc' => 'Sem rosto', 'format' => '0–60 (segundos, 0 desativa)', 'default' => '10'],
+        ],
+        'exemplos' => [['cmd' => 'DMS_CONTINUITY,5,5,5,5,5,15#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'DMS_ALERT_CUSTOM,P1,P2,P3,P4,P5,P6#' => [
+        'cmd' => 'DMS_ALERT_CUSTOM', 'nome' => 'Intervalo de envio por tipo de alerta DMS',
+        'desc' => 'Intervalo entre reenvios do mesmo tipo de alerta à plataforma — mesma ordem de campos do DMS_CONTINUITY acima. Só tem efeito com DMSSW,2,2 ativo.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMS_ALERT_CUSTOM#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G013', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '10–3600 (segundos)', 'default' => '60'],
+            ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '10–3600 (segundos)', 'default' => '60'],
+            ['p' => 'P3', 'desc' => 'Distração', 'format' => '10–3600 (segundos)', 'default' => '60'],
+            ['p' => 'P4', 'desc' => 'Fumo', 'format' => '10–3600 (segundos)', 'default' => '60'],
+            ['p' => 'P5', 'desc' => 'Celular', 'format' => '10–3600 (segundos)', 'default' => '60'],
+            ['p' => 'P6', 'desc' => 'Sem rosto', 'format' => '10–3600 (segundos)', 'default' => '60'],
+        ],
+        'exemplos' => [['cmd' => 'DMS_ALERT_CUSTOM,120,120,120,120,120,120#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'DMS_VOICE_CUSTOM,P1,P2,P3,P4,P5,P6#' => [
+        'cmd' => 'DMS_VOICE_CUSTOM', 'nome' => 'Intervalo de voz por tipo de alerta DMS',
+        'desc' => 'Intervalo entre avisos de voz do mesmo tipo de alerta — mesma ordem de campos do DMS_CONTINUITY acima. Só tem efeito com DMSSW,2,2 ativo.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'DMS_VOICE_CUSTOM#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G014', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Olhos fechados', 'format' => '10–3600 (segundos)', 'default' => '5'],
+            ['p' => 'P2', 'desc' => 'Bocejo', 'format' => '10–3600 (segundos)', 'default' => '5'],
+            ['p' => 'P3', 'desc' => 'Distração', 'format' => '10–3600 (segundos)', 'default' => '5'],
+            ['p' => 'P4', 'desc' => 'Fumo', 'format' => '10–3600 (segundos)', 'default' => '5'],
+            ['p' => 'P5', 'desc' => 'Celular', 'format' => '10–3600 (segundos)', 'default' => '5'],
+            ['p' => 'P6', 'desc' => 'Sem rosto', 'format' => '10–3600 (segundos)', 'default' => '60'],
+        ],
+        'exemplos' => [['cmd' => 'DMS_VOICE_CUSTOM,10,10,10,10,10,10#', 'desc' => 'exemplo da planilha.']],
+    ],
+    // Cinto de segurança — só existe no JC450 e no JC371 (ver mais abaixo, na
+    // seção de pares EVENTSET do JC371); ARIDADE DIFERENTE entre os dois
+    // modelos (JC371 tem 2 campos, JC450 tem 3), por isso são entradas
+    // SEPARADAS, não uma compartilhada. ⚠️ A coluna "Format" da planilha do
+    // JC450 desta linha (G020/G021) diz só "A,B", mas o Comment descreve 3
+    // campos e o EXEMPLO tem 3 valores — mesma inconsistência já vista em
+    // GFENCE (command_catalog.php); seguido o exemplo, não a coluna truncada.
+    'EVENTSET,AWSB,P1,P2,P3#' => [
+        'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — cinto afivelado (DMS)',
+        'desc' => 'Sensibilidade, duração e intervalo de detecção para o alerta de cinto de segurança FASTENED (afivelado incorretamente/de forma insegura, conforme detecção visual).',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'EVENTSET,AWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G020 (coluna Format truncada — ver nota acima)', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => '0=desativado / 1=alta / 2=média / 3=baixa', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Duração mínima para gerar o evento', 'format' => '1–255 (segundos)', 'default' => '3'],
+            ['p' => 'P3', 'desc' => 'Intervalo entre detecções', 'format' => '1–255 (minutos)', 'default' => '1'],
+        ],
+        'exemplos' => [['cmd' => 'EVENTSET,AWSB,2,3,1#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'EVENTSET,ANWSB,P1,P2,P3#' => [
+        'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — sem cinto (DMS)',
+        'desc' => 'Sensibilidade, duração e intervalo de relatório para o alerta de cinto de segurança NÃO afivelado.',
+        'modelos' => ['JC450'], 'template' => true,
+        'consulta' => 'EVENTSET,ANWSB#', 'consulta_ref' => 'inferido', 'fonte' => 'JC450 series command list V2.1.1, linha G021', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => '0=desativado / 1=alta / 2=média / 3=baixa', 'default' => '—'],
+            ['p' => 'P2', 'desc' => 'Duração mínima para gerar o evento', 'format' => '1–255 (segundos)', 'default' => '30'],
+            ['p' => 'P3', 'desc' => 'Intervalo de relatório', 'format' => '10–3600 (minutos)', 'default' => '60'],
+        ],
+        'exemplos' => [['cmd' => 'EVENTSET,ANWSB,2,30,60#', 'desc' => 'exemplo da planilha.']],
     ],
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -861,11 +1166,21 @@ return [
         'exemplos' => [['cmd' => 'SPEED,ON,0,90,10', 'desc' => 'dispara acima de 90 km/h mantidos por 10 s.']],
     ],
 
-    // JC450 e JC182 não têm planilha própria (ver cabeçalho): a cobertura
-    // deles é o que o catálogo antigo já confirmava — adicionados como
-    // MODELO A MAIS nas entradas JC371 acima (não como entradas separadas):
-    // JC450 em DMSSP/DMSVSP/ADAS,CALIBRATION; JC182 em EVENTSET,ACEA/ADCA/
-    // AFIF/AHMW/ALDW/ANDD. Sem confirmação de EVENTALERT para nenhum dos
-    // dois — por isso os pares EVENTALERT ficam só em JC371.
+    // v4.13.12 (26/08/2026) — nota histórica atualizada: esta seção dizia que
+    // JC450 e JC182 "não têm planilha própria" e entravam só como modelo a
+    // mais nas linhas do JC371 (DMSSP/DMSVSP/ADAS,CALIBRATION para o JC450;
+    // EVENTSET,ACEA/ADCA/AFIF/AHMW/ALDW/ANDD para o JC182). Isso mudou:
+    //   - O JC450 GANHOU planilha própria nesta versão
+    //     (`docs/JC450 series command list-EN V2.1.1.xlsx`) e uma seção
+    //     inteira de 18 entradas, logo após "JC400D/JC400AD/JC261/JC261P —
+    //     ADAS" acima — `DMSSP`/`ADAS,CALIBRATION` do JC450 têm sintaxe
+    //     PRÓPRIA (removidos das entradas do JC371 que citavam esta nota).
+    //   - O JC182 perdeu os 6 códigos ADAS/DMS que citavam esta nota: teste
+    //     real de campo (26/08/2026) mostrou que o equipamento não tem
+    //     câmera de IA/visão computacional — só responde a 3 códigos EVENTSET
+    //     (`ACD`, `AVD`, `AOSD`), dos quais só `AOSD` (velocidade) é
+    //     visão/escopo desta tela; ACD/AVD (colisão/vibração, acelerômetro)
+    //     ficam em `command_catalog.php`. Ver `EVENTSET,AOSD` no topo deste
+    //     arquivo para o detalhe completo.
 
 ];

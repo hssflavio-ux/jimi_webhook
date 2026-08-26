@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.12
+
+**Dono do produto reportou (26/08/2026): JC182 real, testado em campo, só responde a 3 dos ~9 códigos EVENTSET que a tela de Configurações IA mostrava para o modelo — bug de categorização herdado por analogia com o JC371. Pediu também: (1) completar os comandos reais do JC182 (planilha JC181 + confirmação de campo) e (2) deixar pronta a tela de Configurações IA para o JC450, que ainda não tem equipamento instalado mas tem planilha própria.**
+
+### Fixed
+- 🔴 **JC182 não tem câmera de IA/visão computacional — os 6 códigos ADAS/DMS (`ALDW`/`AHMW`/`ADCA`/`ACEA`/`ANDD`/`AFIF`) que `includes/ia_config_catalog.php` atribuía a ele por analogia com o JC371 nunca funcionaram.** Teste real de campo confirmou que o JC182 só responde a 3 códigos `EVENTSET`: `ACD` (colisão), `AVD` (vibração) — ambos por acelerômetro — e `AOSD` (excesso de velocidade). Os 6 códigos errados foram removidos do modelo; `EVENTSET,AOSD` ganhou o JC182.
+- 🔴 **`EVENTSET,ACD` estava com o valor "80" cravado na CHAVE do catálogo** (`command_catalog.php`), sem `template`, impedindo enviar qualquer sensibilidade diferente de 80 pela tela de Comandos. Corrigido para `EVENTSET,ACD,P1#`, templada.
+- 🔴 **`SPEED`, `SENALM`, `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE` (`command_catalog.php`) tinham parâmetros incompletos, com arity ou descrição erradas** em relação à planilha oficial mais recente (`docs/JC181_Command_List_V1.0.7_20250811.xlsx`, V1.0.7): `SENALM` tinha 2 campos documentados (real: 5), `COLLIDE` tinha 4 (real: 8), `FATIGUE` tinha 3 campos sem descrição (real: 4), `SPEEDCHECK`/`SWERVE` tinham os 5 campos todos em branco, e `SPEED` trazia a descrição de dois campos TROCADA (B/D). Todos corrigidos e reescritos com os campos reais da planilha.
+
+### Added
+- **JC182 ganhou os comandos `SENALM`/`SPEED`/`SPEEDCHECK`/`SWERVE`/`COLLIDE`/`FATIGUE`** em `command_catalog.php` (tela de Comandos, não Configurações IA — são acelerômetro/GPS, não visão computacional), a pedido do dono do produto. Fonte: planilha JC181 V1.0.7, compartilhada entre os dois modelos por decisão de produto; sinalizado como não confirmado individualmente em hardware JC182 além do EVENTSET medido.
+- 🆕 **`GFENCE` (cerca eletrônica circular e retangular) — comando novo, não existia no catálogo.** Adicionado para JC181/JC182 a partir da planilha JC181 V1.0.7 (linhas D011/D012). ⚠️ Um campo em cada variante não tem descrição nenhuma na planilha do próprio fabricante (sempre "1" nos dois exemplos oficiais) — sinalizado como desconhecido; não confirmado em câmera real.
+- 🆕 **Tela "Configurações IA" preparada para o JC450** — 18 entradas novas/ajustadas em `includes/ia_config_catalog.php`, extraídas de `docs/JC450 series command list-EN V2.1.1.xlsx` (planilha própria do JC450, adicionada ao repo nesta sessão): velocidade (`SPEED`), ativação de IA (`DMSSP`), calibração por medidas físicas (`ADAS,CALIBRATION`, formato totalmente diferente do JC371), área de detecção (`DMSCROP`), intervalos por tipo de evento (`DMSPI`/`DMSVI`/`DMSSEP`), sensibilidade DMS (`DMSSEN`, condicional por tipo de evento), temporização DMS (`DMS_CONTINUITY`/`DMS_ALERT_CUSTOM`/`DMS_VOICE_CUSTOM`), velocidade virtual permanente (`FDMSVSP`) e cinto de segurança (`EVENTSET,AWSB`/`ANWSB`, arity própria do JC450). Sem equipamento real disponível — todas as consultas ficam `consulta_ref: 'inferido'`; nenhum dado enviado a hardware. `DMSSW`/`EVENTSET,AFIF`/`ADASSEN` ganharam JC450 nas entradas já existentes, com as diferenças de semântica por modelo documentadas nos próprios parâmetros.
+- 🔴 **Corrigidos dois falsos-positivos que já estavam no catálogo antes desta sessão, achados ao cruzar com a planilha própria do JC450**: `DMSSP`/`ADAS,CALIBRATION` do JC371 tinham "JC450" no modelo por analogia nunca confirmada — a sintaxe real do JC450 para os dois é completamente diferente (2 campos vs. 4 em `DMSSP`; 5 medidas em mm vs. 1 letra de tipo de veículo em `ADAS,CALIBRATION`). JC450 removido dessas duas entradas e movido para as entradas próprias do modelo.
+
+### Verificação
+- `php -l` limpo em `includes/ia_config_catalog.php` e `includes/command_catalog.php`.
+- Catálogo carregado via `php -r` para confirmar ausência de colisão de chave (nenhuma sobrescrita silenciosa) e contagem final: 70 entradas em `ia_config_catalog.php` (18 JC450, 43 JC371, 14 JC400AD, 1 JC182, 1 JC181), 0 sem `modelos` esperado.
+- Tela `/configuracoes-ia` não exige mudança de JS: a filtragem por modelo já é 100% orientada a dado (`CATALOGO_IA.filter(x => x.m.indexOf(modelo) >= 0)`) — `device_models` já tem a linha `JC450` cadastrada (migration_v4.2.1.sql); a tela funciona assim que o primeiro equipamento real for registrado com esse modelo.
+- Sem hardware JC450 disponível para teste ao vivo — pendência explícita, sinalizada nos comentários do catálogo.
+
 ## [Unreleased] — 4.13.11
 
 **Dono do produto pediu: excesso de velocidade não é uma frente que o produto vai tratar por enquanto — elevar o limite padrão para não disparar o estado no uso normal.**

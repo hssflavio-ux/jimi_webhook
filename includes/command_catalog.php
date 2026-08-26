@@ -317,13 +317,23 @@ return [
     'exemplos' => [
     ],
   ],
-  'COLLIDE,P1,P2,P3,P4#' => [
+  // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha D006 (a versão anterior desta entrada tinha só 4 parâmetros vazios,
+  // sem desc/format — a planilha real documenta 8). JC182 adicionado a pedido
+  // do dono do produto (confirmado em campo, 26/08/2026): é um dos 3 comandos
+  // EVENTSET que o JC182 responde nesta tela — ver EVENTSET,ACD abaixo, que é
+  // a MESMA função de colisão só que pelo dialeto EVENTSET/JT/T; COLLIDE é o
+  // dialeto "planilha JC181" da mesma câmera. Sem confirmação de qual dos dois
+  // dialetos o JC182 realmente aceita para colisão além do EVENTSET medido —
+  // mantido aqui por instrução direta do dono do produto, pendente de teste.
+  'COLLIDE,P1,P2,P3,P4,P5,P6,P7,P8#' => [
     'cmd' => 'COLLIDE',
     'nome' => 'Colisão',
-    'desc' => 'Colisão do JC181. Abaixo do limiar o evento é tratado como alarme falso e o vídeo fica local, sem envio. Padrão do limiar: 5 km/h.',
+    'desc' => 'Sensibilidade para disparar alerta de colisão durante a condução. Abaixo do limiar de velocidade o evento é tratado como alarme falso.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
+      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -333,30 +343,58 @@ return [
     'params' => [
       0 => [
         'p' => 'P1',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação',
+        'format' => 'ON / OFF',
+        'default' => 'ON',
       ],
       1 => [
         'p' => 'P2',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
       2 => [
         'p' => 'P3',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Sensibilidade de disparo',
+        'format' => '0–255',
+        'default' => '120',
       ],
       3 => [
         'p' => 'P4',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Atraso antes de checar a velocidade',
+        'format' => '0–20 (segundos)',
+        'default' => '0',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => 'Tempo de checagem — confirma colisão se a velocidade ficar abaixo do limiar por este tempo',
+        'format' => '10–90 (segundos)',
+        'default' => '15',
+      ],
+      5 => [
+        'p' => 'P6',
+        'desc' => 'Limiar de velocidade para confirmar colisão',
+        'format' => '5–30 (km/h)',
+        'default' => '5',
+      ],
+      6 => [
+        'p' => 'P7',
+        'desc' => 'Taxa mínima de variação de aceleração',
+        'format' => '0–100',
+        'default' => '70',
+      ],
+      7 => [
+        'p' => 'P8',
+        'desc' => 'Taxa de variação de aceleração acima da qual dispensa a dupla confirmação',
+        'format' => '2–300',
+        'default' => '90',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'COLLIDE,ON,0,600,10,90,5#',
+        'desc' => 'exemplo literal da planilha — ⚠️ tem só 6 valores após o cabeçalho para 8 campos documentados; a planilha do próprio fabricante está inconsistente aqui (mesma classe de erro já vista em outros comandos, ver CLAUDE.md "doc mente, meça no device"). Confirmar arity real em câmera antes de usar em produção.',
+      ],
     ],
   ],
   'CRASHALM,A,B#' => [
@@ -809,23 +847,42 @@ return [
       ],
     ],
   ],
-  'EVENTSET,ACD,80#' => [
+  // v4.13.12 — corrigido: a entrada tinha o valor "80" cravado na CHAVE
+  // (template=>false, params=>[]), o que impedia enviar qualquer sensibilidade
+  // diferente de 80 pela tela. Confirmado pelo dono do produto em campo
+  // (26/08/2026): é um dos 3 códigos EVENTSET que o JC182 de fato responde
+  // (junto de AVD/vibração acima e AOSD/velocidade em
+  // includes/ia_config_catalog.php — os únicos 3; os demais códigos ADAS/DMS
+  // do JC371 foram removidos da tela de Configurações IA para este modelo).
+  // Sem planilha própria para o significado exato de P1 — "80" era o único
+  // valor visto; mantido como default, faixa não confirmada.
+  'EVENTSET,ACD,P1#' => [
     'cmd' => 'EVENTSET',
     'nome' => 'Colisão',
-    'desc' => '',
+    'desc' => 'Sensibilidade do evento de colisão (dialeto EVENTSET/JT/T do JC182 e JC371).',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC371',
       1 => 'JC182',
     ],
     'universal' => false,
-    'template' => false,
-    'consulta' => NULL,
-    'consulta_modelos' => [],
-    'consulta_ref' => NULL,
+    'template' => true,
+    'consulta' => 'EVENTSET,ACD#',
+    'consulta_modelos' => ['JC182'],
+    'consulta_ref' => 'medido',
     'params' => [
+      0 => [
+        'p' => 'P1',
+        'desc' => 'Sensibilidade',
+        'format' => 'valor visto em campo: 80 — faixa completa não confirmada',
+        'default' => '80',
+      ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'EVENTSET,ACD,80#',
+        'desc' => 'valor visto em campo no JC182 (26/08/2026).',
+      ],
     ],
   ],
   'EVENTSET,ACDU,P1,P2#' => [
@@ -1192,15 +1249,23 @@ return [
     'exemplos' => [
     ],
   ],
-  'FATIGUE,A,T1,T2#' => [
+  // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha D010. A chave já indicava 3 parâmetros (A,T1,T2) mas só "A" tinha
+  // desc/format — T1/T2 eram placeholders sem documentação nenhuma, e a
+  // planilha real tem 4 campos (exemplo "FATIGUE,ON,6,15,0" confirma). JC182
+  // adicionado a pedido do dono do produto (26/08/2026) — ver nota em COLLIDE
+  // acima sobre a mesma incerteza (JC182 responde ao EVENTSET equivalente
+  // medido; o dialeto FATIGUE puro ainda não foi confirmado nele em campo).
+  'FATIGUE,P1,P2,P3,P4#' => [
     'cmd' => 'FATIGUE',
-    'nome' => 'Fadiga(cansado)',
-    'desc' => 'Para configurar o envio do evento de direção fadigado(cansado), envie',
+    'nome' => 'Fadiga (direção por tempo excessivo)',
+    'desc' => 'Configura o limiar de horas dirigindo sem parar que dispara o evento de fadiga.',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC400D',
-      2 => 'JC400AD',
+      1 => 'JC182',
+      2 => 'JC400D',
+      3 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
@@ -1209,13 +1274,35 @@ return [
     'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
-        'p' => 'A',
-        'desc' => 'ON/OFF',
-        'format' => '',
-        'default' => 'OFF Para consultar o valor atual, envie:',
+        'p' => 'P1',
+        'desc' => 'Ativação',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
+      ],
+      1 => [
+        'p' => 'P2',
+        'desc' => 'Tempo dirigindo sem parar que dispara o evento',
+        'format' => '4–12 (horas)',
+        'default' => '4',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => 'Tempo mínimo de parada para zerar a contagem',
+        'format' => '1–30 (minutos)',
+        'default' => '30',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'FATIGUE,ON,6,15,0#',
+        'desc' => 'dispara após 6 h dirigindo sem parar por ao menos 15 min.',
+      ],
     ],
   ],
   'FILELIST,A#' => [
@@ -1808,6 +1895,84 @@ return [
       ],
     ],
     'exemplos' => [
+    ],
+  ],
+  // v4.13.12 — NOVO. GFENCE não existia neste catálogo; adicionado a partir
+  // de docs/JC181_Command_List_V1.0.7_20250811.xlsx, linhas D011 (círculo) e
+  // D012 (retângulo), a pedido do dono do produto (JC182, 26/08/2026 — ver
+  // nota em COLLIDE acima sobre a incerteza de dialeto). ⚠️ Cerca eletrônica
+  // NO EQUIPAMENTO — é uma função DO FIRMWARE da câmera, não tem relação com
+  // a tabela `geofences`/`/geocercas` da aplicação (essas são cercas
+  // calculadas no servidor a partir do GPS já recebido).
+  // ⚠️ INCERTEZA GENUÍNA nos dois formatos abaixo, sinalizada em vez de
+  // escondida (ver CLAUDE.md "doc mente, meça no device"): a célula de
+  // FORMATO da planilha descreve um número de campos e os DOIS exemplos reais
+  // da própria planilha trazem MAIS UM valor no final do que os campos
+  // documentados explicam (sempre "1", nas duas linhas). Não há descrição
+  // nenhuma pra esse campo extra — pode ser um terminador, uma flag não
+  // documentada, ou erro de transcrição do fabricante. Os exemplos abaixo são
+  // LITERAIS da planilha; o último parâmetro fica sinalizado como
+  // desconhecido. NÃO enviar em produção sem confirmar em câmera real
+  // primeiro (mesma disciplina do `docs/COMANDOS_128_CONSULTA.md`).
+  'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10#' => [
+    'cmd' => 'GFENCE',
+    'nome' => 'Cerca eletrônica (circular)',
+    'desc' => 'Configura uma cerca eletrônica circular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC181',
+      1 => 'JC182',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
+      1 => ['p' => 'P2', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      2 => ['p' => 'P3', 'desc' => 'Forma da cerca (fixo nesta variante)', 'format' => '0 = circular', 'default' => '0'],
+      3 => ['p' => 'P4', 'desc' => 'Latitude do centro', 'format' => '0 = detecção automática pela posição atual do GPS, ou valor fixo', 'default' => '0'],
+      4 => ['p' => 'P5', 'desc' => 'Longitude do centro', 'format' => '0 = detecção automática pela posição atual do GPS, ou valor fixo', 'default' => '0'],
+      5 => ['p' => 'P6', 'desc' => 'Raio do círculo', 'format' => '1–9999, unidade 100 m (ex.: 10 = 1000 m)', 'default' => '10'],
+      6 => ['p' => 'P7', 'desc' => 'Direção do alarme', 'format' => 'IN = ao entrar / OUT = ao sair / vazio = os dois', 'default' => 'vazio'],
+      7 => ['p' => 'P8', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+      8 => ['p' => 'P9', 'desc' => 'Controle de gravação', 'format' => '0 = grava só fora da cerca / 1 = grava só dentro / 255 = não controla', 'default' => '0'],
+      9 => ['p' => 'P10', 'desc' => '⚠️ Campo sem descrição na planilha — sempre "1" no único exemplo visto', 'format' => 'desconhecido', 'default' => '1'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'GFENCE,1,ON,0,0,0,10,,0,0,1#', 'desc' => 'exemplo literal da planilha (linha D011) — cerca 1, centro pela posição atual, raio 1000 m, alarme ao entrar e sair, GPRS. NÃO confirmado em câmera real.'],
+    ],
+  ],
+  'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11#' => [
+    'cmd' => 'GFENCE',
+    'nome' => 'Cerca eletrônica (retangular)',
+    'desc' => 'Configura uma cerca eletrônica retangular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
+    'categoria' => 'alarme',
+    'modelos' => [
+      0 => 'JC181',
+      1 => 'JC182',
+    ],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'params' => [
+      0 => ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
+      1 => ['p' => 'P2', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      2 => ['p' => 'P3', 'desc' => 'Forma da cerca (fixo nesta variante)', 'format' => '1 = retangular', 'default' => '1'],
+      3 => ['p' => 'P4', 'desc' => 'Latitude do 1º canto', 'format' => 'graus decimais', 'default' => '—'],
+      4 => ['p' => 'P5', 'desc' => 'Longitude do 1º canto', 'format' => 'graus decimais', 'default' => '—'],
+      5 => ['p' => 'P6', 'desc' => 'Latitude do 2º canto', 'format' => 'graus decimais', 'default' => '—'],
+      6 => ['p' => 'P7', 'desc' => 'Longitude do 2º canto', 'format' => 'graus decimais', 'default' => '—'],
+      7 => ['p' => 'P8', 'desc' => 'Direção do alarme', 'format' => 'IN = ao entrar / OUT = ao sair / vazio = os dois', 'default' => 'vazio'],
+      8 => ['p' => 'P9', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+      9 => ['p' => 'P10', 'desc' => 'Controle de gravação', 'format' => '0 = grava só fora da cerca / 1 = grava só dentro / 255 = não controla', 'default' => '0'],
+      10 => ['p' => 'P11', 'desc' => '⚠️ Campo sem descrição na planilha — sempre "1" no único exemplo visto', 'format' => 'desconhecido', 'default' => '1'],
+    ],
+    'exemplos' => [
+      0 => ['cmd' => 'GFENCE,1,ON,1,23,113,24,114,,0,0,1#', 'desc' => 'exemplo literal da planilha (linha D012) — retângulo entre os cantos (23,113) e (24,114), alarme ao entrar e sair, GPRS. NÃO confirmado em câmera real.'],
     ],
   ],
   'GPSDUP,A#' => [
@@ -2725,15 +2890,25 @@ return [
     'exemplos' => [
     ],
   ],
-  'SENALM,A,B#' => [
+  // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha D002. A entrada antiga tinha só 2 parâmetros (A=ON/OFF, B=1-3); a
+  // planilha real (modificada em V1.0.2/V1.0.5/V1.0.7) tem 5, e a semântica de
+  // A mudou: não é mais ON/OFF, é o próprio nível de sensibilidade (0=OFF).
+  // `consulta_modelos` já citava JC182 (inconsistente com `modelos`, que não
+  // o tinha) — corrigido adicionando JC182 aqui também, a pedido do dono do
+  // produto (confirmado em campo, 26/08/2026). Ver nota em COLLIDE acima
+  // sobre a mesma incerteza quanto a qual dialeto (SENALM vs EVENTSET,AVD) o
+  // JC182 realmente aceita para vibração além do EVENTSET medido.
+  'SENALM,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SENALM',
-    'nome' => 'Vibração',
-    'desc' => 'Para configurar o envio de eventos de vibração, quando o veículo está parado, envie',
+    'nome' => 'Vibração (veículo parado)',
+    'desc' => 'Sensibilidade para disparar evento de vibração com o veículo estacionado.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
-      1 => 'JC400D',
-      2 => 'JC400AD',
+      1 => 'JC182',
+      2 => 'JC400D',
+      3 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
@@ -2742,22 +2917,40 @@ return [
     'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
-        'p' => 'A',
-        'desc' => 'ON/OFF',
-        'format' => '',
-        'default' => '',
+        'p' => 'P1',
+        'desc' => 'Sensibilidade (0 desativa; quanto maior o número, menos sensível)',
+        'format' => '0/1/2/3/4/5',
+        'default' => '2',
       ],
       1 => [
-        'p' => 'B',
-        'desc' => 'Sensibilidade (1,2 ou 3)',
-        'format' => '',
-        'default' => '2 Padrão: OFF Exemplo de uso:SENALM#6666',
+        'p' => 'P2',
+        'desc' => 'Número de interrupções por vibração para disparar o alarme',
+        'format' => '1–20',
+        'default' => '5',
+      ],
+      2 => [
+        'p' => 'P3',
+        'desc' => 'Tempo de detecção',
+        'format' => '1–3000 (segundos)',
+        'default' => '10',
+      ],
+      3 => [
+        'p' => 'P4',
+        'desc' => 'Intervalo mínimo até o próximo alarme (filtro)',
+        'format' => '1–3000 (minutos)',
+        'default' => '5',
+      ],
+      4 => [
+        'p' => 'P5',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
     ],
     'exemplos' => [
       0 => [
-        'cmd' => 'SENALM,ON,1#',
-        'desc' => 'Vibração',
+        'cmd' => 'SENALM,2,10,15,5,0#',
+        'desc' => 'exemplo da planilha — sensibilidade 2, 10 interrupções, detecção de 15 s, filtro de 5 min, GPRS.',
       ],
     ],
   ],
@@ -2903,6 +3096,14 @@ return [
     'exemplos' => [
     ],
   ],
+  // v4.13.12 — corrigido cruzando com docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha D003: os campos B e D estavam com a DESCRIÇÃO TROCADA (B dizia
+  // "tempo acima da velocidade", que é na verdade o campo D; D dizia "forma
+  // de envio", que é na verdade o campo B) — a ORDEM dos 4 parâmetros já
+  // estava certa, só o texto de ajuda invertia B com D. Confirmado pelo
+  // exemplo oficial "SPEED,ON,0,90,10" (B=0 é forma de envio, não duração).
+  // JC182 adicionado a pedido do dono do produto (26/08/2026) — ver nota em
+  // COLLIDE acima sobre a mesma incerteza quanto ao dialeto real aceito.
   'SPEED,A,B,C,D#' => [
     'cmd' => 'SPEED',
     'nome' => 'Excesso de velocidade',
@@ -2911,8 +3112,9 @@ return [
     'modelos' => [
       0 => 'JC450',
       1 => 'JC181',
-      2 => 'JC400D',
-      3 => 'JC400AD',
+      2 => 'JC182',
+      3 => 'JC400D',
+      4 => 'JC400AD',
     ],
     'universal' => false,
     'template' => true,
@@ -2928,9 +3130,9 @@ return [
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Tempo acima da velocidade(5~600s)',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
       2 => [
         'p' => 'C',
@@ -2940,21 +3142,31 @@ return [
       ],
       3 => [
         'p' => 'D',
-        'desc' => 'Forma de envio:0: GPRS1: SMS+GPRS',
-        'format' => '',
-        'default' => 'OFF Para consultar o valor atual, envie:',
+        'desc' => 'Tempo acima da velocidade',
+        'format' => '5–600 (segundos)',
+        'default' => '20',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'SPEED,ON,0,90,10#',
+        'desc' => 'dispara acima de 90 km/h mantidos por 10 s, envio por GPRS.',
+      ],
     ],
   ],
+  // v4.13.12 — parâmetros preenchidos a partir de
+  // docs/JC181_Command_List_V1.0.7_20250811.xlsx, linha D004 (a entrada
+  // anterior tinha os 5 placeholders sem nenhuma desc/format). JC182
+  // adicionado a pedido do dono do produto (26/08/2026) — ver nota em COLLIDE
+  // acima sobre a mesma incerteza quanto ao dialeto real aceito.
   'SPEEDCHECK,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SPEEDCHECK',
     'nome' => 'Frenagem brusca (detecção)',
-    'desc' => 'Queda de velocidade em km/h dentro de N segundos para caracterizar frenagem brusca. Padrão OFF,0,4,30,50.',
+    'desc' => 'Queda de velocidade em N segundos para caracterizar frenagem brusca.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
+      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -2964,36 +3176,40 @@ return [
     'params' => [
       0 => [
         'p' => 'P1',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
       ],
       1 => [
         'p' => 'P2',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
       2 => [
         'p' => 'P3',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Tempo de detecção',
+        'format' => '1–30 (segundos)',
+        'default' => '4',
       ],
       3 => [
         'p' => 'P4',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Variação de velocidade que caracteriza aceleração brusca',
+        'format' => '10–300 (km/h)',
+        'default' => '30',
       ],
       4 => [
         'p' => 'P5',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Variação de velocidade que caracteriza frenagem brusca',
+        'format' => '10–300 (km/h)',
+        'default' => '50',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'SPEEDCHECK,ON,0,4,30,50#',
+        'desc' => 'exemplo da planilha — detecção de 4 s, 30 km/h para aceleração, 50 km/h para frenagem.',
+      ],
     ],
   ],
   'SSID#' => [
@@ -3042,13 +3258,22 @@ return [
     'exemplos' => [
     ],
   ],
+  // v4.13.12 — parâmetros preenchidos a partir de
+  // docs/JC181_Command_List_V1.0.7_20250811.xlsx, linha D005 (a entrada
+  // anterior tinha os 5 placeholders sem nenhuma desc/format). ⚠️ A própria
+  // planilha rotula P3 como "km/h" na coluna de unidade, mas descreve o campo
+  // como limiar de ÂNGULO ("Angle threshold value") — provável erro de
+  // digitação do fabricante, mantido como o texto da planilha diz (° é o
+  // esperado para ângulo, não km/h). JC182 adicionado a pedido do dono do
+  // produto (26/08/2026) — ver nota em COLLIDE acima sobre a mesma incerteza.
   'SWERVE,P1,P2,P3,P4,P5#' => [
     'cmd' => 'SWERVE',
     'nome' => 'Curva brusca (detecção)',
-    'desc' => 'Tempo de detecção de 1 a 30 s para caracterizar curva brusca. Padrão OFF,0,30,60,3.',
+    'desc' => 'Tempo de detecção para caracterizar curva brusca.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC181',
+      1 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -3058,36 +3283,40 @@ return [
     'params' => [
       0 => [
         'p' => 'P1',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
       ],
       1 => [
         'p' => 'P2',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Forma de envio do alarme',
+        'format' => '0 = GPRS / 1 = SMS+GPRS',
+        'default' => '0',
       ],
       2 => [
         'p' => 'P3',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Limiar do ângulo de curva (planilha rotula a unidade como "km/h" — provável erro do fabricante; ver comentário acima)',
+        'format' => '10–180',
+        'default' => '30',
       ],
       3 => [
         'p' => 'P4',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Velocidade mínima para caracterizar curva brusca',
+        'format' => '10–300 (km/h)',
+        'default' => '60',
       ],
       4 => [
         'p' => 'P5',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Tempo de detecção',
+        'format' => '1–30 (segundos)',
+        'default' => '3',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'SWERVE,ON,0,30,30,3#',
+        'desc' => 'exemplo da planilha.',
+      ],
     ],
   ],
   'TFMODE,P1#' => [
