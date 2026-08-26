@@ -226,6 +226,114 @@ function media_pedido_correspondente(array $pendentes, string $fileUrl, int $jan
 }
 
 /**
+ * Canal de um anexo `VIDEOUPLOAD` (JT/T): `{imei}_{alarmLabel hex}_{canal}_{seq}.ext`
+ * — o MESMO regex que `pushfileupload.php` usa para extrair o alarmLabel do
+ * nome (26/08/2026). Âncora no IMEI (15-17 dígitos) + hex longo de propósito:
+ * o nome de gravação crua do cartão (`AAAA_MM_DD_HH_MM_SS_canal.ext`,
+ * `filelist.php`) também termina em dois grupos numéricos separados por `_`
+ * (segundos e canal) e bateria num regex genérico — começa com ANO, não IMEI,
+ * então não colide com esta âncora. Por isso esta função é separada de
+ * `media_canal_do_nome()` (que resolve `_F_`/`_I_`, convenção JIMI) em vez de
+ * estendida — misturar as duas arriscava a leitura errada MERGE quando o
+ * `HVIDEO` reenvia o nome cru do cartão.
+ *
+ * @param string $fileUrl Nome do arquivo
+ * @returns int|null Canal declarado, ou null quando o nome não é deste formato
+ */
+function media_canal_jtt_upload(string $fileUrl): ?int
+{
+    if (!preg_match('/^\d{15,17}_[0-9A-Fa-f]{16,40}_(\d+)_\d+\.[A-Za-z0-9]+$/', basename($fileUrl), $m)) {
+        return null;
+    }
+    return (int)$m[1];
+}
+
+/**
+ * Agrupa os nomes de um `file_url` por tipo e canal.
+ *
+ * Um alarme JT/T pedido com `VIDEOUPLOAD,...,1_2,2` (vídeo+foto, dois canais)
+ * chega como até 4 arquivos no MESMO campo (vírgula-separados, convenção já
+ * usada pela JIMI — ver `media_file_list()`): vídeo canal 1, vídeo canal 2,
+ * foto canal 1, foto canal 2. Esta função é o ponto único que separa isso para
+ * quem precisa dos DOIS vídeos ao mesmo tempo (2 players) ou só da foto do
+ * canal 2 (miniatura).
+ *
+ * @param string|null $fileUrl Conteúdo cru da coluna
+ * @returns array{video: array<int,string>, image: array<int,string>} Canal => nome
+ */
+function media_channel_files(?string $fileUrl): array
+{
+    $out = ['video' => [], 'image' => []];
+    foreach (media_file_list($fileUrl) as $f) {
+        $kind = media_kind($f);
+        if (!isset($out[$kind])) continue;
+        $canal = media_canal_do_nome($f) ?? media_canal_jtt_upload($f);
+        if ($canal === null) continue;
+        if (!isset($out[$kind][$canal])) $out[$kind][$canal] = $f;
+    }
+    return $out;
+}
+
+/**
+ * Canais de VÍDEO deste alarme que já estão de fato no disco (não só
+ * anunciados no nome).
+ *
+ * @param string|null $fileUrl Conteúdo cru da coluna
+ * @returns int[] Canais confirmados, ordenados
+ */
+function media_video_channels_no_disco(?string $fileUrl): array
+{
+    $dir = media_base_dir();
+    $semConferir = !is_dir($dir);   // mesma convenção de media_available(): sem
+                                     // como checar, assume presente
+    $out = [];
+    foreach (media_channel_files($fileUrl)['video'] as $canal => $f) {
+        if ($semConferir || preg_match('#^https?://#i', $f) || is_file($dir . '/' . basename($f))) {
+            $out[] = $canal;
+        }
+    }
+    sort($out);
+    return $out;
+}
+
+/**
+ * Este alarme já tem PELO MENOS UM vídeo confirmado no disco?
+ *
+ * 🔴 Diferente de `media_available()`, que conta QUALQUER arquivo (inclusive
+ * foto). Desde que `VIDEOUPLOAD` passou a pedir foto+vídeo juntos (mediaType 2,
+ * 26/08/2026), um alarme pode ter só as fotos no disco enquanto o vídeo ainda
+ * não chegou — `media_available()` diria "tem", e quem lê essa resposta como
+ * "já tem o vídeo" (era o caso de `request_alarm_video()`) bloquearia um
+ * reenvio que ainda faz sentido.
+ *
+ * @param string|null $fileUrl Conteúdo cru da coluna
+ * @returns bool
+ */
+function media_has_video(?string $fileUrl): bool
+{
+    return !empty(media_video_channels_no_disco($fileUrl));
+}
+
+/**
+ * Este alarme tem vídeo confirmado em TODOS os canais esperados (1..N)?
+ *
+ * Convenção do produto (26/08/2026): trabalhar sempre com os canais 1 e 2 —
+ * `$canaisEsperados = 2` é o default para todo device com 2+ câmeras.
+ *
+ * @param string|null $fileUrl        Conteúdo cru da coluna
+ * @param int         $canaisEsperados Quantos canais, a partir de 1, contam como completo
+ * @returns bool
+ */
+function media_video_complete(?string $fileUrl, int $canaisEsperados = 2): bool
+{
+    $presentes = media_video_channels_no_disco($fileUrl);
+    for ($c = 1; $c <= $canaisEsperados; $c++) {
+        if (!in_array($c, $presentes, true)) return false;
+    }
+    return true;
+}
+
+/**
  * Garante que existe linha em `media_files` para um arquivo anunciado por um
  * alarme, e devolve o id.
  *

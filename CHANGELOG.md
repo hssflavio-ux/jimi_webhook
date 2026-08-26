@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.16
+
+**Dono do produto descobriu, testando manualmente contra produção, que o comando `VIDEOUPLOAD` estava com o separador de canal errado — hífen em vez de sublinhado — e faltando um campo inteiro (`mediaType`). Corrigido, e aproveitado para fechar o gap: 263 dos 268 alarmes JT/T com anexo dos últimos 7 dias (só no JC371 865478070654829) nunca tiveram o vídeo pedido corretamente.**
+
+### Fixed
+- 🔴 **`VIDEOUPLOAD`: canais com SUBLINHADO (`1_2`), não hífen (`1-2-3`) — e um 6º campo, `mediaType`, que nem constava do catálogo.** A forma anterior (`includes/alarm_video_request.php`, `includes/occurrence_engine.php`) tinha sido resgatada do dashboard antigo mas NUNCA testada contra hardware — nem lá, nem aqui. Confirmado por teste manual do dono do produto (Postman, JC371 865478070654829, upload real chegou ao storage): `VIDEOUPLOAD,<host>,<porta>,<alarmLabel>,1_2,2` (`mediaType` 0=fotos, 1=vídeos, 2=vídeos e fotos). Convenção do produto: sempre canais 1 e 2 (só 1 no JC182, câmera única) e sempre `mediaType=2`. Ver `docs/COMANDOS_128_CONSULTA.md` §9.9.
+- **`request_alarm_video()` bloqueava reenvio quando só a FOTO já estava no disco** — `media_available()` conta qualquer arquivo, e desde que `VIDEOUPLOAD` passou a trazer foto+vídeo juntos isso virou um bloqueio real. Trocado por `media_has_video()` (`includes/media.php`), que olha só arquivos de kind vídeo.
+
+### Added
+- **`includes/iothub_alarm_api.php`** (novo) — cliente do endpoint `GET /api/v2/alarm/getAlarm` (porta 9080, `tracker-dvr-api`), que não existia até agora. Medido contra produção: resposta traz `alarmMsg` como STRING JSON (decodificar duas vezes), `alarmLabel` separado por vírgula (concatenar reproduz `alarms.alarm_label` byte a byte), `alarmTime` em UTC, e teto de 1000 linhas sem paginação — `iothub_get_alarms_chunked()` subdivide a janela recursivamente quando bate no teto.
+- **`scripts/video_upload_backfill.php`** (novo) — cruza os alarmes que a câmera já tem (via `getAlarm` v2) com o que este sistema já tem completo no storage (`media_video_complete()`), e dispara `VIDEOUPLOAD` só para o que falta. Escopo deliberadamente estreito: só age sobre alarme que já existe em `alarms` (webhook já processou); alarme só na câmera é reportado, não criado. Roda manual (backfill do histórico) e é cron-friendly (rotina permanente).
+- **Player duplo (canal 1 + canal 2) em `handlers/rel_alarmes.php`** (modal) **e `handlers/ocorrencias_dashboard.php`** (detalhe) — os dois vídeos tocam simultaneamente, com fallback para o player único de sempre quando o arquivo é de formato antigo sem canal reconhecível no nome. Suporta `includes/media.php` novo: `media_channel_files()`, `media_canal_jtt_upload()`, `media_video_channels_no_disco()`, `media_video_complete()`.
+
+### Verificação
+- `php -l` limpo em todos os arquivos alterados/novos.
+- `media_channel_files()`/`media_video_complete()` testados com nomes reais de produção (par de foto, par de vídeo JT/T, par JIMI `_F_`/`_I_`, nome cru de cartão de `filelist.php` — este último confirmado como NÃO batendo, evitando colisão com `media_canal_jtt_upload()`) e com o caso misto de 4 arquivos (2 fotos + 2 vídeos do mesmo alarme) — vídeo vence foto no mesmo canal, como esperado.
+- `getAlarm` v2 testado ao vivo (ssh+curl, 865478070654829) antes de escrever o cliente — formato de resposta e teto de 1000 confirmados na prática, não pela doc.
+
 ## [Unreleased] — 4.13.15
 
 **Dono do produto corrigiu a v4.13.14: o erro estava invertido. A planilha de comandos JC181 é explicitamente "applicable to JC181 series products" e nunca cita o JC182 — apesar do número de modelo maior, o JC182 tem BEM MENOS funções que o JC181.**

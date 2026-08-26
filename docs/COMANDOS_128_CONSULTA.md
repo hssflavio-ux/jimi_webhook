@@ -446,3 +446,45 @@ protocolo, já gravada, e ainda não usada nenhuma vez para isto.
 7. **Existe uma fonte de diagnóstico de upload já gravada e nunca usada**
    (`iothub_events`, §9.7) — verificar antes de assumir que só o log do
    container conta a história.
+
+### 9.9 O separador de canais também estava errado — e o §9.5 ajudou a errar
+
+🔴 **26/08/2026.** A forma "confirmada" em §9.5 (`1-2-3`, hífen) nunca foi de
+fato testada contra hardware — foi só RESGATADA do dashboard antigo
+(`docs/_arquivo_morto/…`), que por sua vez também nunca a testou (o código lá
+só monta a string; não há log de upload bem-sucedido associado). O texto do
+§9.5 ("a mesma forma que se mostrou correta hoje") está errado: o que se
+confirmou naquele dia foi que `VIDEOUPLOAD` é o comando certo (contra `37384`)
+e que a resposta síncrona indica aceite — não que o SEPARADOR estivesse certo.
+Ninguém cruzou os dois.
+
+**O que o teste manual do dono do produto confirmou (Postman, 26/08/2026,
+JC371 865478070654829, upload real chegou ao storage):**
+
+```
+VIDEOUPLOAD,<host>,<porta>,<alarmLabel sem vírgula>,1_2,2
+```
+
+- Canais com **SUBLINHADO** (`1_2`), não hífen. A doc oficial da Jimi publica
+  hífen — errada, mesma classe de erro do §9.5/§8.1 (doc dá candidato
+  plausível, só o teste contra device real confirma ou derruba).
+- Um **sexto campo**, `mediaType`, que a doc/arquivo-morto nem documentavam:
+  `0`=só fotos, `1`=só vídeos, `2`=vídeos e fotos. Sem ele o comando de 5
+  campos ainda é aceito (a câmera não recusa aridade menor), mas o
+  comportamento do campo não documentado é desconhecido — o teste que importa
+  é o de 6 campos, que é o que ficou confirmado.
+- Convenção do produto a partir daqui: **sempre canais `1_2`** (nunca `1_2_3`
+  — mesmo em modelos com 3+ câmeras, como o JC371) **e sempre `mediaType=2`**
+  — vídeo dos dois canais para o player duplo, foto do canal 2 para miniatura
+  de relatório (a foto do canal 1 sobe e fica sem uso downstream). Modelo de
+  câmera única (JC182) pede só `1`.
+- Corrigido em `includes/alarm_video_request.php`
+  (`request_alarm_video_jtt()`) e `includes/occurrence_engine.php`
+  (`queue_event_video_request()`) — os dois pontos que montam este comando.
+
+**Lição que generaliza, além da de sempre ("doc mente, meça no device"): uma
+nota "confirmado hoje" registrada no meio de uma investigação de bug
+DIFERENTE (aqui, "37384 vs VIDEOUPLOAD") pode estar carregando, sem intenção,
+uma suposição não testada daquele bug específico — o que ficou provado foi só
+o que a investigação daquele dia se propôs a provar.** Releia o que
+"confirmado" realmente cobriu antes de propagar a forma para código novo.

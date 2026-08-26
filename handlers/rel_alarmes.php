@@ -422,7 +422,38 @@ require_once __DIR__ . '/../web/layout_base.php';
                 // com o arquivo íntegro no disco. `image` entra na mesma condição.
                 $midiaKind = media_kind($r['file_url'], $r['file_type']);
                 $temVideo  = !empty($r['file_url']) && in_array($midiaKind, ['video', 'image'], true);
-                $videoOk   = $temVideo && media_available($r['file_url']);
+
+                // ── Player duplo (26/08/2026) ────────────────────────────────
+                // `VIDEOUPLOAD` agora pede vídeo+foto dos canais 1 E 2 juntos
+                // (docs/COMANDOS_128_CONSULTA.md §9.9): o alarme pode ter até 4
+                // arquivos no mesmo `file_url`. `media_channel_files()` separa
+                // por canal; monta-se um payload com o que existir e está no
+                // disco (vídeo tem preferência sobre foto no MESMO canal).
+                $porCanal = media_channel_files($r['file_url']);
+                $midiaPorCanal = [];
+                foreach ([1, 2] as $canal) {
+                    foreach (['video', 'image'] as $kind) {
+                        $nome = $porCanal[$kind][$canal] ?? null;
+                        if ($nome === null || !media_available($nome)) continue;
+                        if (isset($midiaPorCanal[$canal]) && $midiaPorCanal[$canal]['kind'] === 'video') continue;
+                        $midiaPorCanal[$canal] = [
+                            'url'  => media_play_url($nome),
+                            'ts'   => media_is_ts($nome),
+                            'kind' => $kind,
+                            'nome' => basename($nome),
+                        ];
+                    }
+                }
+                // Retrocompat: arquivo sem canal reconhecível no nome (formato
+                // antigo) cai no player único de sempre, no slot 1.
+                if (!$midiaPorCanal && $temVideo && media_available($r['file_url'])) {
+                    $arqUnico = media_pick($r['file_url']);
+                    $midiaPorCanal[1] = [
+                        'url' => media_play_url($r['file_url']), 'ts' => media_is_ts($arqUnico),
+                        'kind' => $midiaKind, 'nome' => basename($arqUnico),
+                    ];
+                }
+                $videoOk = !empty($midiaPorCanal);
             ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
@@ -447,15 +478,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td>
                     <?php if ($videoOk): ?>
-                    <?php $arq = media_pick($r['file_url']); ?>
                     <button type="button" class="badge badge-primary" style="border:0;cursor:pointer;"
                             onclick="abrirVideo(this)"
-                            data-url="<?= htmlspecialchars(media_play_url($r['file_url'])) ?>"
-                            data-ts="<?= media_is_ts($arq) ? '1' : '0' ?>"
-                            data-kind="<?= htmlspecialchars($midiaKind) ?>"
-                            data-nome="<?= htmlspecialchars(basename($arq)) ?>"
+                            data-media="<?= htmlspecialchars(json_encode($midiaPorCanal, JSON_UNESCAPED_SLASHES)) ?>"
                             data-titulo="<?= htmlspecialchars(($r['device_name'] ?? '') . ' · ' . ($r['alarm_label'] ?: '—') . ' · ' . fmt_brt($r['alarm_time'], 'd/m/Y H:i:s')) ?>">
-                        <?= $midiaKind === 'image' ? '&#128247; Ver Foto' : '&#9654; Ver Vídeo' ?>
+                        <?= count($midiaPorCanal) > 1 ? '&#9654; Ver Vídeo' : ($midiaKind === 'image' ? '&#128247; Ver Foto' : '&#9654; Ver Vídeo') ?>
                     </button>
                     <?php elseif ($temVideo): ?>
                     <button type="button" class="badge" style="border:0;cursor:pointer;"
@@ -473,25 +500,44 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?= report_pagination($page, $totalPages, $totalRows, 'alarmes') ?>
 
-<!-- ── Modal do vídeo do alarme (v4.9.8) ────────────────────────────────────
+<!-- ── Modal do vídeo do alarme (v4.9.8; player duplo 26/08/2026) ───────────
      O player é MONTADO no clique, não uma vez por linha: 25 elementos <video>
      com `preload="metadata"` numa página abrem 25 conexões só para exibir a
-     grade. Aqui só o alarme aberto carrega bytes. -->
+     grade. Aqui só o alarme aberto carrega bytes.
+     Dois painéis (canal 1 / canal 2) lado a lado — VIDEOUPLOAD agora pede os
+     dois canais juntos (§9.9), e o objetivo é rodar os dois AO MESMO TEMPO,
+     não alternar entre eles. Painel sem mídia para aquele canal fica oculto. -->
 <div id="video-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,11,13,.62);align-items:center;justify-content:center;padding:24px;">
-    <div class="card" style="max-width:820px;width:100%;padding:16px 18px;">
+    <div class="card" style="max-width:1160px;width:100%;padding:16px 18px;">
         <div class="flex-between mb-12" style="gap:12px;">
-            <div style="min-width:0;">
-                <h3 id="video-modal-titulo" style="font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></h3>
-                <span id="video-modal-arquivo" class="text-mono" style="font-size:11px;color:var(--muted);"></span>
+            <h3 id="video-modal-titulo" style="font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></h3>
+            <button type="button" class="btn btn-outline btn-sm" style="flex-shrink:0;" onclick="fecharVideo()">Fechar</button>
+        </div>
+        <div id="video-modal-paineis" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="video-modal-canal" data-canal="1">
+                <div class="flex-between" style="margin-bottom:6px;">
+                    <span style="font-size:11px;font-weight:600;color:var(--muted);">CANAL 1</span>
+                    <a class="video-modal-baixar btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;" download>Baixar</a>
+                </div>
+                <div class="video-modal-player"></div>
+                <span class="video-modal-arquivo text-mono" style="display:block;margin-top:4px;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
             </div>
-            <div style="display:flex;gap:8px;flex-shrink:0;">
-                <a id="video-modal-baixar" class="btn btn-outline btn-sm" download>Baixar</a>
-                <button type="button" class="btn btn-outline btn-sm" onclick="fecharVideo()">Fechar</button>
+            <div class="video-modal-canal" data-canal="2">
+                <div class="flex-between" style="margin-bottom:6px;">
+                    <span style="font-size:11px;font-weight:600;color:var(--muted);">CANAL 2</span>
+                    <a class="video-modal-baixar btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;" download>Baixar</a>
+                </div>
+                <div class="video-modal-player"></div>
+                <span class="video-modal-arquivo text-mono" style="display:block;margin-top:4px;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
             </div>
         </div>
-        <div id="video-modal-player"></div>
     </div>
 </div>
+<style>
+@media (max-width: 720px) {
+    #video-modal-paineis { grid-template-columns: 1fr; }
+}
+</style>
 
 <?php
 // Emite o CSS/JS do player mesmo sem nenhum bloco renderizado no HTML — aqui
@@ -501,20 +547,44 @@ require_once __DIR__ . '/../web/components/video_player_assets.php';
 <script>
 function abrirVideo(btn) {
     var m = document.getElementById('video-modal');
-    document.getElementById('video-modal-titulo').textContent  = btn.dataset.titulo || 'Vídeo do alarme';
-    document.getElementById('video-modal-arquivo').textContent = btn.dataset.nome || '';
-    var dl = document.getElementById('video-modal-baixar');
-    dl.href = btn.dataset.url;
-    dl.setAttribute('download', btn.dataset.nome || '');
+    document.getElementById('video-modal-titulo').textContent = btn.dataset.titulo || 'Vídeo do alarme';
+    var midia = {};
+    try { midia = JSON.parse(btn.dataset.media || '{}'); } catch (e) {}
+
+    document.querySelectorAll('.video-modal-canal').forEach(function (painel) {
+        var canal = painel.dataset.canal;
+        var item  = midia[canal];
+        var player = painel.querySelector('.video-modal-player');
+        var dl     = painel.querySelector('.video-modal-baixar');
+        var nomeEl = painel.querySelector('.video-modal-arquivo');
+        if (!item) {
+            painel.style.display = 'none';
+            bcPlayer.destruir(player.querySelector('.bc-player'));
+            player.innerHTML = '';
+            return;
+        }
+        painel.style.display = '';
+        dl.href = item.url;
+        dl.setAttribute('download', item.nome || '');
+        nomeEl.textContent = item.nome || '';
+        bcPlayer.montar(player, item.url, !!item.ts, 380, item.kind);
+    });
+
+    // Um canal só (JC182, ou legado sem canal reconhecível): ocupa a largura toda.
+    var visiveis = Object.keys(midia).length;
+    document.getElementById('video-modal-paineis').style.gridTemplateColumns = visiveis > 1 ? '1fr 1fr' : '1fr';
+
     m.style.display = 'flex';
-    bcPlayer.montar(document.getElementById('video-modal-player'), btn.dataset.url, btn.dataset.ts === '1', 440, btn.dataset.kind);
 }
 
 function fecharVideo() {
     var m = document.getElementById('video-modal');
     // Destruir, e não apenas esconder: um <video> oculto continua baixando.
-    bcPlayer.destruir(m.querySelector('.bc-player'));
-    document.getElementById('video-modal-player').innerHTML = '';
+    // Dois painéis agora — os dois precisam ser desmontados.
+    m.querySelectorAll('.video-modal-player').forEach(function (player) {
+        bcPlayer.destruir(player.querySelector('.bc-player'));
+        player.innerHTML = '';
+    });
     m.style.display = 'none';
 }
 

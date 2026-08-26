@@ -3903,23 +3903,28 @@ return [
     'exemplos' => [
     ],
   ],
-  'VIDEOUPLOAD,hkhttpupload.tracksolidpro.com,443,00 000000000000260205115526010300,1,2#' => [
+  'VIDEOUPLOAD,186.248.143.197,23010,3036353438323926082619154203050 0,1_2,2#' => [
     'cmd' => 'VIDEOUPLOAD',
     'nome' => 'Solicitar upload do anexo de um alarme JT/T',
-    // 🔴 25/08/2026 — MEDIDO contra a Telecom (JC371, 865478070654829): pede
+    // 🔴 26/08/2026 — CORRIGIDO. A forma anterior deste catálogo ("1-2-3", com
+    // hífen, herdada de docs/_arquivo_morto/ SEM NUNCA TER SIDO TESTADA contra
+    // hardware real — nem lá nem aqui) estava com o separador errado E sem o
+    // 6º campo. Confirmado por teste manual do dono do produto (Postman,
+    // 26/08/2026, JC371 865478070654829): canais vão com SUBLINHADO (`1_2`,
+    // não hífen) e há um campo a mais, `mediaType`: 0=só fotos, 1=só vídeos,
+    // 2=vídeos e fotos. Upload real confirmado no storage com este formato.
+    // 25/08/2026 — MEDIDO contra a Telecom (JC371, 865478070654829): pede
     // o(s) arquivo(s) já capturados pela câmera pro alarmLabel informado —
     // não gera um clipe novo (isso é EVIDEO/HVIDEO, que são comandos JIMI,
     // ver command_catalog.php de EVIDEO/HVIDEO acima; JC371 recusa os dois).
     // Resposta síncrona real: "start upload task;" — bem mais específica que
-    // o "ok" genérico de outros ACKs. Formato real medido:
-    // "VIDEOUPLOAD,<host storage>,<porta>,<alarmLabel sem vírgula>,1-2-3"
-    // (canais dash-joined, não vírgula — o exemplo da chave desta entrada,
-    // puxado cru da wiki, usa vírgula e porta 443/host de terceiro; nunca
-    // testado nesse formato). Ver includes/alarm_video_request.php
+    // o "ok" genérico de outros ACKs. Ver includes/alarm_video_request.php
     // (request_alarm_video_jtt()) e includes/occurrence_engine.php
     // (queue_event_video_request()), os dois pontos que hoje montam este
     // comando de verdade — este catálogo não é a fonte deles, é só
-    // referência pra tela /comandos.
+    // referência pra tela /comandos. Convenção do produto: sempre canais 1 e
+    // 2 (só 1 no JC182, câmera única) e mediaType 2 — a foto do canal 2 é a
+    // miniatura usada em relatório.
     'desc' => 'Pede à câmera o upload do(s) arquivo(s) de anexo já capturados para um alarme (identificado pelo alarmLabel), pro storage HTTP informado.',
     'categoria' => 'video',
     'modelos' => [
@@ -3931,17 +3936,22 @@ return [
     'consulta' => NULL,
     'consulta_modelos' => [],
     'consulta_ref' => 'medido',
-    'fonte' => 'wiki (JC182) + medido em produção 25/08/2026 (JC371, Telecom)',
+    'fonte' => 'wiki (JC182) + medido em produção 25-26/08/2026 (JC371, Telecom)',
     'params' => [
       0 => ['p' => 'A', 'desc' => 'Host do storage que recebe o arquivo', 'format' => '', 'default' => ''],
       1 => ['p' => 'B', 'desc' => 'Porta do storage', 'format' => '', 'default' => ''],
       2 => ['p' => 'C', 'desc' => 'alarmLabel do alarme dono (sem vírgula — 32 hex)', 'format' => '', 'default' => ''],
-      3 => ['p' => 'D', 'desc' => 'Canais a pedir', 'format' => '1-2-3 (com hífen, não vírgula)', 'default' => '1-2-3'],
+      3 => ['p' => 'D', 'desc' => 'Canais a pedir', 'format' => '1_2 (com SUBLINHADO, não hífen)', 'default' => '1_2'],
+      4 => ['p' => 'E', 'desc' => 'Tipo de mídia: 0=fotos, 1=vídeos, 2=vídeos e fotos', 'format' => '0|1|2', 'default' => '2'],
     ],
     'exemplos' => [
       0 => [
+        'cmd' => 'VIDEOUPLOAD,186.248.143.197,23010,30363534383239260826191542030500,1_2,2',
+        'desc' => 'medido 26/08/2026 (Postman) — canais com sublinhado + mediaType, upload real confirmado no storage',
+      ],
+      1 => [
         'cmd' => 'VIDEOUPLOAD,186.248.143.197,23010,30363534383239260825155916...,1-2-3',
-        'desc' => 'medido — resposta real: "start upload task;", 2 arquivos .jpg (um por canal) chegaram via /pushfileupload',
+        'desc' => '⚠️ forma ANTIGA (hífen, sem mediaType) — não confirmada contra hardware, mantida só de referência histórica',
       ],
     ],
   ],

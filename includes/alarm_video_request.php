@@ -95,7 +95,7 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
 
     // `alarm_time` é UTC; a câmera nomeia o arquivo na hora LOCAL dela.
     $st = $db->prepare("
-        SELECT a.id, a.imei, a.file_url, a.alarm_label, dm.protocol,
+        SELECT a.id, a.imei, a.file_url, a.alarm_label, dm.protocol, dm.camera_count,
                DATE_FORMAT(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00'), '%Y-%m-%d %H:%i:%s') AS local_ts
           FROM alarms a
           LEFT JOIN devices d ON d.imei = a.imei
@@ -107,7 +107,11 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
     if (!$al) {
         return ['ok' => false, 'msg' => 'Alarme não encontrado.'];
     }
-    if (media_available($al['file_url'])) {
+    // 🔴 media_has_video(), não media_available(): desde que VIDEOUPLOAD passou
+    // a pedir foto+vídeo juntos (mediaType 2), um alarme pode ter só a foto no
+    // disco — media_available() diria "tem", bloqueando um reenvio que ainda
+    // faz sentido. Ver includes/media.php.
+    if (media_has_video($al['file_url'])) {
         return ['ok' => false, 'msg' => 'Este alarme já tem o vídeo no servidor.'];
     }
 
@@ -192,10 +196,17 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
  * 0) — não confundir com o `EVIDEO`/`HVIDEO` de `request_alarm_video()`
  * acima, que são JIMI e este device nem reconhece.
  *
- * Formato (resgatado do dashboard antigo, `docs/_arquivo_morto/…`):
- *   VIDEOUPLOAD,<host do storage>,<porta>,<alarmLabel sem vírgula>,1-2-3
- * `1-2-3` é fixo — pede os três canais possíveis do JC371 de uma vez, não um
- * canal específico como no EVIDEO/HVIDEO.
+ * Formato MEDIDO (26/08/2026, Postman contra produção — corrige a forma
+ * anterior, nunca testada contra hardware real):
+ *   VIDEOUPLOAD,<host do storage>,<porta>,<alarmLabel sem vírgula>,<canais>,<mediaType>
+ * 🔴 `<canais>` é separado por SUBLINHADO (`1_2`), não hífen — a doc da Jimi
+ * publica hífen e está ERRADA; `1-2-3` (a forma antiga daqui, resgatada de
+ * `docs/_arquivo_morto/…` e nunca confirmada contra device real) nunca foi
+ * testado e o hífen provavelmente nunca funcionou. `<mediaType>` é o campo que
+ * faltava por completo: 0=só fotos, 1=só vídeos, 2=vídeos e fotos. Convenção
+ * do produto: sempre os canais 1 e 2, sempre mediaType 2 (vídeo dos dois +
+ * foto dos dois — a foto do canal 2 vira miniatura de relatório; a do canal 1
+ * fica no storage sem uso downstream). Ver docs/COMANDOS_128_CONSULTA.md §9.9.
  *
  * ⚠️ Ao contrário do EVIDEO ("…:OK!"), a resposta síncrona é só o ACK do
  * comando — o upload em si acontece depois, por conta da câmera, e chega
@@ -205,7 +216,7 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
  * status que não seja 'failed' (IoTHub aceitou/entregou) já é sucesso.
  *
  * @param PDO      $db      Conexão ativa
- * @param array    $al      Linha de `alarms` (id, imei, alarm_label, local_ts)
+ * @param array    $al      Linha de `alarms` (id, imei, alarm_label, local_ts, camera_count)
  * @param int      $alarmId Redundante com $al['id'], mantido por clareza
  * @param int|null $userId  Quem pediu, para auditoria
  * @returns array{ok:bool, msg:string, comando?:string, resposta?:string}
@@ -217,10 +228,12 @@ function request_alarm_video_jtt(PDO $db, array $al, int $alarmId, ?int $userId)
         return ['ok' => false, 'msg' => 'Este alarme não tem alarmLabel — a câmera não anunciou anexo para ele.'];
     }
 
-    $fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
-    $fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
-    $fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
-    $cmd    = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$label},1-2-3";
+    $fsUrl    = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
+    $fsHost   = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
+    $fsPort   = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
+    // Modelo de 1 câmera só (JC182): pedir canal 2 não existe — pede só o 1.
+    $canais   = ((int)($al['camera_count'] ?? 2) >= 2) ? '1_2' : '1';
+    $cmd      = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$label},{$canais},2";
 
     $env    = iothub_send_instruct($al['imei'], 128, $cmd, 0, 'reenvio');
     $ultima = trim((string)($env['result_msg'] ?? ''));

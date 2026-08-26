@@ -55,6 +55,7 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot
 $detailOcc = null;
 $detailEvents = [];
 $detailMedia = null;      // ['file_url' => …, 'file_type' => …, 'file_name' => …]
+$detailChannels = [];     // canal(1|2) => ['url','ts','kind','nome'] — player duplo
 if (!empty($_GET['id'])) {
     try {
         // A PLACA (devices.device_name) substitui o IMEI no cabeçalho: é o
@@ -141,6 +142,32 @@ if (!empty($_GET['id'])) {
                 ]);
                 $detailMedia = $stmt->fetch() ?: null;
             }
+
+            // ── Player duplo (26/08/2026) ────────────────────────────────
+            // `VIDEOUPLOAD` agora pede vídeo+foto dos canais 1 E 2 juntos
+            // (docs/COMANDOS_128_CONSULTA.md §9.9), e `alarms.file_url`
+            // acumula os arquivos do MESMO alarmLabel (link_upload_by_alarm_
+            // label(), includes/occurrence_engine.php). Varre TODOS os
+            // alarmes agrupados (não só o que `occurrences.media_file_id`
+            // aponta — esse é só UM arquivo, o degrau 1 acima) e separa por
+            // canal: é o que permite mostrar os dois vídeos ao mesmo tempo.
+            // Vazio quando nenhum evento traz arquivo com canal reconhecível
+            // no nome — a tela cai no player único de sempre ($detailMedia).
+            foreach ($detailEvents as $ev) {
+                if (empty($ev['file_url'])) continue;
+                $porCanal = media_channel_files($ev['file_url']);
+                foreach ([1, 2] as $canal) {
+                    foreach (['video', 'image'] as $kind) {
+                        $nome = $porCanal[$kind][$canal] ?? null;
+                        if ($nome === null || !media_available($nome)) continue;
+                        if (isset($detailChannels[$canal]) && $detailChannels[$canal]['kind'] === 'video') continue;
+                        $detailChannels[$canal] = [
+                            'url' => media_play_url($nome), 'ts' => media_is_ts($nome),
+                            'kind' => $kind, 'nome' => basename($nome),
+                        ];
+                    }
+                }
+            }
         }
     } catch (Exception $e) {
         $detailOcc = null;
@@ -149,7 +176,9 @@ if (!empty($_GET['id'])) {
 
 // mpegts.js só quando a mídia resolvida for MPEG-TS: `.ts` é o formato das
 // câmeras JT/T e nenhum navegador o decodifica no <video> nativo.
-if ($detailMedia && media_is_ts($detailMedia['file_url'] ?? null)) {
+$temTsNoDetalhe = ($detailMedia && media_is_ts($detailMedia['file_url'] ?? null))
+    || array_reduce($detailChannels, fn($c, $item) => $c || !empty($item['ts']), false);
+if ($temTsNoDetalhe) {
     $extra_head .= '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>';
 }
 
@@ -196,7 +225,41 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <!-- Mídia -->
         <div>
+            <?php if ($detailChannels): // ── Player duplo (26/08/2026) — ver §9.9 ── ?>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <?php foreach ([1, 2] as $canal): $item = $detailChannels[$canal] ?? null; ?>
+                <div>
+                    <span style="display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">CANAL <?= $canal ?></span>
+                    <?php if ($item):
+                        $vp_url     = $item['url'];
+                        $vp_ts      = $item['ts'];
+                        $vp_kind    = $item['kind'];
+                        $vp_name    = $item['nome'];
+                        $vp_height  = 220;
+                        $vp_missing = false;
+                        $vp_auto    = true;
+                        $vp_id      = 'occ-player-' . $canal;
+                        include __DIR__ . '/../web/components/video_player.php';
+                    ?>
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;">
+                        <span class="text-mono" style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            <?= htmlspecialchars($vp_name) ?>
+                        </span>
+                        <a href="<?= htmlspecialchars($vp_url) ?>" download="<?= htmlspecialchars($vp_name) ?>"
+                           class="btn btn-outline btn-sm" style="padding:3px 10px;font-size:11px;white-space:nowrap;">Baixar</a>
+                    </div>
+                    <?php else: ?>
+                    <div style="background:var(--canvas-soft);border-radius:var(--radius-md);padding:24px 12px;text-align:center;color:var(--muted);font-size:12px;">
+                        Sem mídia neste canal
+                    </div>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
             <?php
+            // Fallback: nenhum canal reconhecido no nome do arquivo (formato
+            // antigo) — mesmo player único de sempre.
+            else:
             $midiaTipo = $detailMedia ? media_kind($detailMedia['file_url'] ?? null, $detailMedia['file_type'] ?? null) : 'other';
             if ($detailMedia && in_array($midiaTipo, ['video', 'image'], true)):
                 // Player embutido: snapshot do MEIO do vídeo e reprodução sem
@@ -232,7 +295,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </button>
                 <?php endif; ?>
             </div>
-            <?php endif; ?>
+            <?php endif; endif; ?>
         </div>
     </div>
 

@@ -467,8 +467,12 @@ function link_upload_to_occurrence(PDO $db, string $imei, string $eventTime, int
  * que `includes/alarm_video_request.php` usa no caminho manual
  * (`request_alarm_video_jtt()`) — os dois ficam consistentes agora.
  *
- * Formato: `VIDEOUPLOAD,<host do storage>,<porta>,<alarmLabel sem vírgula>,1-2-3`
- * — `1-2-3` pede os três canais possíveis do JC371 de uma vez.
+ * Formato MEDIDO 26/08/2026: `VIDEOUPLOAD,<host>,<porta>,<alarmLabel sem
+ * vírgula>,<canais>,<mediaType>` — canais SEPARADOS POR SUBLINHADO (`1_2`,
+ * nunca hífen: a doc da Jimi erra isso), `mediaType` 2 = vídeo e foto dos dois
+ * canais. Convenção do produto: sempre canais 1 e 2 (só 1 no JC182, que tem
+ * uma câmera só). Ver `request_alarm_video_jtt()` em
+ * `includes/alarm_video_request.php` e `docs/COMANDOS_128_CONSULTA.md` §9.8.
  *
  * Apenas AGENDA (fila em memória do request): o despacho HTTP ao IoTHub segura
  * a resposta por até 35s e não pode rodar dentro da transação do webhook —
@@ -528,7 +532,11 @@ function queue_event_video_request(PDO $db, string $imei, string $alarmTime, int
     $fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
     $fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
     $fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
-    $content = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$alarmLabel},1-2-3";
+    // Canais com SUBLINHADO (não hífen — doc da Jimi erra isso) + mediaType
+    // explícito (2 = vídeo e foto): ver includes/alarm_video_request.php
+    // (request_alarm_video_jtt()), medido 26/08/2026 contra produção.
+    $canais  = ((int)$model['camera_count'] >= 2) ? '1_2' : '1';
+    $content = "VIDEOUPLOAD,{$fsHost},{$fsPort},{$alarmLabel},{$canais},2";
 
     $GLOBALS['_pending_video_requests'][] = [
         'imei'          => $imei,
