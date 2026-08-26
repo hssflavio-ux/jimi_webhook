@@ -214,10 +214,28 @@ function firmware_releases(PDO $db, ?int $modelId = null, bool $ativas = true): 
 /**
  * Compara o firmware do equipamento com a release corrente do modelo dele.
  *
- * ⚠️ Por IGUALDADE, nunca por ordem. Não há regra publicada que ordene
+ * ⚠️ Ainda por CONTENÇÃO, nunca por ORDEM — não há regra publicada que ordene
  * `V1.8.0.9_250807` contra `V4.3.2`, e inventar uma faria a tela afirmar
- * "desatualizado" sobre um palpite. Os estados possíveis dizem só o que se
- * sabe.
+ * "desatualizado" sobre um palpite.
+ *
+ * 🔴 26/08/2026 — até aqui a comparação era por IGUALDADE, e nunca batia:
+ * `devices.firmware_version` grava a resposta INTEIRA do `VERSION#`/`CHECK#`
+ * (`firmware_parse_version()` pega o token todo, de propósito — ver seu
+ * docblock), enquanto a referência cadastrada em `/firmwares` é só o TRECHO da
+ * versão que o operador copia da nota de lançamento. Medido contra produção,
+ * nos quatro modelos com leitura:
+ *
+ *   JC181    C181_WAAP_LA_V2.5.4.3_251212.1057                 ref: V2.5.4.3
+ *   JC371    C371_0_0_STD_JMBS_JC371_V1.9.0.2b_260528.0543      ref: V1.9.0.2b
+ *   JC400D   KMC28_JC400_WABA_STD_V4.4.3.2_250818.1701          ref: V4.4.3.2
+ *   JC400AD  KMC28_0_0_STD_JM_C261_V1.8.1.3_250925.1127         ref: V1.10.0.2 (não bate — device desatualizado de verdade)
+ *
+ * Em TODOS os casos em que o equipamento roda a versão de referência, a
+ * referência aparece como SUBSTRING da resposta — nunca como o valor inteiro.
+ * Comparar por igualdade classificava toda a frota como "diferente", mesmo a
+ * que estava em dia. `(?![A-Za-z0-9])` depois do trecho evita o oposto: uma
+ * referência mais curta por acidente de digitação (`V1.9.0.2`) não pode passar
+ * por igual dentro de uma versão DIFERENTE que só COMEÇA igual (`V1.9.0.2b…`).
  *
  * @param  string|null $atual     `devices.firmware_version`
  * @param  string|null $corrente  `version` da release marcada is_current
@@ -230,9 +248,11 @@ function firmware_situacao(?string $atual, ?string $corrente): array
 
     if ($atual === '')    return ['estado' => 'sem_leitura', 'rotulo' => 'Firmware não lido'];
     if ($corrente === '') return ['estado' => 'sem_release', 'rotulo' => 'Sem versão de referência'];
-    // Comparação sem caixa: a versão de referência é DIGITADA no cadastro e a
-    // do equipamento vem da resposta dele. Diferença de caixa entre as duas
-    // seria erro de digitação exibido como "firmware diferente".
-    if (strcasecmp($atual, $corrente) === 0) return ['estado' => 'igual', 'rotulo' => 'Igual à de referência'];
+    // Sem caixa: a referência é DIGITADA no cadastro e a do equipamento vem da
+    // resposta dele — diferença de caixa entre as duas seria erro de
+    // digitação exibido como "firmware diferente".
+    if (preg_match('/' . preg_quote($corrente, '/') . '(?![A-Za-z0-9])/i', $atual)) {
+        return ['estado' => 'igual', 'rotulo' => 'Igual à de referência'];
+    }
     return ['estado' => 'diferente', 'rotulo' => 'Diferente da de referência'];
 }
