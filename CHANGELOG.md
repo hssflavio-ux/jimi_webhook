@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.14
+
+**Dono do produto corrigiu a v4.13.13: os comandos de acelerômetro/GPS (senalm, speedcheck, swerve, collide, gfence, fatigue, EVENTSET,ACD/AVD) tinham sido replicados também para o JC181, mas o pedido listou os comandos especificamente por modelo — só o JC182 devia ganhá-los. E o texto "— dialeto planilha" nos cartões não comunica nada ao operador.**
+
+### Fixed
+- 🔴 **JC181 removido das 8 entradas trazidas para "Configurações IA" na v4.13.13** (`EVENTSET,ACD`, `EVENTSET,AVD`, `SENALM`, `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE`, `GFENCE` circular e retangular) — em `includes/ia_config_catalog.php` e nos dois `GFENCE` de `includes/command_catalog.php` (os únicos que eu tinha criado do zero com os dois modelos; os demais já tinham JC181 de origem legítima, antes desta sessão, e não foram tocados). `SPEED` continua com os dois modelos — não fazia parte deste erro, já tinha JC181 de antes.
+- **Removida a frase "— dialeto planilha" do rótulo dos cartões de `SENALM` e `COLLIDE`** (`ia_config_catalog.php`) — jargão interno que não ajudava o operador a entender o comando. A distinção real (qual comando é o dialeto EVENTSET/JT/T e qual é o de texto simples da planilha) já está no texto de descrição de cada cartão.
+
+### Verificação
+- `php -l` limpo em `includes/ia_config_catalog.php` e `includes/command_catalog.php`.
+- Catálogo recarregado via `php -r`: JC181 caiu de 8 para 1 entrada (só `SPEED`) em `ia_config_catalog.php`; JC182 mantido em 11. Total ainda 79 (nenhuma entrada removida, só o modelo tirado das erradas).
+
 ## [Unreleased] — 4.13.13
 
 **Dono do produto corrigiu a leitura da v4.13.12: "todos os outros comandos desse modelo devem estar na tela de comandos" se referia à própria tela de Configurações IA ("tela de comandos de IA"), não à tela genérica /comandos. Os comandos de acelerômetro/GPS do JC181/JC182 tinham ficado só em /comandos.**

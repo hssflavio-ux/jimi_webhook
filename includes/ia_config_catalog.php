@@ -52,18 +52,24 @@
  *   - `EVENTSET,FACE` (JC371) — CRUD de biblioteca facial (upload/exclusão de
  *     foto), não é "parâmetro com máscara".
  *   - `CRASHALM`/`SENSOR`/`SHOCK`/`DEFENSE*`/`RAPIDACC`/`RAPIDDEC`/
- *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) — colisão/vibração/curva/frenagem
- *     brusca por ACELERÔMETRO, não visão computacional. Continuam só em
- *     `/comandos` — sem pedido do dono do produto para trazê-los aqui.
- *   - ⚠️ EXCEÇÃO deliberada a esta regra: `SENALM`/`COLLIDE`/`SPEEDCHECK`/
- *     `SWERVE`/`FATIGUE`/`GFENCE`/`EVENTSET,ACD`/`EVENTSET,AVD` (JC181/JC182)
- *     SÃO acelerômetro/GPS, mas o dono do produto pediu explicitamente que
- *     entrassem NESTA tela (26/08/2026) — são o único painel de configuração
- *     que estes dois modelos compactos têm (não têm as telas ricas de DMS/
- *     ADAS do JC371/JC400AD). Ver a seção "JC181/JC182 — comandos de
- *     acelerômetro/GPS" mais abaixo. Duplicadas de propósito em
- *     `command_catalog.php`/`/comandos` (mesma fonte, mesmos parâmetros) —
- *     não é inconsistência, é o mesmo comando acessível pelos dois caminhos.
+ *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) e `SENALM`/`COLLIDE`/
+ *     `SPEEDCHECK`/`SWERVE`/`FATIGUE`/`GFENCE` (JC181) — colisão/vibração/
+ *     curva/frenagem brusca/fadiga/cerca eletrônica por ACELERÔMETRO ou GPS,
+ *     não visão computacional. Continuam só em `/comandos` — sem pedido do
+ *     dono do produto para trazê-los aqui **para o JC181**.
+ *   - ⚠️ EXCEÇÃO deliberada a esta regra, só para o JC182: `SENALM`/
+ *     `COLLIDE`/`SPEEDCHECK`/`SWERVE`/`FATIGUE`/`GFENCE`/`EVENTSET,ACD`/
+ *     `EVENTSET,AVD` SÃO acelerômetro/GPS, mas o dono do produto pediu
+ *     explicitamente (26/08/2026) que entrassem NESTA tela — o JC182 não
+ *     tem tela rica de DMS/ADAS como o JC371/JC400AD, então a tela de IA é
+ *     o painel de configuração dele. ⚠️ O pedido foi POR MODELO, listado
+ *     explicitamente pelo dono do produto — **não vale por analogia para o
+ *     JC181**, mesmo os dois compartilhando a mesma planilha de origem
+ *     (corrigido em v4.13.14, depois de replicar por engano para o JC181
+ *     também). Ver a seção "JC182 — comandos de acelerômetro/GPS" mais
+ *     abaixo. Duplicadas de propósito em `command_catalog.php`/`/comandos`
+ *     (mesma fonte, mesmos parâmetros) — não é inconsistência, é o mesmo
+ *     comando acessível pelos dois caminhos.
  *   - `EVENTSET,FACE,*` (JC450, G016–G019) — mesmo caso do JC371 acima, CRUD
  *     de biblioteca facial.
  *   - `COLLIDE`/`INSTALLANGLE` (JC450, D011/D012) — colisão por acelerômetro
@@ -125,17 +131,22 @@
  * Total (26/08/2026): 79 entradas (21 `medido`, 56 `inferido`, 2 sem forma de
  * consulta — os dois `GFENCE`, planilha não confirma se são consultáveis) —
  * JC371 (43 no campo `modelos`) + JC450 (18) + JC400AD (14) + JC182 (11) +
- * JC181 (8). As 6 entradas do JC371 que o catálogo chegou a atribuir também
- * ao JC182 por analogia (ALDW/AHMW/ADCA/ACEA/ANDD/AFIF) foram REMOVIDAS do
- * JC182 em 26/08/2026 — teste real de campo mostrou que o equipamento não
- * tem câmera de IA/visão computacional. No lugar delas, o JC182 (e o JC181,
- * que compartilha o mesmo vocabulário "de planilha") ganharam uma seção
- * própria de comandos de acelerômetro/GPS — `EVENTSET,ACD`/`AVD`,`SENALM`,
- * `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE`, `GFENCE` (circular e
- * retangular) — trazidos para ESTA tela por pedido explícito do dono do
- * produto, apesar de serem acelerômetro/GPS e não visão computacional (ver
- * "Fora de escopo, de propósito" acima para a exceção documentada). São
- * duplicatas de propósito das mesmas entradas em `command_catalog.php`.
+ * JC181 (1, `SPEED`). As 6 entradas do JC371 que o catálogo chegou a
+ * atribuir também ao JC182 por analogia (ALDW/AHMW/ADCA/ACEA/ANDD/AFIF)
+ * foram REMOVIDAS do JC182 em 26/08/2026 — teste real de campo mostrou que
+ * o equipamento não tem câmera de IA/visão computacional. No lugar delas, o
+ * JC182 ganhou uma seção própria de comandos de acelerômetro/GPS —
+ * `EVENTSET,ACD`/`AVD`, `SENALM`, `COLLIDE`, `SPEEDCHECK`, `SWERVE`,
+ * `FATIGUE`, `GFENCE` (circular e retangular) — trazidos para ESTA tela por
+ * pedido explícito do dono do produto (26/08/2026), apesar de serem
+ * acelerômetro/GPS e não visão computacional (ver "Fora de escopo, de
+ * propósito" acima para a exceção documentada). O JC181 NÃO ganhou os
+ * mesmos: o pedido foi específico do JC182, mesmo os dois compartilhando a
+ * planilha-fonte (`docs/JC181_Command_List_V1.0.7_20250811.xlsx`) — uma
+ * primeira versão (v4.13.13) tinha replicado por engano para o JC181
+ * também, corrigido em v4.13.14. São duplicatas de propósito das mesmas
+ * entradas em `command_catalog.php` (que continua com JC181 nelas, por ser
+ * a fonte legítima/original desses comandos naquela tela).
  */
 
 return [
@@ -1181,7 +1192,7 @@ return [
     ],
 
     // ═══════════════════════════════════════════════════════════════════════
-    // JC181 / JC182 — comandos de acelerômetro/GPS trazidos para a tela de IA
+    // JC182 — comandos de acelerômetro/GPS trazidos para a tela de IA
     // ═══════════════════════════════════════════════════════════════════════
     //
     // v4.13.13 (26/08/2026) — CORREÇÃO de leitura do pedido original: "todos
@@ -1192,19 +1203,31 @@ return [
     // `command_catalog.php`; o dono do produto corrigiu ("você não corrigiu
     // a tela de comandos de ia... com os comandos que listei").
     //
-    // Por isso, para JC181/JC182, os comandos de colisão/vibração/curva/
-    // frenagem/fadiga/cerca eletrônica ENTRAM aqui — exceção deliberada à
-    // regra geral de "fora de escopo" do cabeçalho do arquivo (que continua
-    // valendo para JC400/JC261/outros modelos, onde não há pedido do dono do
-    // produto para trazê-los). Estas entradas são DUPLICATAS de propósito das
-    // que existem em `command_catalog.php`/`/comandos` — mesma fonte, mesmos
-    // parâmetros — porque o operador do JC181/JC182 usa a tela de IA como
-    // painel único de configuração desses dois modelos (eles não têm as
-    // telas ricas de DMS/ADAS do JC371/JC400AD).
+    // v4.13.14 — SEGUNDA correção: a v4.13.13 tinha replicado estas 8
+    // entradas também para o JC181, mas o pedido original ("as câmeras
+    // modelo 182 possuem os comandos senalm, speed, speedcheck, swerve,
+    // collide, gfence e fatigue") é ESPECÍFICO do JC182 — o dono do produto
+    // listou os comandos por modelo, não um vocabulário genérico "JC18x".
+    // JC181 REMOVIDO de todas as entradas abaixo (`SPEED` continua com os
+    // dois modelos porque já tinha JC181 desde ANTES desta sessão, por
+    // fonte própria — não é parte deste erro). O rótulo "— dialeto planilha"
+    // também foi removido dos cartões por não comunicar nada útil ao
+    // operador; a fonte real (qual comando é EVENTSET/JT/T vs. o de texto
+    // simples da planilha) já está documentada no `desc` de cada um.
     //
-    // Fonte de todas: `docs/JC181_Command_List_V1.0.7_20250811.xlsx`, exceto
-    // EVENTSET,ACD/AVD (medidos em campo no JC182, 26/08/2026 — ver nota em
-    // EVENTSET,AOSD no topo deste arquivo).
+    // Estes comandos entram nesta tela (não só em `/comandos`) por exceção
+    // deliberada à regra geral de "fora de escopo" do cabeçalho do arquivo
+    // (que continua valendo para JC181/JC400/JC261/outros modelos, onde não
+    // há pedido do dono do produto para trazê-los) — o JC182 não tem uma
+    // tela rica de DMS/ADAS como o JC371/JC400AD, então a tela de IA é o
+    // painel de configuração dele. DUPLICATAS de propósito das mesmas
+    // entradas em `command_catalog.php`/`/comandos` — mesma fonte, mesmos
+    // parâmetros.
+    //
+    // Fonte de todas: `docs/JC181_Command_List_V1.0.7_20250811.xlsx` (o
+    // JC182 compartilha este vocabulário com o JC181, confirmado pelo dono
+    // do produto), exceto EVENTSET,ACD/AVD (medidos em campo no JC182,
+    // 26/08/2026 — ver nota em EVENTSET,AOSD no topo deste arquivo).
 
     'EVENTSET,ACD,P1#' => [
         'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — colisão',
@@ -1230,9 +1253,9 @@ return [
         'exemplos' => [['cmd' => 'EVENTSET,AVD,3,10,5,30#', 'desc' => 'gera evento se houver 5 vibrações em 10s, após 30s em ACC OFF.']],
     ],
     'SENALM,P1,P2,P3,P4,P5#' => [
-        'cmd' => 'SENALM', 'nome' => 'Vibração (veículo parado) — dialeto planilha',
-        'desc' => 'Sensibilidade para disparar evento de vibração com o veículo estacionado (dialeto de texto simples, alternativo ao EVENTSET,AVD acima).',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'cmd' => 'SENALM', 'nome' => 'Vibração (veículo parado)',
+        'desc' => 'Sensibilidade para disparar evento de vibração com o veículo estacionado. Comando alternativo ao EVENTSET,AVD acima, com mais parâmetros de ajuste.',
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => 'SENALM#', 'consulta_ref' => 'medido', 'fonte' => 'JC181 Command List V1.0.7, linha D002', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Sensibilidade (0 desativa; quanto maior o número, menos sensível)', 'format' => '0/1/2/3/4/5', 'default' => '2'],
@@ -1244,9 +1267,9 @@ return [
         'exemplos' => [['cmd' => 'SENALM,2,10,15,5,0#', 'desc' => 'exemplo da planilha.']],
     ],
     'COLLIDE,P1,P2,P3,P4,P5,P6,P7,P8#' => [
-        'cmd' => 'COLLIDE', 'nome' => 'Colisão — dialeto planilha',
-        'desc' => 'Sensibilidade para disparar alerta de colisão durante a condução (dialeto de texto simples, alternativo ao EVENTSET,ACD acima).',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'cmd' => 'COLLIDE', 'nome' => 'Colisão',
+        'desc' => 'Sensibilidade para disparar alerta de colisão durante a condução. Comando alternativo ao EVENTSET,ACD acima, com mais parâmetros de ajuste.',
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => 'COLLIDE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D006', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'ON'],
@@ -1263,7 +1286,7 @@ return [
     'SPEEDCHECK,P1,P2,P3,P4,P5#' => [
         'cmd' => 'SPEEDCHECK', 'nome' => 'Frenagem/aceleração brusca (detecção)',
         'desc' => 'Queda ou aumento de velocidade em N segundos para caracterizar frenagem/aceleração brusca.',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => 'SPEEDCHECK#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D004', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
@@ -1277,7 +1300,7 @@ return [
     'SWERVE,P1,P2,P3,P4,P5#' => [
         'cmd' => 'SWERVE', 'nome' => 'Curva brusca (detecção)',
         'desc' => 'Tempo de detecção para caracterizar curva brusca.',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => 'SWERVE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D005', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
@@ -1291,7 +1314,7 @@ return [
     'FATIGUE,P1,P2,P3,P4#' => [
         'cmd' => 'FATIGUE', 'nome' => 'Fadiga (direção por tempo excessivo)',
         'desc' => 'Configura o limiar de horas dirigindo sem parar que dispara o evento de fadiga.',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => 'FATIGUE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D010', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
@@ -1308,7 +1331,7 @@ return [
     'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10#' => [
         'cmd' => 'GFENCE', 'nome' => 'Cerca eletrônica (circular)',
         'desc' => 'Configura uma cerca eletrônica circular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => null, 'consulta_ref' => null, 'fonte' => 'JC181 Command List V1.0.7, linha D011', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
@@ -1327,7 +1350,7 @@ return [
     'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11#' => [
         'cmd' => 'GFENCE', 'nome' => 'Cerca eletrônica (retangular)',
         'desc' => 'Configura uma cerca eletrônica retangular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
-        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'modelos' => ['JC182'], 'template' => true,
         'consulta' => null, 'consulta_ref' => null, 'fonte' => 'JC181 Command List V1.0.7, linha D012', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
@@ -1358,7 +1381,11 @@ return [
     //     real de campo (26/08/2026) mostrou que o equipamento não tem
     //     câmera de IA/visão computacional — só responde a 3 códigos EVENTSET
     //     (`ACD`, `AVD`, `AOSD`). Os 3 ganharam entrada própria nesta tela
-    //     (ver acima), junto do restante do vocabulário "planilha JC181"
-    //     compartilhado entre os dois modelos.
+    //     (ver acima), junto do restante do vocabulário de
+    //     `docs/JC181_Command_List_V1.0.7_20250811.xlsx` que o JC182
+    //     compartilha com o JC181 — trazido só para o JC182, por pedido
+    //     explícito do dono do produto (26/08/2026). O JC181 continua fora
+    //     desta tela (nunca teve tela rica de DMS/ADAS, mas também nunca foi
+    //     pedido trazer estes comandos de acelerômetro/GPS para cá).
 
 ];

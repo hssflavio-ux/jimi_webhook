@@ -1899,8 +1899,10 @@ return [
   ],
   // v4.13.12 — NOVO. GFENCE não existia neste catálogo; adicionado a partir
   // de docs/JC181_Command_List_V1.0.7_20250811.xlsx, linhas D011 (círculo) e
-  // D012 (retângulo), a pedido do dono do produto (JC182, 26/08/2026 — ver
-  // nota em COLLIDE acima sobre a incerteza de dialeto). ⚠️ Cerca eletrônica
+  // D012 (retângulo), a pedido do dono do produto — especificamente para
+  // JC182 (26/08/2026); JC181 REMOVIDO em v4.13.14, adicionado por engano
+  // (o pedido listou os comandos por modelo, e JC181 nunca foi citado).
+  // ⚠️ Cerca eletrônica
   // NO EQUIPAMENTO — é uma função DO FIRMWARE da câmera, não tem relação com
   // a tabela `geofences`/`/geocercas` da aplicação (essas são cercas
   // calculadas no servidor a partir do GPS já recebido).
@@ -1920,8 +1922,7 @@ return [
     'desc' => 'Configura uma cerca eletrônica circular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
     'categoria' => 'alarme',
     'modelos' => [
-      0 => 'JC181',
-      1 => 'JC182',
+      0 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -1950,8 +1951,7 @@ return [
     'desc' => 'Configura uma cerca eletrônica retangular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
     'categoria' => 'alarme',
     'modelos' => [
-      0 => 'JC181',
-      1 => 'JC182',
+      0 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
