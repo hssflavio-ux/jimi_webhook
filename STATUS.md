@@ -71,6 +71,17 @@
 > (ocorrência #120, dois `.jpg`, um por canal) e `/midia?f=...` serviu o
 > arquivo com `200`/`image/jpeg` válido.
 >
+> ⚠️ **A correção do item (a) só vale pra upload NOVO** — `pushfileupload.php`
+> já tinha processado os dois `.jpg` da ocorrência 120 ANTES do deploy da
+> v4.13.8, então `alarms.file_url` ficou vazio mesmo depois do fix (o código
+> corrigido nunca rodou pra esse registro específico). Rodado backfill único
+> (chamando `link_upload_by_alarm_label()` de novo para os dois
+> `media_files` já existentes) pra corrigir o caso já gravado. Confirmado
+> visualmente no Chrome da IDE, sessão de admin temporária: `/relatorios/
+> alarmes` mostra "📷 Ver Foto" na linha certa e o modal abre a foto real
+> (estrada, timestamp, velocidade, IMEI sobrepostos) — sem erro de console.
+> Evento NOVO, gerado depois do deploy, não precisa de backfill nenhum.
+>
 > **Pendência real, não de software**: as 30+ ocorrências da Telecom
 > anteriores a este fix (antes da v4.13.6 estar no ar) continuam sem
 > vídeo — o pedido foi reenviado pra todas depois da correção, mas a
