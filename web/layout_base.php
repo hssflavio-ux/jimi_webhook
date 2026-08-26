@@ -28,7 +28,12 @@ if (!isset($customers))     $customers     = get_available_customers($user['id']
 
 // ── YUV Navigation (v4.0.0): principal + accordion groups ──
 $navPrincipal = [
-    ['route' => 'resumo',        'label' => 'Resumo',        'icon' => 'grid',     'href' => '/'],
+    // v4.13.10 — item de menu removido a pedido do dono do produto: o Painel
+    // (linha abaixo) substituiu o Resumo como tela inicial. `resumo.php` e a
+    // rota `/` continuam no ar (router.php intocado) — só o item de menu saiu,
+    // então quem tiver o link direto ainda acessa normalmente. Reintroduzir:
+    // descomentar a linha abaixo.
+    // ['route' => 'resumo',        'label' => 'Resumo',        'icon' => 'grid',     'href' => '/'],
     // v4.10.3 — item 7 do PLANO_IMPLEMENTACAO_v4.10.md. Ao lado do Resumo, de
     // propósito: NÃO substitui `resumo.php` (que fica intocado) — é a
     // alternativa widgetizada e editável, opt-in, lado a lado.
@@ -100,8 +105,14 @@ $navGroups = [
 // em operação, e é o mesmo perfil de gente que as usa.
 $navBottom = [
     ['route' => 'comandos',   'label' => 'Comandos',   'icon' => 'terminal', 'href' => '/comandos'],
-    ['route' => 'parametros', 'label' => 'Parâmetros', 'icon' => 'sliders',  'href' => '/parametros',
-     'admin_only' => true],
+    // v4.13.10 — item de menu removido a pedido do dono do produto: a tela
+    // ainda não está funcional (JT/T PROJETO_PARAMETROS.md em andamento). O
+    // handler (/parametros) e a permissão em grupos_permissao.php ficam
+    // intocados de propósito — é só o item de menu que some, pra ninguém
+    // entrar numa tela que ainda não faz o que promete. Reintroduzir quando a
+    // tela estiver pronta: descomentar as duas linhas abaixo.
+    // ['route' => 'parametros', 'label' => 'Parâmetros', 'icon' => 'sliders',  'href' => '/parametros',
+    //  'admin_only' => true],
     // v4.13.0 — vizinha de Parâmetros pela mesma razão da nota acima: manda
     // instrução pra equipamento em operação, mesmo perfil de quem usa.
     ['route' => 'configuracoes-ia', 'label' => 'Configurações IA', 'icon' => 'brain', 'href' => '/configuracoes-ia',

@@ -5,6 +5,15 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.10
+
+**Dono do produto pediu: remover do menu o item Resumo (substituído pelo Painel) e o item Parâmetros (tela ainda não funcional) — só a exibição, código intocado para uso futuro.**
+
+### Changed
+- Item de menu **Resumo** removido de `$navPrincipal` (`web/layout_base.php`) — o Painel (`/painel`) já é a tela inicial de fato. `resumo.php` e a rota `/` continuam funcionando normalmente para quem tiver o link direto; só some do menu.
+- Item de menu **Parâmetros** removido de `$navBottom` (`web/layout_base.php`) — a tela (`/parametros`) ainda não está funcional (parametrização JT/T em andamento, ver `PROJETO_PARAMETROS.md`). O handler e a permissão em `grupos_permissao.php` ficam intocados de propósito.
+- Ambos os itens foram comentados (não apagados), com nota explicando o motivo e como reintroduzir — reversível descomentando duas linhas.
+
 ## [Unreleased] — 4.13.9
 
 **Dono do produto reportou: os gráficos do `/painel` são difíceis de entender — todos mostram "00" a "23" sem dizer o que é isso, fácil de confundir com dia do mês.**
