@@ -1,4 +1,62 @@
-# STATUS.md — Jimi Webhook System v4.13.7 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.13.17 (YUV Parity)
+
+> ### 📍 ESTADO EM 26/08/2026 — produção em v4.13.17, `VIDEOUPLOAD` com o separador certo + gap histórico fechado
+>
+> **Produção está em `4.13.17`** (deploy + verificação nesta sessão). Dono do
+> produto testou `VIDEOUPLOAD` manualmente no Postman e achou o motivo pelo
+> qual a v4.13.3–7 (sessão anterior, `VIDEOUPLOAD` "confirmado" contra a
+> Telecom) não estava de fato enchendo o storage: o separador de canal e um
+> campo inteiro estavam errados. Corrigir isso destrancou um SEGUNDO bug, só
+> visível depois que o primeiro upload de verdade em escala aconteceu — mesmo
+> padrão em cadeia da entrada "ESTADO EM 25/08/2026" logo abaixo neste
+> arquivo (cadeia de 4 bugs do vídeo de evento JT/T).
+>
+> #### 🔧 v4.13.16 — `VIDEOUPLOAD`: sublinhado, não hífen, e faltava `mediaType`
+>
+> Formato usado desde a v4.13.6 (`1-2-3`, três canais com hífen) nunca tinha
+> sido testado contra hardware — só resgatado do dashboard morto por
+> semelhança de forma (mesma classe de erro do item 2 da cadeia de 25/08:
+> doc/código antigo dá candidato plausível, ninguém mede). Confirmado no Postman
+> (865478070654829, JC371): `VIDEOUPLOAD,<host>,<porta>,<alarmLabel>,1_2,2` —
+> canais com SUBLINHADO, e um 6º campo, `mediaType` (0=fotos, 1=vídeos,
+> 2=ambos), que não existia em versão nenhuma do código. Convenção fixada:
+> sempre canais 1 e 2 (só 1 no JC182), sempre `mediaType=2`. Corrigido em
+> `includes/alarm_video_request.php` e `includes/occurrence_engine.php`; doc
+> em `docs/COMANDOS_128_CONSULTA.md` §9.9 e `CLAUDE.md`.
+>
+> Aproveitado para fechar peças que faltavam: cliente novo pra
+> `GET /api/v2/alarm/getAlarm` (`includes/iothub_alarm_api.php` — não existia;
+> medido contra produção: `alarmLabel` vem separado por vírgula, concatenar
+> reproduz `alarms.alarm_label`; teto de 1000 linhas sem paginação, por isso
+> `iothub_get_alarms_chunked()` subdivide a janela), backfill
+> (`scripts/video_upload_backfill.php`, cron a cada 30 min desde esta sessão)
+> e player duplo (canal 1 + canal 2 simultâneos) em `rel_alarmes.php` e
+> `ocorrencias_dashboard.php`.
+>
+> #### 🔧 v4.13.17 — o bug que o `VIDEOUPLOAD` corrigido destrancou: `alarms.file_url` gated por ocorrência
+>
+> Rodando o backfill de verdade (não o dry-run) contra o 865478070654829: os
+> 4 arquivos por alarme (2 vídeos + 2 fotos) chegavam certos em `media_files`,
+> mas `alarms.file_url` continuava NULL pra alarmes sem ocorrência — medido:
+> `264-3` ("ADAS: Distância Insegura"), que não tem
+> `occurrence_config_params`. Causa: `link_upload_by_alarm_label()`
+> (`includes/occurrence_engine.php`) fazia `JOIN` até `occurrences` ANTES de
+> decidir gravar `alarms.file_url` — a MESMA função que a cadeia de 25/08
+> (item 4a) tinha corrigido pra passar a gravar `alarms.file_url` (antes só
+> gravava `occurrences.media_file_id`), sem perceber que a correção ainda
+> dependia do `JOIN` até ocorrência ficar de pé — e a MESMA classe do bug que
+> `media_register_file()`/`link_media_to_occurrence()` resolveu pra
+> `media_files` na v4.9.35 (ver `CLAUDE.md`, bullet logo acima do novo).
+> Corrigido resolvendo o alarme por `imei`+`alarm_label` sozinho, sem depender
+> de ocorrência; o vínculo com `occurrences.media_file_id` virou segundo passo
+> opcional. 199 arquivos que já tinham chegado nessa janela foram religados
+> retroativamente por script avulso (não versionado).
+>
+> **Resultado do backfill real (janela de 7 dias, só 865478070654829):** 131
+> `VIDEOUPLOAD` disparados, 3 já completos, 29 com pedido pendente de antes,
+> **85 alarmes existem só na câmera — o webhook nunca gravou** (achado
+> registrado, não investigado nesta sessão — é gap DIFERENTE deste, na
+> ingestão, não no vídeo).
 
 > ### 📍 ESTADO EM 25/08/2026 (tarde/noite) — produção em v4.13.7, vídeo de evento JT/T destravado nesta sessão
 >
