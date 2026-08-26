@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.9.32
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.13.16
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
@@ -21,6 +21,12 @@
  *   modelo. O texto insiste no ponto que não é óbvio para quem usa — a URL do
  *   modelo errado NÃO dá erro, a câmera baixa e aplica.
  *
+ * Atualizada na v4.13.16:
+ * - Player de vídeo do evento (detalhe de Ocorrência e coluna Vídeo de
+ *   Alarmes) passou a mostrar os DOIS vídeos — câmera 1 e câmera 2 — lado a
+ *   lado, tocando ao mesmo tempo, quando o equipamento tem duas lentes.
+ *
+
  * Duas regras de negócio que o usuário PRECISA entender e que só existem aqui:
  * o sistema notifica por OCORRÊNCIA e não por alarme (12 alarmes em rajada =
  * 1 aviso, e isso é o desenho funcionando), e o link do relatório grande é
@@ -743,8 +749,10 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <h4 style="font-size:14px;font-weight:600;margin:20px 0 8px">Tela de Tratativa (Detalhe da Ocorrência)</h4>
 <p>Ao clicar em uma ocorrência, abre-se a tela de detalhe com:</p>
 <ul style="font-size:13px;line-height:1.8;color:var(--body)">
-    <li><strong>Player de vídeo</strong> do momento do evento, aberto num quadro do <em>meio</em>
-        do vídeo (o snapshot). O play roda na própria tela — baixar é opcional.
+    <li><strong>Player de vídeo duplo</strong> — quando a câmera tem duas lentes, os vídeos da
+        <strong>câmera 1</strong> e da <strong>câmera 2</strong> aparecem lado a lado e tocam ao
+        mesmo tempo, cada um aberto num quadro do <em>meio</em> do vídeo (o snapshot). O play roda
+        na própria tela — baixar é opcional. Câmera de lente única mostra só um player.
         Funciona com vídeos MP4 e com gravações em formato <code>.ts</code> das câmeras JT/T</li>
     <li><strong>Alarmes agrupados</strong> (todos os alarmes que compõem a ocorrência, com dados de GPS e velocidade)</li>
     <li><strong>Mini-mapa</strong> da localização do evento</li>
@@ -1146,7 +1154,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td>Tipos de Alarme</td><td>Clique nos tipos para incluí-los na consulta — dá para selecionar vários de uma vez</td></tr>
 <tr><td>Ver posições no mapa</td><td>Abre um mapa com todos os alarmes da consulta. Cada marcador traz a <strong>placa, a data/hora e o nome do alarme</strong> — aqui cada ponto é de um veículo diferente</td></tr>
 <tr><td>Ver Mapa (na linha)</td><td>Abre o mapa em uma nova aba, no local exato daquele alarme</td></tr>
-<tr><td>Ver Vídeo (na linha)</td><td>Abre o vídeo do evento numa janela sobre a tela, já posicionado num quadro do <strong>meio</strong> do vídeo. Toca ali mesmo — baixar é opcional. Só aparece nos alarmes cujo equipamento anexou vídeo</td></tr>
+<tr><td>Ver Vídeo (na linha)</td><td>Abre uma janela sobre a tela com o vídeo do evento, já posicionado num quadro do <strong>meio</strong>. Quando a câmera tem duas lentes, os dois vídeos (câmera 1 e câmera 2) tocam lado a lado ao mesmo tempo. Toca ali mesmo — baixar é opcional. Só aparece nos alarmes cujo equipamento anexou vídeo</td></tr>
 <tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados filtrados</td></tr>
 </table>
 
