@@ -3666,20 +3666,44 @@ return [
   ],
   'VIDEOUPLOAD,hkhttpupload.tracksolidpro.com,443,00 000000000000260205115526010300,1,2#' => [
     'cmd' => 'VIDEOUPLOAD',
-    'nome' => 'Configurar upload de mídia',
-    'desc' => '',
-    'categoria' => 'ia',
+    'nome' => 'Solicitar upload do anexo de um alarme JT/T',
+    // 🔴 25/08/2026 — MEDIDO contra a Telecom (JC371, 865478070654829): pede
+    // o(s) arquivo(s) já capturados pela câmera pro alarmLabel informado —
+    // não gera um clipe novo (isso é EVIDEO/HVIDEO, que são comandos JIMI,
+    // ver command_catalog.php de EVIDEO/HVIDEO acima; JC371 recusa os dois).
+    // Resposta síncrona real: "start upload task;" — bem mais específica que
+    // o "ok" genérico de outros ACKs. Formato real medido:
+    // "VIDEOUPLOAD,<host storage>,<porta>,<alarmLabel sem vírgula>,1-2-3"
+    // (canais dash-joined, não vírgula — o exemplo da chave desta entrada,
+    // puxado cru da wiki, usa vírgula e porta 443/host de terceiro; nunca
+    // testado nesse formato). Ver includes/alarm_video_request.php
+    // (request_alarm_video_jtt()) e includes/occurrence_engine.php
+    // (queue_event_video_request()), os dois pontos que hoje montam este
+    // comando de verdade — este catálogo não é a fonte deles, é só
+    // referência pra tela /comandos.
+    'desc' => 'Pede à câmera o upload do(s) arquivo(s) de anexo já capturados para um alarme (identificado pelo alarmLabel), pro storage HTTP informado.',
+    'categoria' => 'video',
     'modelos' => [
       0 => 'JC182',
+      1 => 'JC371',
     ],
     'universal' => false,
     'template' => false,
     'consulta' => NULL,
     'consulta_modelos' => [],
-    'consulta_ref' => NULL,
+    'consulta_ref' => 'medido',
+    'fonte' => 'wiki (JC182) + medido em produção 25/08/2026 (JC371, Telecom)',
     'params' => [
+      0 => ['p' => 'A', 'desc' => 'Host do storage que recebe o arquivo', 'format' => '', 'default' => ''],
+      1 => ['p' => 'B', 'desc' => 'Porta do storage', 'format' => '', 'default' => ''],
+      2 => ['p' => 'C', 'desc' => 'alarmLabel do alarme dono (sem vírgula — 32 hex)', 'format' => '', 'default' => ''],
+      3 => ['p' => 'D', 'desc' => 'Canais a pedir', 'format' => '1-2-3 (com hífen, não vírgula)', 'default' => '1-2-3'],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'VIDEOUPLOAD,186.248.143.197,23010,30363534383239260825155916...,1-2-3',
+        'desc' => 'medido — resposta real: "start upload task;", 2 arquivos .jpg (um por canal) chegaram via /pushfileupload',
+      ],
     ],
   ],
   'VOICESW,A#' => [
@@ -3955,6 +3979,15 @@ return [
   ],
   'HVIDEO,A,B#' => [
     'cmd' => 'HVIDEO',
+    // 🔴 25/08/2026 — TESTADO e RECUSADO no JC371 (Telecom, 865478070654829):
+    // "Command was not recognized!" — o firmware nem conhece o verbo. É
+    // comando JIMI (device_models.protocol='JIMI'), não JT/T; JC371 fala
+    // JT/T. Pra pedir upload de anexo JT/T o comando é VIDEOUPLOAD (ver
+    // entrada própria neste catálogo) ou 37384/0x9208 no binário — e 37384
+    // por sua vez FOI medido aceito ("ok") mas nunca produziu upload real
+    // (ver STATUS.md 25/08/2026 e docs/COMANDOS_128_CONSULTA.md §9). NÃO
+    // reintroduzir HVIDEO/EVIDEO como fallback pra device JT/T sem medir de
+    // novo — os dois já causaram um ciclo de tentativa-e-erro documentado.
     'nome' => 'Enviar vídeo histórico da memória',
     'desc' => 'You can request the device to upload the playback video file which store in memory (which is one minute each file and with low video quality) to the server.',
     'categoria' => 'video',
@@ -3991,6 +4024,11 @@ return [
   ],
   'EVIDEO,A,B,C#' => [
     'cmd' => 'EVIDEO',
+    // 🔴 25/08/2026 — TESTADO e RECUSADO no JC371 (Telecom, 865478070654829):
+    // "Error:Number of parameters errors!" com a forma de 2 parâmetros
+    // (sem duração — a que includes/alarm_video_request.php usava). Mesma
+    // história do HVIDEO acima: é comando JIMI, JC371 fala JT/T. Ver
+    // docs/COMANDOS_128_CONSULTA.md §9.
     'nome' => 'Gerar e enviar trecho do cartão TF',
     'desc' => 'This command is for High video quality which record and stored in TF card with 3 mins for each video file. You can request the device to generate a new short video file with the period you need, and then upload the file to the server.',
     'categoria' => 'video',

@@ -297,3 +297,152 @@ vírgula é frase, não rótulo.
 
 Tudo isto está travado em `tests/helpers/command_response.test.php`, com as
 respostas cruas das três medições como fixture.
+
+## 9. Comandos de AÇÃO (upload de anexo) — "aceito" não é "executado", e o comando certo já tinha sido descoberto antes (25/08/2026)
+
+> Levantado numa sessão inteira em cima da Telecom (JC371, `865478070654829`,
+> cliente Frota Principal) depois de o dono do produto reportar que vídeo de
+> evento nunca subia pra nenhuma câmera JT/T. Detalhe técnico completo (SQL,
+> logs, timestamps) em `STATUS.md`, entrada "ESTADO EM 25/08/2026"; aqui fica
+> só o que generaliza — pra não cometer os mesmos quatro erros de novo.
+
+### 9.1 A falha, em uma frase
+
+**O comando escolhido pra pedir upload de anexo de alarme JT/T (`37384`,
+0x9208) nunca foi testado contra hardware real, e quando finalmente rodou
+(depois de destravar um bug que o impedia de rodar), a câmera ACEITAVA o
+pedido — sem nunca de fato subir o arquivo.** O comando certo (`VIDEOUPLOAD`,
+texto, proNo 128) já tinha sido implementado e usado numa versão ANTERIOR do
+dashboard (`docs/_arquivo_morto/archive/web/dashboard.js`, função
+`requestVideoUpload()`) — perdido na reescrita do produto, sem que nada
+registrasse "isto aqui é o que funciona, não mexer".
+
+### 9.2 A cadeia de 4 bugs — cada um escondia o próximo
+
+| # | Bug | Por que não apareceu antes |
+|---|---|---|
+| 1 | `flush_pending_video_requests()` chamava uma função renomeada 13 dias antes (v4.9.13) — `Error` de PHP, não `Exception`, não cai no `catch` | Processo morre em silêncio, pós-resposta HTTP já enviada — zero log, zero sintoma pro usuário |
+| 2 | O comando escolhido (`37384`) nunca tinha sido testado — destravar o bug 1 revelou que ele é *aceito* (`_content:"ok"`) mas não *executado* | O "ok" parece sucesso; só desmascarou cruzando com o log do container de upload (zero conexão da câmera, apesar do "ok") |
+| 3 | O comando certo (`VIDEOUPLOAD`) tem o `alarmLabel` no nome do arquivo que a câmera sobe — mas o regex que extrai esse nome nunca batia (doc erra o separador) | Todo anexo caía num fallback impreciso (janela ±3min) em vez do casamento exato — funcionava "por sorte" na maioria, errou na primeira vez que dois canais chegaram juntos |
+| 4 | O anexo ficava só em `occurrences.media_file_id` — `alarms.file_url`, que é o que a tela de Alarmes lê, nunca era escrito | A tela de Ocorrências mostrava o vídeo (lia a coluna certa); a tela de Alarmes mostrava `—` pro MESMO arquivo (lia a coluna errada) — dois pontos de leitura, um só de escrita |
+
+Nenhum destes quatro apareceu como erro visível — cada um só ficou claro
+depois que o anterior foi corrigido e a evidência ficou "estranha demais pra
+ignorar" (ex.: vídeo aparecendo numa tela e não na outra).
+
+### 9.3 "Aceito" não é "executado" — um modo de falha novo neste projeto
+
+Toda a disciplina de `command_response_interpret()` (§2 acima) trata de
+DISTINGUIR recusa de sucesso pela RESPOSTA. O `37384` é um caso mais
+traiçoeiro: a resposta É de sucesso genuíno (`_code:"100"`,
+`"Command communication successful response"`, `_content:"ok"`) — só que
+"ok" aqui é o **ACK do protocolo recebendo o comando**, não confirmação de
+que o efeito pretendido (upload) aconteceu. `VIDEOUPLOAD`, em contraste,
+respondeu `"start upload task;"` — uma frase que descreve a AÇÃO, não só o
+recebimento; diferença que só apareceu comparando os dois lado a lado.
+
+**Lição que generaliza**: pra comando de AÇÃO (não consulta), o único jeito
+confiável de confirmar que funciona é verificar o EFEITO do lado de fora do
+comando — aqui, cruzar com o log do serviço que deveria RECEBER o upload
+(`docker logs dvr-upload`), não só ler a resposta síncrona do device. Uma
+resposta de sucesso sintaticamente válida não é prova de execução.
+
+🔴 **Isto já tinha acontecido antes, com OUTRO comando de ação, e ninguém
+cruzou os dois casos até hoje.** `handlers/sendcommand.php` (comentários de
+v4.9.1, sessão anterior a esta) documenta exatamente o mesmo sintoma para o
+`37382` (FTP upload de gravação, §"Extração de vídeo do cartão" do
+`.env.example`): o comando era **aceito pelo device e pelo hub**, sem nunca
+produzir arquivo — corrigido só depois de perceber que faltavam as
+credenciais de FTP configuradas no servidor. **"Aceito ≠ executado" não é um
+acidente pontual do `37384` — é o SEGUNDO caso do mesmo padrão nesta base**,
+o que muda a lição de "cuidado com este comando" para "todo comando de ação
+neste projeto merece confirmação de efeito, por padrão, antes de ser dado
+como resolvido".
+
+### 9.4 EVIDEO/HVIDEO são JIMI; VIDEOUPLOAD é JT/T — não são intercambiáveis
+
+| Comando | Protocolo (`device_models.protocol`) | Modelos confirmados | JC371 |
+|---|---|---|---|
+| `EVIDEO` | JIMI | JC400AD, JC400D | 🔴 recusado: `Error:Number of parameters errors!` (25/08/2026) |
+| `HVIDEO` | JIMI | JC400AD, JC400D | 🔴 recusado: `Command was not recognized!` (25/08/2026) |
+| `VIDEOUPLOAD` | JT/T | JC182 (wiki), **JC371 (medido 25/08/2026)** | ✅ aceito, produziu upload real |
+| `37384` (0x9208 binário) | JT/T | — | ⚠️ aceito ("ok"), **nunca produziu upload** (medido 25/08/2026) |
+
+A escolha original (`37384`) era plausível pela doc oficial (JT/T 1078,
+"Alarm Attachment Upload") — e é exatamente esse tipo de escolha "razoável
+pela doc, nunca medida" que já causou os outros defeitos deste arquivo
+(`MILE#`, `CHECK`/`LOG` descartados — §4 e §8.1). O padrão se repete: **doc
+oficial dá um candidato plausível; só o teste contra hardware real confirma
+ou derruba.**
+
+### 9.5 O comando certo já tinha sido implementado — no arquivo morto
+
+`docs/_arquivo_morto/archive/web/dashboard.js` e `dashboard_template.php`
+(versão do dashboard anterior à reescrita YUV) já tinham um botão "Solicitar"
+por alarme JT/T, chamando exatamente `VIDEOUPLOAD,<host>,<porta>,<alarmLabel
+sem vírgula>,1-2-3` — a mesma forma que se mostrou correta hoje, incluindo o
+detalhe de que os canais vão com HÍFEN (`1-2-3`), não vírgula. Ninguém tinha
+registrado essa implementação como "isto funciona, preservar" em nenhum
+lugar que sobrevivesse à reescrita — ela simplesmente não foi portada, e o
+conhecimento morreu junto com o código antigo.
+
+**Lição que generaliza, e é o motivo desta seção existir**: antes de
+DERIVAR um comando a partir de documentação (planilha, wiki, spec oficial),
+**procurar em `docs/_arquivo_morto/` se uma versão anterior do produto já
+implementou e usou aquilo contra câmera real** — mesmo código morto pode ser
+a fonte de verdade mais barata disponível, mais barata que testar do zero.
+O arquivo morto não é só histórico de UI — é registro de comportamento
+medido que a reescrita não herdou automaticamente.
+
+### 9.7 Uma fonte de diagnóstico que existe e nunca foi consultada: `iothub_events`
+
+A doc oficial (seção 1.13, ver `docs/_arquivo_morto/API_COVERAGE_v3.0.0.md`)
+descreve um endpoint `/pushIothubEvent` que recebe eventos explícitos de
+início/fim de upload — `UploadAlarmFileBegin`, `UploadAlarmFileEnd`,
+`UploadMediaFileBegin`, `UploadMediaFileEnd`. `handlers/pushiothubevent.php`
+existe, roda em produção e grava tudo em `iothub_events` — mas a
+investigação de hoje diagnosticou "câmera não subiu o anexo" só pelo log do
+container `dvr-upload` (visão de fora, do lado do servidor de upload), sem
+nunca consultar essa tabela, que teria a visão do PRÓPRIO PROTOCOLO: ela
+distingue "a câmera nunca tentou" de "a câmera tentou e o upload começou mas
+não terminou" — dois diagnósticos diferentes, duas correções diferentes.
+**Pendência para a próxima vez que um upload falhar**: checar
+`iothub_events` (`event_type LIKE 'Upload%'`) para o IMEI/janela em questão
+ANTES de ir direto ao log do container — é a fonte mais próxima do
+protocolo, já gravada, e ainda não usada nenhuma vez para isto.
+
+### 9.8 Lições que generalizam, resumidas
+
+1. **"Aceito" ≠ "executado"** para comando de ação — confirme o EFEITO
+   (arquivo chegou? valor mudou?), não só a resposta síncrona do device.
+   Já aconteceu duas vezes nesta base (`37382` em v4.9.1, `37384` hoje) —
+   não é acidente pontual, é padrão a vigiar por padrão.
+2. **Fila/tabela nova em screen nova**: um valor gravado num ponto
+   (`occurrences.media_file_id`) não aparece automaticamente em toda tela
+   que deveria mostrá-lo — cada consumidor lê sua própria coluna; conferir
+   TODAS as telas que exibem o mesmo dado, não só a primeira que funcionar.
+3. **Nome de arquivo/campo que a doc descreve raramente bate com o que o
+   device realmente emite** — é o mesmo "doc mente, meça no device" já
+   documentado em `CLAUDE.md` pra outros protocolos (proNo 33027/33028,
+   `FILELIST`), agora confirmado também pro nome do anexo de upload.
+4. **Antes de escrever um comando novo a partir de spec, procurar se uma
+   versão anterior do produto (arquivo morto, código comentado, migração
+   antiga) já resolveu o mesmo problema contra hardware real.** É mais
+   barato achar do que redescobrir. O arquivo morto (`docs/_arquivo_morto/`)
+   hoje contém só 4 arquivos de código (o dashboard antigo + doc de
+   cobertura de API) — pequeno o bastante para varrer inteiro em minutos
+   quando a dúvida surgir de novo.
+5. **Um bug que trava a EXECUÇÃO (função inexistente, exceção não
+   capturada) pode esconder, por trás de si, um SEGUNDO bug de escolha
+   errada** — corrigir só o primeiro e assumir que "agora funciona" sem
+   verificar o efeito real deixaria o segundo intocado, "corrigido" só na
+   aparência.
+6. **O bug de fuso "3 horas de diferença" também já se repetiu** —
+   `archive/includes/dashboarddata.php` documenta a mesma causa-raiz
+   (`new DateTime($str)` sem timezone explícito lendo string UTC como se
+   fosse local) que resurgiu nesta sessão em `alarms.created_at` (achado
+   tangencial, não corrigido — ver STATUS.md). Ao investigar qualquer
+   horário "estranho por exatas 3h", suspeitar primeiro deste padrão.
+7. **Existe uma fonte de diagnóstico de upload já gravada e nunca usada**
+   (`iothub_events`, §9.7) — verificar antes de assumir que só o log do
+   container conta a história.
