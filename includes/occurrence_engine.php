@@ -364,44 +364,69 @@ function get_branch_id_for_imei(PDO $db, string $imei): ?int
  * no mesmo alarme (um por canal) é a mesma da JIMI: nomes separados por
  * vírgula (`media_file_list()` já espera isso).
  *
+ * 🔴 26/08/2026 — a promessa do parágrafo acima só era verdade quando o
+ * alarme JÁ TINHA ocorrência: até esta correção, o `SELECT` fazia `JOIN
+ * occurrence_events`/`occurrences` ANTES de decidir gravar `alarms.file_url`
+ * — um `INNER JOIN` que ZERA a linha inteira quando `alarm_type` não tem
+ * `occurrence_config_params` (ex.: `264-3`, "ADAS: Distância Insegura"). O
+ * arquivo chegava íntegro ao disco, `media_files` ganhava a linha certa, e
+ * `alarms.file_url` ficava NULL PARA SEMPRE — sintoma idêntico ao que este
+ * mesmo parágrafo já tinha corrigido uma vez, só que pra uma fatia diferente
+ * de alarmes. Medido no backfill de 26/08/2026 (`scripts/video_upload_
+ * backfill.php`): 91 arquivos chegaram, boa parte em alarmes `264-3` sem
+ * ocorrência — `alarms.file_url` continuava NULL nesses. Agora a gravação em
+ * `alarms` é INCONDICIONAL (resolve o alarme por `imei`+`alarm_label`
+ * sozinho); o vínculo com `occurrences.media_file_id` continua sendo um
+ * segundo passo, só quando existe ocorrência — e não bloqueia mais o
+ * primeiro.
+ *
  * @param PDO    $db       Conexão ativa
  * @param string $imei     IMEI do device
  * @param string $label    alarmLabel extraído do nome do arquivo
  * @param int    $mediaId  media_files.id recém-inserido
  * @param string $fileType Tipo detectado ('video', 'image', …)
  * @param string $fileName Nome do arquivo (para gravar em alarms.file_url)
- * @return int|null ID da ocorrência vinculada, ou null se não resolvida
+ * @return int|null ID da ocorrência vinculada, ou null quando o alarme não
+ *                  existe OU existe mas não tem ocorrência (o `file_url` já
+ *                  foi gravado mesmo assim, nesse segundo caso)
  */
 function link_upload_by_alarm_label(PDO $db, string $imei, string $label, int $mediaId, string $fileType, string $fileName = ''): ?int
 {
-    $stmt = $db->prepare(
-        "SELECT a.id AS alarm_id, a.file_url AS alarm_file_url,
-                o.id AS occ_id, o.media_file_id, mf.file_type AS linked_type
-         FROM alarms a
-         JOIN occurrence_events e ON e.alarm_id = a.id
-         JOIN occurrences o ON o.id = e.occurrence_id
-         LEFT JOIN media_files mf ON mf.id = o.media_file_id
-         WHERE a.imei = :imei
-           AND a.alarm_label = :label
-         ORDER BY o.id DESC
-         LIMIT 1"
-    );
+    $stmt = $db->prepare("SELECT id, file_url FROM alarms WHERE imei = :imei AND alarm_label = :label LIMIT 1");
     $stmt->execute([':imei' => $imei, ':label' => $label]);
+    $alarm = $stmt->fetch();
+    if (!$alarm) {
+        return null;
+    }
+
+    if ($fileName !== '') {
+        $existentes = array_filter(array_map('trim', explode(',', (string)$alarm['file_url'])));
+        if (!in_array($fileName, $existentes, true)) {
+            $existentes[] = $fileName;
+            $db->prepare("UPDATE alarms SET file_url = :f, file_type = COALESCE(file_type, :t) WHERE id = :aid")
+               ->execute([':f' => implode(',', $existentes), ':t' => $fileType, ':aid' => (int)$alarm['id']]);
+        }
+    }
+
+    // Ocorrência é um SEGUNDO passo, opcional: nem todo alarme gera uma
+    // (ex.: falta occurrence_config_params pro tipo) — o file_url acima já
+    // foi gravado independente disso.
+    $stmt = $db->prepare(
+        "SELECT o.id AS occ_id, o.media_file_id, mf.file_type AS linked_type
+           FROM occurrence_events e
+           JOIN occurrences o ON o.id = e.occurrence_id
+      LEFT JOIN media_files mf ON mf.id = o.media_file_id
+          WHERE e.alarm_id = :aid
+          ORDER BY o.id DESC
+          LIMIT 1"
+    );
+    $stmt->execute([':aid' => (int)$alarm['id']]);
     $row = $stmt->fetch();
     if (!$row) {
         return null;
     }
 
     $occId = (int)$row['occ_id'];
-
-    if ($fileName !== '') {
-        $existentes = array_filter(array_map('trim', explode(',', (string)$row['alarm_file_url'])));
-        if (!in_array($fileName, $existentes, true)) {
-            $existentes[] = $fileName;
-            $db->prepare("UPDATE alarms SET file_url = :f, file_type = COALESCE(file_type, :t) WHERE id = :aid")
-               ->execute([':f' => implode(',', $existentes), ':t' => $fileType, ':aid' => (int)$row['alarm_id']]);
-        }
-    }
 
     $shouldLink = $row['media_file_id'] === null
         || ($fileType === 'video' && $row['linked_type'] !== 'video');

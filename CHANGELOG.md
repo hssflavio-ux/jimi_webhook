@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.17
+
+**Achado rodando o backfill da v4.13.16 contra produção de verdade (não só o dry-run): o efeito real — não a resposta síncrona — mostrou que `alarms.file_url` continuava NULL mesmo com os 4 arquivos (2 vídeos + 2 fotos) já íntegros em `media_files`, para todo alarme sem ocorrência gerada.**
+
+### Fixed
+- 🔴 **`link_upload_by_alarm_label()` (`includes/occurrence_engine.php`) só gravava `alarms.file_url` quando o alarme JÁ TINHA ocorrência** — o `SELECT` fazia `INNER JOIN occurrence_events`/`occurrences` ANTES de decidir gravar, então um alarme sem `occurrence_config_params` pro tipo (medido: `264-3`, "ADAS: Distância Insegura (HMW)") nunca ganhava a coluna preenchida, mesmo com o arquivo íntegro no disco e a linha certa em `media_files`. Sintoma idêntico ao que esta MESMA função já tinha corrigido uma vez (25/08/2026, docblock da função) — só que para uma fatia diferente de alarmes; o comentário antigo prometia "grava alarms.file_url sempre" e isso nunca foi verdade para quem não tinha ocorrência. Agora a gravação em `alarms` é incondicional (resolve por `imei`+`alarm_label` sozinha, sem JOIN); o vínculo com `occurrences.media_file_id` é um segundo passo, opcional, que não bloqueia mais o primeiro.
+- Reparados retroativamente os `alarms.file_url` que ficaram NULL durante a janela entre o deploy da v4.13.16 e esta correção (script avulso, não versionado — religou pelos `media_files` já no disco).
+
+### Verificação
+- `php -l` limpo.
+- Reprodução em produção: alarme #13787 (264-3, sem ocorrência) tinha os 4 arquivos em `media_files` e `file_url` NULL antes da correção; depois de reaplicar `link_upload_by_alarm_label()` para os arquivos já recebidos, `file_url` ficou populado com os 4 nomes.
+
 ## [Unreleased] — 4.13.16
 
 **Dono do produto descobriu, testando manualmente contra produção, que o comando `VIDEOUPLOAD` estava com o separador de canal errado — hífen em vez de sublinhado — e faltando um campo inteiro (`mediaType`). Corrigido, e aproveitado para fechar o gap: 263 dos 268 alarmes JT/T com anexo dos últimos 7 dias (só no JC371 865478070654829) nunca tiveram o vídeo pedido corretamente.**
