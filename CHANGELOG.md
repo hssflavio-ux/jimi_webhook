@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.9
+
+**Dono do produto reportou: os gráficos do `/painel` são difíceis de entender — todos mostram "00" a "23" sem dizer o que é isso, fácil de confundir com dia do mês.**
+
+### Fixed
+- 🔴 **Os dois gráficos de barra do painel (`ts_alarms`/`ts_occurrences`) não tinham título nenhum de eixo.** Com `periodo=hoje` (padrão da tela), o eixo X é HORA do dia em GMT-3 (00–23) — sem rótulo, fácil de ler como dia do mês, ainda mais perto do dia 23–25. Adicionado título de eixo no Chart.js (X: "Hora do dia (GMT-3)" ou "Dia", conforme o período; Y: "Alarmes"/"Ocorrências") e uma legenda curta acima do gráfico ("Hoje, por hora (GMT-3)" / "Últimos 7 dias, por dia" / "Últimos 30 dias, por dia") — nova função `dashboard_period_caption()` em `includes/dashboard_widgets.php`, chamada pelos dois widgets.
+
+### Verificação
+- `php -l` limpo em `includes/dashboard_widgets.php`.
+- JS gerado extraído e validado com `node --check` (sintaticamente correto, sem executar no navegador).
+
 ## [Unreleased] — 4.13.8
 
 **Vídeo chegava (v4.13.7) mas continuava sem aparecer em `/relatorios/alarmes` — quarto bug da cadeia, dois motivos independentes.**

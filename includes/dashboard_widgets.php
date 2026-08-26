@@ -385,6 +385,25 @@ function dashboard_render_heatmap(PDO $db, int $cid, bool $isReseller, string $p
     })();</script>';
 }
 
+/**
+ * Legenda curta do que o eixo X das séries temporais representa — sem isso
+ * (achado por relato do dono do produto) os dois gráficos de barra do painel
+ * (`ts_alarms`/`ts_occurrences`) mostravam só "00" a "23" sem dizer que é
+ * HORA do dia de hoje (GMT-3), fácil de confundir com dia do mês quando o
+ * usuário olha rápido — ainda mais perto do dia 23-25.
+ *
+ * @param string $periodo 'hoje' | '7d' | 'mes'
+ * @returns array{eixo:string, legenda:string}
+ */
+function dashboard_period_caption(string $periodo): array
+{
+    if ($periodo === 'hoje') {
+        return ['eixo' => 'Hora do dia (GMT-3)', 'legenda' => 'Hoje, por hora (GMT-3)'];
+    }
+    $dias = $periodo === '7d' ? 'Últimos 7 dias' : 'Últimos 30 dias';
+    return ['eixo' => 'Dia', 'legenda' => "{$dias}, por dia"];
+}
+
 function dashboard_series_window(string $periodo): array
 {
     if ($periodo === 'hoje') {
@@ -421,13 +440,16 @@ function dashboard_render_ts_alarms(PDO $db, int $cid, bool $isReseller, string 
             if (isset($labelIndex[$bk])) $vals[$labelIndex[$bk]] = (int)$r['cnt'];
         }
     } catch (Throwable $e) {}
-    return '<div class="text-mono" style="font-size:20px;font-weight:600;margin-bottom:6px;">' . array_sum($vals) . '</div>'
+    $cap = dashboard_period_caption($periodo);
+    return '<div class="text-mono" style="font-size:20px;font-weight:600;margin-bottom:2px;">' . array_sum($vals) . '</div>'
+        . '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">' . htmlspecialchars($cap['legenda']) . '</div>'
         . '<div class="chart-box" style="height:160px;position:relative;"><canvas id="w-chart-alarms"></canvas></div>
         <script>(function(){
             new Chart(document.getElementById("w-chart-alarms"), { type:"bar",
                 data:{ labels:' . json_encode($labels) . ', datasets:[{label:"Alarmes",data:' . json_encode($vals) . ',backgroundColor:"rgba(0,82,255,0.7)",borderRadius:4}]},
                 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-                    scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:"#eef0f3"}}}}
+                    scales:{x:{title:{display:true,text:' . json_encode($cap['eixo']) . ',font:{size:10}},ticks:{font:{size:9}},grid:{display:false}},
+                            y:{title:{display:true,text:"Alarmes",font:{size:10}},beginAtZero:true,ticks:{font:{size:9},precision:0},grid:{color:"#eef0f3"}}}}
             });
         })();</script>';
 }
@@ -448,13 +470,16 @@ function dashboard_render_ts_occurrences(PDO $db, int $cid, bool $isReseller, st
             if (isset($labelIndex[$bk])) $vals[$labelIndex[$bk]] = (int)$r['cnt'];
         }
     } catch (Throwable $e) {}
-    return '<div class="text-mono" style="font-size:20px;font-weight:600;margin-bottom:6px;">' . array_sum($vals) . '</div>'
+    $cap = dashboard_period_caption($periodo);
+    return '<div class="text-mono" style="font-size:20px;font-weight:600;margin-bottom:2px;">' . array_sum($vals) . '</div>'
+        . '<div style="font-size:11px;color:var(--muted);margin-bottom:6px;">' . htmlspecialchars($cap['legenda']) . '</div>'
         . '<div class="chart-box" style="height:160px;position:relative;"><canvas id="w-chart-occs"></canvas></div>
         <script>(function(){
             new Chart(document.getElementById("w-chart-occs"), { type:"bar",
                 data:{ labels:' . json_encode($labels) . ', datasets:[{label:"Ocorrências",data:' . json_encode($vals) . ',backgroundColor:"rgba(244,176,0,0.7)",borderRadius:4}]},
                 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
-                    scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:"#eef0f3"}}}}
+                    scales:{x:{title:{display:true,text:' . json_encode($cap['eixo']) . ',font:{size:10}},ticks:{font:{size:9}},grid:{display:false}},
+                            y:{title:{display:true,text:"Ocorrências",font:{size:10}},beginAtZero:true,ticks:{font:{size:9},precision:0},grid:{color:"#eef0f3"}}}}
             });
         })();</script>';
 }
