@@ -51,13 +51,19 @@
  * velocidade" (exemplo: wiki `IA-jc371`). Ficam de fora, mesmo estando perto:
  *   - `EVENTSET,FACE` (JC371) — CRUD de biblioteca facial (upload/exclusão de
  *     foto), não é "parâmetro com máscara".
- *   - `CRASHALM`/`SENSOR`/`SHOCK`/`SENALM`/`DEFENSE*`/`RAPIDACC`/`RAPIDDEC`/
- *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) e `COLLIDE`/`SPEEDCHECK`/`SWERVE`/
- *     `FATIGUE`/`GFENCE` (JC181/JC182) — colisão/vibração por ACELERÔMETRO,
- *     curva/frenagem brusca e cerca eletrônica NO EQUIPAMENTO, não visão
- *     computacional nem excesso de velocidade. Continuam disponíveis em
- *     `/comandos`, sem mudança (JC182 ganhou os mesmos em 26/08/2026, a
- *     pedido do dono do produto — ver `command_catalog.php`).
+ *   - `CRASHALM`/`SENSOR`/`SHOCK`/`DEFENSE*`/`RAPIDACC`/`RAPIDDEC`/
+ *     `RAPIDTURN`/`RAPIDTEST` (JC400/JC261) — colisão/vibração/curva/frenagem
+ *     brusca por ACELERÔMETRO, não visão computacional. Continuam só em
+ *     `/comandos` — sem pedido do dono do produto para trazê-los aqui.
+ *   - ⚠️ EXCEÇÃO deliberada a esta regra: `SENALM`/`COLLIDE`/`SPEEDCHECK`/
+ *     `SWERVE`/`FATIGUE`/`GFENCE`/`EVENTSET,ACD`/`EVENTSET,AVD` (JC181/JC182)
+ *     SÃO acelerômetro/GPS, mas o dono do produto pediu explicitamente que
+ *     entrassem NESTA tela (26/08/2026) — são o único painel de configuração
+ *     que estes dois modelos compactos têm (não têm as telas ricas de DMS/
+ *     ADAS do JC371/JC400AD). Ver a seção "JC181/JC182 — comandos de
+ *     acelerômetro/GPS" mais abaixo. Duplicadas de propósito em
+ *     `command_catalog.php`/`/comandos` (mesma fonte, mesmos parâmetros) —
+ *     não é inconsistência, é o mesmo comando acessível pelos dois caminhos.
  *   - `EVENTSET,FACE,*` (JC450, G016–G019) — mesmo caso do JC371 acima, CRUD
  *     de biblioteca facial.
  *   - `COLLIDE`/`INSTALLANGLE` (JC450, D011/D012) — colisão por acelerômetro
@@ -116,17 +122,20 @@
  * continua sendo o mecanismo pra promover os `'inferido'` restantes pra
  * `'medido'` conforme forem testados em mais câmeras/modelos.
  *
- * Total (26/08/2026): 70 entradas, todas com forma de consulta (18 `medido`,
- * 52 `inferido`, 0 sem forma) — JC371 (43 no campo `modelos`) + JC400AD (14)
- * + JC450 (18, 14 entradas PRÓPRIAS + 4 compartilhadas com JC371/JC400AD) +
- * JC182 (1, `EVENTSET,AOSD` — compartilhada com JC371) + JC181 (1, `SPEED`).
- * JC182 não soma entrada própria nenhuma: seu único comando de visão
- * confirmado (velocidade) já é o mesmo do JC371. As outras 6 entradas do
- * JC371 que o catálogo chegou a atribuir também ao JC182 (ALDW/AHMW/ADCA/
- * ACEA/ANDD/AFIF) foram REMOVIDAS do JC182 em 26/08/2026 — teste real de
- * campo mostrou que o equipamento não tem câmera de IA/visão computacional
- * (só ACD/AVD/AOSD, e os dois primeiros são acelerômetro — ver
- * `command_catalog.php`, fora do escopo desta tela).
+ * Total (26/08/2026): 79 entradas (21 `medido`, 56 `inferido`, 2 sem forma de
+ * consulta — os dois `GFENCE`, planilha não confirma se são consultáveis) —
+ * JC371 (43 no campo `modelos`) + JC450 (18) + JC400AD (14) + JC182 (11) +
+ * JC181 (8). As 6 entradas do JC371 que o catálogo chegou a atribuir também
+ * ao JC182 por analogia (ALDW/AHMW/ADCA/ACEA/ANDD/AFIF) foram REMOVIDAS do
+ * JC182 em 26/08/2026 — teste real de campo mostrou que o equipamento não
+ * tem câmera de IA/visão computacional. No lugar delas, o JC182 (e o JC181,
+ * que compartilha o mesmo vocabulário "de planilha") ganharam uma seção
+ * própria de comandos de acelerômetro/GPS — `EVENTSET,ACD`/`AVD`,`SENALM`,
+ * `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE`, `GFENCE` (circular e
+ * retangular) — trazidos para ESTA tela por pedido explícito do dono do
+ * produto, apesar de serem acelerômetro/GPS e não visão computacional (ver
+ * "Fora de escopo, de propósito" acima para a exceção documentada). São
+ * duplicatas de propósito das mesmas entradas em `command_catalog.php`.
  */
 
 return [
@@ -1152,10 +1161,15 @@ return [
     // JC181 — sem ADAS/DMS por visão (sem chip de IA); só evento de velocidade
     // ═══════════════════════════════════════════════════════════════════════
 
+    // v4.13.13 (26/08/2026) — JC182 adicionado: o dono do produto confirmou
+    // que a câmera responde ao mesmo `SPEED` da planilha JC181 (além do
+    // `EVENTSET,AOSD` já medido — as duas formas convivem no mesmo
+    // equipamento). Ver a seção "JC181/JC182 — comandos de acelerômetro/GPS"
+    // logo abaixo para o resto do vocabulário compartilhado dos dois modelos.
     'SPEED,P1,P2,P3,P4#' => [
         'cmd' => 'SPEED', 'nome' => 'Evento de excesso de velocidade',
         'desc' => 'Ativa/desativa o evento de excesso de velocidade, define modo de alerta, limite e duração acima dele.',
-        'modelos' => ['JC181'], 'template' => true,
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
         'consulta' => 'SPEED#', 'consulta_ref' => 'medido', 'fonte' => 'JC181 Command List V1.0.7, linha D003', 'procedencia' => 'planilha',
         'params' => [
             ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => '—'],
@@ -1166,7 +1180,172 @@ return [
         'exemplos' => [['cmd' => 'SPEED,ON,0,90,10', 'desc' => 'dispara acima de 90 km/h mantidos por 10 s.']],
     ],
 
-    // v4.13.12 (26/08/2026) — nota histórica atualizada: esta seção dizia que
+    // ═══════════════════════════════════════════════════════════════════════
+    // JC181 / JC182 — comandos de acelerômetro/GPS trazidos para a tela de IA
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // v4.13.13 (26/08/2026) — CORREÇÃO de leitura do pedido original: "todos
+    // os outros comandos desse modelo devem estar na tela de comandos" (msg.
+    // do dono do produto) se referia a ESTA tela ("tela de comandos de IA" —
+    // Configurações IA), não à tela genérica `/comandos`. A v4.13.12 tinha
+    // interpretado errado e deixado esses comandos só em
+    // `command_catalog.php`; o dono do produto corrigiu ("você não corrigiu
+    // a tela de comandos de ia... com os comandos que listei").
+    //
+    // Por isso, para JC181/JC182, os comandos de colisão/vibração/curva/
+    // frenagem/fadiga/cerca eletrônica ENTRAM aqui — exceção deliberada à
+    // regra geral de "fora de escopo" do cabeçalho do arquivo (que continua
+    // valendo para JC400/JC261/outros modelos, onde não há pedido do dono do
+    // produto para trazê-los). Estas entradas são DUPLICATAS de propósito das
+    // que existem em `command_catalog.php`/`/comandos` — mesma fonte, mesmos
+    // parâmetros — porque o operador do JC181/JC182 usa a tela de IA como
+    // painel único de configuração desses dois modelos (eles não têm as
+    // telas ricas de DMS/ADAS do JC371/JC400AD).
+    //
+    // Fonte de todas: `docs/JC181_Command_List_V1.0.7_20250811.xlsx`, exceto
+    // EVENTSET,ACD/AVD (medidos em campo no JC182, 26/08/2026 — ver nota em
+    // EVENTSET,AOSD no topo deste arquivo).
+
+    'EVENTSET,ACD,P1#' => [
+        'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — colisão',
+        'desc' => 'Sensibilidade do evento de colisão (dialeto EVENTSET/JT/T do JC182). Confirmado em campo — um dos 3 códigos que a câmera de fato responde.',
+        'modelos' => ['JC182'], 'template' => true,
+        'consulta' => 'EVENTSET,ACD#', 'consulta_ref' => 'medido', 'fonte' => 'medido em campo, 26/08/2026', 'procedencia' => 'wiki',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'valor visto em campo: 80 — faixa completa não confirmada', 'default' => '80'],
+        ],
+        'exemplos' => [['cmd' => 'EVENTSET,ACD,80#', 'desc' => 'valor visto em campo no JC182 (26/08/2026).']],
+    ],
+    'EVENTSET,AVD,P1,P2,P3,P4#' => [
+        'cmd' => 'EVENTSET', 'nome' => 'Sensibilidade — vibração',
+        'desc' => 'Sensibilidade do evento de vibração com o veículo parado (dialeto EVENTSET/JT/T do JC182). Confirmado em campo — um dos 3 códigos que a câmera de fato responde.',
+        'modelos' => ['JC182'], 'template' => true,
+        'consulta' => 'EVENTSET,AVD#', 'consulta_ref' => 'medido', 'fonte' => 'medido em campo, 26/08/2026', 'procedencia' => 'wiki',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => 'OFF / 1–5 (quanto menor, mais sensível)', 'default' => '3'],
+            ['p' => 'P2', 'desc' => 'Tempo de detecção', 'format' => '1–300 (segundos)', 'default' => '10'],
+            ['p' => 'P3', 'desc' => 'Nº de vibrações', 'format' => '1–20', 'default' => '5'],
+            ['p' => 'P4', 'desc' => 'Filtro de alarme', 'format' => '10–60 (segundos)', 'default' => '30'],
+        ],
+        'exemplos' => [['cmd' => 'EVENTSET,AVD,3,10,5,30#', 'desc' => 'gera evento se houver 5 vibrações em 10s, após 30s em ACC OFF.']],
+    ],
+    'SENALM,P1,P2,P3,P4,P5#' => [
+        'cmd' => 'SENALM', 'nome' => 'Vibração (veículo parado) — dialeto planilha',
+        'desc' => 'Sensibilidade para disparar evento de vibração com o veículo estacionado (dialeto de texto simples, alternativo ao EVENTSET,AVD acima).',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => 'SENALM#', 'consulta_ref' => 'medido', 'fonte' => 'JC181 Command List V1.0.7, linha D002', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Sensibilidade (0 desativa; quanto maior o número, menos sensível)', 'format' => '0/1/2/3/4/5', 'default' => '2'],
+            ['p' => 'P2', 'desc' => 'Número de interrupções por vibração para disparar o alarme', 'format' => '1–20', 'default' => '5'],
+            ['p' => 'P3', 'desc' => 'Tempo de detecção', 'format' => '1–3000 (segundos)', 'default' => '10'],
+            ['p' => 'P4', 'desc' => 'Intervalo mínimo até o próximo alarme (filtro)', 'format' => '1–3000 (minutos)', 'default' => '5'],
+            ['p' => 'P5', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+        ],
+        'exemplos' => [['cmd' => 'SENALM,2,10,15,5,0#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'COLLIDE,P1,P2,P3,P4,P5,P6,P7,P8#' => [
+        'cmd' => 'COLLIDE', 'nome' => 'Colisão — dialeto planilha',
+        'desc' => 'Sensibilidade para disparar alerta de colisão durante a condução (dialeto de texto simples, alternativo ao EVENTSET,ACD acima).',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => 'COLLIDE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D006', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'ON'],
+            ['p' => 'P2', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+            ['p' => 'P3', 'desc' => 'Sensibilidade de disparo', 'format' => '0–255', 'default' => '120'],
+            ['p' => 'P4', 'desc' => 'Atraso antes de checar a velocidade', 'format' => '0–20 (segundos)', 'default' => '0'],
+            ['p' => 'P5', 'desc' => 'Tempo de checagem — confirma colisão se a velocidade ficar abaixo do limiar por este tempo', 'format' => '10–90 (segundos)', 'default' => '15'],
+            ['p' => 'P6', 'desc' => 'Limiar de velocidade para confirmar colisão', 'format' => '5–30 (km/h)', 'default' => '5'],
+            ['p' => 'P7', 'desc' => 'Taxa mínima de variação de aceleração', 'format' => '0–100', 'default' => '70'],
+            ['p' => 'P8', 'desc' => 'Taxa de variação de aceleração acima da qual dispensa a dupla confirmação', 'format' => '2–300', 'default' => '90'],
+        ],
+        'exemplos' => [['cmd' => 'COLLIDE,ON,0,600,10,90,5#', 'desc' => 'exemplo literal da planilha — ⚠️ tem só 6 valores para 8 campos documentados (planilha do fabricante inconsistente); confirmar arity real antes de usar em produção.']],
+    ],
+    'SPEEDCHECK,P1,P2,P3,P4,P5#' => [
+        'cmd' => 'SPEEDCHECK', 'nome' => 'Frenagem/aceleração brusca (detecção)',
+        'desc' => 'Queda ou aumento de velocidade em N segundos para caracterizar frenagem/aceleração brusca.',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => 'SPEEDCHECK#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D004', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P2', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+            ['p' => 'P3', 'desc' => 'Tempo de detecção', 'format' => '1–30 (segundos)', 'default' => '4'],
+            ['p' => 'P4', 'desc' => 'Variação de velocidade que caracteriza aceleração brusca', 'format' => '10–300 (km/h)', 'default' => '30'],
+            ['p' => 'P5', 'desc' => 'Variação de velocidade que caracteriza frenagem brusca', 'format' => '10–300 (km/h)', 'default' => '50'],
+        ],
+        'exemplos' => [['cmd' => 'SPEEDCHECK,ON,0,4,30,50#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'SWERVE,P1,P2,P3,P4,P5#' => [
+        'cmd' => 'SWERVE', 'nome' => 'Curva brusca (detecção)',
+        'desc' => 'Tempo de detecção para caracterizar curva brusca.',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => 'SWERVE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D005', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P2', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+            ['p' => 'P3', 'desc' => 'Limiar do ângulo de curva (planilha rotula a unidade como "km/h" — provável erro do fabricante)', 'format' => '10–180', 'default' => '30'],
+            ['p' => 'P4', 'desc' => 'Velocidade mínima para caracterizar curva brusca', 'format' => '10–300 (km/h)', 'default' => '60'],
+            ['p' => 'P5', 'desc' => 'Tempo de detecção', 'format' => '1–30 (segundos)', 'default' => '3'],
+        ],
+        'exemplos' => [['cmd' => 'SWERVE,ON,0,30,30,3#', 'desc' => 'exemplo da planilha.']],
+    ],
+    'FATIGUE,P1,P2,P3,P4#' => [
+        'cmd' => 'FATIGUE', 'nome' => 'Fadiga (direção por tempo excessivo)',
+        'desc' => 'Configura o limiar de horas dirigindo sem parar que dispara o evento de fadiga.',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => 'FATIGUE#', 'consulta_ref' => 'inferido', 'fonte' => 'JC181 Command List V1.0.7, linha D010', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P2', 'desc' => 'Tempo dirigindo sem parar que dispara o evento', 'format' => '4–12 (horas)', 'default' => '4'],
+            ['p' => 'P3', 'desc' => 'Tempo mínimo de parada para zerar a contagem', 'format' => '1–30 (minutos)', 'default' => '30'],
+            ['p' => 'P4', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+        ],
+        'exemplos' => [['cmd' => 'FATIGUE,ON,6,15,0#', 'desc' => 'dispara após 6 h dirigindo sem parar por ao menos 15 min.']],
+    ],
+    // GFENCE: ⚠️ mesma incerteza genuína documentada em `command_catalog.php`
+    // — um campo final sem descrição em nenhum lugar da planilha (sempre "1"
+    // nos dois exemplos oficiais). NÃO enviar em produção sem confirmar em
+    // câmera real primeiro.
+    'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10#' => [
+        'cmd' => 'GFENCE', 'nome' => 'Cerca eletrônica (circular)',
+        'desc' => 'Configura uma cerca eletrônica circular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => null, 'consulta_ref' => null, 'fonte' => 'JC181 Command List V1.0.7, linha D011', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
+            ['p' => 'P2', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P3', 'desc' => 'Forma da cerca (fixo nesta variante)', 'format' => '0 = circular', 'default' => '0'],
+            ['p' => 'P4', 'desc' => 'Latitude do centro', 'format' => '0 = detecção automática pela posição atual do GPS, ou valor fixo', 'default' => '0'],
+            ['p' => 'P5', 'desc' => 'Longitude do centro', 'format' => '0 = detecção automática pela posição atual do GPS, ou valor fixo', 'default' => '0'],
+            ['p' => 'P6', 'desc' => 'Raio do círculo', 'format' => '1–9999, unidade 100 m (ex.: 10 = 1000 m)', 'default' => '10'],
+            ['p' => 'P7', 'desc' => 'Direção do alarme', 'format' => 'IN = ao entrar / OUT = ao sair / vazio = os dois', 'default' => 'vazio'],
+            ['p' => 'P8', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+            ['p' => 'P9', 'desc' => 'Controle de gravação', 'format' => '0 = grava só fora da cerca / 1 = grava só dentro / 255 = não controla', 'default' => '0'],
+            ['p' => 'P10', 'desc' => '⚠️ Campo sem descrição na planilha — sempre "1" no único exemplo visto', 'format' => 'desconhecido', 'default' => '1'],
+        ],
+        'exemplos' => [['cmd' => 'GFENCE,1,ON,0,0,0,10,,0,0,1#', 'desc' => 'exemplo literal da planilha — cerca 1, centro pela posição atual, raio 1000 m, alarme ao entrar e sair, GPRS. NÃO confirmado em câmera real.']],
+    ],
+    'GFENCE,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11#' => [
+        'cmd' => 'GFENCE', 'nome' => 'Cerca eletrônica (retangular)',
+        'desc' => 'Configura uma cerca eletrônica retangular no equipamento e, opcionalmente, controla a gravação dentro/fora dela.',
+        'modelos' => ['JC181', 'JC182'], 'template' => true,
+        'consulta' => null, 'consulta_ref' => null, 'fonte' => 'JC181 Command List V1.0.7, linha D012', 'procedencia' => 'planilha',
+        'params' => [
+            ['p' => 'P1', 'desc' => 'Número da cerca', 'format' => '1 (único valor visto na planilha)', 'default' => '1'],
+            ['p' => 'P2', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+            ['p' => 'P3', 'desc' => 'Forma da cerca (fixo nesta variante)', 'format' => '1 = retangular', 'default' => '1'],
+            ['p' => 'P4', 'desc' => 'Latitude do 1º canto', 'format' => 'graus decimais', 'default' => '—'],
+            ['p' => 'P5', 'desc' => 'Longitude do 1º canto', 'format' => 'graus decimais', 'default' => '—'],
+            ['p' => 'P6', 'desc' => 'Latitude do 2º canto', 'format' => 'graus decimais', 'default' => '—'],
+            ['p' => 'P7', 'desc' => 'Longitude do 2º canto', 'format' => 'graus decimais', 'default' => '—'],
+            ['p' => 'P8', 'desc' => 'Direção do alarme', 'format' => 'IN = ao entrar / OUT = ao sair / vazio = os dois', 'default' => 'vazio'],
+            ['p' => 'P9', 'desc' => 'Forma de envio do alarme', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+            ['p' => 'P10', 'desc' => 'Controle de gravação', 'format' => '0 = grava só fora da cerca / 1 = grava só dentro / 255 = não controla', 'default' => '0'],
+            ['p' => 'P11', 'desc' => '⚠️ Campo sem descrição na planilha — sempre "1" no único exemplo visto', 'format' => 'desconhecido', 'default' => '1'],
+        ],
+        'exemplos' => [['cmd' => 'GFENCE,1,ON,1,23,113,24,114,,0,0,1#', 'desc' => 'exemplo literal da planilha — retângulo entre os cantos (23,113) e (24,114), alarme ao entrar e sair, GPRS. NÃO confirmado em câmera real.']],
+    ],
+
+    // v4.13.13 (26/08/2026) — nota histórica atualizada: esta seção dizia que
     // JC450 e JC182 "não têm planilha própria" e entravam só como modelo a
     // mais nas linhas do JC371 (DMSSP/DMSVSP/ADAS,CALIBRATION para o JC450;
     // EVENTSET,ACEA/ADCA/AFIF/AHMW/ALDW/ANDD para o JC182). Isso mudou:
@@ -1178,9 +1357,8 @@ return [
     //   - O JC182 perdeu os 6 códigos ADAS/DMS que citavam esta nota: teste
     //     real de campo (26/08/2026) mostrou que o equipamento não tem
     //     câmera de IA/visão computacional — só responde a 3 códigos EVENTSET
-    //     (`ACD`, `AVD`, `AOSD`), dos quais só `AOSD` (velocidade) é
-    //     visão/escopo desta tela; ACD/AVD (colisão/vibração, acelerômetro)
-    //     ficam em `command_catalog.php`. Ver `EVENTSET,AOSD` no topo deste
-    //     arquivo para o detalhe completo.
+    //     (`ACD`, `AVD`, `AOSD`). Os 3 ganharam entrada própria nesta tela
+    //     (ver acima), junto do restante do vocabulário "planilha JC181"
+    //     compartilhado entre os dois modelos.
 
 ];

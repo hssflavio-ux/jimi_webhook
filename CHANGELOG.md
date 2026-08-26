@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.13
+
+**Dono do produto corrigiu a leitura da v4.13.12: "todos os outros comandos desse modelo devem estar na tela de comandos" se referia à própria tela de Configurações IA ("tela de comandos de IA"), não à tela genérica /comandos. Os comandos de acelerômetro/GPS do JC181/JC182 tinham ficado só em /comandos.**
+
+### Added
+- **10 entradas novas em `includes/ia_config_catalog.php` (tela Configurações IA) para JC181/JC182**: `EVENTSET,ACD` (colisão) e `EVENTSET,AVD` (vibração) — os dois dialetos EVENTSET medidos em campo no JC182 —, mais `SENALM`, `COLLIDE`, `SPEEDCHECK`, `SWERVE`, `FATIGUE` e `GFENCE` (circular e retangular) no dialeto "planilha JC181" para os dois modelos, e `JC182` adicionado ao `SPEED` que já existia para JC181. São exceção deliberada à regra "fora de escopo" do cabeçalho do arquivo (acelerômetro/GPS não é visão computacional) — mas JC181/JC182 não têm outra tela de configuração de IA, e o dono do produto pediu explicitamente que entrassem aqui. Duplicatas de propósito das entradas equivalentes em `command_catalog.php`/`/comandos` (mesma fonte, mesmos parâmetros — não removidas de lá).
+
+### Verificação
+- `php -l` limpo em `includes/ia_config_catalog.php`.
+- Catálogo recarregado via `php -r`: 79 entradas (era 70), sem colisão de chave; 21 `medido`, 56 `inferido`, 2 sem forma de consulta (os dois `GFENCE`).
+
 ## [Unreleased] — 4.13.12
 
 **Dono do produto reportou (26/08/2026): JC182 real, testado em campo, só responde a 3 dos ~9 códigos EVENTSET que a tela de Configurações IA mostrava para o modelo — bug de categorização herdado por analogia com o JC371. Pediu também: (1) completar os comandos reais do JC182 (planilha JC181 + confirmação de campo) e (2) deixar pronta a tela de Configurações IA para o JC450, que ainda não tem equipamento instalado mas tem planilha própria.**
