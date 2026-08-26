@@ -169,11 +169,11 @@ class PushAlarmHandler extends WebhookHandler {
             // CLAUDE.md). Sem tirar as vírgulas aqui, no PONTO ÚNICO onde o
             // valor entra, dois consumidores downstream quebram em silêncio:
             // o ctype_xdigit() de queue_event_video_request() (disparo
-            // automático de vídeo, proNo 37384) rejeita todo alarme achando
-            // que não há anexo, e link_upload_by_alarm_label() nunca acha
+            // automático de vídeo, VIDEOUPLOAD via proNo 128 — ver
+            // includes/occurrence_engine.php) rejeita todo alarme achando que
+            // não há anexo, e link_upload_by_alarm_label() nunca acha
             // igualdade contra o label contínuo extraído do NOME do arquivo
-            // em pushfileupload.php. Medido em produção 25/08/2026: zero
-            // comandos 37384 emitidos desde que o proNo foi corrigido.
+            // em pushfileupload.php.
             $alarmLabel    = str_replace(',', '', $msg['alarmLabel'] ?? $msg['alarmId'] ?? '') ?: null;
             $alarmId       = $msg['alarmId'] ?? null;
             $alarmSerialNo = isset($msg['alarmSerialNo']) ? (int)$msg['alarmSerialNo'] : null;

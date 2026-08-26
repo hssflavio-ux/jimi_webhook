@@ -355,17 +355,28 @@ function get_branch_id_for_imei(PDO $db, string $imei): ?int
  * Preferência de mídia: preenche media_file_id vazio; se a ocorrência já
  * tem uma imagem vinculada e chega o VÍDEO do mesmo anexo, o vídeo assume.
  *
+ * 🔴 Também grava `alarms.file_url`/`file_type` no ALARME dono do label — não
+ * só `occurrences.media_file_id`. Achado em produção 25/08/2026: sem isso,
+ * `handlers/rel_alarmes.php` (que lê só `alarms.file_url`, por linha de
+ * alarme) e a grade "Alarmes Agrupados" do detalhe (idem) nunca mostravam o
+ * anexo — só o card de mídia da ocorrência, que já tinha o degrau 1
+ * (`occurrences.media_file_id`), enxergava. Convenção de MÚLTIPLOS arquivos
+ * no mesmo alarme (um por canal) é a mesma da JIMI: nomes separados por
+ * vírgula (`media_file_list()` já espera isso).
+ *
  * @param PDO    $db       Conexão ativa
  * @param string $imei     IMEI do device
  * @param string $label    alarmLabel extraído do nome do arquivo
  * @param int    $mediaId  media_files.id recém-inserido
  * @param string $fileType Tipo detectado ('video', 'image', …)
+ * @param string $fileName Nome do arquivo (para gravar em alarms.file_url)
  * @return int|null ID da ocorrência vinculada, ou null se não resolvida
  */
-function link_upload_by_alarm_label(PDO $db, string $imei, string $label, int $mediaId, string $fileType): ?int
+function link_upload_by_alarm_label(PDO $db, string $imei, string $label, int $mediaId, string $fileType, string $fileName = ''): ?int
 {
     $stmt = $db->prepare(
-        "SELECT o.id, o.media_file_id, mf.file_type AS linked_type
+        "SELECT a.id AS alarm_id, a.file_url AS alarm_file_url,
+                o.id AS occ_id, o.media_file_id, mf.file_type AS linked_type
          FROM alarms a
          JOIN occurrence_events e ON e.alarm_id = a.id
          JOIN occurrences o ON o.id = e.occurrence_id
@@ -381,7 +392,17 @@ function link_upload_by_alarm_label(PDO $db, string $imei, string $label, int $m
         return null;
     }
 
-    $occId = (int)$row['id'];
+    $occId = (int)$row['occ_id'];
+
+    if ($fileName !== '') {
+        $existentes = array_filter(array_map('trim', explode(',', (string)$row['alarm_file_url'])));
+        if (!in_array($fileName, $existentes, true)) {
+            $existentes[] = $fileName;
+            $db->prepare("UPDATE alarms SET file_url = :f, file_type = COALESCE(file_type, :t) WHERE id = :aid")
+               ->execute([':f' => implode(',', $existentes), ':t' => $fileType, ':aid' => (int)$row['alarm_id']]);
+        }
+    }
+
     $shouldLink = $row['media_file_id'] === null
         || ($fileType === 'video' && $row['linked_type'] !== 'video');
 

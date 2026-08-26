@@ -172,10 +172,30 @@ window.bcPlayer = (function () {
     /**
      * Monta o bloco do player dentro de um container vazio e inicializa.
      * É o caminho de quem só conhece a URL na hora do clique (modal).
+     *
+     * `kind` é novo (25/08/2026): até então `montar()` SEMPRE montava um
+     * `<video>`, e o anexo de alarme JT/T (VIDEOUPLOAD) pode chegar como FOTO
+     * por canal — um `<video src="foto.jpg">` dispara o evento `error` e cai
+     * em "Não foi possível carregar o vídeo", mesmo com o arquivo íntegro.
+     * `kind === 'image'` usa `<img>`, mesmo tratamento que
+     * `web/components/video_player.php` já dava no detalhe da ocorrência
+     * (que nasce com a mídia no HTML); aqui é o caminho de quem só sabe a URL
+     * na hora do clique.
      */
-    function montar(container, url, ehTs, alturaMax) {
+    function montar(container, url, ehTs, alturaMax, kind) {
         if (!container) return null;
         destruir(container.querySelector('.bc-player'));
+        if (kind === 'image') {
+            container.innerHTML = '<div class="bc-player-box" style="max-height:' + (alturaMax || 440) + 'px;"></div>';
+            var img = document.createElement('img');
+            img.src = url;
+            img.alt = 'Imagem do evento';
+            img.style.maxWidth = '100%';
+            img.style.maxHeight = (alturaMax || 440) + 'px';
+            img.style.display = 'block';
+            container.querySelector('.bc-player-box').appendChild(img);
+            return null;
+        }
         container.innerHTML =
             '<div class="bc-player" data-auto="0" data-ts="' + (ehTs ? '1' : '0') + '">' +
               '<div class="bc-player-box" style="min-height:240px;">' +

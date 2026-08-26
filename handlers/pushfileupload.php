@@ -95,7 +95,7 @@ class PushFileUploadHandler extends WebhookHandler {
                 if ($mediaId > 0 && $result === 'SUCCESS') {
                     $linked = null;
                     if ($alarmLabel) {
-                        $linked = link_upload_by_alarm_label($this->db, $imei, $alarmLabel, $mediaId, $fileType);
+                        $linked = link_upload_by_alarm_label($this->db, $imei, $alarmLabel, $mediaId, $fileType, $fileName);
                     }
                     if ($linked === null && $eventTime) {
                         link_upload_to_occurrence($this->db, $imei, $eventTime, $mediaId);

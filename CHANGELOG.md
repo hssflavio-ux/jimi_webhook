@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.8
+
+**Vídeo chegava (v4.13.7) mas continuava sem aparecer em `/relatorios/alarmes` — quarto bug da cadeia, dois motivos independentes.**
+
+### Fixed
+- 🔴 **`link_upload_by_alarm_label()` só gravava `occurrences.media_file_id`, nunca `alarms.file_url`.** `handlers/rel_alarmes.php` (e a grade "Alarmes Agrupados" do detalhe da ocorrência) leem exclusivamente `alarms.file_url`, por linha de alarme — sem essa coluna preenchida, o anexo ficava invisível ali mesmo já vinculado à ocorrência. Corrigido gravando as duas, com a convenção de múltiplos canais já usada pela JIMI (nomes separados por vírgula).
+- 🔴 **O anexo do `VIDEOUPLOAD` pode chegar como FOTO (`.jpg`), não só vídeo** — medido em produção: um `.jpg` por canal para o mesmo alarme. `rel_alarmes.php` filtrava só `media_kind(...) === 'video'`, e `bcPlayer.montar()` (o player em JS do modal, `web/components/video_player_assets.php`) só sabia montar `<video>` — um `.jpg` carregado ali dispararia o evento `error` do `<video>` em silêncio. Os dois ganharam o ramo de imagem: filtro aceita `['video','image']`, `montar()` ganhou parâmetro `kind` e monta `<img>` quando for foto. Botão passa a dizer "Ver Foto" quando aplicável.
+
+### Verificação
+- `php -l` limpo em `includes/occurrence_engine.php`, `handlers/pushfileupload.php`, `handlers/rel_alarmes.php`, `web/components/video_player_assets.php`, `handlers/pushalarm.php`.
+- `STATUS.md` ganhou entrada consolidada com a cadeia completa dos 4 bugs (v4.13.3–4.13.8); arquivamento rodado (`status-archive`) para manter as 3 entradas mais recentes inline.
+
 ## [Unreleased] — 4.13.7
 
 **Primeiro upload JT/T de verdade da sessão (VIDEOUPLOAD pós-fix) — e ele revelou mais um bug: o anexo de uma ocorrência foi ligado a OUTRA.**
