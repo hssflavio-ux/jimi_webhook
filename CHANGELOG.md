@@ -5,6 +5,13 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.11
+
+**Dono do produto pediu: excesso de velocidade não é uma frente que o produto vai tratar por enquanto — elevar o limite padrão para não disparar o estado no uso normal.**
+
+### Changed
+- `DEFAULT_SPEED_LIMIT_KMH` (`includes/fleet_state.php`) elevado de **80 para 150 km/h**. É o piso usado por `resolve_speed_limit()` quando nem o equipamento (`devices.speed_limit_kmh`) nem o cliente (`customers.default_speed_limit_kmh`) têm valor cadastrado — afeta o estado "Excesso de velocidade" do balão em `/rastreamento` e qualquer outra tela que use `resolve_speed_limit()`/`resolve_live_state()`. Funcionalidade preservada (não removida): equipamento ou cliente com valor próprio cadastrado continuam usando o valor deles, sem alteração.
+
 ## [Unreleased] — 4.13.10
 
 **Dono do produto pediu: remover do menu o item Resumo (substituído pelo Painel) e o item Parâmetros (tela ainda não funcional) — só a exibição, código intocado para uso futuro.**

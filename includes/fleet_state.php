@@ -106,10 +106,14 @@ function device_presence(?int $min): array
 /**
  * Limite de velocidade quando nem o equipamento nem o cliente definiram um.
  *
- * 80 km/h é o limite de rodovia de pista simples no Brasil (CTB art. 61),
- * que é o cenário mais comum de frota rodoviária.
+ * v4.13.11 — elevado de 80 para 150 km/h a pedido do dono do produto: excesso
+ * de velocidade não é uma frente que o produto vai tratar por enquanto. Valor
+ * alto o bastante pra "excesso" praticamente não disparar no uso normal, sem
+ * apagar a funcionalidade (fica pronta para quando isto voltar à pauta —
+ * device/cliente ainda podem sobrescrever via resolve_speed_limit()).
+ * 80 km/h era o limite de rodovia de pista simples no Brasil (CTB art. 61).
  */
-const DEFAULT_SPEED_LIMIT_KMH = 80;
+const DEFAULT_SPEED_LIMIT_KMH = 150;
 
 /**
  * Piso de pontos para um excesso de velocidade valer como evento.
