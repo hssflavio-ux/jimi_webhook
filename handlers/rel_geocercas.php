@@ -384,7 +384,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td class="text-mono"><?= htmlspecialchars(fmt_dwell($dwell)) ?></td>
                 <td>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['latitude'], $r['longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                 </td>
             </tr>
@@ -433,7 +433,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
                 <td>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['latitude'], $r['longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                 </td>
             </tr>

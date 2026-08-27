@@ -82,6 +82,29 @@ function is_valid_coordinate($lat, $lng) {
 }
 
 /**
+ * Link "Ver Mapa" — abre o ponto num serviço de mapa externo, em nova aba.
+ *
+ * Ponto ÚNICO desta URL: até 26/08/2026 os 9 arquivos que oferecem "Ver Mapa"
+ * (`rel_alarmes`, `rel_desatualizados`, `rel_geocercas`, `rel_ignicao`,
+ * `rel_posicoes`, `rel_status_frota`, `rel_velocidade`, `report_segments.php`,
+ * `export_helper.php`) montavam a MESMA string do OpenStreetMap
+ * (`https://www.openstreetmap.org/?mlat=…`) cada um por conta própria.
+ * Trocar de provedor — como pedido aqui, para Google Maps — exigia lembrar
+ * dos 9 lugares. A URL usada é a API pública "Universal" do Google Maps
+ * (`/maps/search/?api=1&query=lat,lng`), que não exige chave e é a forma
+ * oficialmente documentada para linkar um ponto sem precisar de um Maps
+ * Embed/JavaScript API key.
+ *
+ * @param float|string $lat
+ * @param float|string $lng
+ * @returns string URL pronta para `href`
+ */
+function map_link_url($lat, $lng): string
+{
+    return sprintf('https://www.google.com/maps/search/?api=1&query=%s,%s', $lat, $lng);
+}
+
+/**
  * Calcula a distância em quilômetros entre dois pontos geográficos
  * utilizando a fórmula de Haversine.
  *

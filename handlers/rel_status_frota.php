@@ -343,7 +343,7 @@ $cardBase = http_build_query($cardQ);
                 <td class="text-mono"><?= $r['last_speed'] !== null ? number_format((float)$r['last_speed'], 1, ',', '.') . ' km/h' : '—' ?></td>
                 <td>
                     <?php if ($hasCoords): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['last_latitude'] ?>&mlon=<?= $r['last_longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['last_latitude'], $r['last_longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>

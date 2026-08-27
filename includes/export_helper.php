@@ -68,7 +68,7 @@ function export_map_link($lat, $lng, string $label = 'MAPA')
         return '—';
     }
     return new ExportLink(
-        sprintf('https://www.openstreetmap.org/?mlat=%s&mlon=%s&zoom=16', $lat, $lng),
+        map_link_url($lat, $lng),
         $label
     );
 }

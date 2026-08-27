@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.19
+
+**Pedido do dono do produto: os links "Ver Mapa" que abrem em aba externa devem ir para o Google Maps, não o OpenStreetMap. Mesma lição da padronização de mapas (v4.13.18): 9 arquivos duplicavam a mesma URL do OSM.**
+
+### Changed
+- **`map_link_url($lat, $lng)`** (novo, `includes/functions.php`) — ponto único da URL de "Ver Mapa"; troca `https://www.openstreetmap.org/?mlat=…` por `https://www.google.com/maps/search/?api=1&query=lat,lng` (API pública "Universal" do Google Maps, sem chave). Substituído nos 9 pontos que geravam o link: `rel_alarmes`, `rel_desatualizados`, `rel_geocercas` (2×), `rel_ignicao`, `rel_posicoes`, `rel_status_frota`, `rel_velocidade`, `report_segments.php` e `export_helper.php` (exportação XLSX/CSV/PDF).
+- A camada de tiles do mapa embutido (Leaflet "Ruas") continua OpenStreetMap — só o link externo mudou.
+
+### Verificação
+- `php -l` limpo nos 10 arquivos tocados.
+- `tests/export.spec.js` atualizado para a URL nova (assert que quebraria em silêncio se alguém revertesse um dos 9 pontos).
+
 ## [Unreleased] — 4.13.18
 
 **Pedido do dono do produto: camada de mapa satelital. Os 10 mapas do sistema duplicavam cada um o próprio `<link>`/`<script>` do Leaflet e o próprio `L.tileLayer(OSM)` — padronizado antes de acrescentar a camada nova, para não repetir a mudança 10 vezes.**

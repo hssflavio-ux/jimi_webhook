@@ -283,7 +283,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td>
                     <?php if ((float)$r['latitude'] != 0): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['latitude'], $r['longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>

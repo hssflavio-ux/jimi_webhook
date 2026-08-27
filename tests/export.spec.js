@@ -95,6 +95,6 @@ test('relatório agendado de Alarmes sai padronizado por placa, com a URL do map
     // asserção que passaria por vacuidade sobre um arquivo só com cabeçalho.
     if (linhas.length > 1) {
         expect(linhas[1], 'a coluna Mapa do CSV leva a URL, não o rótulo')
-            .toContain('https://www.openstreetmap.org/?mlat=');
+            .toContain('https://www.google.com/maps/search/?api=1&query=');
     }
 });

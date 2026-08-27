@@ -337,7 +337,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 </td>
                 <td>
                     <?php if ($hasCoords): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['start_lat'] ?>&mlon=<?= $r['start_lng'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['start_lat'], $r['start_lng'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>

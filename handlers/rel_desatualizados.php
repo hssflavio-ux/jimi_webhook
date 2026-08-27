@@ -365,7 +365,7 @@ $expBaseFrota = http_build_query($expQ);
                 <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoTotal, $r['last_latitude'], $r['last_longitude'])) ?></td>
                 <td>
                     <?php if ($temCoord): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['last_latitude'] ?>&mlon=<?= $r['last_longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['last_latitude'], $r['last_longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>

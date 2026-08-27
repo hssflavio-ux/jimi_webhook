@@ -472,7 +472,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
                 <td>
                     <?php if ($hasCoords): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $r['latitude'] ?>&mlon=<?= $r['longitude'] ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($r['latitude'], $r['longitude'])) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>

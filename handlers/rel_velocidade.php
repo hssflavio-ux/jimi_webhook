@@ -303,7 +303,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><span class="badge <?= $overBadge ?> text-mono">+<?= number_format($over, 1, ',', '.') ?></span></td>
                 <td>
                     <?php if ($hasCoords): ?>
-                    <a href="https://www.openstreetmap.org/?mlat=<?= $lat ?>&mlon=<?= $lng ?>&zoom=16"
+                    <a href="<?= htmlspecialchars(map_link_url($lat, $lng)) ?>"
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
