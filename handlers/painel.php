@@ -27,10 +27,11 @@ $layout = dashboard_resolve_layout($db, $userId);
 // Widgets do catálogo ainda fora do layout do usuário — só para o picker.
 $hidden = array_values(array_diff(array_keys(DASHBOARD_WIDGETS), $layout));
 
+require_once __DIR__ . '/../web/components/map_assets.php';
+
 $page_title = 'Painel';
 $current_route = 'painel';
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+$extra_head = BC_MAP_ASSETS_HTML . '
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>

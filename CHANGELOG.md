@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.18
+
+**Pedido do dono do produto: camada de mapa satelital. Os 10 mapas do sistema duplicavam cada um o próprio `<link>`/`<script>` do Leaflet e o próprio `L.tileLayer(OSM)` — padronizado antes de acrescentar a camada nova, para não repetir a mudança 10 vezes.**
+
+### Added
+- **`web/components/map_assets.php`** (novo) — ponto único do `<link>`/`<script>` do Leaflet 1.9.4 e da função `bcMapBaseLayers(map)`, que adiciona as camadas Ruas (OpenStreetMap) e Satélite (Esri World Imagery — grátis, sem chave de API) mais o controle de alternância do próprio Leaflet (canto superior direito, recolhido).
+- Camada de satélite disponível nos 10 mapas do sistema: `/rastreamento`, `/` (Resumo), `/painel` (heatmap), `/geocercas`, `/ativos/{id}` (ao vivo), `/relatorios/alarmes`, `/relatorios/desatualizados`, `/relatorios/posicoes`, `/relatorios/deslocamento` (rota e replay).
+
+### Verificação
+- `php -l` limpo nos 12 arquivos tocados.
+- `BC_MAP_ASSETS_HTML` renderizado via `php -r` para conferir a concatenação com o `$extra_head` específico de cada tela (scripts extras como `leaflet.heat`/`chart.js` continuam entrando depois, sem duplicar o Leaflet).
+
 ## [Unreleased] — 4.13.17
 
 **Achado rodando o backfill da v4.13.16 contra produção de verdade (não só o dry-run): o efeito real — não a resposta síncrona — mostrou que `alarms.file_url` continuava NULL mesmo com os 4 arquivos (2 vídeos + 2 fotos) já íntegros em `media_files`, para todo alarme sem ocorrência gerada.**

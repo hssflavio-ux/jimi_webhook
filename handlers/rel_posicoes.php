@@ -189,8 +189,8 @@ if ($generated && $selImei) {
 $page_title = 'Relatório de Posições';
 $current_route = 'rel_posicoes';
 
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+require_once __DIR__ . '/../web/components/map_assets.php';
+$extra_head = BC_MAP_ASSETS_HTML . '
 <style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -308,7 +308,7 @@ function toggleMap() {
     container.style.display = 'block';
     if (!mapInstance) {
         mapInstance = L.map('map-container');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(mapInstance);
+        bcMapBaseLayers(mapInstance);
         var bounds = [];
         mapData.forEach(function(p) {
             bounds.push([p.lat, p.lng]);

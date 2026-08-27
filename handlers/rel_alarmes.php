@@ -265,8 +265,8 @@ foreach ($rows as $r) {
         && media_is_ts(media_pick($r['file_url']))) { $temTs = true; break; }
 }
 
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+require_once __DIR__ . '/../web/components/map_assets.php';
+$extra_head = BC_MAP_ASSETS_HTML . '
 <style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
 // mpegts.js só quando alguma linha da página for `.ts` — remuxa TS→fMP4 em JS,
 // que é a única forma de o navegador tocar a gravação da câmera.
@@ -647,7 +647,7 @@ function toggleMap() {
     container.style.display = 'block';
     if (!mapInstance) {
         mapInstance = L.map('map-container');
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(mapInstance);
+        bcMapBaseLayers(mapInstance);
         var bounds = [];
         mapData.forEach(function(p) {
             bounds.push([p.lat, p.lng]);

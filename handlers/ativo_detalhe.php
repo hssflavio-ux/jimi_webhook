@@ -522,14 +522,10 @@ case 'ao-vivo':
     <span>Lng: <strong style="color:var(--ink);font-family:'JetBrains Mono',monospace"><?= number_format($asset['last_longitude'], 6) ?></strong></span>
     <span>Velocidade: <strong style="color:var(--ink)"><?= round($asset['last_speed'] ?? 0) ?> km/h</strong></span>
 </div>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<?php require_once __DIR__ . '/../web/components/map_assets.php'; echo BC_MAP_ASSETS_HTML; ?>
 <script>
 var map = L.map('live-map').setView([<?= $asset['last_latitude'] ?>, <?= $asset['last_longitude'] ?>], 15);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap'
-}).addTo(map);
+bcMapBaseLayers(map);
 L.marker([<?= $asset['last_latitude'] ?>, <?= $asset['last_longitude'] ?>]).addTo(map)
     .bindPopup('<?= htmlspecialchars($asset['device_name'] ?? $asset['imei']) ?><br><?= fmt_brt_dt($asset['last_communication']) ?>');
 </script>

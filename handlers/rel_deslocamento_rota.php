@@ -189,8 +189,8 @@ $jornadaS = $utcFrom && $utcTo ? max(0, strtotime($utcTo) - strtotime($utcFrom))
 
 $page_title = 'Rota do Deslocamento';
 $current_route = 'rel_deslocamento';
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+require_once __DIR__ . '/../web/components/map_assets.php';
+$extra_head = BC_MAP_ASSETS_HTML . '
 <style>
 #rota-map{height:calc(100vh - 300px);min-height:460px;border-radius:var(--radius-lg);border:1px solid var(--hairline);}
 .rota-kpi{font-family:\'JetBrains Mono\',monospace;font-size:15px;font-weight:600;color:var(--ink);}
@@ -249,7 +249,7 @@ var routeData = {
 };
 
 var map = L.map('rota-map', { preferCanvas: true });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '&copy; OSM'}).addTo(map);
+bcMapBaseLayers(map);
 
 var latlngs = routeData.points.map(function(p) { return [p.lat, p.lng]; });
 L.polyline(latlngs, { color: '#0052ff', weight: 3, opacity: 0.75 }).addTo(map);

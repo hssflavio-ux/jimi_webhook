@@ -93,8 +93,8 @@ if (!empty($_GET['ajax'])) {
 
 $page_title = 'Rastreamento';
 $current_route = 'rastreamento';
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+require_once __DIR__ . '/../web/components/map_assets.php';
+$extra_head = BC_MAP_ASSETS_HTML . '
 <style>
 #tracking-map{height:calc(100vh - 140px);border-radius:var(--radius-lg);border:1px solid var(--hairline);}
 .map-wrap{padding:4px;position:relative;}
@@ -189,7 +189,7 @@ var mapData = <?= json_encode(array_map(function($p) {
 }, $positions)) ?>;
 
 var map = L.map('tracking-map');
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(map);
+bcMapBaseLayers(map);
 var markers = {};
 var bounds = [];
 

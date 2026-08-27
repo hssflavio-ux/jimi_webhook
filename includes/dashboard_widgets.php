@@ -369,7 +369,7 @@ function dashboard_render_heatmap(PDO $db, int $cid, bool $isReseller, string $p
     <script>(function(){
         var data = ' . $json . ';
         var map = L.map("w-heatmap-map");
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OSM"}).addTo(map);
+        bcMapBaseLayers(map);
         var bounds=[], heatPoints=[];
         data.forEach(function(p){
             var lat=parseFloat(p.latitude), lng=parseFloat(p.longitude);

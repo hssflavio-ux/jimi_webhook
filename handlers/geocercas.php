@@ -348,8 +348,8 @@ $showForm = ($action === 'nova' || $editFence) && !$tableMissing;
 $page_title = 'Geocercas';
 $current_route = 'geocercas';
 if ($showForm) {
-    $extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>';
+    require_once __DIR__ . '/../web/components/map_assets.php';
+    $extra_head = BC_MAP_ASSETS_HTML;
 }
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -536,9 +536,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     else if (savedPoly.length) { start = savedPoly[0]; zoom = 15; }
 
     var map = L.map('fenceMap').setView(start, zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
+    bcMapBaseLayers(map);
 
     var shape = document.querySelector('input[name=shape]:checked').value;
     var center = (!isNaN(savedLat) && !isNaN(savedLng)) ? L.latLng(savedLat, savedLng) : null;

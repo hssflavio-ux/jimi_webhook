@@ -307,8 +307,8 @@ if ($faceidEnabled) {
 
 $page_title = 'Resumo';
 $current_route = 'resumo';
-$extra_head = '<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+require_once __DIR__ . '/../web/components/map_assets.php';
+$extra_head = BC_MAP_ASSETS_HTML . '
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -555,7 +555,7 @@ function dismissBanner() {
     var container = document.getElementById('heatmap-map');
     var data = <?= json_encode($gpsData) ?>;
     var map = L.map(container);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'&copy; OSM'}).addTo(map);
+    bcMapBaseLayers(map);
     var bounds = [];
     var heatPoints = [];
     data.forEach(function(p) {
