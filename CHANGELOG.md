@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.20
+
+**Pedido do dono do produto: a camada de satélite passa a ser HÍBRIDA — imagem aérea com as vias e os nomes por cima. Imagem aérea pura não serve para operação de frota: o operador vê o telhado, mas não sabe em que rua o veículo está.**
+
+### Changed
+- **`bcMapBaseLayers()`** (`web/components/map_assets.php`) — a segunda camada de base deixa de ser `Satélite` e passa a ser `Híbrido`: um `L.layerGroup` com o `World_Imagery` mais os DOIS overlays transparentes de referência do próprio Esri — `Reference/World_Transportation` (traçado, nome e sentido das vias) e `Reference/World_Boundaries_and_Places` (limites e topônimos). Continua grátis e sem chave de API, e o rótulo do controle de camadas passa a `Ruas` / `Híbrido`.
+- Vale para os 10 mapas do sistema de uma vez, sem tocar em nenhum handler — é exatamente o que a padronização da v4.13.18 comprou. Nenhum chamador passa `opts`, e o retorno mantém a chave `satelite` (agora um `L.LayerGroup`) para não quebrar assinatura.
+
+### Verificação
+- `php -l` limpo em `web/components/map_assets.php`.
+- Os 3 serviços Esri sondados com `curl` em São Paulo nos zooms 13/15/17/19: **200** em todos os 12, `image/jpeg` na imagem e `image/png` nos dois overlays (o overlay é transparente, então tile faltante em algum quadrante cai sobre a imagem e nunca deixa o mapa em branco).
+- Renderizado em Chrome com o próprio `BC_MAP_ASSETS_HTML`: nomes de rua, praças e setas de sentido legíveis sobre a imagem em z17, e a alternância `Ruas` ⇄ `Híbrido` troca as três camadas do grupo de uma vez.
+- ℹ️ As linhas finas de borda de tile visíveis em alguns zooms são do Leaflet (arredondamento de device pixel ratio) e aparecem **igualmente na camada de satélite anterior** — verificado lado a lado; não é regressão desta mudança.
+
 ## [Unreleased] — 4.13.19
 
 **Pedido do dono do produto: os links "Ver Mapa" que abrem em aba externa devem ir para o Google Maps, não o OpenStreetMap. Mesma lição da padronização de mapas (v4.13.18): 9 arquivos duplicavam a mesma URL do OSM.**
