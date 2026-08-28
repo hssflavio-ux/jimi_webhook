@@ -6,21 +6,44 @@
  * Singleton PDO que lê variáveis do arquivo .env.
  * Configura timezone UTC e charset utf8mb4 na conexão.
  */
+/**
+ * Carrega o `.env` em `putenv()` (o projeto não usa biblioteca de dotenv).
+ *
+ * 🔴 Extraída do construtor do `Database` na v4.13.21 porque o carregamento
+ * acontecia SÓ ao abrir a conexão — então qualquer página que renderize sem
+ * tocar no banco enxergava `getenv()` vazio e caía nos valores padrão. Foi o
+ * que aconteceu com `/esqueci-senha`: a tela é servida sem consultar nada num
+ * GET, e o rodapé mostrava `v4.0.0` (o fallback do `SYSTEM_VERSION`) enquanto
+ * o `/login` ao lado mostrava a versão certa — porque o login consulta
+ * `COUNT(*) FROM users` e, de carona, carregava o `.env`.
+ *
+ * Idempotente e sem custo de conexão: variável já definida no ambiente vence
+ * a do arquivo, e chamadas repetidas não refazem nada relevante.
+ *
+ * @returns void
+ */
+function env_load() {
+    static $carregado = false;
+    if ($carregado) return;
+    $carregado = true;
+
+    $envFile = __DIR__ . '/../.env';
+    if (!file_exists($envFile)) return;
+    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0 || strpos($line, '=') === false) continue;
+        list($key, $value) = explode('=', $line, 2);
+        if (!getenv(trim($key))) putenv(trim($key) . '=' . trim($value));
+    }
+}
+
 class Database {
     private static $instance = null;
     private $connection;
     
     private function __construct() {
-        $envFile = __DIR__ . '/../.env';
-        if (file_exists($envFile)) {
-            $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-            foreach ($lines as $line) {
-                if (strpos(trim($line), '#') === 0 || strpos($line, '=') === false) continue;
-                list($key, $value) = explode('=', $line, 2);
-                if (!getenv(trim($key))) putenv(trim($key) . '=' . trim($value));
-            }
-        }
-        
+        env_load();
+
         $host = getenv('DB_HOST') ?: 'localhost';
         $port = getenv('DB_PORT') ?: '3306';
         $dbname = getenv('DB_NAME') ?: 'jimi_tracker';

@@ -21,6 +21,11 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/password_reset.php';
 
+// Um GET desta tela não consulta nada, e sem isto o `.env` não seria lido:
+// o rodapé mostraria a versão de fallback (`4.0.0`) em vez da real. Ver
+// `env_load()` em config/database.php.
+env_load();
+
 /** Resposta única da tela — ver o cabeçalho. */
 const MSG_NEUTRA = 'Se este e-mail estiver cadastrado e ativo, enviamos uma senha temporária para ele. Confira a caixa de entrada e o spam.';
 

@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.22
+
+**Achado testando a v4.13.21 em produção: o rodapé de `/esqueci-senha` mostrava `v4.0.0` enquanto o `/login` ao lado mostrava a versão real.**
+
+### Fixed
+- **`env_load()`** (novo, `config/database.php`) — o `.env` era lido **dentro do construtor do `Database`**, ou seja, só ao abrir conexão. Qualquer página que renderize sem tocar no banco enxergava `getenv()` vazio e caía nos valores padrão. `/esqueci-senha` é servida sem consultar nada num GET, então mostrava o fallback `4.0.0` do `SYSTEM_VERSION`; no POST (que consulta `users`) a versão certa aparecia — a assimetria GET/POST na mesma tela é a assinatura do defeito. A leitura virou função própria, idempotente e sem custo de conexão, chamada pelo construtor (comportamento inalterado) e pelo handler público.
+- ⚠️ Vale para qualquer tela futura que renderize sem banco: `require_once config/database.php` **não** carrega o `.env` sozinho — é preciso chamar `env_load()`.
+
+### Verificação
+- Provado localmente com um `.env` temporário: antes de `env_load()`, `getenv('SYSTEM_VERSION')` vazio; depois, o valor do arquivo. O rodapé de `/esqueci-senha` renderizou `v9.9.9-teste` no servidor embutido, sem abrir conexão. `.env` de teste removido em seguida.
+
 ## [Unreleased] — 4.13.21
 
 **Pedido do dono do produto: cadastrar usuário informando só o e-mail. O sistema gera uma senha temporária de 6 caracteres alfanuméricos, envia por e-mail e obriga a troca no primeiro acesso; a mesma mecânica atende "esqueci minha senha".**
