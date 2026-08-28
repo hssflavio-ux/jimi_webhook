@@ -8,6 +8,7 @@
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
+require_once __DIR__ . '/../includes/password_reset.php';
 require_admin();
 
 $db = Database::getInstance()->getConnection();
@@ -15,6 +16,9 @@ $currentUser = get_jimi_user();
 $isReseller = ($currentUser['user_type'] ?? '') === 'revendedor';
 $error = null;
 $success = null;
+// Usuário cujo e-mail de senha temporária falhou: a tela mostra o contador de
+// 30 s e reposta o reenvio sozinha (ver o bloco de retry no fim do arquivo).
+$retryUserId = null;
 
 $tab = $_GET['tab'] ?? 'empresa';
 
@@ -26,7 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // RBAC ação fina (v4.2.0 — Fase B2)
     require_permission('usuarios', ($action === 'toggle' || $id > 0) ? 'edit' : 'create');
 
-    if ($action === 'toggle') {
+    if ($action === 'resend') {
+        // Reenvio manual (botão da lista) e retentativa automática caem aqui.
+        // `issue_temp_password()` gera OUTRA senha: a anterior nunca foi
+        // gravada (envio falhou) ou já não serve — não existe "reenviar a
+        // mesma", porque o banco só guarda o bcrypt dela.
+        $r = issue_temp_password($id, false);
+        if ($r['ok']) {
+            $success = 'Senha temporária enviada para ' . $r['email'] . '.';
+        } else {
+            $error = 'Não foi possível enviar: ' . $r['error'];
+            $retryUserId = $id;
+        }
+    } elseif ($action === 'toggle') {
         if ($id === (int)$currentUser['id']) {
             $error = 'Você não pode desativar seu próprio usuário.';
         } else {
@@ -52,7 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Nome, e-mail e cliente são obrigatórios.';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $error = 'E-mail inválido.';
-        } elseif ($id === 0 && strlen($password) < 6) {
+        } elseif ($password !== '' && strlen($password) < 6) {
+            // v4.13.21 — em branco deixou de ser erro na criação: passou a
+            // significar "gere e mande por e-mail". O mínimo só vale para quem
+            // digitou alguma coisa.
             $error = 'A senha deve ter no mínimo 6 caracteres.';
         } else {
             try {
@@ -61,7 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $sql = "UPDATE users SET name=?, email=?, role=?, user_type=?, permission_group_id=?, photo_url=?";
                     $params = [$name, $email, $role, $userType, $pgId, $photoUrl ?: null];
                     if ($password !== '') {
-                        $sql = "UPDATE users SET name=?, email=?, role=?, user_type=?, permission_group_id=?, photo_url=?, password_hash=?";
+                        // Senha definida à mão pelo admin encerra a pendência de
+                        // troca: sem limpar a flag, o usuário para quem o admin
+                        // acabou de definir uma senha ainda cairia em
+                        // /trocar-senha no acesso seguinte, sem explicação.
+                        $sql = "UPDATE users SET name=?, email=?, role=?, user_type=?, permission_group_id=?, photo_url=?, password_hash=?, must_change_password=0, temp_password_expires_at=NULL";
                         $params[] = password_hash($password, PASSWORD_BCRYPT);
                     }
                     $sql .= " WHERE id=?";
@@ -70,8 +93,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute($params);
                     $userId = $id;
                 } else {
-                    $stmt = $db->prepare("INSERT INTO users (email, password_hash, name, role, user_type, permission_group_id, photo_url) VALUES (?,?,?,?,?,?,?)");
-                    $stmt->execute([$email, password_hash($password, PASSWORD_BCRYPT), $name, $role, $userType, $pgId, $photoUrl ?: null]);
+                    // Senha em branco = o sistema gera e envia. O INSERT ainda
+                    // precisa de ALGUM hash (`password_hash` é NOT NULL): entra
+                    // um valor aleatório de 32 bytes que ninguém — nem o admin
+                    // — conhece, substituído por `issue_temp_password()` quando
+                    // o e-mail sai. Se o envio falhar, o usuário fica com esse
+                    // hash impossível e o selo "senha não entregue" na lista,
+                    // que é exatamente o que o botão Reenviar resolve.
+                    $enviarTemp  = ($password === '');
+                    $hashInicial = $enviarTemp
+                        ? password_hash(bin2hex(random_bytes(32)), PASSWORD_BCRYPT)
+                        : password_hash($password, PASSWORD_BCRYPT);
+                    $stmt = $db->prepare("INSERT INTO users (email, password_hash, name, role, user_type, permission_group_id, photo_url, must_change_password) VALUES (?,?,?,?,?,?,?,?)");
+                    $stmt->execute([$email, $hashInicial, $name, $role, $userType, $pgId, $photoUrl ?: null, $enviarTemp ? 1 : 0]);
                     $userId = (int)$db->lastInsertId();
                 }
 
@@ -81,7 +115,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$customerId, $userId, $role]);
 
                 $db->commit();
-                $success = $id > 0 ? 'Usuário atualizado.' : 'Usuário criado.';
+
+                // Fora da transação de propósito: `issue_temp_password()` abre a
+                // dela, e o PDO não aninha. O usuário já está gravado quando o
+                // e-mail é tentado — é o que torna o reenvio possível.
+                if ($id === 0 && !empty($enviarTemp)) {
+                    $r = issue_temp_password($userId, true);
+                    if ($r['ok']) {
+                        $success = 'Usuário criado. Senha temporária enviada para ' . $email . '.';
+                    } else {
+                        $error = 'Usuário criado, mas o e-mail com a senha temporária não saiu: ' . $r['error'];
+                        $retryUserId = $userId;
+                    }
+                } else {
+                    $success = $id > 0 ? 'Usuário atualizado.' : 'Usuário criado.';
+                }
             } catch (PDOException $e) {
                 $db->rollBack();
                 $error = ($e->getCode() === '23000') ? 'E-mail já existe.' : 'Erro: ' . $e->getMessage();
@@ -164,6 +212,42 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
+<?php if ($retryUserId): ?>
+<!-- Retentativa automática do e-mail (v4.13.21).
+     🔴 O temporizador roda no NAVEGADOR, não no PHP: um sleep(30) no request
+     prenderia um worker do PHP-FPM por meio minuto — os mesmos workers que
+     atendem os webhooks das câmeras — e deixaria a tela do admin pendurada.
+     Uma tentativa só; falhando de novo, fica o botão Reenviar da lista, porque
+     insistir em laço vira fila de e-mails duplicados quando o problema é do
+     outro lado. -->
+<div class="card mb-16" id="retry-box" style="border-color:#ffe0b2;background:#fff8ec;color:#8a5a00;font-size:13px">
+    Nova tentativa de envio em <strong id="retry-count">30</strong>s…
+    <button type="button" id="retry-cancel" class="btn btn-outline btn-sm" style="margin-left:8px;padding:2px 10px;font-size:12px">Cancelar</button>
+</div>
+<form method="post" id="retry-form" style="display:none">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="resend">
+    <input type="hidden" name="id" value="<?= (int)$retryUserId ?>">
+</form>
+<script>
+(function () {
+    var restam = 30, box = document.getElementById('retry-count'), timer;
+    timer = setInterval(function () {
+        restam--;
+        if (box) box.textContent = restam;
+        if (restam <= 0) {
+            clearInterval(timer);
+            document.getElementById('retry-form').submit();
+        }
+    }, 1000);
+    document.getElementById('retry-cancel').addEventListener('click', function () {
+        clearInterval(timer);
+        document.getElementById('retry-box').textContent = 'Retentativa cancelada — use o botão Reenviar na lista.';
+    });
+})();
+</script>
+<?php endif; ?>
+
 <!-- Tabs + busca + export (Fase C) -->
 <div class="flex-between" style="margin-bottom:16px;gap:8px;flex-wrap:wrap;">
     <div class="flex" style="gap:0;">
@@ -203,10 +287,30 @@ include __DIR__ . '/../web/layout_base.php';
                     </td>
                     <td><?= htmlspecialchars($pgNames[$u['permission_group_id'] ?? 0] ?? '—') ?></td>
                     <td><?= htmlspecialchars($u['customer_names'] ?? '—') ?></td>
-                    <td><?= $u['is_active'] ? '<span class="badge badge-success">Ativo</span>' : '<span class="badge">Inativo</span>' ?></td>
+                    <td>
+                        <?= $u['is_active'] ? '<span class="badge badge-success">Ativo</span>' : '<span class="badge">Inativo</span>' ?>
+                        <?php if (!empty($u['must_change_password'])): ?>
+                            <?php if (empty($u['temp_password_sent_at'])): ?>
+                                <!-- must_change_password=1 + sent_at NULL: o usuário existe e
+                                     NINGUÉM sabe a senha dele. É o estado derivado que a
+                                     migração v4.13.21 deixou de gravar numa quarta coluna. -->
+                                <span class="badge" style="background:#fff1e0;color:#8a5a00;" title="O e-mail com a senha temporária não foi entregue">senha não entregue</span>
+                            <?php else: ?>
+                                <span class="badge" style="background:#eef0f3;color:#5b616e;" title="Enviada em <?= htmlspecialchars(fmt_brt($u['temp_password_sent_at'])) ?> — troca pendente no primeiro acesso">senha temporária</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </td>
                     <td>
                         <div style="display:flex;gap:4px;">
                             <a href="?edit=<?= $u['id'] ?>&tab=<?= $tab ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Editar</a>
+                            <?php if (!empty($u['is_active'])): ?>
+                            <form method="post" style="display:inline" onsubmit="return confirm('Gerar e enviar uma NOVA senha temporária para <?= htmlspecialchars($u['email'], ENT_QUOTES) ?>? A senha atual deixa de valer.')">
+                                <?= csrf_field() ?>
+                                <input type="hidden" name="action" value="resend">
+                                <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                                <button class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;" title="Gera outra senha temporária e envia por e-mail">Reenviar senha</button>
+                            </form>
+                            <?php endif; ?>
                             <?php if ((int)$u['id'] !== (int)$currentUser['id']): ?>
                             <form method="post" style="display:inline" onsubmit="return confirm('<?= $u['is_active']?'Desativar':'Ativar' ?>?')">
                                 <?= csrf_field() ?>
@@ -236,7 +340,16 @@ include __DIR__ . '/../web/layout_base.php';
             <?php if ($editUser): ?><input type="hidden" name="id" value="<?= $editUser['id'] ?>"><?php endif; ?>
             <div class="form-group"><label>Nome *</label><input type="text" name="name" required value="<?= htmlspecialchars($editUser['name'] ?? '') ?>"></div>
             <div class="form-group"><label>E-mail *</label><input type="email" name="email" required value="<?= htmlspecialchars($editUser['email'] ?? '') ?>"></div>
-            <div class="form-group"><label>Senha <?= $editUser?'(deixe em branco)':'*' ?></label><input type="password" name="password" minlength="6" <?= $editUser?'':'required' ?>></div>
+            <div class="form-group">
+                <label>Senha <?= $editUser ? '(deixe em branco para manter)' : '(opcional)' ?></label>
+                <input type="password" name="password" minlength="6" autocomplete="new-password">
+                <?php if (!$editUser): ?>
+                <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">
+                    Em branco, o sistema gera uma senha temporária de 6 caracteres, envia para o e-mail acima
+                    e exige a troca no primeiro acesso. Preenchendo, a senha vale direto e nada é enviado.
+                </div>
+                <?php endif; ?>
+            </div>
             <div class="form-row">
                 <div class="form-group"><label>Papel *</label>
                     <select name="role" required><?php foreach ($roleLabels as $v=>$l): ?>

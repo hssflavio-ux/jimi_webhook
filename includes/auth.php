@@ -94,6 +94,61 @@ function require_login() {
         exit;
     }
     refresh_session();
+    require_password_change_gate();
+}
+
+/**
+ * Indica se o usuário logado está com senha TEMPORÁRIA pendente de troca.
+ *
+ * Resultado cacheado no request: `require_login()` roda uma vez por página, mas
+ * handlers que chamam `require_admin()` (que chama `require_login()`) e depois
+ * `require_permission()` não pagam a consulta de novo.
+ *
+ * @returns bool
+ */
+function user_must_change_password() {
+    if (empty($_SESSION['user_id'])) return false;
+    if (array_key_exists('_jimi_must_change_pw', $GLOBALS)) return $GLOBALS['_jimi_must_change_pw'];
+
+    $GLOBALS['_jimi_must_change_pw'] = false;
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("SELECT must_change_password FROM users WHERE id = ?");
+        $stmt->execute(array($_SESSION['user_id']));
+        $GLOBALS['_jimi_must_change_pw'] = (bool)$stmt->fetchColumn();
+    } catch (Exception $e) {
+        // Coluna ausente (banco antes da v4.13.21) NÃO pode trancar ninguém
+        // fora do sistema: falha em aberto, registrando.
+        error_log('user_must_change_password: ' . $e->getMessage());
+    }
+    return $GLOBALS['_jimi_must_change_pw'];
+}
+
+/**
+ * Prende em `/trocar-senha` quem entrou com senha temporária (v4.13.21).
+ *
+ * 🔴 Mora aqui, no `require_login()`, e não no `login.php`. Redirecionar só na
+ * tela de login deixa a trava valendo por convenção: bastava digitar
+ * `/rastreamento` na barra de endereço para seguir usando o sistema inteiro com
+ * a senha que veio por e-mail — que é justamente a senha que mais gente já viu.
+ *
+ * Exceções: a própria tela de troca, o logout (a saída tem de continuar
+ * possível) e as duas rotas que já existem fora da sessão (`/login`,
+ * `/setup`). Tudo o mais — inclusive `/perfil` e a troca de cliente — cai na
+ * trava: enquanto a senha for temporária não há nada a fazer no sistema.
+ *
+ * @returns void
+ */
+function require_password_change_gate() {
+    $uri  = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/';
+    $path = rtrim(parse_url($uri, PHP_URL_PATH) ?: '/', '/');
+    if ($path === '') $path = '/';
+    $livres = array('/trocar-senha', '/logout', '/login', '/setup');
+    if (in_array($path, $livres, true)) return;
+    if (!user_must_change_password()) return;
+
+    header('Location: /trocar-senha');
+    exit;
 }
 
 function require_admin() {
@@ -359,6 +414,47 @@ function _gen_token() {
     return md5(uniqid(mt_rand(), true)) . md5(uniqid(mt_rand(), true));
 }
 
+/**
+ * Troca o token da sessão corrente por um novo, preservando o login (v4.13.21).
+ *
+ * Usado depois da troca de senha: a credencial mudou, então o identificador de
+ * sessão emitido sob a credencial antiga não continua valendo. Preserva a linha
+ * de `sessions` (com o `customer_id` do contexto ativo) — quem trocou a senha
+ * não é deslogado, só passa a carregar outro token.
+ *
+ * ⚠️ Limpa também o token CSRF em cache: `csrf_generate()` o deriva por HMAC do
+ * cookie de sessão, então sem esta linha os formulários renderizados no resto
+ * do request sairiam assinados com o token ANTIGO e o POST seguinte tomaria 403.
+ *
+ * @returns string|null Novo token, ou null se não havia sessão em cookie
+ */
+function rotate_session_token() {
+    if (!isset($_COOKIE[AUTH_COOKIE])) return null;
+    $old = $_COOKIE[AUTH_COOKIE];
+    $new = _gen_token();
+    try {
+        $db = Database::getInstance()->getConnection();
+        $stmt = $db->prepare("UPDATE sessions SET id = ? WHERE id = ?");
+        $stmt->execute(array($new, $old));
+    } catch (Exception $e) {
+        error_log('rotate_session_token: ' . $e->getMessage());
+        return null;
+    }
+
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    setcookie(AUTH_COOKIE, $new, [
+        'expires'  => time() + AUTH_LIFETIME,
+        'path'     => '/',
+        'domain'   => '',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
+    $_COOKIE[AUTH_COOKIE] = $new;
+    if (defined('CSRF_TOKEN_KEY')) unset($_SESSION[CSRF_TOKEN_KEY]);
+    return $new;
+}
+
 function login_user($email, $password) {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
@@ -383,9 +479,25 @@ function login_user($email, $password) {
             error_log('login_user rate-limit skip: ' . $e->getMessage());
         }
 
-        $stmt = $db->prepare("SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ?");
-        $stmt->execute(array($email));
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        // `temp_expired` é calculado no SQL, não em PHP: o prazo está gravado em
+        // UTC e a comparação com NOW() acontece na MESMA conexão que já força
+        // time_zone '+00:00' — não há fuso a supor. O try/catch cobre a janela
+        // do deploy em que o código novo já está no ar e a migração v4.13.21
+        // ainda não rodou (mesmo padrão defensivo de get_jimi_user()).
+        try {
+            $stmt = $db->prepare(
+                "SELECT id, email, name, role, password_hash, is_active,
+                        must_change_password,
+                        (temp_password_expires_at IS NOT NULL AND temp_password_expires_at < NOW()) AS temp_expired
+                   FROM users WHERE email = ?"
+            );
+            $stmt->execute(array($email));
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            $stmt = $db->prepare("SELECT id, email, name, role, password_hash, is_active FROM users WHERE email = ?");
+            $stmt->execute(array($email));
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
 
         if (!$user || empty($user['is_active'])) {
             _log_login($db, $email, $ip, $ua, false);
@@ -394,6 +506,13 @@ function login_user($email, $password) {
         if (!password_verify($password, $user['password_hash'])) {
             _log_login($db, $email, $ip, $ua, false);
             return array('success' => false, 'error' => 'Senha incorreta.');
+        }
+        // Senha temporária vencida (v4.13.21). A mensagem NÃO pode ser "senha
+        // incorreta": a pessoa digitou a senha certa, e mandá-la tentar de novo
+        // só a faz queimar o rate limit de 5 tentativas por IP.
+        if (!empty($user['must_change_password']) && !empty($user['temp_expired'])) {
+            _log_login($db, $email, $ip, $ua, false);
+            return array('success' => false, 'error' => 'Senha temporária expirada. Use "Esqueci minha senha" para receber outra.');
         }
 
         _log_login($db, $email, $ip, $ua, true);

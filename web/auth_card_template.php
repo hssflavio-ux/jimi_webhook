@@ -1,16 +1,46 @@
+<?php
+/**
+ * bycamera — Card de autenticação fora do dashboard v4.13.21
+ *
+ * Shell das telas que existem ANTES (ou à margem) do painel: `/esqueci-senha`
+ * e `/trocar-senha`. Mesmo cartão do login — logo, título, subtítulo, alerta,
+ * corpo, rodapé com a versão — sem sidebar nem menu: a de troca obrigatória
+ * porque o usuário não pode navegar para lugar nenhum enquanto não trocar a
+ * senha, e a de recuperação porque não há sessão.
+ *
+ * Uso (o corpo vem por output buffering, para o formulário continuar sendo
+ * PHP+HTML normal em vez de string concatenada):
+ *
+ *   ob_start(); ?>
+ *   <form method="post"> … </form>
+ *   <?php $auth_body = ob_get_clean();
+ *   $auth_page_title = 'bycamera — Trocar senha';
+ *   $auth_heading    = 'Defina sua senha';
+ *   $auth_sub        = 'Sua senha atual é temporária.';
+ *   include __DIR__ . '/../web/auth_card_template.php';
+ *
+ * ⚠️ `web/login_template.php` NÃO passou a usar este arquivo — ele continua
+ * com a própria cópia do CSS. A extração foi deixada de fora de propósito na
+ * v4.13.21: a tela de login é a única porta do sistema e não há como exercê-la
+ * nesta máquina (a suíte precisa de banco), então o ganho de tirar a
+ * duplicação não paga o risco de derrubá-la sem conseguir verificar. Fica
+ * anotado como pendência — a lição de `web/components/map_assets.php` (10
+ * cópias do mesmo tileLayer) vale aqui também.
+ */
+$auth_error   = $auth_error   ?? null;
+$auth_success = $auth_success ?? null;
+$auth_body    = $auth_body    ?? '';
+$auth_links   = $auth_links   ?? '';
+?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>bycamera — Entrar</title>
-<!-- PWA -->
+<title><?= htmlspecialchars($auth_page_title ?? 'bycamera') ?></title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#0052ff">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="bycamera">
-<link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
+<meta name="robots" content="noindex,nofollow">
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,13 +56,6 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:var(--surface-soft);color:var(--body);min-height:100vh;display:flex;align-items:center;justify-content:center}
 .login-card{background:var(--surface);border:1px solid var(--hairline);border-radius:24px;padding:40px;width:100%;max-width:400px}
-/* A marca substituiu o placeholder de pontinhos + texto "JIMI" (v4.8.0).
-   Aqui é o único lugar que usa o lockup COMPLETO (`logo-login.png`, com o
-   descritor "videomonitoramento inteligente"): medido, o descritor ocupa
-   8,6% da altura da arte (19 px de 221), então só se lê em tamanho grande —
-   daí ocupar a largura útil do card inteiro (318 px → 78 px de altura), onde
-   ele sai com 6,7 px. Na sidebar, que reserva 84 px de largura para a marca,
-   o mesmo descritor teria 1,8 px: um borrão. */
 .logo{display:flex;justify-content:center;margin-bottom:24px}
 .logo img{width:100%;height:auto;display:block}
 h1{font-size:28px;font-weight:400;color:var(--ink);margin-bottom:6px;letter-spacing:-.5px;text-align:center}
@@ -51,14 +74,13 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
 .btn-primary:hover{background:var(--primary-active)}
 .alert{padding:12px 16px;border-radius:12px;font-size:14px;margin-bottom:20px}
 .alert-error{background:#fdeaec;color:var(--error);border:1px solid #f5c2c7}
-/* v4.13.21 — porta de entrada do /esqueci-senha. Mesma regra do
-   auth_card_template.php, que atende as telas de senha temporária. */
+.alert-success{background:#e8f8f1;color:#04794a;border:1px solid #b7e8d1}
+.hint{font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px;line-height:1.5}
 .links{text-align:center;margin-top:20px;font-size:13px}
 .links a{color:var(--primary);text-decoration:none;font-weight:500}
 .links a:hover{text-decoration:underline}
 .footer{text-align:center;margin-top:24px;font-size:12px;color:var(--muted-soft)}
 .footer span{font-family:'JetBrains Mono',monospace}
-/* Mobile: card 100% width, touch targets ≥44px, safe areas */
 @media (max-width:480px){
     body{align-items:flex-start;padding:16px;padding-top:max(24px,env(safe-area-inset-top))}
     .login-card{max-width:100%;padding:28px 20px;border-radius:16px;margin-top:6vh}
@@ -73,26 +95,22 @@ input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--
     <div class="logo">
         <img src="/web/assets/logo-login.png" alt="bycamera — videomonitoramento inteligente">
     </div>
-    <h1>Entrar no sistema</h1>
-    <p class="sub">Insira suas credenciais para acessar o painel.</p>
+    <h1><?= htmlspecialchars($auth_heading ?? '') ?></h1>
+    <p class="sub"><?= htmlspecialchars($auth_sub ?? '') ?></p>
 
-    <?php if (!empty($error)): ?>
-    <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+    <?php if ($auth_error): ?>
+    <div class="alert alert-error"><?= htmlspecialchars($auth_error) ?></div>
+    <?php endif; ?>
+    <?php if ($auth_success): ?>
+    <div class="alert alert-success"><?= htmlspecialchars($auth_success) ?></div>
     <?php endif; ?>
 
-    <form method="post">
-        <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirect ?? '/') ?>">
-        <div class="fg">
-            <label for="email">E-mail</label>
-            <input type="email" id="email" name="email" required autofocus autocomplete="email">
-        </div>
-        <div class="fg">
-            <label for="password">Senha</label>
-            <input type="password" id="password" name="password" required autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary">Entrar</button>
-    </form>
-    <div class="links"><a href="/esqueci-senha">Esqueci minha senha</a></div>
+    <?= $auth_body ?>
+
+    <?php if ($auth_links): ?>
+    <div class="links"><?= $auth_links ?></div>
+    <?php endif; ?>
+
     <div class="footer">
         <span>v<?= getenv('SYSTEM_VERSION') ?: '4.0.0' ?></span>
     </div>

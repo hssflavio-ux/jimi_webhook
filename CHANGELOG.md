@@ -5,6 +5,37 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.21
+
+**Pedido do dono do produto: cadastrar usuário informando só o e-mail. O sistema gera uma senha temporária de 6 caracteres alfanuméricos, envia por e-mail e obriga a troca no primeiro acesso; a mesma mecânica atende "esqueci minha senha".**
+
+### Added
+- **`includes/password_reset.php`** (novo) — ponto único dos dois fluxos: gera a senha (alfabeto de 32 símbolos, sem `I`/`O`/`0`/`1`, porque a pessoa digita lendo do e-mail), envia e **só grava o hash se o envio deu certo**. Ordem deliberada: gravar antes faria uma queda de SMTP matar a senha que o usuário já usava — ele ficaria sem a antiga (sobrescrita) e sem a nova (não entregue).
+- **`/esqueci-senha`** (`handlers/esqueci_senha.php`, rota pública) — resposta **sempre idêntica**, exista ou não o e-mail: diferenciar transformaria a tela num verificador de quem tem conta. Falha de SMTP também devolve a mensagem neutra (o erro vai para o log). Limite de 5 pedidos por IP/hora (`password_reset_log`) e, em silêncio, 1 por e-mail a cada 5 min.
+- **`/trocar-senha`** (`handlers/trocar_senha.php`) — nova + confirmar, mínimo 6, recusa senha igual à temporária; ao gravar, chama `rotate_session_token()` (novo em `auth.php`), porque a credencial mudou.
+- **`web/auth_card_template.php`** (novo) — cartão das telas fora do dashboard (sem sidebar: enquanto a senha for temporária não há navegação possível).
+- **`/usuarios`**: botão **Reenviar senha temporária** por linha e selo **"senha não entregue"** (`must_change_password = 1 AND temp_password_sent_at IS NULL` — estado derivado, não uma quarta coluna).
+- Link **"Esqueci minha senha"** no `/login`.
+- `mysql/migration_v4.13.21.sql` — `users.must_change_password`, `users.temp_password_expires_at`, `users.temp_password_sent_at` e a tabela `password_reset_log`. Sem tabela de token: a temporária **é** a senha, em bcrypt como qualquer outra, e o login continua sendo um `password_verify()` só.
+
+### Changed
+- **`/usuarios`**: o campo Senha deixou de ser obrigatório na criação. Em branco = gera e envia; preenchido = vale direto, sem e-mail e sem troca obrigatória (mantido a pedido do dono do produto, para conta de teste ou usuário sem e-mail real).
+- 🔴 **A trava do primeiro acesso mora em `require_login()`** (`includes/auth.php`), não no `login.php`. Redirecionar só na tela de login deixaria a trava valendo por convenção: bastava digitar `/rastreamento` na barra de endereço para usar o sistema inteiro com a senha que veio por e-mail. Exceções: `/trocar-senha`, `/logout`, `/login`, `/setup`.
+- `login_user()` recusa senha temporária **vencida** com mensagem própria ("solicite outra em Esqueci minha senha") — dizer "senha incorreta" faria a pessoa tentar de novo e queimar o rate limit de 5 falhas por IP.
+- Falha de envio no cadastro: mensagem na tela e **uma** retentativa automática em 30 s, com o temporizador no **navegador**. `sleep(30)` no PHP prenderia um worker do PHP-FPM — os mesmos que atendem os webhooks das câmeras.
+- Texto do e-mail de recuperação **não** diz "ignore: sua senha anterior continua valendo" (o padrão do gênero): neste desenho ela já não vale quando a mensagem chega, e mandar ignorar trancaria o usuário do lado de fora sem explicação.
+
+### Verificação
+- `php -l` limpo em `handlers/`, `includes/`, `config/`, `core/` (o mesmo comando da FASE 4 do deploy) e nos dois templates; `bash -n scripts/deploy.sh`.
+- `tests/helpers/temp_password.test.php` (novo, **18/18 sem banco**, rodado): 2000 senhas geradas — todas com 6 caracteres, nenhuma fora do alfabeto, nenhuma com `I`/`O`/`0`/`1`, gerador não constante; corpo do e-mail com a senha, botão absoluto só quando há `APP_URL`, nome escapado, e o rodapé corrigido travado nos dois sentidos.
+- `tests/senha_temporaria.spec.js` (novo): link no login, render da rota pública, resposta neutra sem vazar existência, `/trocar-senha` sem sessão → `/login`, e usuário sem pendência → `/perfil`.
+- Rotas exercidas no servidor embutido: `GET /esqueci-senha` = **200** com o formulário; `GET /trocar-senha` sem sessão = **302** para `/login?redirect=%2Ftrocar-senha`. Os dois corpos de e-mail renderizados e conferidos no navegador.
+- ⚠️ **Não verificado nesta máquina** (sem MySQL e sem `.env`): o envio real por SMTP, a trava com a flag ligada e a migração. Conferir no homolog após o deploy — criar um usuário com senha em branco, confirmar a chegada do e-mail, e tentar `/rastreamento` antes de trocar a senha.
+
+### Pendências conhecidas
+- `web/login_template.php` continua com a própria cópia do CSS do cartão, em vez de usar `web/auth_card_template.php`. A extração ficou de fora de propósito: é a única porta do sistema e não há como exercê-la sem banco nesta máquina.
+- Pedir recuperação invalida a senha atual na hora, então quem souber o e-mail de alguém pode forçar a troca dessa pessoa (incômodo, não acesso). É consequência direta de "a temporária é a senha"; separar as duas exigiria um segundo caminho de autenticação.
+
 ## [Unreleased] — 4.13.20
 
 **Pedido do dono do produto: a camada de satélite passa a ser HÍBRIDA — imagem aérea com as vias e os nomes por cima. Imagem aérea pura não serve para operação de frota: o operador vê o telhado, mas não sabe em que rua o veículo está.**

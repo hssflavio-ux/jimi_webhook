@@ -110,6 +110,15 @@ if (empty($segments)) {
         // fabricante). Ver includes/ia_config_catalog.php.
         'configuracoes-ia'    => 'configuracoes_ia.php',
         'grupos-permissao'    => 'grupos_permissao.php',
+        // v4.13.21 — fluxo da senha temporária por e-mail. As duas ficam FORA
+        // de `$screenByHandler` e da matriz de `grupos_permissao.php`, como
+        // `login`/`logout`/`perfil`: não são telas de produto que um grupo
+        // possa conceder ou negar. `/esqueci-senha` é pública por definição
+        // (quem a usa não consegue entrar); `/trocar-senha` é a única saída de
+        // quem está preso pela troca obrigatória — negá-la a um grupo
+        // trancaria o usuário fora do sistema sem alternativa.
+        'esqueci-senha'       => 'esqueci_senha.php',
+        'trocar-senha'        => 'trocar_senha.php',
         // IoTHub pode postar o callback offline em camelCase (doc §2.4)
         'pushInstructResponse' => 'pushinstructresponse.php',
     ];

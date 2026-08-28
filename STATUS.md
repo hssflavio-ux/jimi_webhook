@@ -1,4 +1,58 @@
-# STATUS.md — Jimi Webhook System v4.13.17 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.13.21 (YUV Parity)
+
+> ### 📍 ESTADO EM 28/08/2026 — senha temporária por e-mail (v4.13.21) + mapa híbrido (v4.13.20); NADA em produção ainda
+>
+> **As duas mudanças estão só no git — não houve deploy nesta sessão.** Produção
+> segue em `4.13.17`.
+>
+> #### 🔧 v4.13.20 — a camada de satélite virou HÍBRIDA
+>
+> Pedido do dono do produto: imagem aérea sem via nem nome não serve para
+> operação de frota (o operador vê o telhado e não sabe em que rua o veículo
+> está). `bcMapBaseLayers()` (`web/components/map_assets.php`) passou a montar
+> um `L.layerGroup` com o `World_Imagery` mais os dois overlays de referência do
+> próprio Esri — `Reference/World_Transportation` e
+> `Reference/World_Boundaries_and_Places`. Continua grátis e sem chave; o
+> controle diz `Ruas` / `Híbrido`. Vale nos 10 mapas de uma vez, sem tocar em
+> handler nenhum — o retorno da padronização da v4.13.18.
+>
+> Os 3 serviços sondados com `curl` em São Paulo (z13/15/17/19): 200 nos 12.
+> ⚠️ As linhas finas de borda de tile em alguns zooms são do Leaflet e aparecem
+> **igualmente na camada anterior** — verificado lado a lado, não é regressão.
+>
+> #### 🔧 v4.13.21 — cadastro por e-mail, senha temporária e "esqueci minha senha"
+>
+> Antes: o admin inventava a senha em `/usuarios` (campo obrigatório), combinava
+> por WhatsApp, e ninguém era obrigado a trocá-la; quem esquecia dependia de um
+> admin — **não existia rota de recuperação nenhuma** no projeto.
+>
+> Agora: senha em branco no cadastro = o sistema gera 6 caracteres, envia
+> (`includes/password_reset.php`, ponto único) e obriga a troca. `/esqueci-senha`
+> é pública e responde sempre igual. Detalhes de desenho no CHANGELOG da
+> v4.13.21; três decisões do dono do produto: validade de **24 h**, campo de
+> senha manual **mantido** como opção, e falha de envio = mensagem + **uma**
+> retentativa em 30 s (temporizador no navegador, nunca `sleep()` no PHP).
+>
+> 🔴 **A trava mora no `require_login()`**, não no `login.php`: só na tela de
+> login, bastaria digitar `/rastreamento` na barra de endereço para escapar dela.
+>
+> #### ⏳ O que falta verificar (precisa de banco + SMTP — não dá nesta máquina)
+>
+> 1. Rodar a migração `mysql/migration_v4.13.21.sql` no homolog.
+> 2. Criar usuário com senha em branco e confirmar a **chegada do e-mail**.
+> 3. Antes de trocar a senha, tentar `/rastreamento`: tem de cair em
+>    `/trocar-senha`. É a trava que o E2E **não** cobre (exige usuário semeado
+>    com a flag, e criá-lo pela tela dispara e-mail de verdade).
+> 4. `/esqueci-senha` com um e-mail real de teste.
+>
+> #### 📌 Pendências deixadas de propósito
+>
+> - `web/login_template.php` ainda duplica o CSS do cartão em vez de usar
+>   `web/auth_card_template.php` — é a única porta do sistema e não há como
+>   exercê-la sem banco aqui.
+> - Pedir recuperação invalida a senha atual na hora: quem souber o e-mail de
+>   alguém força a troca dessa pessoa (incômodo, não acesso). Consequência de
+>   "a temporária é a senha".
 
 > ### 📍 ESTADO EM 26/08/2026 — produção em v4.13.17, `VIDEOUPLOAD` com o separador certo + gap histórico fechado
 >
