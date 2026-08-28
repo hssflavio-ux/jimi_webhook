@@ -44,6 +44,11 @@ test.describe('Senha temporária — recuperação de acesso', () => {
         const alerta = page.locator('.alert-success');
         await expect(alerta).toBeVisible();
         await expect(alerta).toContainText(/senha temporária/i);
+        // O limite por e-mail é silencioso (senão revelaria que a conta
+        // existe), então a mensagem PRECISA explicar o "pedi e não chegou" —
+        // sem isso, quem pede duas vezes seguidas conclui que está quebrado.
+        // Medido com o dono do produto em 28/08/2026.
+        await expect(alerta).toContainText(/5 minutos/i);
 
         // 🔴 O coração do teste: a tela pública não pode virar um verificador de
         // quem tem conta no sistema.

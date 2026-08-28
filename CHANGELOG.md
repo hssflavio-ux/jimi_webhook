@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.13.23
+
+**Achado no teste em produção com o dono do produto: pedir recuperação duas vezes seguidas parecia "não enviar nada".**
+
+### Changed
+- A mensagem neutra de `/esqueci-senha` passou a explicar o limite de reenvio: *"Se você já tinha pedido nos últimos minutos, use a senha do e-mail anterior: enviamos no máximo uma a cada 5 minutos."* O limite por e-mail é aplicado **em silêncio** de propósito (dizer "já enviamos há pouco para este endereço" confirmaria que a conta existe), e o efeito colateral era o legítimo concluir que o sistema estava quebrado. A frase é genérica, vale para todo mundo e não revela nada. Travada em `tests/senha_temporaria.spec.js`.
+
+### Verificação em produção (v4.13.21 + migração)
+- Cadastro sem senha → **"Usuário criado. Senha temporária enviada"**, selo `senha temporária` na lista, e-mail recebido.
+- Login com a temporária → `/rastreamento` digitado na barra de endereço **cai em `/trocar-senha`** (a trava do `require_login()`, confirmada manualmente pelo dono do produto — é o ponto que nenhum teste automatizado cobre).
+- Troca: senha igual à temporária recusada; senha nova aceita.
+- `/esqueci-senha` fora da janela de 5 min: e-mail enviado e selo `senha temporária` de volta na lista — que é a prova indireta do envio, já que o selo só é gravado quando `send_mail()` retorna sucesso.
+- ⚠️ Faltou exercitar em produção: o caso **"senha não entregue"** (falha de SMTP no cadastro) e a retentativa automática de 30 s. O SMTP global está saudável, e derrubá-lo de propósito não compensa.
+
 ## [Unreleased] — 4.13.22
 
 **Achado testando a v4.13.21 em produção: o rodapé de `/esqueci-senha` mostrava `v4.0.0` enquanto o `/login` ao lado mostrava a versão real.**

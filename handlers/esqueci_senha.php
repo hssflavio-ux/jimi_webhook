@@ -26,8 +26,16 @@ require_once __DIR__ . '/../includes/password_reset.php';
 // `env_load()` em config/database.php.
 env_load();
 
-/** Resposta única da tela — ver o cabeçalho. */
-const MSG_NEUTRA = 'Se este e-mail estiver cadastrado e ativo, enviamos uma senha temporária para ele. Confira a caixa de entrada e o spam.';
+/**
+ * Resposta única da tela — ver o cabeçalho.
+ *
+ * A segunda frase existe porque o limite por e-mail (REENVIO_MIN) é aplicado
+ * em SILÊNCIO: quem pediu duas vezes seguidas recebe "enviamos" e não recebe
+ * e-mail nenhum, e sem esse aviso conclui que o sistema está quebrado — foi o
+ * que aconteceu no teste de 28/08/2026, com o dono do produto. A frase é
+ * genérica e vale para todo mundo, então não revela se a conta existe.
+ */
+const MSG_NEUTRA = 'Se este e-mail estiver cadastrado e ativo, enviamos uma senha temporária para ele. Confira a caixa de entrada e o spam. Se você já tinha pedido nos últimos minutos, use a senha do e-mail anterior: enviamos no máximo uma a cada 5 minutos.';
 
 /** Janela em que o mesmo e-mail não recebe outra temporária (aplicada em silêncio). */
 const REENVIO_MIN = 5;
