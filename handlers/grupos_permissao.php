@@ -22,6 +22,11 @@ $screens = [
     'bi'                    => 'BI',
     'ocorrencias_dashboard' => 'Dashboard (Ocorrências)',
     'comandos'              => 'Comandos',
+    // v4.14.0 — os mesmos comandos do proNo 128 pelo canal SMS. Permissão
+    // própria (e não a de 'comandos') porque este canal CUSTA dinheiro: cada
+    // disparo consome crédito por equipamento, e faz sentido conceder o envio
+    // normal a quem não deve gastar franquia de SMS.
+    'comandos-sms'          => 'Comandos por SMS',
     'exportar'              => 'Exportar',
     'video_aovivo'          => 'Vídeo — Ao Vivo',
     'video_playback'        => 'Vídeo — Playback',
@@ -41,6 +46,9 @@ $screens = [
     'config-ocorrencias'    => 'Config. Ocorrências',
     'config-notificacoes'   => 'Config. Notificações',
     'config-smtp'           => 'Servidor de E-mail',
+    // v4.14.0 — mesma trava e mesma razão de /firmwares: require_admin() no
+    // handler, porque guarda credencial de terceiro e o segredo do webhook.
+    'config-sms'            => 'SMS — Allcance (só admin)',
     'config-dispositivos'   => 'Config. Dispositivos',
     'config-parametros'     => 'Perfis de Parâmetros',
     // v4.9.16 — a área dedicada. Marcar aqui NÃO basta para liberar: os três

@@ -5,7 +5,37 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
-## [Unreleased] — 4.13.23
+## [Unreleased] — 4.14.0
+
+**Comandos do protocolo 128 por SMS — um segundo transporte para o mesmo catálogo.**
+
+O caminho normal de um comando de texto é o IoT Hub, por TCP. Quando a câmera não fala com o Hub — APN errado, `SERVER` apontando para o lugar errado, equipamento mudo — não havia como alcançá-la. O SMS chega pela rede da operadora, que é um caminho **independente**: é um canal de resgate.
+
+### Added
+- **Tela `/comandos-sms`** — o catálogo INTEIRO de `command_catalog.php` (o mesmo do `/comandos`, sem catálogo paralelo), com a trava por modelo, preview da string exata e disparo em lote. O **saldo é consultado a cada abertura da tela**, e o resumo diz quantos créditos o disparo vai custar antes de confirmar.
+- **`includes/sms_gateway.php`** — ponto único de fala com a API da Allcance: login com cache do Bearer, saldo, envio. Nenhum outro arquivo chama o provedor.
+- **`/pushsms?k=<segredo>`** — webhook de retorno. Grava o status de entrega **e a resposta que o equipamento devolve por SMS**, que é o que fecha o ciclo e faz do canal algo além de um disparo cego.
+- **`/config-sms`** (admin) — credenciais da conta (senha cifrada AES-256-GCM), teste de credencial+saldo, e o gerador do segredo do webhook, que exibe a URL pronta para cadastrar no painel da Allcance.
+- **`sms_settings`** e **`sms_commands`** (`migration_v4.14.0.sql`).
+
+### Notas de implementação
+- **O texto do comando é IDÊNTICO ao da plataforma** (`CMD,A,B#`), sem conversão. Decisão do dono do produto, apoiada na nota oficial das planilhas Jimi (JC450: *"Commands can all be delivered using any of the following ways: TCP, SMS, or TF card"*, mesmo formato de vírgula). ⚠️ Isso **derruba** a forma `CMD#666666#A#B` que a wiki Foco na Via documenta como "SMS" — o teste do catálogo continua afirmando que nenhuma sintaxe carrega `666666`, e o spec da tela nova repete a asserção.
+- 🔴 **`sms_commands` é tabela própria, não `commands`.** Os estados do provedor (`entregue celular`, `saldo insuficiente`, `lista negra`, `message_text_invalid`) não cabem no enum `pending/queued/sent/executed/failed` sem tradução com perda, e `/commandstatus` faz polling em `commands` esperando o ciclo do Hub. Custo aceito: o histórico SMS ainda não aparece na aba de comandos de `/ativo_detalhe`.
+- 🔴 **`sms_normalizar_msisdn()` é função nomeada e testada, não um `preg_replace` no handler.** `sim_cards.msisdn` é texto livre e a API aceita QUALQUER string sem reclamar — cobra o crédito e a mensagem não chega, sem erro em log nem tela. A armadilha específica é o `55`: DDD 55 é Caxias do Sul, então o prefixo do país só é removido quando o resto fica com 10 ou 11 dígitos. 20 formas reais fixadas em `tests/helpers/sms_webhook.test.php`.
+- **"recebido" significa duas coisas.** Sozinho é confirmação de entrega; **com `mensagem` preenchida é a resposta do equipamento**. Tratar os dois igual faria a tela mostrar "Recebido" e jogar fora exatamente o que a câmera respondeu.
+- **`/pushsms` não estende `WebhookHandler`** — aquela classe exige `WEBHOOK_TOKEN` no corpo e idempotência por MD5 de `data_list`, e o payload da Allcance não tem nem um nem outro. Segue o precedente do `/filelist`. A defesa é o segredo `k` na query (`hash_equals`), a única possível: o provedor não envia cabeçalho de autenticação nenhum. **Segredo não configurado = endpoint fechado** — aberto por omissão deixaria qualquer um inventar status de entrega e resposta de equipamento.
+- ⚠️ **O webhook é da CONTA INTEIRA**, não da nossa aplicação. Item sem `referencia_numero` conhecido é logado e descartado — casar por número solto atribuiria a resposta de um SMS ao comando errado, já que o mesmo chip recebe muitos comandos ao longo do tempo.
+- **Equipamento com chip sem número aparece na lista, desabilitado, com o motivo escrito e link para `/chips`** — em vez de sumir. Sumir faria a lista mentir por omissão. A trava de modelo **não** reabilita essas linhas: são dois motivos independentes de bloqueio.
+- `/config-sms` entrou em `$navBottom` com `admin_only`, e **não** no grupo Cadastros: item de grupo é filtrado só por `can()`, que é permissivo por omissão, então tela de administrador dentro de um grupo aparece para todo usuário sem grupo. Mesma razão do `/firmwares`.
+- `api_response` é coluna JSON e é gravada **sempre** com `json_encode()` — a lição do `3140 Invalid JSON text` que quebrou o callback de comando offline por meses.
+- `customer_id`/`vehicle_id` de `sms_commands` são **snapshot** do dono no momento do envio (`resolve_installation_for_imei()`), e o histórico da tela filtra por eles — nunca por JOIN em `devices.customer_id`, que é só "quem tem a câmera hoje" (regra da Fase 2).
+
+### Pendente
+- **Cron de PULL** (`/relatorios/campanhas/sms`) como plano B para webhook indisponível. Não implementado de propósito: a doc diz que "cada relatório é disponibilizado apenas uma vez por consulta", e não foi medido se o PULL consome o que o webhook entregaria. Rodar os dois às cegas pode fazer status sumir.
+- **Primeiro envio real não foi feito.** Chip M2M frequentemente não recebe SMS — é contratual da operadora, não técnico. O teste inicial precisa ser um comando inócuo (`STATUS#`) num equipamento só.
+- **A migração não roda no deploy que a traz** — `./scripts/deploy.sh --force` duas vezes, ou o `.sql` à mão.
+
+## [4.13.23]
 
 **Achado no teste em produção com o dono do produto: pedir recuperação duas vezes seguidas parecia "não enviar nada".**
 

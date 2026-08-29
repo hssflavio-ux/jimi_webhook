@@ -71,10 +71,22 @@ if (empty($segments)) {
     $third = $segments[2] ?? null;
 
     $ajaxRoutes = ['camerasdata','commandstatus','sendcommand','mediadata','trackdata','hbdata','devicemodels',
-                   'ocorrenciasdata','exportardata','notificacoesdata','solicitarvideo','dashboarddata'];
+                   'ocorrenciasdata','exportardata','notificacoesdata','solicitarvideo','dashboarddata',
+                   // v4.14.0 — despacho de comando pelo canal SMS. Fica aqui, e
+                   // não em $screenByHandler, pelo mesmo motivo do
+                   // 'sendcommand': é ação AJAX, não tela. A permissão é
+                   // conferida dentro do handler (require_permission).
+                   'sendsms'];
     $webhookRoutes = ['pushgps','pushhb','pushalarm','pushfileupload','pushlbs','pushresourcelist',
                       'pushftpfileupload','pushiothubevent','pushTerminalTransInfo','pushinstructresponse',
-                      'pushevent'];
+                      'pushevent',
+                      // v4.14.0 — retorno do provedor de SMS (Allcance): status
+                      // de entrega e a RESPOSTA do equipamento ao comando.
+                      // ⚠️ Não usa WEBHOOK_TOKEN: quem posta é um terceiro que
+                      // não conhece o nosso protocolo. A defesa é o segredo `k`
+                      // na query, conferido dentro do handler — mesmo desenho
+                      // do /filelist.
+                      'pushsms'];
     // NOTA: 'checklist' fica fora daqui de propósito — resolve via $subrouteMap
     // (fallback sem subrota → checklist.php; /checklist/inspecao → checklist_inspection.php)
     // 'download' (v4.7.3) NÃO exige login de propósito: a autorização é a
@@ -94,6 +106,13 @@ if (empty($segments)) {
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
         'config-smtp'         => 'config_smtp.php',
+        // v4.14.0 — canal de SMS (Allcance): credenciais da conta e o segredo
+        // do webhook de retorno. `require_admin()` no handler, porque `can()`
+        // é permissivo por omissão e esta tela guarda credencial de terceiro.
+        'config-sms'          => 'config_sms.php',
+        // v4.14.0 — os MESMOS comandos do proNo 128 do /comandos, despachados
+        // pela rede da operadora em vez do IoT Hub (canal de resgate).
+        'comandos-sms'        => 'comandos_sms.php',
         // 🔴 v4.9.11 — era a rota `/config`, e ela estava MORTA. Existe um
         // diretório `config/` no docroot (o do PDO singleton), então o mod_dir
         // do Apache redirecionava `/config` → `/config/` com 301 e servia o
@@ -244,6 +263,11 @@ $screenByHandler = [
     'bi.php'                    => 'bi',
     'ocorrencias_dashboard.php' => 'ocorrencias_dashboard',
     'comandos.php'              => 'comandos',
+    // v4.14.0 — tela nova entra nos DOIS lugares: aqui e em $screens de
+    // grupos_permissao.php. Só aqui = impossível de conceder; só lá = o `view`
+    // não é verificado por ninguém. Já aconteceu cinco vezes.
+    'comandos_sms.php'          => 'comandos-sms',
+    'config_sms.php'            => 'config-sms',
     // v4.9.16 — área dedicada de parâmetros. Entra aqui E em `$screens`
     // (grupos_permissao.php): só no router, o admin não tem o que marcar; só
     // na matriz, o `view` não é verificado por ninguém. O acesso efetivo é

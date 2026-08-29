@@ -105,6 +105,10 @@ $navGroups = [
 // em operação, e é o mesmo perfil de gente que as usa.
 $navBottom = [
     ['route' => 'comandos',   'label' => 'Comandos',   'icon' => 'terminal', 'href' => '/comandos'],
+    // v4.14.0 — o mesmo comando, pela rede da operadora. Fica ao lado do
+    // Comandos (e não num grupo) porque também manda instrução a equipamento
+    // em operação, e porque é o par natural dele na cabeça do operador.
+    ['route' => 'comandos-sms', 'label' => 'Comandos SMS', 'icon' => 'terminal', 'href' => '/comandos-sms'],
     // v4.13.10 — item de menu removido a pedido do dono do produto: a tela
     // ainda não está funcional (JT/T PROJETO_PARAMETROS.md em andamento). O
     // handler (/parametros) e a permissão em grupos_permissao.php ficam
@@ -123,6 +127,11 @@ $navBottom = [
     // `admin_only` — item de grupo é filtrado só por can(), que é permissivo por
     // omissão e deixaria a tela à vista de todo usuário sem grupo.
     ['route' => 'firmwares',  'label' => 'Firmware',   'icon' => 'gear',     'href' => '/firmwares',
+     'admin_only' => true],
+    // v4.14.0 — MESMA razão do /firmwares acima: a tela é require_admin(), e
+    // item dentro de um grupo é filtrado só por can(), que é permissivo por
+    // omissão. No grupo Cadastros ela apareceria para todo usuário sem grupo.
+    ['route' => 'config-sms', 'label' => 'SMS',        'icon' => 'gear',     'href' => '/config-sms',
      'admin_only' => true],
     ['route' => 'exportar',   'label' => 'Exportar',   'icon' => 'download', 'href' => '/exportar'],
     ['route' => 'wiki',       'label' => 'Ajuda',      'icon' => 'book',     'href' => '/wiki'],

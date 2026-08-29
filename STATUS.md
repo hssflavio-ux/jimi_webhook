@@ -1,4 +1,45 @@
-# STATUS.md — Jimi Webhook System v4.13.23 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.14.0 (YUV Parity)
+
+> ### 📍 ESTADO EM 29/08/2026 — canal de SMS implementado, NÃO publicado e NÃO exercitado contra equipamento real
+>
+> **v4.14.0 — comandos do proNo 128 por SMS (Allcance).** Segundo transporte
+> para o mesmo catálogo de comandos de texto: quando a câmera não fala com o IoT
+> Hub (APN ou `SERVER` errados), o SMS chega por um caminho independente.
+>
+> **O que está pronto e verificado:**
+> - Tela `/comandos-sms` (catálogo inteiro + trava de modelo + saldo a cada
+>   abertura), `/config-sms` (admin), webhook `/pushsms`, ação `/sendsms`,
+>   `includes/sms_gateway.php`, `includes/sms_inbound.php`.
+> - `migration_v4.14.0.sql` (`sms_settings`, `sms_commands`) + linha no `deploy.sh`.
+> - `php -l` limpo em `handlers/ config/ core/ includes/`; JS da tela validado
+>   por `node --check`; **44/44** em `tests/helpers/sms_webhook.test.php`.
+> - **A API foi exercitada de verdade** (29/08/2026): `POST /v2/api/login`
+>   devolveu `200 success` e `GET /v2/api/creditos` listou `SMS TRANSACIONAL`.
+>   O token é JWT de 3600 s e não há refresh — daí o cache em `sms_settings`.
+>
+> 🔴 **O que NÃO foi verificado — leia antes de confiar:**
+> 1. **Nenhum SMS foi enviado.** O caminho `/campanhas` está escrito contra a
+>    doc e a coleção do Postman, não contra uma resposta real. O primeiro teste
+>    tem de ser um comando inócuo (`STATUS#`) num equipamento só.
+> 2. **Chip M2M frequentemente NÃO recebe SMS** — é contratual da operadora, não
+>    técnico. Se o primeiro envio for aceito pela API e nunca entregue, suspeite
+>    disto antes do código.
+> 3. **O SQL não rodou contra MySQL nenhum** (a máquina de desenvolvimento não
+>    tem servidor). Foi revisado à mão; a `UNIQUE` na coluna gerada
+>    `customer_key` é o que impede duas linhas globais.
+> 4. **A conta usada tem 10 créditos** — de teste, não de operação.
+>
+> ⚠️ **Passo de infraestrutura FORA DO GIT:** a URL do webhook
+> (`APP_URL` + `/pushsms?k=<segredo>`) precisa ser cadastrada **no painel da
+> Allcance** — não há endpoint de API para isso. Sem ela, a tela mostra "aceito"
+> e o status de entrega e a resposta do equipamento nunca chegam. Mesma classe
+> do `docs/apache/filelist-chunked.conf`: some se a conta for reprovisionada, e
+> nada no deploy avisa. O segredo é gerado em `/config-sms`, que mostra a URL
+> pronta.
+>
+> ⚠️ **Migração nova → DOIS deploys** (`--force` duas vezes) ou o `.sql` à mão.
+>
+> Design completo em `docs/superpowers/specs/2026-08-29-comandos-sms-design.md`.
 
 > ### 📍 ESTADO EM 28/08/2026 — senha temporária por e-mail NO AR e testada ponta a ponta; v4.13.22–23 pendentes
 >

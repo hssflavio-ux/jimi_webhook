@@ -454,6 +454,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.12.0" "mysql/migration_v4.12.0.sql" "customer_id/vehicle_id em gps_data/alarms/events/heartbeats/media_files/occurrences — fase 2"
     run_migration "4.13.0" "mysql/migration_v4.13.0.sql" "device_ia_config_state — tela Configuracoes IA (ADAS/DMS/velocidade)"
     run_migration "4.13.21" "mysql/migration_v4.13.21.sql" "senha temporaria por e-mail (users + password_reset_log)"
+    run_migration "4.14.0" "mysql/migration_v4.14.0.sql" "sms_settings + sms_commands — comandos proNo 128 via SMS (Allcance)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
