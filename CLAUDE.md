@@ -29,6 +29,8 @@ Official API reference: https://docs.jimicloud.com/integration/integration.html
 
 **Deploy** (comando com `sudo`, qual chave SSH vale de qual máquina, a chave do GitHub sob `sudo` em produção, o bump de `SYSTEM_VERSION`, flags e rollback) → skill `deploy` (`.claude/skills/deploy/SKILL.md`).
 
+🔴 **Migração nova NÃO roda no deploy que a traz — precisa de um SEGUNDO deploy.** O `deploy.sh` ganha a linha `run_migration` no MESMO `git pull` que o está executando, e o bash lê o script em execução aos poucos, direto do disco: alterar o arquivo no meio da execução faz o interpretador perder o trecho novo. Medido na v4.13.21 (28/08/2026): rotas novas no ar, colunas ausentes no banco. ⚠️ O intervalo entre as duas coisas é perigoso porque o código novo já roda contra o esquema velho — e **nem toda tela grita**: `/usuarios` mostrou `SQLSTATE[42S22]`, mas o `/esqueci-senha`, cuja resposta é neutra de propósito, mandava e-mail com senha que o banco não gravava. Ou aplique o `.sql` à mão logo depois do deploy, ou rode `./scripts/deploy.sh --force` duas vezes.
+
 ## Commands
 
 ```bash

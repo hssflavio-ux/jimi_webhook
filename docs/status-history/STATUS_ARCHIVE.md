@@ -4,6 +4,307 @@ Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recente
 
 ---
 
+> ### 📍 ESTADO EM 21/08/2026 — v4.9.39 no ar; v4.9.40 pronta, NÃO publicada
+>
+> **Produção (`bycamera.ia.br`) está em `17d874e`, `/ping` reportando 4.9.39.**
+> A **v4.9.40 está no working tree e ainda não foi commitada nem publicada** —
+> `SYSTEM_VERSION` já bumpado no `.env.example`, sem migração de banco.
+>
+> A rodada nasceu de uma pergunta de uma linha: *existe na planilha do JC371 um
+> comando de PARAR o playback?* **Não existe** — a planilha é toda de
+> configuração e consulta, e o controle de stream do JC371 vive no binário do
+> JT/T 1078 (`37378`). Mas o cruzamento feito para responder achou 18 sintaxes
+> ausentes do catálogo e um comando que a v4.9.25 tinha descartado por engano.
+>
+> #### 🔑 `CHECK#` — a consulta mais completa do proNo 128, e ela é universal
+>
+> Disparado em produção em 20/08/2026, ANTES de catalogar. Quatro equipamentos
+> alcançáveis, quatro respostas:
+>
+> | Equipamento | Modelo | |
+> |---|---|---|
+> | `864993060429173` | JC400AD | ✅ `VERSION:KMC28_..._V1.8.0.9_250807.1920` |
+> | `864993060392306` | JC400AD | ✅ `VERSION:KMC28_..._V1.8.1.3_250925.1127` |
+> | `865478070003241` | JC371 | ✅ `VERSION:C371_..._V1.9.0.2b_260528.0543` |
+> | `869058070151343` | JC182 | ✅ `IMEI:…;VERSION:C182_..._V1.2.5.2_260422.0924` |
+>
+> O JC181 estava offline e o comando virou fila — **não é recusa**. JC450 e
+> JC400D não foram alcançados. Virou a **segunda exceção manual** de `universal`
+> no catálogo (a primeira é o `UPDATE`, v4.9.32), pela mesma razão: a derivação
+> automática mede a FONTE — "presente em 5+ das 6 páginas da wiki" — e só a
+> planilha do JC371 documenta o comando. Sendo LEITURA, errar o modelo custa uma
+> recusa, não um estrago: é o inverso do `SERVER`.
+>
+> Quatro campos da resposta valem por si:
+>
+> | Campo | Para que serve aqui |
+> |---|---|
+> | `UPLOAD` | o endereço para onde a câmera sobe arquivo — **é o que falta conferir na 400D**, que aceita o `FILELIST` e nunca sobe a lista (pendência aberta) |
+> | `SERVER` | para onde ela aponta, **com a porta**: `21100` na linha 400, `21122` no JC371/JC182. Copiar a de um modelo para o outro derruba câmera que funcionava |
+> | `TIMEZONE` | `-3:00` — o fuso do equipamento, pela boca dele. É a confirmação da convenção que `includes/filelist.php` assume ao ler o carimbo dos nomes |
+> | `VERSION` | a **mesma string** que o `VERSION#` devolve |
+>
+> ⚠️ **No JC181 o `CHECK#` é caro, e isso está medido**: na bateria da v4.9.25
+> ele estourou os 30 s do hub e derrubou a sessão JIMI daquele equipamento —
+> nove respostas boas antes dele, zero depois. A sessão volta sozinha, mas não
+> se varre a frota com ele em rajada.
+>
+> #### 🔴 A v4.9.25 tinha descartado o `CHECK` como "token solto"
+>
+> Aquela varredura leu a wiki — onde `CHECK` e `LOG` aparecem mesmo como palavra
+> solta em tabelas de parâmetros — e os classificou como ruído, junto com `ON`,
+> `P3`, `P5`, `CAR` e `DMS`. A planilha da fabricante os documenta (A003, A025) e
+> o equipamento responde. É o **espelho** do erro do `MILE#` (`docs/COMANDOS_128_CONSULTA.md`
+> §4): lá batizei por coincidência, aqui descartei por ausência. **Ausência numa
+> fonte não é ausência no protocolo.** A §5 do documento foi corrigida no ponto
+> exato onde a afirmação errada estava, e o levantamento novo é a §8.
+>
+> #### As 18 sintaxes — e por que 11 delas nenhum levantamento por nome acharia
+>
+> - **Sete nomes** que não existiam: `CHECK`, `CHECKVIDEO`, `STATUSVIDEO`,
+>   `SENSORSET`, `SHUTDOWNTIME`, `VIDEORSL_SUB`, `VIDETIMEZONE`.
+> - **Onze variantes de ARIDADE** — o nome já existia, aquela sintaxe não:
+>   `KEYFUN,A,B` · `APN,A,B,C,D` · `SERVER,A,B,C,D,E,F` · `BCD,A,B` · `LOG,ALL` ·
+>   `RECORDAUDIO,A,B` · `RECORDAUDIO_SUB,A,B` · `RATATION,A,B,C,D` ·
+>   `PICTIMER,A,B,C,D` · `TIMER,A` · `ANGLEREP,A`. É a mesma classe que escondeu
+>   a forma nua do `FILELIST` por meses (v4.9.27). Mandar a aridade errada é
+>   **aceito e mal interpretado, sem erro nenhum**; o que protege é a trava por
+>   modelo, e por isso todas nascem presas ao JC371 — mesmo quando o nome é
+>   universal em outra sintaxe (`TIMER`, `ANGLEREP`, `SERVER`).
+>
+> Dois achados dentro dos 18: **`BCD,A,B#` revela que o segundo campo é a VERSÃO
+> do JT/T 808** (0 = 2011, 1 = 2019) — muda o dialeto que a câmera fala com o hub
+> inteiro, e a entrada de um campo só, vinda da wiki, dizia "808-2013", ano que
+> não existe na planilha. E **`STATUSVIDEO#` diz o que nenhuma outra resposta
+> diz**: `On video` × `Camera insertion`, quais canais estão gravando contra
+> quais câmeras estão conectadas — a pergunta que separa "não gravou" de "não tem
+> câmera" quando a barra do playback vem vazia num canal.
+>
+> #### Duas correções que apareceram no caminho
+>
+> **A leitura de pares descartava, em silêncio, chave que não fosse uma palavra.**
+> `command_response_kv()` exigia `[A-Za-z][A-Za-z0-9 _/.-]{1,28}` e três formatos
+> reais caíam fora — a linha sumia da tela sem nada indicando por quê:
+> `EVENTSET,AVD:OFF` e `WAKEUP,RTC:0,240` (JC371, chave com **vírgula**) e
+> `[AR9150]:C182_…` (JC182, chave com **colchetes**). Duas coisas seguem de fora
+> de propósito: a chave **nunca atravessa um `:`** — é o que mantém
+> `RSERVICE:rtmp://ip:1936/live` com o rótulo certo apesar dos três dois-pontos —
+> e o bloco `bootcase[…]` do JC182, que tem quebra de linha no meio.
+>
+> 🔴 **A guarda de "placeholder por preencher" da tela de comandos casava por
+> FORMATO, e recusava valor legítimo de uma letra.** Ela testava
+> `/(,P\d+|,[A-Z])(,|#)/` sobre o texto montado, e um valor de UMA LETRA é
+> idêntico a um placeholder de uma letra: `VIDEOTIMEZONE,W,3,0#` — onde `W` é
+> *oeste de GMT*, o exemplo oficial do próprio comando — era **recusado pela
+> própria tela**. Agora a pergunta é sobre os CAMPOS (`faltaParametro()`): o que
+> está em branco está em branco. ⚠️ A causa-raiz eram **sete entradas com
+> `template: true` e `params: []`** — sem parâmetro declarado a tela não desenha
+> campo, o preview sai com a letra crua e o operador manda `TIMER,A,B#` para o
+> equipamento. Corrigidas as sete; nas três que só a wiki documenta
+> (`TIMER,A,B`, `TIMER1,A,B`, `DMS_VIRTUAL_SPEED,A`) as posições foram declaradas
+> e **a descrição ficou em branco de propósito** — inventar o significado seria o
+> palpite que este projeto não aceita.
+>
+> #### `CHECK#` também alimenta a leitura de firmware
+>
+> `firmware_is_version_command()` virou `firmware_comando_le_versao()` e aceita
+> os dois comandos. **Só foi possível porque medi antes**: as duas leituras
+> devolvem a MESMA string, byte a byte, nos dois modelos alcançáveis. Se
+> divergissem, `/firmwares` — que compara por **igualdade**, porque não há regra
+> publicada que ordene `V1.8.0.9_250807` contra `V4.3.2` — passaria a acusar
+> "diferente da referência" conforme o comando usado por último. Importa porque
+> `devices.firmware_version` só é preenchido quando alguém **pergunta**: estava
+> NULL na 400AD de produção, online, no dia da medição.
+>
+> #### Verificação
+>
+> | | |
+> |---|---|
+> | PHP | 6 suítes; **115 checagens** no `command_response.test.php` (eram 80), com as respostas cruas das medições como fixture |
+> | Navegador | `comandos.spec.js` **17/17** |
+> | Lint | limpo em `handlers config core includes web` |
+> | Prova negativa | **8 checagens PHP** caem ao desfazer as três correções; **4 specs** caem ao reverter cada metade da correção da tela |
+>
+> #### 🔴 Dois defeitos NA SUÍTE, não no produto
+>
+> **9 specs não rodam por falta de `TEST_IMEI`, e a suíte sai com código 0.**
+> Inventário exato, colhido do relatório JSON em 21/08/2026 — 16 pulados:
+>
+> | Quantos | Onde | Por quê |
+> |---|---|---|
+> | 7 | `video_playback_barra.spec.js` | `TEST_IMEI` |
+> | 1 | `video_playback_filelist.spec.js` | `TEST_IMEI` |
+> | 1 | `webhook_occurrence.spec.js` | `TEST_IMEI` + `WEBHOOK_TOKEN` |
+> | 3 | `multitenant.spec.js` | `TEST_EMAIL_B` / `TEST_PASSWORD_B` — **desde a Fase M.4** |
+> | 2 | Modelos de relatório | sem dado no cliente de teste |
+> | 1 | Relatórios operacionais | sem dado de segmentação no período |
+> | 1 | rate limiting | opt-in (`RATE_LIMIT_TEST=1`) |
+>
+> As 9 primeiras cobrem justamente a barra de zoom, o despacho do `FILELIST` e o
+> webhook que cria ocorrência — o núcleo das últimas seis versões. É a terceira
+> encarnação da mesma armadilha (`TEST_EMAIL_B` na v4.9.24, coleta de `*.test.js`
+> na v4.9.32): **verde que não significa verificado**. Para rodar a suíte de
+> verdade: `TEST_EMAIL`, `TEST_PASSWORD`, `TEST_IMEI` (IMEI existente no banco
+> local) e `WEBHOOK_TOKEN`.
+>
+> **O fixture de login falha por timeout do evento `load`.** Com `TEST_IMEI`
+> definido, 5 specs falharam — todas em `tests/fixtures/auth.js:35`, ANTES de
+> qualquer asserção: o login funciona (navega para `/`), o `domcontentloaded`
+> dispara e o `load` não fecha em 15 s. Provado que **não é regressão da
+> v4.9.40**: revertendo só os arquivos desta rodada, os mesmos testes falham
+> idênticos; e a cada execução falha um teste DIFERENTE, sempre no mesmo ponto.
+> As CDNs (`jsdelivr`, `fonts.googleapis`) respondem em 0,2 s, então não é rede —
+> o candidato é o servidor embutido do PHP ser de thread única.
+>
+> ⚠️ **A decisão de trocar a espera para `domcontentloaded` NÃO foi tomada**: é
+> uma linha, mas esconderia uma `/` genuinamente lenta, se for esse o caso.
+> Medir o tempo da `/` no servidor dev vem antes de mexer no fixture.
+>
+> #### ⚠️ Fora do git
+>
+> `docs/JC 371 Command List V1.0.1.xlsx` e
+> `docs/JC181_Command_List_V1.0.7_20250811.xlsx` estão **untracked**, e o
+> catálogo agora cita as linhas delas (A003, A020, A021, A023, B002, B005, B006,
+> B008, B009, C001, C002). Sem versioná-las, a procedência de 18 entradas aponta
+> para arquivos que só existem numa máquina.
+>
+> #### Pendências de campo que continuam abertas
+>
+> 1. **A 400D (`862798051583785`) aceita o `FILELIST` e nunca sobe a lista.** A
+>    hipótese é endereço de upload não configurado — o `CHECK#` agora responde
+>    isso (`UPLOAD:…`), e a câmera estava offline há 11 h na tentativa.
+> 2. **Não há comando verificado de PARAR o playback no JT/T** (`37378`): os
+>    nomes de campo continuam sem confirmação em equipamento real.
+> 3. **`CHECKVIDEO#` na linha JC400**: relatado do campo como não suportado e
+>    ausente da planilha `JC400 & JC261`; a tentativa de confirmar por medição
+>    caiu em fila offline nas duas 400AD, então segue sem medição própria.
+
+> ### 🔴 v4.9.32 — a trava do `UPDATE` desligava a atualização de 5 dos 6 modelos
+>
+> **`UPDATE,P1#` — atualização de firmware — estava travado em JC371.** A tela
+> de Comandos desabilita os equipamentos cujo modelo a documentação não cobre,
+> e o campo `universal` do catálogo é DERIVADO da wiki ("presente em 5+ das 6
+> páginas"). Como só a página do JC371 documenta o `UPDATE`, ele nasceu preso a
+> esse modelo. Só que o comando vale para a linha JC inteira — **o que muda de
+> um modelo para o outro é apenas a URL do pacote**. Era artefato da FONTE, não
+> do protocolo.
+>
+> Medido no banco de teste: com o catálogo anterior, escolher `UPDATE`
+> desabilitava **9 dos 10** equipamentos. Em produção isso significa que as
+> JC400AD não podiam ser atualizadas pela tela — exatamente a frota onde a
+> divergência de firmware custou caro na v4.9.31 (`V1.8.1.2_250904` aceita
+> `EVIDEO`, `V1.8.0.9_250807` recusa) e onde a pendência 5 pedia justamente uma
+> atualização.
+>
+> #### O segundo defeito, mais silencioso: o botão FOTA nunca atualizou nada
+>
+> `/equipamentos` tinha um modal "Atualização de Firmware (OTA)" que mandava
+> **`proNo 33027`** — que é **"Definir parâmetro"** do JT/T — com um payload
+> inventado, `{"firmware_url":"…"}`. O gateway aceita, devolve `code:0`, a tela
+> exibe "Comando de firmware enviado" e o equipamento ignora. É a mesma família
+> do defeito que a v4.9.12 corrigiu na parametrização: **comando aceito pelo
+> gateway e ignorado pelo device**, sem erro em lugar nenhum.
+>
+> #### O que entrou no lugar
+>
+> | | Antes | Agora |
+> |---|---|---|
+> | Trava do `UPDATE` | só JC371 | os 6 modelos (`universal`) |
+> | URL do pacote | texto livre digitado a cada envio | cadastro **por modelo** (`/firmwares`) |
+> | Firmware do equipamento | `NULL` em 100% da base | gravado da resposta do `VERSION#` |
+> | Envio | `proNo 33027` com payload inventado | `UPDATE,<url>#` no proNo 128 |
+>
+> - **`/firmwares`** (só admin) — frota com a versão lida, quando foi lida, e a
+>   comparação com a de referência do modelo; mais o cadastro de URLs. Botões
+>   [Ler versão] (`VERSION#`) e [Atualizar] (`UPDATE,<url>#`).
+> - **`includes/firmware.php`** — ponto único: lê a versão da resposta, valida a
+>   URL, resolve o pacote do modelo.
+> - **A resposta do `VERSION#` passa a ser gravada nos DOIS caminhos**, o
+>   síncrono (`sendcommand.php`) e o callback offline (`pushinstructresponse.php`).
+>   Cobrir só um deixaria sem leitura a metade da frota que estava desligada
+>   quando alguém perguntou.
+> - **`migration_v4.9.32.sql`** — `firmware_releases`, `devices.firmware_checked_at`,
+>   `devices.firmware_source`. Registrada no `scripts/deploy.sh`.
+>
+> #### 🔴 Soltar a trava exigia colocar outra no lugar
+>
+> O envio em lote de `/comandos` manda a **mesma string** para todos os
+> equipamentos marcados. Com `UPDATE` liberado para todos os modelos, marcar
+> dois modelos e enviar aplicaria o pacote de um no outro — e **isso não devolve
+> erro nenhum**: o equipamento aceita, baixa e aplica. Diferente de quase todo
+> defeito deste projeto, esse não aparece em callback nem em log; aparece numa
+> câmera que parou de funcionar.
+>
+> Por isso, três guardas, nesta ordem de força:
+>
+> 1. **`UPDATE` com mais de um modelo marcado bloqueia o botão de envio.** É o
+>    único comando do catálogo cujo *parâmetro* é específico do modelo.
+> 2. **A URL é cadastro com o modelo na chave**, e a de referência vem
+>    pré-selecionada. Digitar a cada envio é repetir a chance do erro.
+> 3. **Equipamento sem modelo cadastrado não recebe `UPDATE`** — sem modelo não
+>    há pacote certo, só um palpite. Em produção 1 dos 11 está assim.
+>
+> ⚠️ **Vírgula e `#` na URL partem o comando** (são os separadores do proNo
+> 128): o equipamento recebe um pedaço de endereço e não baixa nada. Recusado
+> no cadastro, nas duas telas e no `/sendcommand`.
+>
+> ⚠️ **O `/sendcommand` NÃO consegue barrar a vírgula.** Quando a string chega
+> lá, uma URL com vírgula e um `UPDATE` de dois parâmetros são indistinguíveis;
+> recusar o segundo bloquearia uma variante que algum modelo pode aceitar. O
+> guard do servidor pega URL sem esquema, com espaço ou vazia — a vírgula é
+> barrada antes, onde a URL ainda está separada do resto. Está escrito no
+> próprio arquivo, com o que ele pega e o que não pega.
+>
+> ⚠️ **Versões são comparadas por IGUALDADE, nunca por ordem.** Não há regra
+> publicada que ordene `V1.8.0.9_250807` contra `V4.3.2`. A tela diz "igual à de
+> referência", "diferente" ou "não lido" — e nunca "desatualizado", que exigiria
+> a ordem que não temos.
+>
+> #### Verificação
+>
+> - **7 casos em navegador real** (`tests/firmware.spec.js`), verificados
+>   **reprovando no código anterior**: com o catálogo antigo, 9 de 10
+>   equipamentos ficavam desabilitados ao escolher `UPDATE`.
+> - **30 checagens novas** em `tests/helpers/command_response.test.php` (80 no
+>   total), incluindo a contagem do cabeçalho do catálogo — que estava **errada
+>   desde a v4.9.27** (dizia 219/143, o array tinha 220/144) e agora é conferida.
+> - **Migração aplicada e reaplicada** no banco de desenvolvimento: idempotente.
+> - **Caminho de gravação exercitado contra o schema real** (sonda com rollback):
+>   a versão é gravada, a recusa não sobrescreve o valor lido, e a unicidade
+>   `(modelo, versão)` recusa duplicata.
+> - **Caminho do CALLBACK exercitado por webhook real** (`/pushinstructresponse`
+>   com a resposta de um `VERSION#` correlacionado): grava a versão; a resposta
+>   de `STATUS#` (`Battery:12.1V`, que tem cara de versão) **não** vira firmware;
+>   `Time Out!` não apaga o valor já lido.
+> - **Suíte completa: 133 passaram, 0 falharam, 6 pulados** — a primeira execução
+>   de verdade da suíte, pelo motivo abaixo.
+>
+> #### 🔴 Achado fora do escopo: a suíte Playwright nunca rodava
+>
+> `npx playwright test` sem argumento imprimia "Running 137 tests using 1 worker"
+> e **nada mais**, saindo com **código 0**. O `testMatch` padrão do Playwright
+> coleta `*.test.js` além de `*.spec.js`, e `tests/helpers/player_snapshot.test.js`
+> não é spec: é script Node com uma IIFE que roda na importação e termina em
+> `process.exit()`. Playwright importa todo arquivo coletado para descobrir os
+> testes dele — a importação matava o processo antes do primeiro spec.
+>
+> Exit 0 é o que um runner de CI lê como suíte verde. E passar um caminho
+> (`npx playwright test tests/x.spec.js`) sempre funcionou, então quem depurava
+> um spec específico via tudo normal — é por isso que sobreviveu.
+>
+> Corrigido com `testMatch: '**/*.spec.js'`. O `player_snapshot.test.js` passou a
+> ser chamado explicitamente pelo `scripts/run-tests.ps1` (antes rodava **por
+> acidente**, como efeito colateral de envenenar a coleta). Os 6 pulados são
+> pendências conhecidas — 3 de multi-tenant esperando `TEST_EMAIL_B`, o rate
+> limiting que bloqueia o IP de propósito, coerência entre relatórios e
+> webhook→ocorrência (`TEST_IMEI`).
+>
+> 🔴 **O que NÃO foi verificado**: o `UPDATE` em câmera real (M.2.5 segue
+> aberto). Não há como confirmar sem device, e ninguém deveria disparar o
+> primeiro `UPDATE` de verdade sem uma câmera sacrificável e o pacote correto do
+> fornecedor em mãos.
+>
+
 > ### 📍 ESTADO EM 20/08/2026 — v4.9.26 a v4.9.33 no ar; v4.9.34 pronta para subir
 >
 > **Produção (`bycamera.ia.br`) está em `0d333c1`, `/ping` reportando 4.9.33,
