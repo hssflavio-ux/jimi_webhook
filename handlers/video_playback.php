@@ -8,8 +8,14 @@
  *
  * Fluxo JT/T (JC450/JC181/JC182/JC371) — pergunta e resposta:
  *   1. [Requisitar] → proNo 37381 (0x9205, consulta de gravações no cartão).
- *      A janela beginTime/endTime é GMT-0 compacta (yyMMddHHmmss) e NÃO pode
- *      cruzar o dia — o período é fatiado em segmentos por dia UTC.
+ *      A janela beginTime/endTime é compacta (yyMMddHHmmss) na hora LOCAL da
+ *      câmera (UTC−3) — 🔴 NÃO GMT 0, apesar do nome do campo: medido em
+ *      produção em 31/08/2026 (865478070654829), ver a nota em
+ *      `handlers/pushresourcelist.php`. NÃO pode cruzar o dia — o período é
+ *      fatiado em segmentos por dia LOCAL (`localDaySegments()`), um pedido
+ *      por vez, esperando a resposta do pedido anterior antes do próximo
+ *      (a câmera não aceita dois 37381 concorrentes — ver a nota em
+ *      `onSubmitRequest()`).
  *      A câmera responde de forma assíncrona via /pushresourcelist.
  *   2. [Extrair] → proNo 37382 ("FTP file upload command") com a janela exata
  *      da gravação; a CÂMERA sobe o arquivo por FTP para o destino configurado
@@ -889,6 +895,25 @@ function fmtCompactUTC(d) {
 }
 
 /**
+ * Carimbo compacto (`yyMMddHHmmss`) na hora LOCAL da câmera — para o 37377 e o
+ * 37382, que recebem de volta um instante que o EQUIPAMENTO tem de reconhecer
+ * no relógio dele.
+ *
+ * 🔴 `t` é epoch UTC de verdade (desde a correção de `pushresourcelist.php`
+ * v4.14.1, que passou a somar o offset ao gravar). Mandar `t` cru de volta ao
+ * device — como este arquivo fazia com `fmtCompactUTC(new Date(t*1000))` — é
+ * pedir um trecho 3h no futuro relativo ao relógio dele. `pbLocal()` já faz a
+ * conversão certa para a JIMI (`pbCarimbo`); esta função é o mesmo caminho,
+ * só formatado compacto para o JT/T.
+ */
+function fmtCompactLocal(t) {
+    var d = pbLocal(t);
+    function p(n) { return String(n).padStart(2, '0'); }
+    return String(d.getUTCFullYear()).slice(2) + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) +
+           p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds());
+}
+
+/**
  * VER NA CÂMERA — transmite o trecho direto do equipamento, sem gravar nada.
  *
  * JIMI: `REPLAYLIST,<nome>` (planilha A008) empurra o vídeo do cartão para o
@@ -943,8 +968,8 @@ function pbVerNaCamera(t, dur, canal) {
             channel: canal, channelId: canal,
             resourceType: 0, codeType: 0, storageType: 0,
             playMethod: 0, forwardRewind: 0,
-            beginTime: fmtCompactUTC(new Date(t * 1000)),
-            endTime:   fmtCompactUTC(new Date((t + dur) * 1000)),
+            beginTime: fmtCompactLocal(t),
+            endTime:   fmtCompactLocal(t + dur),
             instructionID: 'pb' + Date.now()
         };
     }
@@ -1033,8 +1058,8 @@ function pbSubirStorage(t, dur, canal, btn) {
     var cmd = ehJimi
         ? 'HVIDEO,' + pbCarimbo(t) + ',' + canal
         : { channel: canal, channelId: canal,
-            beginTime: fmtCompactUTC(new Date(t * 1000)),
-            endTime:   fmtCompactUTC(new Date((t + dur) * 1000)),
+            beginTime: fmtCompactLocal(t),
+            endTime:   fmtCompactLocal(t + dur),
             alarmFlag: 0, resourceType: 2, codeType: 0, storageType: 0 };
 
     pbSendCmd(selImei, proNo, cmd, function (ok, msg) {
@@ -1123,17 +1148,28 @@ function selectRecording(el, rec) {
 // pede todos os canais numa tacada, para que as duas famílias se comportem
 // igual na tela (a dinâmica difere; a experiência não deve).
 
-/** Fatia o período em segmentos por dia UTC — o 37381 não cruza o dia. */
-function utcDaySegments(fromDay, toDay) {
-    var start = new Date(fromDay + 'T00:00:00-03:00');
-    var end = new Date(toDay + 'T23:59:59-03:00');
-    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return [];
-    var segs = [], cur = start;
-    while (cur <= end && segs.length < 15) {
-        var dayEnd = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth(), cur.getUTCDate(), 23, 59, 59));
-        var segEnd = dayEnd < end ? dayEnd : end;
-        segs.push([fmtCompactUTC(cur), fmtCompactUTC(segEnd)]);
-        cur = new Date(dayEnd.getTime() + 1000);
+/**
+ * Fatia o período em segmentos por dia — o 37381 não cruza o dia.
+ *
+ * 🔴 O DIA É O DIA LOCAL DA CÂMERA, não UTC — mesma correção do fuso desta
+ * versão (ver `fmtCompactLocal`). `beginTime`/`endTime` são rótulos que o
+ * EQUIPAMENTO interpreta no relógio dele; fatiar por dia UTC e mandar como
+ * se fosse o dia local pedia (e recebia) uma janela deslocada 3h — perdendo
+ * as três primeiras horas do dia BRT pedido e invadindo a madrugada do dia
+ * seguinte. `date_from`/`date_to` já chegam como dias BRT (mesma convenção
+ * do resto da tela), e como não há mais conversão de fuso nenhuma aqui, a
+ * fatia é aritmética pura de calendário — sem `Date` ancorado em `-03:00`.
+ */
+function localDaySegments(fromDay, toDay) {
+    function partes(s) { var p = s.split('-').map(Number); return Date.UTC(p[0], p[1] - 1, p[2]); }
+    var cur = partes(fromDay), fim = partes(toDay);
+    if (isNaN(cur) || isNaN(fim) || fim < cur) return [];
+    var segs = [];
+    while (cur <= fim && segs.length < 15) {
+        var d = new Date(cur);
+        var ymd = fmtCompactUTC(d).slice(0, 6);   // yyMMdd — getters UTC sobre um Date sem fuso são só aritmética de calendário aqui
+        segs.push([ymd + '000000', ymd + '235959']);
+        cur += 86400000;
     }
     return segs;
 }
@@ -1255,19 +1291,49 @@ function onSubmitRequest(e) {
         });
         return false;
     } else {
-        // 37381 (0x9205): uma consulta por canal e por dia UTC. O laço é aqui
-        // porque o comando não aceita "todos" — mas a TELA não pede canal.
+        // 37381 (0x9205): uma consulta por canal e por dia local. O laço é
+        // aqui porque o comando não aceita "todos" — mas a TELA não pede canal.
+        //
+        // 🔴 SERIALIZADO, canal a canal — NUNCA em paralelo. Mandar tudo de
+        // uma vez (era um `forEach` disparando todos os `fetch`) fazia a
+        // câmera ainda estar processando o primeiro pedido quando o próximo
+        // já chegava: ela não respondia ao segundo, e o comando voltava como
+        // falha. Só acontece no JT/T — a JIMI não passa por aqui (sobe a
+        // lista inteira sozinha, sem pedido por canal, no branch `if` acima).
+        // A fila só avança no CALLBACK do pedido anterior, sucesso OU
+        // falha — esperar só o sucesso travaria a fila para sempre no
+        // primeiro canal que a câmera recusar.
+        e.preventDefault();
+        var bt = document.querySelector('#playback-form button[type=submit]');
         var cams = Number(document.getElementById('pb-imei').selectedOptions[0].dataset.cam) || 1;
-        utcDaySegments(from, to).forEach(function (seg, i) {
-            for (var c = 1; c <= cams; c++) {
-                pbSendCmd(imei, 37381, {
-                    channel: c, channelId: c,
-                    beginTime: seg[0], endTime: seg[1],
-                    alarmFlag: 0, resourceType: 0, codeType: 0, storageType: 0,
-                    instructionID: 'pb' + Date.now() + '_' + i + '_' + c
-                });
-            }
+        var fila = [];
+        localDaySegments(from, to).forEach(function (seg, i) {
+            for (var c = 1; c <= cams; c++) fila.push({ seg: seg, canal: c, idx: i });
         });
+        if (!fila.length) return true;
+
+        var total = fila.length, feitos = 0;
+        if (bt) { bt.disabled = true; bt.innerHTML = '&#8230; Pedindo à câmera (0/' + total + ')'; }
+
+        (function proximo() {
+            if (!fila.length) {
+                if (bt) { bt.disabled = false; bt.innerHTML = '&#128269; Requisitar Gravações'; }
+                pbSubmeterForm();
+                return;
+            }
+            var item = fila.shift();
+            pbSendCmd(imei, 37381, {
+                channel: item.canal, channelId: item.canal,
+                beginTime: item.seg[0], endTime: item.seg[1],
+                alarmFlag: 0, resourceType: 0, codeType: 0, storageType: 0,
+                instructionID: 'pb' + Date.now() + '_' + item.idx + '_' + item.canal
+            }, function () {
+                feitos++;
+                if (bt) bt.innerHTML = '&#8230; Pedindo à câmera (' + feitos + '/' + total + ')';
+                proximo();
+            });
+        })();
+        return false;
     }
     return true;
 }

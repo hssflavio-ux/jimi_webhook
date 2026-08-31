@@ -5,15 +5,33 @@
  * Versão: 2.0.0 (Estratégia de Nomenclatura Automática)
  *
  * CORREÇÕES:
- * 1. Gera nomes de arquivos sintéticos (REC_IMEI_CH_DATA.ts) quando o dispositivo 
+ * 1. Gera nomes de arquivos sintéticos (REC_IMEI_CH_DATA.ts) quando o dispositivo
  *    envia apenas segmentos de tempo (comum em novos firmwares).
  * 2. Mantém a robustez de inserção da versão anterior.
+ *
+ * 🔴 v4.14.1 — begin/end de um item do 37381 é a hora LOCAL da câmera
+ * (UTC−3), NÃO GMT 0. `cleanDate()` tratava como já-UTC — a MESMA suposição
+ * que a doc dava para o corpo do webhook em tempo real (gps_data, alarms),
+ * mas que não vale para o carimbo de uma GRAVAÇÃO no cartão (ver o mesmo
+ * achado, já corrigido, em `includes/filelist.php` para o FILELIST da JIMI).
+ *
+ * Medido em produção em 31/08/2026, 865478070654829 (JC371, veículo em
+ * movimento): pedido um 37381 da janela real das últimas 4h (UTC de
+ * verdade), o bloco mais recente devolvido tinha end_time 3h00m04s ATRÁS do
+ * `NOW()` do servidor — se o campo já fosse UTC, o bloco mais recente de um
+ * equipamento gravando AGORA estaria a poucos segundos do NOW(), não a 3h.
+ * `cleanDate()` agora soma `FILELIST_OFFSET_SEGUNDOS` (a mesma constante do
+ * FILELIST) antes de gravar — os dois protocolos passam a guardar
+ * `resource_lists.start_time`/`end_time` em UTC de verdade, e a exibição em
+ * `video_playback.php` (`pbLocal()`, que já fazia essa conversão para os
+ * blocos JIMI) passa a acertar os dois.
  */
 
 define('HANDLER_NAME', 'pushresourcelist');
 if (ob_get_level()) ob_end_clean();
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/WebhookHandler.php';
+require_once __DIR__ . '/../includes/filelist.php';   // FILELIST_OFFSET_SEGUNDOS
 
 class PushResourceListHandler extends WebhookHandler {
 
@@ -190,14 +208,23 @@ class PushResourceListHandler extends WebhookHandler {
 
     private function cleanDate($dateInput) {
         if (empty($dateInput)) return null;
+
+        $ts = null;
         if (is_numeric($dateInput)) {
-            if (strlen((string)$dateInput) > 11) $dateInput = $dateInput / 1000;
-            return gmdate('Y-m-d H:i:s', (int)$dateInput);
+            $v = $dateInput;
+            if (strlen((string)$v) > 11) $v = $v / 1000;
+            $ts = (int)$v;
+        } else {
+            $dt = date_create((string)$dateInput, new DateTimeZone('UTC'));
+            $ts = $dt ? $dt->getTimestamp() : null;
         }
-        // Device transmite GMT-0 (doc §1.11): interpretar sempre como UTC,
-        // independente do timezone do PHP
-        $dt = date_create((string)$dateInput, new DateTimeZone('UTC'));
-        return $dt ? $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s') : null;
+        if ($ts === null) return null;
+
+        // 🔴 Hora LOCAL da câmera (UTC−3), não GMT 0 — ver a nota medida no
+        // cabeçalho do arquivo. `FILELIST_OFFSET_SEGUNDOS` é a MESMA
+        // constante que `includes/filelist.php` usa para o carimbo do nome
+        // de arquivo da JIMI; a regra tem uma casa só.
+        return gmdate('Y-m-d H:i:s', $ts + FILELIST_OFFSET_SEGUNDOS);
     }
 
     private function mapResourceType($val) {

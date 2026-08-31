@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.14.1
+
+**Dois defeitos relatados no playback JT/T no mesmo dia: horário do vídeo ora em GMT, ora em GMT-3; e requisição de lista de gravações falhando em câmeras de mais de um canal.**
+
+### Fixed
+- **`begin`/`end` do 37381 (`/pushresourcelist`) é hora LOCAL da câmera (UTC−3), não GMT 0** — a mesma armadilha já corrigida para o `FILELIST` da JIMI (`includes/filelist.php`), nunca medida para o lado JT/T. `cleanDate()` tratava o campo como já-UTC; agora soma `FILELIST_OFFSET_SEGUNDOS` antes de gravar em `resource_lists`, a mesma constante e a mesma regra do FILELIST. Medido em produção em 31/08/2026 contra `865478070654829` (JC371, veículo em movimento): pedido um 37381 da janela real das últimas 4h, o bloco mais recente devolvido tinha `end_time` 3h00m04s atrás do `NOW()` do servidor — se já fosse UTC, estaria a segundos do `NOW()`, não a 3h.
+- **`handlers/video_playback.php` mandava de volta ao equipamento (37377/37382) o epoch bruto de `resource_lists`, agora corrigido para UTC de verdade — sem reconverter para local, o pedido de stream/extração ficaria 3h no futuro.** `fmtCompactLocal()` (novo) passa pelo mesmo `pbLocal()` que já convertia certo para o `HVIDEO` da JIMI; substitui `fmtCompactUTC(new Date(t*1000))` nos dois pontos (`pbSendCmd` do 37377 e do 37382).
+- **`utcDaySegments()` → `localDaySegments()`**: fatiava o período pedido por dia UTC e mandava como se fosse dia local — perdia as 3 primeiras horas do dia BRT pedido e invadia a madrugada do dia seguinte. Agora fatia por dia de calendário local, sem conversão de fuso nenhuma (o rótulo que sai já é o que o equipamento espera).
+- **37381 concorrente entre canais**: `onSubmitRequest()` disparava um `pbSendCmd` por canal/dia num `forEach`, todos em paralelo — a câmera ainda processava o primeiro pedido quando o próximo chegava, não respondia, e o comando voltava como falha. Só acontecia no JT/T (a JIMI sobe a lista inteira sozinha, sem pedido por canal). A fila agora é serializada: só avança no callback do pedido anterior — sucesso OU falha —, nunca em paralelo.
+
+### Verificação
+- Sonda direta em produção (`iothub_send_instruct` com 37381 para `865478070654829`, janela das últimas 4h): confirmou o offset de 3h nos horários de `resource_lists` antes da correção.
+- Cruzamento independente: `alarms.file_url`/`media_files.file_name` da mesma câmera embutem um carimbo (`…20260831182702…`) que também é 3h atrás de `alarms.alarm_time` (comprovadamente UTC) — mesma classe de defeito, subsistema diferente, mesma câmera, mesmo dia.
+- `php -l` limpo em todos os arquivos alterados. Não há migração — `resource_lists` tem TTL de 30 min (`captured_at`), então linhas gravadas antes da correção expiram sozinhas.
+
+### Pendente
+- Não medido: se o corpo numérico (epoch em ms) do 37381 sofre o mesmo deslocamento — a medição em produção usou o formato de string, que é o que a 865478070654829 mandou. `cleanDate()` aplica a correção nos dois ramos por precaução, mas só o de string foi comprovado.
+- Não medido: se `media_files.file_name`/`alarms.file_url` dos alarmes JT/T (que também embutem hora local) são lidos em algum ponto do código como se fossem UTC — fora do escopo desta sessão, fica como suspeita a investigar se aparecer mais confusão de horário em telas de alarme.
+
 ## [Unreleased] — 4.14.0
 
 **Comandos do protocolo 128 por SMS — um segundo transporte para o mesmo catálogo.**
