@@ -31,6 +31,21 @@
  *     da API, e travar a tela por uma consulta que falhou esconderia um canal
  *     que talvez estivesse funcionando.
  *
+ *  4. **Parâmetro nasce EM BRANCO — nunca pré-preenchido com o padrão de
+ *     fábrica.** (v4.14.1, pedido do dono do produto.) O padrão aparece só
+ *     como dica de texto abaixo do campo. Isso abre DUAS formas de envio pelo
+ *     mesmo comando, decididas pelo que o operador digitou:
+ *       • TODOS os campos preenchidos → grava (`APN,val1,val2#`);
+ *       • NENHUM campo preenchido → vira CONSULTA — a forma nua do comando
+ *         (`atual.q`, o mesmo campo `consulta` de `command_catalog.php` que
+ *         o /comandos já usa no chip "Consulta"), que LÊ em vez de escrever;
+ *       • preenchimento PARCIAL é recusado — não há como adivinhar se o
+ *         operador esqueceu um campo ou pretendia mesmo deixá-lo assim, e o
+ *         SMS custa crédito para descobrir errado.
+ *     Sem consulta catalogada (`atual.q` nulo) e campos em branco, o envio
+ *     fica bloqueado — não existe forma nua conhecida desse comando para
+ *     mandar.
+ *
  * ⚠️ Cada SMS CUSTA. É a diferença operacional para o /comandos, e é por isso
  * que a tela mostra o saldo, o custo do disparo em lote (1 crédito por
  * equipamento marcado) e pede confirmação.
@@ -499,61 +514,97 @@ function escolher() {
     atual.p.forEach(p => {
       const g = document.createElement('div');
       g.className = 'form-group';
+      // 🔴 SEM `value` pré-preenchido — v4.14.1. O padrão de fábrica vira dica
+      // de texto, não valor já digitado: se o campo nascesse preenchido, o
+      // operador que só quer CONSULTAR (deixar tudo em branco) precisaria
+      // apagar cada campo um a um, e um clique apressado no "Enviar" gravaria
+      // o padrão de fábrica como se fosse uma escolha.
       g.innerHTML = '<label>' + p.p + (p.d ? ' — ' + p.d : '') + '</label>'
-                  + '<input type="text" class="p-in" data-p="' + p.p + '" value="'
-                  + (p.v ? String(p.v).replace(/"/g,'&quot;') : '') + '">';
+                  + '<input type="text" class="p-in" data-p="' + p.p + '" placeholder="valor de ' + p.p + '">'
+                  + (p.v ? '<div style="font-size:11px;color:var(--muted);margin-top:2px;">Padrão de fábrica: '
+                          + String(p.v).replace(/</g,'&lt;') + '</div>' : '');
       row.appendChild(g);
     });
     elParams.appendChild(row);
     elParams.querySelectorAll('.p-in').forEach(i => i.addEventListener('input', montar));
+
+    // Nota da forma de CONSULTA — só existe quando o catálogo conhece uma
+    // (`atual.q`). Puramente informativa: a decisão real acontece em montar(),
+    // olhando se os campos estão todos vazios.
+    const nota = document.createElement('div');
+    nota.id = 'nota-consulta';
+    nota.style.cssText = 'font-size:12px;color:var(--muted);margin-top:4px;';
+    if (atual.q) {
+      nota.innerHTML = 'Deixe os campos acima em branco para <strong>consultar</strong> em vez de gravar — envia <span class="text-mono">'
+                      + atual.q + '</span>'
+                      + (atual.qm && atual.qm.length ? ' (' + atual.qm.join(', ') + ')' : '');
+    } else {
+      nota.innerHTML = 'Este comando não tem forma de consulta conhecida — preencha todos os campos para enviar.';
+    }
+    elParams.appendChild(nota);
   }
   aplicarTravaModelo();
   montar();
 }
 
 /**
- * Monta a string exata. A guarda de "falta parâmetro" pergunta pelos CAMPOS,
- * nunca pela aparência do resultado: um valor de UMA LETRA (VIDEOTIMEZONE,W,…)
- * é indistinguível de um placeholder de uma letra, e a guarda por formato
- * recusava o exemplo oficial do próprio comando.
+ * Monta a string exata.
+ *
+ * 🔴 A DECISÃO "grava ou consulta" olha os CAMPOS, nunca a aparência do
+ * resultado — mesma lição do /comandos (`faltaParametro()`): um valor de UMA
+ * LETRA é indistinguível de um placeholder de uma letra, então a pergunta
+ * certa é "o campo está vazio?", não "o texto parece um placeholder?".
+ *
+ *   TODOS os campos vazios      → CONSULTA (`atual.q`), se o catálogo souber
+ *                                  uma; senão, bloqueia — não existe forma nua
+ *                                  conhecida desse comando para mandar.
+ *   TODOS os campos preenchidos → grava, substituição posicional (idêntica a
+ *                                  montarComando() de comandos.php).
+ *   Preenchimento PARCIAL       → bloqueia. Não há como adivinhar se o campo
+ *                                  vazio foi esquecido ou é intencional, e
+ *                                  errar aqui custa um crédito de SMS.
  */
 function montar() {
   if (!atual) { elPrev.value=''; elAviso.textContent=''; atualizarBotao(); return; }
 
-  // Substituição POSICIONAL, idêntica à de comandos.php (montarComando): quebra
-  // por vírgula e troca os tokens que são placeholder (P1..Pn ou letra única
-  // maiúscula), na ordem dos campos. Nada de regex sobre o texto inteiro — o
-  // nome do parâmetro pode aparecer noutro lugar da string.
   const ins = elParams.querySelectorAll('.p-in');
   const vals = Array.prototype.map.call(ins, i => i.value.trim());
-  const faltando = [];
-  atual.p.forEach((p, i) => { if (!vals[i]) faltando.push(p.p); });
+  const preenchidos = vals.filter(v => v !== '').length;
+  const todosVazios = ins.length > 0 && preenchidos === 0;
+  const parcial = ins.length > 0 && preenchidos > 0 && preenchidos < ins.length;
 
-  let s;
+  let s = null;
   if (!ins.length) {
     s = atual.s;
-  } else {
+  } else if (todosVazios) {
+    s = atual.q || null;
+  } else if (!parcial) {
+    // Todos preenchidos — substituição posicional: quebra por vírgula e troca
+    // os tokens que são placeholder (P1..Pn ou letra única maiúscula), na
+    // ordem dos campos. Nada de regex sobre o texto inteiro — o nome do
+    // parâmetro pode aparecer noutro lugar da string.
     const corpo = atual.s.replace(/#$/, '');
     let idx = 0;
     s = corpo.split(',').map((t, pos) => {
       if (pos === 0) return t;
-      if (/^(P\d+|[A-Z])$/.test(t)) {
-        const v = vals[idx]; idx++;
-        return (v !== undefined && v !== '') ? v : t;
-      }
+      if (/^(P\d+|[A-Z])$/.test(t)) { const v = vals[idx]; idx++; return v; }
       return t;
     }).join(',') + '#';
   }
 
-  elPrev.value = s;
+  elPrev.value = s || '';
 
-  if (faltando.length) {
-    elAviso.innerHTML = '<span style="color:#a97a00;">Preencha: ' + faltando.join(', ') + '</span>';
-  } else if (s.length > LIMITE_SMS) {
+  if (parcial) {
+    elAviso.innerHTML = '<span style="color:#a97a00;">Preencha todos os campos para gravar, ou deixe todos em branco para consultar.</span>';
+  } else if (todosVazios && !atual.q) {
+    elAviso.innerHTML = '<span style="color:#b3261e;">Sem forma de consulta conhecida para este comando — preencha os campos.</span>';
+  } else if (s && s.length > LIMITE_SMS) {
     elAviso.innerHTML = '<span style="color:#b3261e;">' + s.length + ' caracteres — acima do limite de '
       + LIMITE_SMS + '. A operadora partiria a mensagem e o equipamento receberia meio comando.</span>';
+  } else if (s) {
+    elAviso.innerHTML = '<span style="color:var(--muted);">' + (todosVazios ? 'consulta · ' : '') + s.length + '/' + LIMITE_SMS + ' caracteres</span>';
   } else {
-    elAviso.innerHTML = '<span style="color:var(--muted);">' + s.length + '/' + LIMITE_SMS + ' caracteres</span>';
+    elAviso.textContent = '';
   }
   atualizarBotao();
 }
@@ -589,13 +640,12 @@ function selecionados() {
 function atualizarBotao() {
   const n = selecionados().length;
   const s = elPrev.value;
-  // Mesma leitura posicional de montar() — um só jeito de perguntar "falta
-  // campo?", senão as duas respostas podem divergir e o botão libera um envio
-  // que sai com o placeholder cru para o equipamento.
-  const faltaParam = atual
-    ? [...elParams.querySelectorAll('.p-in')].some(i => i.value.trim() === '')
-    : true;
-  const ok = n > 0 && atual && !faltaParam && s.length > 0 && s.length <= LIMITE_SMS;
+  // 🔴 UMA fonte de verdade sobre "está pronto para enviar": montar() já
+  // decidiu grava/consulta/bloqueia e só deixa `elPrev.value` não-vazio no
+  // caso válido — repetir a leitura dos campos aqui poderia divergir (ex.:
+  // "parcial" e "sem consulta catalogada" são dois motivos de bloqueio
+  // diferentes, e só montar() sabe distingui-los).
+  const ok = n > 0 && atual && s.length > 0 && s.length <= LIMITE_SMS;
   elBtn.disabled = !ok;
   elResumo.textContent = n === 0 ? 'nenhum selecionado'
     : n + (n === 1 ? ' selecionado · 1 crédito' : ' selecionados · ' + n + ' créditos');

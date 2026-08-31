@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.14.2
+
+**Pedido do dono do produto: em `/comandos-sms`, todo comando nasce com os campos em branco, e o operador escolhe — preencher grava, deixar tudo vazio vira consulta.**
+
+### Changed
+- **`handlers/comandos_sms.php`** — os campos de parâmetro não vêm mais pré-preenchidos com o padrão de fábrica do catálogo (`p.v`); o padrão agora é só uma dica de texto abaixo do campo. `montar()` decide pelos CAMPOS, nunca pela aparência do resultado (mesma lição do `faltaParametro()` do `/comandos`): todos vazios → usa `atual.q` (a forma de consulta já existente em `command_catalog.php`, o mesmo campo que o `/comandos` usa no chip "Consulta"); todos preenchidos → grava; preenchimento parcial → bloqueia o envio (ambíguo, e cada SMS custa crédito). Comando sem forma de consulta catalogada e campos vazios também bloqueia, com aviso explícito.
+
+### Verificação
+- Lógica de decisão isolada e testada em Node para as 5 combinações (sem parâmetro no catálogo / tudo vazio com consulta / tudo vazio sem consulta / parcial / tudo preenchido) — todas corretas, incluindo o caso do valor de uma letra só (`VIDEOTIMEZONE,W,3,0#`) não sendo confundido com placeholder vazio.
+- **Teste ponta a ponta real em produção**: enviado `ANGLEREP#` (consulta, `consulta_ref: medido+wiki`) por SMS para `865478070003241` (JC371, online) pelo mesmo caminho de `sendsms.php` (`sms_enviar()` + INSERT em `sms_commands`). A Allcance aceitou a campanha (HTTP 201, `status: success`). Confirmado que `/pushsms` está publicamente acessível e valida o segredo corretamente (403 com chave errada). Em ~8 min não chegou callback de entrega nem resposta do equipamento — igual à ressalva já registrada em `[Unreleased] — 4.14.0`/Pendente ("chip M2M frequentemente não recebe SMS, é contratual da operadora"). Não foi possível confirmar o ciclo completo nesta sessão; ver Pendente.
+
+### Pendente
+- **Ciclo completo (entrega + resposta do equipamento) ainda não confirmado.** O envio e a aceitação pela Allcance funcionaram; falta a confirmação de que o webhook `/pushsms` recebe pelo menos o status de entrega. Vale checar o histórico de `/comandos-sms` mais tarde (o registro, `sms_commands.id = 2`, imei `865478070003241`, ficou salvo) e, se nada chegar em algumas horas, conferir no painel da Allcance se o webhook está mesmo cadastrado na URL certa (`https://bycamera.ia.br/pushsms?k=...`, visível em `/config-sms`).
+
 ## [Unreleased] — 4.14.1
 
 **Dois defeitos relatados no playback JT/T no mesmo dia: horário do vídeo ora em GMT, ora em GMT-3; e requisição de lista de gravações falhando em câmeras de mais de um canal.**
