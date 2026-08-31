@@ -27,7 +27,25 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
-require_login();
+
+// 🔴 NÃO usar require_login() aqui — ela redireciona pra /login com
+// `header('Location: ...')`, que é o comportamento certo para NAVEGAÇÃO de
+// página mas quebra em SILÊNCIO quem chama este endpoint como recurso:
+//   1. O link "Baixar" (`<a href="/midia?...&dl=1" download>`) — com
+//      sessão vencida, o navegador segue o redirect e salva o HTML da
+//      página de login no disco, sem abrir aba nem mostrar erro nenhum. O
+//      arquivo "baixado" é a tela de login, não o vídeo.
+//   2. O player MPEG-TS (mpegts.js), que busca a mesma URL por `fetch` pra
+//      remuxar — o fetch também segue o redirect e tenta remuxar HTML.
+// Mesmo padrão que require_ajax_session() já resolve para os endpoints de
+// dados (trackdata.php, hbdata.php, mediadata.php etc.): responder 401 em
+// vez de redirecionar.
+auth_init();
+if (empty($_SESSION['user_id'])) {
+    http_response_code(401);
+    exit('Sessão expirada. Atualize a página e faça login novamente.');
+}
+refresh_session();
 
 $db  = Database::getInstance()->getConnection();
 $cid = get_customer_id();
