@@ -41,6 +41,7 @@
 
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/filelist.php';
+require_once __DIR__ . '/../includes/media.php';   // media_pick()
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -211,11 +212,21 @@ if ($requested && $selImei) {
         $doNome = filelist_ts_do_nome_utc((string)$m['file_name']);
         $t = $toTs($doNome ?: ($m['event_time'] ?: $m['created_at']));
         if ($t === null || $t < $barraIni - $margem || $t > $barraFim + $margem) continue;
+        // 🔴 `file_url`/`file_name` podem trazer MAIS DE UM arquivo, vírgula-
+        // separados — a JIMI anuncia frontal e interna no MESMO campo
+        // (includes/media.php, media_file_list()). Repassar a string CRUA
+        // pro JS faz `/midia?f=...` não casar com arquivo nenhum: o player
+        // falha ao remuxar e o botão Baixar (atributo `download`) salva o
+        // 404 de midia.php como se fosse o vídeo — mesma classe de bug que
+        // video_downloads.php tinha. media_pick() escolhe o arquivo que de
+        // fato está no disco, convenção já usada em ativo_detalhe.php e
+        // rel_alarmes.php.
+        $arquivoReal = media_pick($m['file_url']);
         $pbArquivos[] = [
             't'   => $t,
             'c'   => (int)($m['channel'] ?: 0),
-            'u'   => (string)$m['file_url'],
-            'n'   => (string)$m['file_name'],
+            'u'   => $arquivoReal,
+            'n'   => basename($arquivoReal),
             'mb'  => $m['file_size'] ? round($m['file_size'] / 1048576, 1) : 0,
             'st'  => (string)$m['download_status'],
             'dl'  => $m['downloaded_at'] ? 1 : 0,

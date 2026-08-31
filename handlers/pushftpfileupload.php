@@ -39,6 +39,16 @@ class PushFtpFileUploadHandler extends WebhookHandler {
         $fileSize = $item['fileSize'] ?? $item['size'] ?? 0;
         $fileType = detect_media_type($fileName);
 
+        // 🔴 `$fileName` acima pode ser o `instructionID` (a CHAVE de
+        // correlação do comando, não um nome de arquivo) ou o literal
+        // 'unknown' — os dois fallbacks entram quando o callback não diz o
+        // nome real. `$nomeConfiavel` marca se `$fileName` veio mesmo do
+        // payload (`fileName`/`file`) ou, mais abaixo, do disco via
+        // `resolverArquivoPeloPedido()`. Sem essa distinção, `$downloadStatus`
+        // (calculado só do `result` do Hub) marca 'disponivel' um arquivo que
+        // não existe sob esse nome — ver a guarda no fim deste bloco.
+        $nomeConfiavel = !empty($item['fileName']) || !empty($item['file']);
+
         try {
             $isSuccess = ($result === 0 || strtoupper((string)$result) === 'SUCCESS');
             $downloadStatus = $isSuccess ? 'disponivel' : 'erro';
@@ -104,19 +114,32 @@ class PushFtpFileUploadHandler extends WebhookHandler {
             // `beginTime`. E essa janela está guardada no `event_time` do
             // pedido pendente. Daí a resolução por padrão de nome — determinística,
             // sem depender de varrer o diretório por data de modificação.
-            if ($pendingId > 0 && empty($item['fileName']) && empty($item['file'])) {
+            if ($pendingId > 0 && !$nomeConfiavel) {
                 $achado = $this->resolverArquivoPeloPedido($pendingId);
                 if ($achado !== null) {
                     $fileName = $achado['nome'];
                     $fileUrl  = $achado['nome'];
                     $fileType = detect_media_type($fileName);
                     if (!$fileSize) $fileSize = $achado['tamanho'];
+                    $nomeConfiavel = true;
                 } else {
                     Logger::warning('FTP Upload sem nome de arquivo e sem correspondência no disco', [
                         'source' => $this->handlerName, 'imei' => $imei,
                         'instruction_id' => $instructionID, 'media_id' => $pendingId,
                     ]);
                 }
+            }
+
+            // 🔴 Sem nome real (nem do payload, nem resolvido no disco), não
+            // há o que baixar — não importa o que o Hub disse em `result`.
+            // Marcar 'disponivel' aqui grava `$fileName` (o `instructionID`
+            // ou o literal 'unknown') em `file_name`/`file_url`; `/midia`
+            // responde 404 pra sempre, e o botão Baixar (antes desta
+            // correção) salvava esse 404 como se fosse o vídeo. Medido em
+            // produção (FJR7B59, 31/08/2026, media_files.id=2318): 4 cliques
+            // em "Baixar", 4 downloads de erro disfarçados de vídeo.
+            if (!$nomeConfiavel) {
+                $downloadStatus = 'erro';
             }
 
             if ($pendingId > 0) {

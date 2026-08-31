@@ -365,14 +365,38 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     <?php endif; ?>
                 </td>
                 <td style="text-align:center;">
-                    <?php if ($isAvailable): ?>
+                    <?php if ($isAvailable):
+                        // 🔴 `mf.file_url` pode trazer MAIS DE UM arquivo, vírgula-
+                        // separados — a JIMI anuncia frontal e interna no MESMO
+                        // campo (includes/media.php, media_file_list()). Montar o
+                        // link colando o campo CRU direto na URL do /midia (como
+                        // esta tela fazia) produz um `f=` que não casa com arquivo
+                        // NENHUM no disco: midia.php devolve 404 em texto/html sem
+                        // Content-Disposition, e o botão "Baixar" (atributo
+                        // `download`, sem nome fixo) salva essa página de erro como
+                        // um arquivo ".html" no lugar do vídeo — sintoma relatado:
+                        // "o arquivo baixado é um html". Mesmo ponto único que
+                        // ativo_detalhe.php e rel_alarmes.php já usam para isto: um
+                        // link por arquivo REAL da lista, não pela string inteira.
+                        $arquivosReais = array_values(array_filter(
+                            media_file_list($f['file_url']), 'media_available'
+                        ));
+                    ?>
+                    <?php if ($arquivosReais): foreach ($arquivosReais as $i => $nomeArq):
+                        $canalArq = media_canal_do_nome($nomeArq);
+                        $rotuloArq = ($jaBaixado ? 'Baixar de novo' : 'Baixar')
+                            . ($canalArq ? ' CH' . $canalArq : (count($arquivosReais) > 1 ? ' ' . ($i + 1) : ''));
+                    ?>
                     <?php /* ⚠️ `&dl=1` é o que carimba `downloaded_at`. O player
                              usa a MESMA URL sem esse marcador, para que assistir
                              não vire "baixado" — ver handlers/midia.php. */ ?>
-                    <a href="<?= htmlspecialchars($fileStorageUrl . $f['file_url']) ?>&dl=1"
+                    <a href="<?= htmlspecialchars($fileStorageUrl . rawurlencode(basename($nomeArq))) ?>&dl=1"
                        class="btn <?= $jaBaixado ? 'btn-outline' : 'btn-primary' ?> btn-sm"
-                       style="padding:4px 12px;font-size:12px;"
-                       target="_blank" download><?= $jaBaixado ? 'Baixar de novo' : 'Baixar' ?></a>
+                       style="padding:4px 12px;font-size:12px;<?= $i > 0 ? 'margin-left:4px;' : '' ?>"
+                       target="_blank" download><?= htmlspecialchars($rotuloArq) ?></a>
+                    <?php endforeach; else: ?>
+                    <span class="badge badge-error" style="font-size:11px;" title="A câmera anunciou este arquivo mas ele não está no disco do servidor.">Arquivo ausente</span>
+                    <?php endif; ?>
                     <?php elseif ($isRequested): ?>
                     <span class="badge" style="font-size:11px;" title="A câmera ainda não terminou de enviar">Aguardando câmera</span>
                     <?php else: ?>
