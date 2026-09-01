@@ -98,15 +98,14 @@ if (empty($segments)) {
     // 'parametros' (v4.9.16) é a área dedicada de configuração das câmeras
     // JT/T. Não colide com o diretório do docroot como `/config` colidiu
     // (v4.9.11): não existe `parametros/` na raiz.
+    // v4.15.1 — 'auditoria' SAIU desta lista: agora é subrota (ver
+    // $subrouteMap), porque ganhou 3 relatórios-irmãos (/auditoria/negados,
+    // /cadastro, /login). A permissão continua em $screenByHandler logo
+    // abaixo E em $screens (grupos_permissao.php) — ver a nota lá.
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
-                     'midia','parametros','firmwares','manutencoes','painel',
-                     // v4.15.0 — consulta de audit_log. Resolve o arquivo
-                     // (auditoria.php); a permissão em si entra em
-                     // $screenByHandler logo abaixo E em $screens
-                     // (grupos_permissao.php) — ver a nota lá.
-                     'auditoria'];
+                     'midia','parametros','firmwares','manutencoes','painel'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -175,6 +174,15 @@ if (empty($segments)) {
         ],
         'checklist' => [
             'inspecao' => 'checklist_inspection.php',
+        ],
+        // v4.15.1 — 3 relatórios-irmãos de /auditoria. Sem segundo segmento,
+        // cai no fallback (mais abaixo) que resolve pra `auditoria.php` —
+        // mesmo mecanismo que já mantém `/video` e `/relatorios` funcionando
+        // com e sem subrota.
+        'auditoria' => [
+            'negados'  => 'auditoria_negados.php',
+            'cadastro' => 'auditoria_cadastro.php',
+            'login'    => 'auditoria_login.php',
         ],
     ];
 
@@ -360,6 +368,12 @@ $screenByHandler = [
     // impossível de conceder; só lá = o `view` não é verificado por ninguém
     // (mesmo par de erros já cometido seis vezes, listado no CLAUDE.md).
     'auditoria.php'             => 'auditoria',
+    // v4.15.1 — os 3 relatórios-irmãos de /auditoria compartilham a MESMA
+    // chave, exatamente como todo `rel_*.php` compartilha 'relatorios': não
+    // precisam de entrada própria em $screens.
+    'auditoria_negados.php'     => 'auditoria',
+    'auditoria_cadastro.php'    => 'auditoria',
+    'auditoria_login.php'       => 'auditoria',
 ];
 if (isset($screenByHandler[$handler])) {
     require_once __DIR__ . '/../includes/auth.php';

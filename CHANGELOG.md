@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.15.1
+
+**Pedido do dono do produto na sequência da auditoria (v4.15.0): relatórios exportáveis. Alinhado com ele: só exportação síncrona (sem entrar no agendamento por e-mail), e 3 relatórios SEPARADOS por finalidade em vez de um genérico.**
+
+### Added
+- **`audit_union_sql()`** (`includes/audit.php`) — o `UNION ALL` que já existia inline em `handlers/auditoria.php` (audit_log + login_log + commands?/sms_commands? condicionais) virou função reusável, ponto único para as 4 telas que agora dependem dele.
+- **`/auditoria/negados`** (`handlers/auditoria_negados.php`) — todo `status='denied'`: 403 de `require_admin()`/`require_permission()` e login que falhou. "Quem tentou o que não podia."
+- **`/auditoria/cadastro`** (`handlers/auditoria_cadastro.php`) — toda ação `*.create`/`*.update`/`*.delete` (filtro `REGEXP '\\.(create|update|delete)$'`, testado contra MySQL real com amostras positivas e negativas). Filtro extra de entidade. "Quem mudou o quê."
+- **`/auditoria/login`** (`handlers/auditoria_login.php`) — login (sucesso/falha), logout, troca de cliente e impersonação.
+- Os três seguem o MESMO padrão de export síncrono de `rel_alarmes.php`: `stream_export()`, `SYNC_EXPORT_MAX_ROWS`, `require_permission('auditoria', 'export')` — ação separada de `'view'`, então quem só vê a grade toma 403 ao tentar exportar.
+- Barra de abas comum às 4 páginas (Tudo / Acessos Negados / Alterações de Cadastro / Login e Sessão).
+
+### Changed
+- **Permissão dos 3 relatórios é `'auditoria'`, não `'relatorios'`** — decisão deliberada: dado de segurança não pode ficar visível a quem só tem permissão de exportar relatório de frota. Os 3 handlers entram em `$screenByHandler` apontando pra essa MESMA chave (mesmo padrão de todo `rel_*.php` apontar pra `'relatorios'`) — não precisam de entrada nova em `$screens` de `grupos_permissao.php`.
+- `handlers/router.php`: `'auditoria'` saiu de `$simpleRoutes` e virou `$subrouteMap` (como `/video` e `/relatorios`) — `/auditoria` sem segundo segmento continua caindo no mesmo `auditoria.php` de sempre, via o fallback que esse mecanismo já tinha.
+
+### Verificação
+- `php -l` limpo em todos os arquivos tocados/criados.
+- Os 3 filtros de categoria testados contra MySQL local real: REGEXP de CRUD confirmado batendo em `chip.delete`/`geofence.create` e não batendo em `session.login`/`permission.denied`/`command.dispatch`; os 3 `WHERE` completos rodados contra o UNION de 3 branches com dados reais, resultado conferido linha a linha.
+- Não testado pela UI no navegador — recomendado antes de considerar fechado, em especial os botões de export e a barra de abas.
+
 ## [Unreleased] — 4.15.0
 
 **Pedido do dono do produto: auditoria de ações de usuário / segurança operacional. Não existia tabela genérica de auditoria — 5 handlers faziam DELETE físico sem nenhum rastro de autor.**

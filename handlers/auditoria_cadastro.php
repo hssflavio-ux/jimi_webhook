@@ -1,36 +1,21 @@
 <?php
 /**
- * bycamera — Auditoria de ações de usuário v4.15.0
- * Rota: /auditoria
+ * bycamera — Relatório de Alterações de Cadastro v4.15.1
+ * Rota: /auditoria/cadastro
  *
- * Consulta somente-leitura de `audit_log` (mysql/migration_v4.15.0.sql):
- * quem fez o quê, quando, em qual registro, com o antes/depois quando a ação
- * tinha. Nada nesta tela escreve em `audit_log` — a escrita é sempre
- * `includes/audit.php`, chamada de dentro de cada handler mutante e de
- * `require_admin()`/`require_permission()` (negação de acesso).
+ * Fatia de `/auditoria` (handlers/auditoria.php) focada em CRUD — toda ação
+ * cujo nome termina em `.create`/`.update`/`.delete` (convenção fixa de
+ * `audit_log.action`, ver includes/audit.php). É o "quem mudou o quê" de
+ * cadastro: chip, motorista, geocerca, usuário, cliente, equipamento,
+ * veículo, grupo de permissão, etc. — tudo que `audit_log()` grava nos
+ * handlers de CRUD.
  *
- * Unifica `audit_log` com `login_log` (tentativas de login, que já existiam
- * antes desta feature e não foram duplicadas aqui — ver includes/auth.php)
- * via `UNION ALL`, numa subquery com colunas normalizadas. `login_log` não
- * tem `user_id`/`customer_id`/`entity_type` (NULL nas três) — o efeito
- * colateral é ÚTIL: filtrar por usuário, cliente ou entidade exclui essas
- * linhas automaticamente (`NULL = :param` nunca é verdadeiro em SQL), sem
- * precisar de lógica condicional em PHP para "não faz sentido aplicar este
- * filtro em login".
+ * Não inclui `login`/`permission.denied`/`command.dispatch` — esses ficam em
+ * /auditoria/login e /auditoria/negados. Comandos a equipamento não são
+ * "cadastro" e não têm sufixo create/update/delete, então já ficam fora
+ * naturalmente do filtro por REGEXP, sem precisar de exclusão explícita.
  *
- * Escopo multi-tenant: `report_customer_scope()`/`report_customer_options()`
- * (includes/functions.php), o MESMO ponto único que toda tela de relatório
- * usa — para não reinventar a distinção null=sem restrição / []=revendedor
- * sem cliente (CLAUDE.md).
- *
- * v4.15.1 — três relatórios-irmãos entraram ao lado desta tela, cada um com
- * a MESMA permissão `'auditoria'` (não `'relatorios'` — dado de segurança
- * não fica visível a quem só exporta relatório de frota) e reusando
- * `audit_union_sql()` (includes/audit.php) com um filtro de categoria por
- * cima: `auditoria_negados.php` (`/auditoria/negados`, `status='denied'`),
- * `auditoria_cadastro.php` (`/auditoria/cadastro`, ações `*.create/update/
- * delete`) e `auditoria_login.php` (`/auditoria/login`, sessão/troca de
- * cliente). A barra de abas abaixo é comum às quatro páginas.
+ * Mesma permissão da tela-mãe (`'auditoria'`, não `'relatorios'`).
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -46,17 +31,18 @@ $scopeCust   = report_customer_scope($filtroCust, $isAdmin, $customerId);
 $customers   = $isAdmin ? report_customer_options($db) : [];
 $mostrarCliente = ($scopeCust === null);
 
-// ── Filtros ───────────────────────────────────────────────────────────────
 $filtroUser   = trim((string)($_GET['user_id'] ?? ''));
-$filtroAction = trim((string)($_GET['action'] ?? ''));
 $filtroEntity = trim((string)($_GET['entity_type'] ?? ''));
 $dateFrom     = $_GET['date_from'] ?? brt_today();
 $dateTo       = $_GET['date_to'] ?? brt_today();
-[$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto de 31 dias — auditoria não varre a base inteira
+[$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo);
 $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 50;
 
-$where  = ['t.created_at BETWEEN :df AND :dt'];
+// A categoria (CRUD) é fixa por REGEXP no nome da ação — convenção
+// "entidade.verbo" de includes/audit.php. Sem parâmetro de usuário: é um
+// padrão constante, não entrada externa.
+$where  = ["t.created_at BETWEEN :df AND :dt", "t.action REGEXP '\\\\.(create|update|delete)$'"];
 $params = [];
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo);
 $params[':df'] = $utcFrom;
@@ -70,23 +56,14 @@ if ($filtroUser !== '' && ctype_digit($filtroUser)) {
     $where[] = 't.user_id = :uid';
     $params[':uid'] = (int)$filtroUser;
 }
-if ($filtroAction !== '') {
-    $where[] = 't.action LIKE :action';
-    $params[':action'] = '%' . $filtroAction . '%';
-}
 if ($filtroEntity !== '') {
     $where[] = 't.entity_type = :etype';
     $params[':etype'] = $filtroEntity;
 }
 $whereSql = 'WHERE ' . implode(' AND ', $where);
 
-// União de todas as fontes — ponto único em includes/audit.php
-// (audit_union_sql()), reusado pelos 3 relatórios (auditoria_negados.php,
-// auditoria_cadastro.php, auditoria_login.php) para não duplicar o SQL.
 $unionSql = audit_union_sql($db);
 
-// Lista de usuários pro filtro — só do escopo visível (mesma disciplina de
-// report_customer_options(): não vazar nome de usuário de outro tenant).
 $stmtUsers = $scopeCust !== null
     ? $db->prepare("
         SELECT DISTINCT u.id, u.name FROM users u
@@ -96,6 +73,41 @@ $stmtUsers = $scopeCust !== null
     : $db->prepare("SELECT id, name FROM users ORDER BY name");
 $stmtUsers->execute($scopeCust !== null ? [':cid' => $scopeCust] : []);
 $usuarios = $stmtUsers->fetchAll(PDO::FETCH_ASSOC);
+
+// Lista de entidades para o filtro — só as que já aparecem em audit_log
+// (não um catálogo fixo, que ficaria desatualizado a cada handler novo).
+$stmtEntities = $db->query("SELECT DISTINCT entity_type FROM audit_log WHERE entity_type IS NOT NULL ORDER BY entity_type");
+$entidades = $stmtEntities ? $stmtEntities->fetchAll(PDO::FETCH_COLUMN) : [];
+
+// ── Export síncrono ──────────────────────────────────────────────────────
+$export = $_GET['export'] ?? '';
+if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
+    require_permission('auditoria', 'export');
+    require_once __DIR__ . '/../includes/export_helper.php';
+    $expStmt = $db->prepare("
+        SELECT t.* FROM ($unionSql) t
+        $whereSql
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT " . SYNC_EXPORT_MAX_ROWS);
+    $expStmt->execute($params);
+    $expRows = [];
+    foreach ($expStmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $detalhe = trim(($r['before_data'] ? 'antes: ' . $r['before_data'] . '  ' : '') . ($r['after_data'] ? 'depois: ' . $r['after_data'] : ''));
+        $expRows[] = [
+            fmt_brt($r['created_at'], 'd/m/Y H:i:s'),
+            trim(($r['actor_name'] ?? '') . ' ' . ($r['actor_email'] ? '(' . $r['actor_email'] . ')' : '')) ?: '—',
+            $r['customer_name'] ?? '—',
+            $r['action'],
+            $r['entity_type'] ? $r['entity_type'] . ($r['entity_id'] ? ' #' . $r['entity_id'] : '') : '—',
+            $detalhe ?: '—',
+        ];
+    }
+    stream_export($export, 'auditoria_alteracoes_cadastro',
+        ['Quando', 'Autor', 'Cliente', 'Ação', 'Entidade', 'Detalhe'],
+        $expRows, 'Relatório de Alterações de Cadastro',
+        report_period_label($dateFrom, $dateTo),
+        [1.1, 1.6, 1.4, 1.3, 1.2, 2.6]);
+}
 
 $totalRows  = 0;
 $totalPages = 1;
@@ -121,24 +133,22 @@ try {
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    // Tabela ausente = migração v4.15.0 não aplicada. Explica em vez de dar
-    // erro de SQL cru (a lição do /usuarios na v4.13.21).
     $migIndisp = true;
-    Logger::warning('auditoria: audit_log indisponível', ['erro' => $e->getMessage()]);
+    Logger::warning('auditoria_cadastro: audit_log indisponível', ['erro' => $e->getMessage()]);
 }
 
-$page_title    = 'Auditoria';
+$page_title    = 'Auditoria — Alterações de Cadastro';
 $current_route = 'auditoria';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div class="mb-16" style="display:flex;gap:4px;border-bottom:1px solid var(--hairline);">
     <a href="/auditoria" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
-       color:var(--brand);border-bottom:2px solid var(--brand);margin-bottom:-1px;">Tudo</a>
+       color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;">Tudo</a>
     <a href="/auditoria/negados" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
        color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;">Acessos Negados</a>
     <a href="/auditoria/cadastro" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
-       color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;">Alterações de Cadastro</a>
+       color:var(--brand);border-bottom:2px solid var(--brand);margin-bottom:-1px;">Alterações de Cadastro</a>
     <a href="/auditoria/login" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
        color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;">Login e Sessão</a>
 </div>
@@ -148,8 +158,6 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div style="font-size:13px;color:#7a1a12;line-height:1.6;">
         <strong>A migração v4.15.0 não foi aplicada.</strong>
         A tabela <code>audit_log</code> não existe, então não há nada para mostrar ainda.
-        Rode <code>./scripts/deploy.sh --force</code> mais uma vez, ou aplique
-        <code>mysql/migration_v4.15.0.sql</code> à mão.
     </div>
 </div>
 <?php endif; ?>
@@ -181,12 +189,15 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div class="form-group" style="margin:0;">
-            <label>Ação contém</label>
-            <input type="text" name="action" value="<?= htmlspecialchars($filtroAction) ?>" placeholder="ex.: chip.delete">
-        </div>
-        <div class="form-group" style="margin:0;">
             <label>Entidade</label>
-            <input type="text" name="entity_type" value="<?= htmlspecialchars($filtroEntity) ?>" placeholder="ex.: sim_card">
+            <select name="entity_type">
+                <option value="">Todas</option>
+                <?php foreach ($entidades as $et): ?>
+                <option value="<?= htmlspecialchars($et) ?>" <?= $filtroEntity === $et ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($et) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
         </div>
         <div class="form-group" style="margin:0;">
             <label>De</label>
@@ -204,9 +215,15 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <div class="card">
+    <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
     <div class="flex-between mb-16">
-        <h2 style="font-size:16px;font-weight:600;color:var(--ink);">Ações registradas</h2>
-        <span style="font-size:12px;color:var(--muted);"><?= $totalRows ?> registro(s)</span>
+        <h2 style="font-size:16px;font-weight:600;color:var(--ink);">Alterações de Cadastro</h2>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--muted);"><?= $totalRows ?> registro(s)</span>
+            <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
+            <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+            <a href="?<?= $expBase ?>&export=csv" class="btn btn-outline btn-sm">Exportar CSV</a>
+        </div>
     </div>
     <div style="overflow:auto;">
     <table class="table">
@@ -217,7 +234,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php if ($mostrarCliente): ?><th>Cliente</th><?php endif; ?>
                 <th>Ação</th>
                 <th>Entidade</th>
-                <th>Status</th>
                 <th>Detalhe</th>
             </tr>
         </thead>
@@ -238,11 +254,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                         <?= htmlspecialchars($r['entity_type']) ?><?= $r['entity_id'] ? ' #' . (int)$r['entity_id'] : '' ?>
                     <?php else: ?>—<?php endif; ?>
                 </td>
-                <td style="font-size:12px;">
-                    <span class="badge badge-<?= $r['status'] === 'success' ? 'success' : ($r['status'] === 'denied' ? 'error' : 'neutral') ?>">
-                        <?= htmlspecialchars($r['status']) ?>
-                    </span>
-                </td>
                 <td style="font-size:11px;max-width:320px;">
                     <?php if ($r['before_data'] || $r['after_data']): ?>
                         <details>
@@ -259,8 +270,8 @@ require_once __DIR__ . '/../web/layout_base.php';
             </tr>
         <?php endforeach; ?>
         <?php if (!$rows): ?>
-            <tr><td colspan="<?= $mostrarCliente ? 7 : 6 ?>" style="text-align:center;color:var(--muted);padding:24px;">
-                Nenhuma ação registrada no período/filtro.
+            <tr><td colspan="<?= $mostrarCliente ? 6 : 5 ?>" style="text-align:center;color:var(--muted);padding:24px;">
+                Nenhuma alteração de cadastro no período/filtro.
             </td></tr>
         <?php endif; ?>
         </tbody>
