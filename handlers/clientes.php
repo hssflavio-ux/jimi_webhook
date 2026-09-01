@@ -33,6 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete' && $id > 1) {
         $stmt = $db->prepare("UPDATE customers SET is_active = 0 WHERE id = ? AND id > 1");
         $stmt->execute([$id]);
+        if ($stmt->rowCount() > 0) {
+            audit_log('customer.deactivate', 'customer', $id, ['is_active' => 1], ['is_active' => 0]);
+        }
         $success = 'Cliente desativado.';
     } elseif ($action === 'impersonate' && $id > 0 && $isReseller) {
         set_customer_context($id);
@@ -59,16 +62,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? (int)$_POST['default_speed_limit_kmh'] : null;
 
         if ($id > 0) {
+            $beforeUpd = $db->prepare("SELECT name, document, email, phone, address, occurrence_config_id, faceid_enabled, default_speed_limit_kmh FROM customers WHERE id = ?");
+            $beforeUpd->execute([$id]);
+            $beforeRow = $beforeUpd->fetch(PDO::FETCH_ASSOC);
+
             $stmt = $db->prepare("UPDATE customers SET name=?, document=?, email=?, phone=?, address=?,
                 occurrence_config_id=?, faceid_enabled=?, brand_color=?, logo_url=?,
                 default_speed_limit_kmh=? WHERE id=?");
             $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $spdLim, $id]);
+            audit_log('customer.update', 'customer', $id, $beforeRow, [
+                'name' => $name, 'document' => $doc, 'email' => $email, 'phone' => $phone,
+                'occurrence_config_id' => $occCfg, 'faceid_enabled' => $faceId, 'default_speed_limit_kmh' => $spdLim,
+            ]);
             $success = 'Cliente atualizado.';
         } else {
             $stmt = $db->prepare("INSERT INTO customers (name, document, email, phone, address,
                 occurrence_config_id, faceid_enabled, brand_color, logo_url, default_speed_limit_kmh, reseller_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$name, $doc, $email, $phone, $addr, $occCfg, $faceId, $brand ?: null, $logo ?: null, $spdLim, $isReseller ? $user['id'] : null]);
+            audit_log('customer.create', 'customer', (int)$db->lastInsertId(), null, [
+                'name' => $name, 'document' => $doc, 'email' => $email, 'phone' => $phone,
+                'reseller_id' => $isReseller ? $user['id'] : null,
+            ]);
             $success = 'Cliente criado.';
         }
     } else {

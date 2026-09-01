@@ -47,6 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $stmt->execute([$owner_id, $plate, $vehicleType, $_SESSION['user_id'] ?? null]);
         $newVehicleId = (int)$db->lastInsertId();
+        audit_log('vehicle.create', 'vehicle', $newVehicleId, null,
+            ['plate' => $plate, 'vehicle_type' => $vehicleType, 'customer_id' => $owner_id]);
         $success = true;
     }
 }

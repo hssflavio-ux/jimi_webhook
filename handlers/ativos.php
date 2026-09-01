@@ -35,7 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (get_open_installation_for_vehicle($db, $vehicleId)) {
             $err = 'Este veículo tem uma câmera instalada — desinstale-a antes de desativar.';
         } else {
-            $db->prepare("UPDATE vehicles SET is_active=0 WHERE id=? AND customer_id=?")->execute([$vehicleId, $customer_id]);
+            $stmt = $db->prepare("UPDATE vehicles SET is_active=0 WHERE id=? AND customer_id=?");
+            $stmt->execute([$vehicleId, $customer_id]);
+            if ($stmt->rowCount() > 0) {
+                audit_log('vehicle.deactivate', 'vehicle', $vehicleId, ['is_active' => 1], ['is_active' => 0]);
+            }
             $msg = 'Veículo removido.';
         }
     } elseif ($action === 'edit' && $vehicleId) {
@@ -45,8 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($plate === '') {
             $err = 'Placa é obrigatória.';
         } else {
-            $db->prepare("UPDATE vehicles SET plate=?, vehicle_type=? WHERE id=? AND customer_id=?")
-               ->execute([$plate, $vtype, $vehicleId, $customer_id]);
+            $beforeV = $db->prepare("SELECT plate, vehicle_type FROM vehicles WHERE id=? AND customer_id=?");
+            $beforeV->execute([$vehicleId, $customer_id]);
+            $beforeRow = $beforeV->fetch(PDO::FETCH_ASSOC);
+
+            $stmt = $db->prepare("UPDATE vehicles SET plate=?, vehicle_type=? WHERE id=? AND customer_id=?");
+            $stmt->execute([$plate, $vtype, $vehicleId, $customer_id]);
+            if ($beforeRow && $stmt->rowCount() > 0) {
+                audit_log('vehicle.update', 'vehicle', $vehicleId, $beforeRow, ['plate' => $plate, 'vehicle_type' => $vtype]);
+            }
             // Espelha em `devices.vehicle_type` (fonte que /rastreamento lê) se
             // houver câmera instalada agora — mesma sincronização feita na
             // instalação, em install_device_on_vehicle().

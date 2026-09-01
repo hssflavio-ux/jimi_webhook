@@ -79,6 +79,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $imported++;
             }
+            // Uma linha por LOTE, não por equipamento — um CSV de centenas de
+            // linhas não deve virar centenas de linhas de audit_log; o
+            // resumo (quantos, para qual cliente) já é o que importa auditar.
+            if ($imported > 0) {
+                audit_log('device.import_batch', 'customer', $importOwner, null,
+                    ['imported' => $imported, 'skipped' => $skipped]);
+            }
             $message = "$imported importado(s), $skipped ignorado(s).";
             if ($importErrors) {
                 $message .= ' Avisos: ' . implode('; ', array_slice($importErrors, 0, 10))
@@ -150,6 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // chip aqui é sempre seguro (não há cascade de desativação
                     // a considerar numa linha que acabou de nascer).
                     $chipWarning = link_sim_card_to_device($db, $simCardId, $imei, $ownerId);
+                    audit_log('device.create', 'device', (int)$db->lastInsertId(), null, [
+                        'imei' => $imei, 'device_name' => $deviceName, 'customer_id' => $ownerId,
+                        'device_model_id' => $modelId, 'camera_count' => $cameraCount, 'is_active' => $isActive,
+                    ]);
                     $message = 'Equipamento cadastrado com sucesso.' . ($chipWarning ? ' ' . $chipWarning : '');
                     $messageType = 'success';
                 }
@@ -174,9 +185,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Só desativa (is_active 1→0) câmera SEM instalação aberta — é
                 // o mesmo princípio já aplicado a chip em chips.php. Desativar
                 // em uso deixaria o veículo com uma câmera "fantasma".
-                $wasActive = (bool)$db->query(
-                    "SELECT is_active FROM devices WHERE imei = " . $db->quote($editImei)
-                )->fetchColumn();
+                $beforeDev = $db->query(
+                    "SELECT id, device_name, customer_id, device_model_id, camera_count, is_active
+                       FROM devices WHERE imei = " . $db->quote($editImei)
+                )->fetch(PDO::FETCH_ASSOC);
+                $wasActive = (bool)($beforeDev['is_active'] ?? false);
                 $installed = $db->prepare("
                     SELECT 1 FROM device_installations di
                     JOIN devices d ON d.id = di.device_id
@@ -230,6 +243,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } else {
                             $chipWarning = link_sim_card_to_device($db, $simCardId, $editImei, $ownerId);
                         }
+                        audit_log('device.update', 'device', (int)($beforeDev['id'] ?? 0) ?: null, $beforeDev, [
+                            'imei' => $editImei, 'device_name' => $deviceName, 'customer_id' => $ownerId,
+                            'device_model_id' => $modelId, 'camera_count' => $cameraCount, 'is_active' => $isActive,
+                        ]);
                         $message = 'Equipamento atualizado.' . ($chipWarning ? ' ' . $chipWarning : '');
                         $messageType = 'success';
                     }

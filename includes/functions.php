@@ -726,6 +726,10 @@ function install_device_on_vehicle(PDO $db, int $deviceId, int $vehicleId, ?int 
            ->execute([$vehicle['customer_id'], $vehicle['vehicle_type'], $deviceId]);
 
         $db->commit();
+        if (function_exists('audit_log')) {
+            audit_log('device.install', 'vehicle', $vehicleId, null,
+                ['device_id' => $deviceId, 'imei' => $dev['imei'], 'customer_id' => $vehicle['customer_id']]);
+        }
         return null;
     } catch (Exception $e) {
         $db->rollBack();
@@ -745,6 +749,12 @@ function install_device_on_vehicle(PDO $db, int $deviceId, int $vehicleId, ?int 
  */
 function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserId): ?string
 {
+    // v4.15.0 — "antes" lido ANTES do UPDATE que fecha a instalação: depois
+    // dele `removed_at` já não é mais NULL e a linha não casaria de novo.
+    $before = $db->prepare("SELECT device_id FROM device_installations WHERE vehicle_id = ? AND removed_at IS NULL");
+    $before->execute([$vehicleId]);
+    $deviceId = $before->fetchColumn();
+
     $stmt = $db->prepare("
         UPDATE device_installations
         SET removed_at = NOW(), removed_by = ?
@@ -753,6 +763,9 @@ function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserI
     $stmt->execute([$actorUserId, $vehicleId]);
     if ($stmt->rowCount() === 0) {
         return 'Este veículo não tem câmera instalada.';
+    }
+    if (function_exists('audit_log')) {
+        audit_log('device.uninstall', 'vehicle', $vehicleId, ['device_id' => $deviceId], null);
     }
     return null;
 }

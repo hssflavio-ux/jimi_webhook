@@ -47,8 +47,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Você não pode desativar seu próprio usuário.';
         } else {
             $newStatus = (int)($_POST['is_active'] ?? 0);
+            $prevStatus = $db->prepare("SELECT is_active FROM users WHERE id = ?");
+            $prevStatus->execute([$id]);
+            $wasActive = $prevStatus->fetchColumn();
             $stmt = $db->prepare("UPDATE users SET is_active = ? WHERE id = ?");
             $stmt->execute([$newStatus, $id]);
+            audit_log('user.toggle_active', 'user', $id, ['is_active' => $wasActive], ['is_active' => $newStatus]);
             $success = $newStatus ? 'Usuário ativado.' : 'Usuário desativado.';
         }
     } elseif ($action === 'save') {
@@ -76,6 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $db->beginTransaction();
+                // v4.15.0 — before/after NUNCA carrega password_hash, nem antes
+                // nem depois; o que a auditoria registra é o booleano "a senha
+                // foi trocada nesta ação", mesma regra fixa de /perfil.
+                $beforeRow = null;
+                if ($id > 0) {
+                    $beforeSel = $db->prepare("SELECT name, email, role, user_type, permission_group_id, is_active FROM users WHERE id = ?");
+                    $beforeSel->execute([$id]);
+                    $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
                 if ($id > 0) {
                     $sql = "UPDATE users SET name=?, email=?, role=?, user_type=?, permission_group_id=?, photo_url=?";
                     $params = [$name, $email, $role, $userType, $pgId, $photoUrl ?: null];
@@ -115,6 +128,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt->execute([$customerId, $userId, $role]);
 
                 $db->commit();
+
+                audit_log($id > 0 ? 'user.update' : 'user.create', 'user', $userId, $beforeRow, [
+                    'name' => $name, 'email' => $email, 'role' => $role, 'user_type' => $userType,
+                    'permission_group_id' => $pgId, 'customer_id' => $customerId,
+                    'password_changed' => $password !== '',
+                ]);
 
                 // Fora da transação de propósito: `issue_temp_password()` abre a
                 // dela, e o PDO não aninha. O usuário já está gravado quando o
