@@ -38,6 +38,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         set_customer_context($id);
         $stmt = $db->prepare("INSERT INTO impersonation_log (reseller_user_id, customer_id) VALUES (?, ?)");
         $stmt->execute([$user['id'], $id]);
+        // v4.15.0 — DEPOIS do set_customer_context(): audit_log() lê
+        // get_customer_id() para resolver o customer_id da linha, e ele só
+        // reflete o cliente assumido a partir daqui.
+        audit_log('customer.impersonate_start', 'customer', $id);
         header('Location: /');
         exit;
     } elseif ($name) {

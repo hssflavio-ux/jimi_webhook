@@ -9,8 +9,14 @@
  * `includes/audit.php`, chamada de dentro de cada handler mutante e de
  * `require_admin()`/`require_permission()` (negação de acesso).
  *
- * ⚠️ Nesta primeira fase mostra só `audit_log` — a unificação com `login_log`
- * (timeline única de login+ações via UNION) entra na Fase 2 do plano.
+ * Unifica `audit_log` com `login_log` (tentativas de login, que já existiam
+ * antes desta feature e não foram duplicadas aqui — ver includes/auth.php)
+ * via `UNION ALL`, numa subquery com colunas normalizadas. `login_log` não
+ * tem `user_id`/`customer_id`/`entity_type` (NULL nas três) — o efeito
+ * colateral é ÚTIL: filtrar por usuário, cliente ou entidade exclui essas
+ * linhas automaticamente (`NULL = :param` nunca é verdadeiro em SQL), sem
+ * precisar de lógica condicional em PHP para "não faz sentido aplicar este
+ * filtro em login".
  *
  * Escopo multi-tenant: `report_customer_scope()`/`report_customer_options()`
  * (includes/functions.php), o MESMO ponto único que toda tela de relatório
@@ -41,29 +47,47 @@ $dateTo       = $_GET['date_to'] ?? brt_today();
 $page         = max(1, (int)($_GET['page'] ?? 1));
 $perPage      = 50;
 
-$where  = ['al.created_at BETWEEN :df AND :dt'];
+$where  = ['t.created_at BETWEEN :df AND :dt'];
 $params = [];
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo);
 $params[':df'] = $utcFrom;
 $params[':dt'] = $utcTo;
 
 if ($scopeCust !== null) {
-    $where[] = 'al.customer_id = :cid';
+    $where[] = 't.customer_id = :cid';
     $params[':cid'] = $scopeCust;
 }
 if ($filtroUser !== '' && ctype_digit($filtroUser)) {
-    $where[] = 'al.user_id = :uid';
+    $where[] = 't.user_id = :uid';
     $params[':uid'] = (int)$filtroUser;
 }
 if ($filtroAction !== '') {
-    $where[] = 'al.action LIKE :action';
+    $where[] = 't.action LIKE :action';
     $params[':action'] = '%' . $filtroAction . '%';
 }
 if ($filtroEntity !== '') {
-    $where[] = 'al.entity_type = :etype';
+    $where[] = 't.entity_type = :etype';
     $params[':etype'] = $filtroEntity;
 }
 $whereSql = 'WHERE ' . implode(' AND ', $where);
+
+// `audit_log` + `login_log` (tentativas de login) numa forma só, com colunas
+// normalizadas — ver a nota no cabeçalho do arquivo sobre o efeito colateral
+// útil do NULL em login_log.customer_id/user_id/entity_type.
+$unionSql = "
+    SELECT al.id AS id, 'audit_log' AS src, al.user_id, al.actor_name, al.actor_email,
+           al.customer_id, cu.name AS customer_name, al.action, al.entity_type, al.entity_id,
+           al.before_data, al.after_data, al.status, al.created_at
+      FROM audit_log al
+      LEFT JOIN customers cu ON cu.id = al.customer_id
+    UNION ALL
+    SELECT ll.id AS id, 'login_log' AS src, NULL AS user_id, NULL AS actor_name, ll.email AS actor_email,
+           NULL AS customer_id, NULL AS customer_name,
+           IF(ll.success = 1, 'session.login', 'session.login_failed') AS action,
+           NULL AS entity_type, NULL AS entity_id, NULL AS before_data, NULL AS after_data,
+           IF(ll.success = 1, 'success', 'denied') AS status, ll.created_at
+      FROM login_log ll
+";
 
 // Lista de usuários pro filtro — só do escopo visível (mesma disciplina de
 // report_customer_options(): não vazar nome de usuário de outro tenant).
@@ -82,7 +106,7 @@ $totalPages = 1;
 $rows       = [];
 
 try {
-    $stmtCount = $db->prepare("SELECT COUNT(*) FROM audit_log al $whereSql");
+    $stmtCount = $db->prepare("SELECT COUNT(*) FROM ($unionSql) t $whereSql");
     $stmtCount->execute($params);
     $totalRows  = (int)$stmtCount->fetchColumn();
     $totalPages = max(1, (int)ceil($totalRows / $perPage));
@@ -90,15 +114,10 @@ try {
     $offset     = ($page - 1) * $perPage;
 
     $stmt = $db->prepare("
-        SELECT al.id, al.user_id, al.actor_name, al.actor_email, al.customer_id,
-               al.action, al.entity_type, al.entity_id, al.before_data, al.after_data,
-               al.status, al.ip_address, al.created_at,
-               cu.name AS customer_name
-          FROM audit_log al
-          LEFT JOIN customers cu ON cu.id = al.customer_id
-          $whereSql
-         ORDER BY al.created_at DESC, al.id DESC
-         LIMIT :lim OFFSET :off
+        SELECT t.* FROM ($unionSql) t
+        $whereSql
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT :lim OFFSET :off
     ");
     foreach ($params as $k => $v) $stmt->bindValue($k, $v);
     $stmt->bindValue(':lim', $perPage, PDO::PARAM_INT);

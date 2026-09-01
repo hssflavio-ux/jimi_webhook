@@ -12,6 +12,7 @@ $input = json_decode(file_get_contents('php://input'), true);
 
 // D4 (v4.2.0): sair da impersonação — fecha o log aberto e volta ao 1º cliente próprio
 if (!empty($input['exit_impersonation'])) {
+    $impersonado = (int)($_SESSION['customer_id'] ?? 0);
     try {
         $db = Database::getInstance()->getConnection();
         $db->prepare("UPDATE impersonation_log SET ended_at = NOW() WHERE reseller_user_id = ? AND ended_at IS NULL")
@@ -19,6 +20,11 @@ if (!empty($input['exit_impersonation'])) {
     } catch (Exception $e) {}
     $own = get_available_customers($_SESSION['user_id']);
     if (!empty($own)) set_customer_context((int)$own[0]['id']);
+    // v4.15.0 — registrado com o customer_id DE ORIGEM (o que estava sendo
+    // impersonado): depois de set_customer_context() acima, get_customer_id()
+    // já aponta para o cliente próprio, então audit_log() sozinho gravaria a
+    // linha no cliente ERRADO.
+    audit_log('customer.impersonate_end', 'customer', $impersonado ?: null);
     header('Content-Type: application/json');
     echo json_encode(['code' => 0, 'msg' => 'Impersonação encerrada.']);
     exit;
@@ -33,7 +39,9 @@ if ($customer_id > 0) {
         if ((int)$c['id'] === $customer_id) { $found = true; break; }
     }
     if ($found) {
+        $anterior = (int)($_SESSION['customer_id'] ?? 0);
         set_customer_context($customer_id);
+        audit_log('customer.switch', 'customer', $customer_id, ['from' => $anterior ?: null], ['to' => $customer_id]);
         header('Content-Type: application/json');
         echo json_encode(['code' => 0, 'msg' => 'Cliente alterado.']);
         exit;

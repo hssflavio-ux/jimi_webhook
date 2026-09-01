@@ -66,6 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         rotate_session_token();
 
         Logger::info('Senha definitiva cadastrada após senha temporária', ['user_id' => (int)$user['id']]);
+        // v4.15.0 — SEM before/after (mesma regra de /perfil): nunca gravar
+        // hash nem senha.
+        audit_log('user.password_change', 'user', (int)$user['id']);
         $auth_success = 'Senha alterada. Bem-vindo!';
     }
 }

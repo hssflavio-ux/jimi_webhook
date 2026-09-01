@@ -34,6 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $stmt = $db->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
         $stmt->execute([password_hash($newPassword, PASSWORD_BCRYPT), $user['id']]);
+        // v4.15.0 — SEM before/after: nunca gravar hash nem senha, nem antiga
+        // nem nova. Regra fixa desta categoria, não opcional.
+        audit_log('user.password_change', 'user', (int)$user['id']);
         $success = 'Senha alterada com sucesso.';
     }
 }
