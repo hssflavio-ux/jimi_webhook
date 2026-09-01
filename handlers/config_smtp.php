@@ -147,6 +147,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // O painel "em uso agora" é renderizado nesta mesma request:
             // sem limpar o cache ele mostraria a configuração anterior.
             smtp_settings_cache_clear();
+            // Sem before/after de credencial: nunca grava senha nem cifrada.
+            audit_log($existing ? 'smtp_settings.update' : 'smtp_settings.create', 'smtp_settings',
+                $existing['id'] ?? null, null,
+                ['host' => $host, 'port' => $port, 'secure' => $secure, 'from_email' => $fromEmail,
+                 'is_active' => $isActive, 'password_changed' => $password !== '']);
             $message = 'Credenciais salvas. Use "Enviar e-mail de teste" para validar.';
             $messageType = 'success';
 
@@ -197,6 +202,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($row) {
                 $db->prepare("DELETE FROM smtp_settings WHERE id = :id")->execute([':id' => $row['id']]);
                 smtp_settings_cache_clear();
+                audit_log('smtp_settings.delete', 'smtp_settings', $row['id'],
+                    ['host' => $row['host'], 'port' => $row['port'], 'from_email' => $row['from_email']], null);
                 $message = 'Configuração removida.';
                 $messageType = 'success';
             }

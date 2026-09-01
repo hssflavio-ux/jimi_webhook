@@ -5,6 +5,40 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.15.0
+
+**Pedido do dono do produto: auditoria de ações de usuário / segurança operacional. Não existia tabela genérica de auditoria — 5 handlers faziam DELETE físico sem nenhum rastro de autor.**
+
+### Added
+- **`audit_log`** (`mysql/migration_v4.15.0.sql`) — uma linha por ação (create/update/delete/login/permissão negada/troca de cliente), apenas-inserção por convenção. Autor com FK fraca (`ON DELETE SET NULL`) + snapshot de nome/e-mail congelado no INSERT; `customer_id`/`entity_type`/`entity_id` sem FK, de propósito (a linha referenciada pode ser a que a própria ação apagou). `action` é string livre `"entidade.verbo"`, não ENUM.
+- **`includes/audit.php`** — ponto único de escrita: `audit_log()` (nunca lança exceção — falha ao auditar não pode derrubar a ação de negócio já feita) e `audit_log_denied()` (atalho para 403).
+- **`require_admin()`/`require_permission()`** (`includes/auth.php`) chamam `audit_log_denied()` no ramo que já leva ao 403 — cobre as ~25 telas do sistema de uma vez, sem instrumentar cada handler.
+- **`/auditoria`** (`handlers/auditoria.php`) — tela só-leitura, filtrada por usuário/ação/entidade/período/cliente (via `report_customer_scope()`), paginada. A consulta une `audit_log` + `login_log` + `commands` + `sms_commands` via `UNION ALL`, com os dois últimos branches **condicionais à existência da tabela** (checada por `information_schema`, não por try/catch) — para uma instalação sem a migração v4.14.0 não perder a tela inteira por causa de uma tabela periférica.
+  - `commands` (JT/T via IoT Hub) nunca ganhou `customer_id` — entra com `customer_id = NULL` de propósito: juntar pelo dono ATUAL de `devices` reabriria a classe de bug que a Fase 2 (v4.12.0) fechou. Aparece só na visão sem filtro de cliente.
+  - `sms_commands.customer_id` é snapshot (`resolve_installation_for_imei()`) — seguro filtrar por cliente.
+  - Registrada nos **dois lugares obrigatórios** (CLAUDE.md): `$screenByHandler` (router.php) e `$screens` (grupos_permissao.php), grantável por grupo de permissão (não `require_admin()` — é tela só-leitura, sem credencial de terceiro nem comando a equipamento).
+
+### Changed — instrumentação (before/after via SELECT imediatamente antes do UPDATE/DELETE)
+- Os 5 handlers com `DELETE` físico confirmado: `chips.php`, `motoristas.php`, `geocercas.php`, `agendamentos.php`, `grupos_permissao.php`.
+- Resto do CRUD: `usuarios.php`, `clientes.php`, `equipamentos.php` (incl. `device.import_batch`, uma linha por lote), `ativos.php`/`ativos_novo.php`, `checklist.php`, `manutencoes.php`, `firmwares.php`, `config_parametros.php`.
+- Config global/admin: `config_sms.php`, `config_smtp.php`, `config_notificacoes.php`, `config_ocorrencias.php`.
+- Sessão/tenant: `customer_switch.php` (troca + impersonação), `clientes.php` (início da impersonação), `perfil.php`/`trocar_senha.php` (troca de senha), `logout_user()`.
+- `includes/functions.php`: `install_device_on_vehicle()`/`uninstall_device_from_vehicle()` ganham `device.install`/`device.uninstall` no PONTO ÚNICO — cobre `ativos.php` e `ativo_detalhe.php` de uma vez.
+- **Regra fixa em toda troca de senha**: `before`/`after` NUNCA carrega hash — só o booleano "senha foi trocada".
+- **Regra fixa em todo DELETE com escopo (`WHERE customer_id=?`)**: só grava o log quando `rowCount() > 0` — evita "delete fantasma" quando o escopo bloqueou silenciosamente a exclusão de um registro de outro cliente.
+- **Resolução por SELECT dedicado, nunca por `lastInsertId()`**, em `firmwares.php`/`config_parametros.php`: o ramo `ON DUPLICATE KEY UPDATE` devolve 0 quando atualiza em vez de inserir.
+
+### Verificação
+- `php -l` limpo em todos os arquivos tocados.
+- Migração e as duas queries de UNION (3 e 4 branches) testadas contra MySQL local real (`C:\Users\flavi\mysql`, schema `jimi_tracker` em v4.9.32) — filtro por `customer_id`/`user_id` confirmado excluindo `login_log`/`commands` corretamente (NULL nunca casa), e o branch condicional confirmado pulando `sms_commands` (ausente naquele schema) sem quebrar o resto.
+- Não testado end-to-end pela UI (navegador) nem contra a suíte Playwright — recomendado antes de considerar fechado.
+
+### Pendente
+- Retenção/expurgo automático de `audit_log` — tabela cresce indefinidamente por ora.
+- Exportação do próprio log de auditoria.
+- Imutabilidade a nível de banco (trigger/revogar GRANT) — a garantia de apenas-inserção é só convenção de código nesta fase.
+- `handlers/download.php` (link assinado por e-mail, sem sessão) deliberadamente fora de escopo — não há usuário identificável na requisição.
+
 ## [Unreleased] — 4.14.2
 
 **Pedido do dono do produto: em `/comandos-sms`, todo comando nasce com os campos em branco, e o operador escolhe — preencher grava, deixar tudo vazio vira consulta.**

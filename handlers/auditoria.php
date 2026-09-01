@@ -74,20 +74,69 @@ $whereSql = 'WHERE ' . implode(' AND ', $where);
 // `audit_log` + `login_log` (tentativas de login) numa forma só, com colunas
 // normalizadas — ver a nota no cabeçalho do arquivo sobre o efeito colateral
 // útil do NULL em login_log.customer_id/user_id/entity_type.
-$unionSql = "
+//
+// `commands`/`sms_commands` entram como branches CONDICIONAIS (checadas por
+// INFORMATION_SCHEMA, não por try/catch): sem isso, uma instalação em que a
+// migração v4.14.0 (que cria sms_commands) ainda não rodou perderia a tela
+// de auditoria INTEIRA por causa de uma tabela periférica — o que o
+// audit_log já garante (negação de acesso, CRUD) não pode depender do que é
+// só um extra de leitura.
+$existSql = "SELECT TABLE_NAME FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('commands','sms_commands')";
+$existentes = [];
+try {
+    $existentes = $db->query($existSql)->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) { /* segue sem os branches extras */ }
+
+$unionParts = ["
     SELECT al.id AS id, 'audit_log' AS src, al.user_id, al.actor_name, al.actor_email,
            al.customer_id, cu.name AS customer_name, al.action, al.entity_type, al.entity_id,
            al.before_data, al.after_data, al.status, al.created_at
       FROM audit_log al
       LEFT JOIN customers cu ON cu.id = al.customer_id
-    UNION ALL
+", "
     SELECT ll.id AS id, 'login_log' AS src, NULL AS user_id, NULL AS actor_name, ll.email AS actor_email,
            NULL AS customer_id, NULL AS customer_name,
            IF(ll.success = 1, 'session.login', 'session.login_failed') AS action,
            NULL AS entity_type, NULL AS entity_id, NULL AS before_data, NULL AS after_data,
            IF(ll.success = 1, 'success', 'denied') AS status, ll.created_at
       FROM login_log ll
-";
+"];
+
+if (in_array('commands', $existentes, true)) {
+    // `commands` (proNo 128/JT/T via IoT Hub) NUNCA teve customer_id
+    // acrescentado (conferido nas migrações) — só imei. NULL aqui, de
+    // propósito: juntar pelo dono ATUAL de devices.customer_id reabriria a
+    // classe de bug que a Fase 2 fechou (câmera trocada de cliente
+    // reatribuindo retroativamente o histórico). Efeito: aparece só na
+    // visão sem filtro de cliente (admin), nunca filtrado por um cliente
+    // específico — melhor não mostrar do que mostrar errado.
+    $unionParts[] = "
+    SELECT c.id AS id, 'commands' AS src, NULL AS user_id, c.operator AS actor_name, NULL AS actor_email,
+           NULL AS customer_id, NULL AS customer_name,
+           'command.dispatch' AS action, 'device' AS entity_type, NULL AS entity_id,
+           NULL AS before_data, JSON_OBJECT('imei', c.imei, 'pro_no', c.pro_no) AS after_data,
+           CASE c.status WHEN 'executed' THEN 'success' WHEN 'failed' THEN 'error' ELSE 'aguardando' END AS status,
+           c.created_at
+      FROM commands c
+    ";
+}
+if (in_array('sms_commands', $existentes, true)) {
+    // `sms_commands.customer_id` É snapshot (resolve_installation_for_imei,
+    // regra da Fase 2) — seguro filtrar por cliente aqui, ao contrário de
+    // `commands` acima.
+    $unionParts[] = "
+    SELECT sc.id AS id, 'sms_commands' AS src, NULL AS user_id, sc.operator AS actor_name, NULL AS actor_email,
+           sc.customer_id, cu2.name AS customer_name,
+           'sms_command.dispatch' AS action, 'device' AS entity_type, NULL AS entity_id,
+           NULL AS before_data, JSON_OBJECT('imei', sc.imei, 'command_content', sc.command_content) AS after_data,
+           CASE sc.status_envio WHEN 'enviado' THEN 'success' ELSE 'error' END AS status,
+           sc.created_at
+      FROM sms_commands sc
+      LEFT JOIN customers cu2 ON cu2.id = sc.customer_id
+    ";
+}
+$unionSql = implode(' UNION ALL ', $unionParts);
 
 // Lista de usuários pro filtro — só do escopo visível (mesma disciplina de
 // report_customer_options(): não vazar nome de usuário de outro tenant).

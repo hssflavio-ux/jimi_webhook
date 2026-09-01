@@ -81,6 +81,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
     } else {
         try {
             if ($ruleId) {
+                $beforeSel = $db->prepare("SELECT alarm_type, min_risk, notify_bell, notify_popup, notify_sound, notify_email, is_active FROM notification_rules WHERE id = :id");
+                $beforeSel->execute([':id' => $ruleId]);
+                $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
                 $stmt = $db->prepare(
                     "UPDATE notification_rules
                         SET alarm_type = :atype, min_risk = :risk,
@@ -100,6 +104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
                     ':active' => $isActive,
                     ':id'     => $ruleId,
                 ]);
+                audit_log('notification_rule.update', 'notification_rule', $ruleId, $beforeRow, [
+                    'alarm_type' => $alarmType, 'min_risk' => $minRisk, 'notify_bell' => $notifyBell,
+                    'notify_popup' => $notifyPopup, 'notify_sound' => $notifySound, 'notify_email' => $notifyEmail,
+                    'is_active' => $isActive,
+                ]);
                 $message = 'Regra salva.';
             } else {
                 $stmt = $db->prepare(
@@ -118,6 +127,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
                     ':email'  => $notifyEmail,
                     ':emails' => $emails ? json_encode($emails, JSON_UNESCAPED_UNICODE) : null,
                     ':active' => $isActive,
+                ]);
+                audit_log('notification_rule.create', 'notification_rule', (int)$db->lastInsertId(), null, [
+                    'customer_id' => $ruleCustomer, 'alarm_type' => $alarmType, 'min_risk' => $minRisk,
+                    'notify_bell' => $notifyBell, 'notify_popup' => $notifyPopup, 'notify_sound' => $notifySound,
+                    'notify_email' => $notifyEmail, 'is_active' => $isActive,
                 ]);
                 $message = 'Regra criada.';
             }
@@ -144,9 +158,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'exclu
     csrf_verify();
     require_permission('config-notificacoes', 'delete');
     try {
-        $stmt = $db->prepare("SELECT customer_id FROM notification_rules WHERE id = :id");
+        $stmt = $db->prepare("SELECT customer_id, alarm_type, is_active FROM notification_rules WHERE id = :id");
         $stmt->execute([':id' => (int)$_POST['id']]);
-        $target = $stmt->fetch();
+        $target = $stmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$target) {
             $message = 'Regra não encontrada.';
@@ -159,6 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'exclu
             $messageType = 'error';
         } else {
             $db->prepare("DELETE FROM notification_rules WHERE id = :id")->execute([':id' => (int)$_POST['id']]);
+            audit_log('notification_rule.delete', 'notification_rule', (int)$_POST['id'], $target, null);
             $message = 'Regra excluída.';
             $messageType = 'success';
         }

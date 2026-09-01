@@ -94,6 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->prepare("UPDATE sms_settings SET " . implode(', ', $sets)
                         . " WHERE customer_id IS NULL")->execute($params);
+            // Sem before/after de credencial: nunca grava senha nem cifrada.
+            audit_log('sms_settings.update', 'sms_settings', null, null,
+                ['username' => $username, 'is_active' => $isActive, 'password_changed' => $password !== '']);
 
             $message = 'Credenciais gravadas.';
             $messageType = 'success';
@@ -104,6 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $novo = bin2hex(random_bytes(24));
             $db->prepare("UPDATE sms_settings SET webhook_secret = :s WHERE customer_id IS NULL")
                ->execute([':s' => $novo]);
+            // Sem before/after: o segredo em si nunca entra no log.
+            audit_log('sms_settings.rotate_webhook_secret', 'sms_settings', null);
             $message = 'Segredo do webhook gerado. Atualize a URL no painel da Allcance — a anterior parou de valer.';
             $messageType = 'success';
 

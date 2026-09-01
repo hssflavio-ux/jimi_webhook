@@ -43,7 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
         try {
             $db->beginTransaction();
 
+            $isNewConfig = !$configId;
+            $beforeRow = null;
             if ($configId) {
+                $beforeSel = $db->prepare("SELECT name, is_default FROM occurrence_configs WHERE id = :id");
+                $beforeSel->execute([':id' => $configId]);
+                $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
                 $stmt = $db->prepare("UPDATE occurrence_configs SET name = :name, is_default = :def WHERE id = :id");
                 $stmt->execute([':name' => $name, ':def' => $isDefault, ':id' => $configId]);
             } else {
@@ -98,6 +104,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
             }
 
             $db->commit();
+            audit_log($isNewConfig ? 'occurrence_config.create' : 'occurrence_config.update', 'occurrence_config',
+                $configId, $beforeRow, ['name' => $name, 'is_default' => $isDefault, 'param_count' => count($seenTypes)]);
             $message = $configId ? 'Perfil salvo com sucesso.' : 'Perfil criado com sucesso.';
             if ($ignoredDup > 0) {
                 $message .= $ignoredDup === 1
@@ -131,10 +139,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'exclu
         $message = "Não é possível excluir: $linked cliente(s) vinculado(s).";
         $messageType = 'error';
     } else {
+        $beforeDel = $db->prepare("SELECT name, is_default FROM occurrence_configs WHERE id = :id");
+        $beforeDel->execute([':id' => $delId]);
+        $beforeRow = $beforeDel->fetch(PDO::FETCH_ASSOC) ?: null;
+
         $stmt = $db->prepare("DELETE FROM occurrence_config_params WHERE config_id = :id");
         $stmt->execute([':id' => $delId]);
         $stmt = $db->prepare("DELETE FROM occurrence_configs WHERE id = :id");
         $stmt->execute([':id' => $delId]);
+        if ($beforeRow) {
+            audit_log('occurrence_config.delete', 'occurrence_config', $delId, $beforeRow, null);
+        }
         $message = 'Perfil excluído.';
         $messageType = 'success';
     }
