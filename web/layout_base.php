@@ -93,6 +93,10 @@ $navGroups = [
             ['route' => 'config-smtp',         'label' => 'Servidor de E-mail',  'href' => '/config-smtp'],
             // 'config-parametros' saiu daqui na v4.9.16 → menu Parâmetros (só admin).
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
+            // v4.15.0 — grantável por grupo (não admin_only): não guarda
+            // credencial de terceiro nem manda comando a equipamento, mesma
+            // razão que a mantém fora de $navBottom.
+            ['route' => 'auditoria',           'label' => 'Auditoria',           'href' => '/auditoria'],
         ],
     ],
 ];

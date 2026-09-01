@@ -64,6 +64,12 @@ $screens = [
     'firmwares'             => 'Firmware (só admin)',
     'usuarios'              => 'Usuários',
     'wiki'                  => 'Central de Ajuda',
+    // v4.15.0 — consulta de audit_log. Deliberadamente NÃO admin-only: é uma
+    // tela só-leitura, sem credencial de terceiro nem comando a equipamento
+    // (as duas razões que justificam require_admin() nas outras entradas
+    // acima), então grupos de "auditor" podem ganhar a permissão sem ganhar
+    // admin completo.
+    'auditoria'             => 'Auditoria',
 ];
 // NOTA (v4.8.5): `checklist` e `wiki` entraram aqui porque uma tela que o
 // router protege mas que a matriz não lista é uma tela IMPOSSÍVEL de liberar —

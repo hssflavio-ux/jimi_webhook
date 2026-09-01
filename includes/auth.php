@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/functions.php'; // fmt_brt() e helpers de data para todo o dashboard
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/audit.php'; // audit_log()/audit_log_denied() — v4.15.0
 
 define('AUTH_COOKIE', 'jimi_token');
 define('AUTH_LIFETIME', 86400);
@@ -155,6 +156,10 @@ function require_admin() {
     require_login();
     $user = get_jimi_user();
     if (isset($user['role']) && $user['role'] !== 'admin') {
+        // v4.15.0 — cobre as telas admin-only de uma vez, sem instrumentar
+        // cada handler: só roda no ramo que já ia bloquear mesmo (nenhum
+        // custo no caminho de quem tem acesso).
+        audit_log_denied(basename($_SERVER['SCRIPT_NAME'] ?? 'unknown', '.php'));
         http_response_code(403);
         die('Acesso restrito ao administrador.');
     }
@@ -265,6 +270,9 @@ function can($screen, $action = 'view') {
 function require_permission($screen, $action = 'view') {
     require_login();
     if (!can($screen, $action)) {
+        // v4.15.0 — mesma cobertura automática de require_admin(): é o outro
+        // ponto por onde passa todo bloqueio de acesso do sistema.
+        audit_log_denied($screen);
         http_response_code(403);
         echo '<h1>403 — Acesso negado</h1><p>Seu grupo de permissão não autoriza esta ação. Contate o administrador.</p>';
         exit;
@@ -559,6 +567,12 @@ function _log_login($db, $email, $ip, $ua, $success) {
 }
 
 function logout_user() {
+    // v4.15.0 — ANTES de limpar $_SESSION: audit_log() resolve o autor via
+    // get_jimi_user(), que depende de $_SESSION['user_id']. Registrar depois
+    // do DELETE/limpeza gravaria a saída como "ação de ninguém".
+    if (!empty($_SESSION['user_id'])) {
+        audit_log('session.logout', 'user', (int)$_SESSION['user_id']);
+    }
     if (isset($_COOKIE[AUTH_COOKIE])) {
         $token = $_COOKIE[AUTH_COOKIE];
         try {

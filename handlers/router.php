@@ -101,7 +101,12 @@ if (empty($segments)) {
     $simpleRoutes = ['login','logout','setup','dashboard','resumo','rastreamento','bi','comandos',
                      'exportar','ping','customer_switch','usuarios','perfil',
                      'chips','equipamentos','motoristas','geocercas','agendamentos','wiki','download',
-                     'midia','parametros','firmwares','manutencoes','painel'];
+                     'midia','parametros','firmwares','manutencoes','painel',
+                     // v4.15.0 — consulta de audit_log. Resolve o arquivo
+                     // (auditoria.php); a permissão em si entra em
+                     // $screenByHandler logo abaixo E em $screens
+                     // (grupos_permissao.php) — ver a nota lá.
+                     'auditoria'];
     $renamedRoutes = [
         'config-ocorrencias'  => 'config_ocorrencias.php',
         'config-notificacoes' => 'config_notificacoes.php',
@@ -351,6 +356,10 @@ $screenByHandler = [
     'configuracoes_ia.php'      => 'configuracoes-ia',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
+    // v4.15.0 — entra aqui E em `$screens` (grupos_permissao.php): só aqui =
+    // impossível de conceder; só lá = o `view` não é verificado por ninguém
+    // (mesmo par de erros já cometido seis vezes, listado no CLAUDE.md).
+    'auditoria.php'             => 'auditoria',
 ];
 if (isset($screenByHandler[$handler])) {
     require_once __DIR__ . '/../includes/auth.php';
