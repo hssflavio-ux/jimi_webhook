@@ -89,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action === 'delete') {
                 // O histórico sai por ON DELETE CASCADE
                 $db->prepare("DELETE FROM report_schedules WHERE id = :id")->execute([':id' => $id]);
+                audit_log('report_schedule.delete', 'report_schedule', $id, $row, null);
                 header('Location: /agendamentos?msg=excluido');
                 exit;
             }
@@ -98,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $next = $novo === 1 ? schedule_next_run($row) : null;
             $db->prepare("UPDATE report_schedules SET is_active = :a, fail_count = 0, next_run_at = :n WHERE id = :id")
                ->execute([':a' => $novo, ':n' => $next, ':id' => $id]);
+            audit_log('report_schedule.toggle', 'report_schedule', $id, ['is_active' => $row['is_active']], ['is_active' => $novo]);
             header('Location: /agendamentos?msg=' . ($novo === 1 ? 'ativado' : 'desativado'));
             exit;
         } catch (Throwable $e) {
@@ -164,7 +166,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
 
             if ($id > 0) {
-                if (!schedule_owned($db, $id, $customerId)) {
+                $beforeRow = schedule_owned($db, $id, $customerId);
+                if (!$beforeRow) {
                     throw new RuntimeException('Agendamento fora do seu escopo.');
                 }
                 // fail_count zera na edição: mexer na configuração é a resposta
@@ -177,6 +180,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         next_run_at = :next, fail_count = 0
                     WHERE id = :id")
                    ->execute($fields + [':id' => $id]);
+                audit_log('report_schedule.update', 'report_schedule', $id, $beforeRow,
+                    ['name' => $name, 'report_type' => $reportType, 'frequency' => $frequency, 'recipients' => $recipients, 'is_active' => $isActive]);
                 $flash = 'atualizado';
             } else {
                 $db->prepare("
@@ -190,6 +195,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        ':cid' => (int)$customerId,
                        ':uid' => $user['id'] ?? null,
                    ]);
+                audit_log('report_schedule.create', 'report_schedule', (int)$db->lastInsertId(), null,
+                    ['name' => $name, 'report_type' => $reportType, 'frequency' => $frequency, 'recipients' => $recipients, 'is_active' => $isActive]);
                 $flash = 'criado';
             }
 

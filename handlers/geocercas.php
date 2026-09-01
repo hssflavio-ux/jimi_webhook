@@ -87,14 +87,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_permission('geocercas', 'delete');
         $delId = (int)$_POST['id'];
         try {
-            $stmt = $db->prepare("SELECT customer_id FROM geofences WHERE id = :id");
+            $stmt = $db->prepare("SELECT customer_id, name, kind, shape, is_active FROM geofences WHERE id = :id");
             $stmt->execute([':id' => $delId]);
-            $ownerId = $stmt->fetchColumn();
+            $beforeRow = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if ($ownerId === false) {
+            if ($beforeRow === false) {
                 header('Location: /geocercas?msg=nao_encontrada');
                 exit;
             }
+            $ownerId = $beforeRow['customer_id'];
             if (!$isAdmin && (int)$ownerId !== (int)$customerId) {
                 header('Location: /geocercas?msg=fora_escopo');
                 exit;
@@ -102,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Vínculos, estado e eventos saem por ON DELETE CASCADE
             $db->prepare("DELETE FROM geofences WHERE id = :id")->execute([':id' => $delId]);
+            audit_log('geofence.delete', 'geofence', $delId, $beforeRow, null);
             header('Location: /geocercas?msg=excluida');
             exit;
         } catch (Throwable $e) {
@@ -192,14 +194,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':active'  => $isActive,
             ];
 
+            $beforeRow = null;
             if ($fenceId) {
                 // Escopo: usuário comum só edita cerca do próprio cliente
-                $own = $db->prepare("SELECT customer_id FROM geofences WHERE id = :id");
+                $own = $db->prepare("SELECT customer_id, name, kind, shape, alert_on, is_active FROM geofences WHERE id = :id");
                 $own->execute([':id' => $fenceId]);
-                $ownerId = $own->fetchColumn();
-                if ($ownerId === false) {
+                $beforeRow = $own->fetch(PDO::FETCH_ASSOC);
+                if ($beforeRow === false) {
                     throw new RuntimeException('Geocerca não encontrada.');
                 }
+                $ownerId = $beforeRow['customer_id'];
                 if (!$isAdmin && (int)$ownerId !== (int)$customerId) {
                     throw new RuntimeException('Geocerca fora do seu escopo.');
                 }
@@ -252,6 +256,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $db->commit();
+            // v4.15.0 — depois do commit, cobrindo os dois ramos (create/update)
+            // com a mesma chamada: o "depois" inclui os IMEIs vinculados, que só
+            // ficam definitivos após o INSERT IGNORE em geofence_devices acima.
+            audit_log(
+                $savedAction === 'criada' ? 'geofence.create' : 'geofence.update',
+                'geofence', $fenceId, $beforeRow,
+                ['name' => $name, 'kind' => $kind, 'shape' => $shape, 'alert_on' => $alertOn,
+                 'is_active' => $isActive, 'imeis' => $imeis]
+            );
             $messageType = 'success';
             if (!$imeis) {
                 $message .= ' Nenhum equipamento vinculado — a cerca não será avaliada até que você vincule ao menos um.';

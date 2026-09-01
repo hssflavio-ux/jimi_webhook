@@ -99,8 +99,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ((int)$stmt->fetchColumn() > 0) {
             $error = 'Não é possível excluir: há usuários vinculados a este grupo.';
         } else {
+            $beforeDel = $db->prepare("SELECT name, user_type, permissions FROM permission_groups WHERE id = ?");
+            $beforeDel->execute([$id]);
+            $beforeRow = $beforeDel->fetch(PDO::FETCH_ASSOC);
+
             $stmt = $db->prepare("DELETE FROM permission_groups WHERE id = ?");
             $stmt->execute([$id]);
+            if ($beforeRow && $stmt->rowCount() > 0) {
+                audit_log('permission_group.delete', 'permission_group', $id, $beforeRow, null);
+            }
             $success = 'Grupo de permissão removido.';
         }
     } elseif ($action === 'save') {
@@ -129,12 +136,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $permissionsJson = !empty($permissions) ? json_encode($permissions, JSON_UNESCAPED_UNICODE) : null;
 
                 if ($id > 0) {
+                    $beforeUpd = $db->prepare("SELECT name, user_type, permissions FROM permission_groups WHERE id = ?");
+                    $beforeUpd->execute([$id]);
+                    $beforeRow = $beforeUpd->fetch(PDO::FETCH_ASSOC);
+
                     $stmt = $db->prepare("UPDATE permission_groups SET name=?, user_type=?, permissions=? WHERE id=?");
                     $stmt->execute([$name, $user_type, $permissionsJson, $id]);
+                    if ($beforeRow) {
+                        audit_log('permission_group.update', 'permission_group', $id, $beforeRow,
+                            ['name' => $name, 'user_type' => $user_type, 'permissions' => $permissions]);
+                    }
                     $success = 'Grupo de permissão atualizado.';
                 } else {
                     $stmt = $db->prepare("INSERT INTO permission_groups (name, user_type, permissions) VALUES (?, ?, ?)");
                     $stmt->execute([$name, $user_type, $permissionsJson]);
+                    audit_log('permission_group.create', 'permission_group', (int)$db->lastInsertId(), null,
+                        ['name' => $name, 'user_type' => $user_type, 'permissions' => $permissions]);
                     $success = 'Grupo de permissão criado com sucesso.';
                 }
             } catch (PDOException $e) {

@@ -23,10 +23,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_permission('motoristas', $action === 'delete' ? 'delete' : ($id > 0 ? 'edit' : 'create'));
 
     if ($action === 'delete' && $id > 0) {
+        $beforeDel = $db->prepare("SELECT name, cnh_number, cnh_category, identifier, customer_id, is_active FROM drivers WHERE id = ?");
+        $beforeDel->execute([$id]);
+        $beforeRow = $beforeDel->fetch(PDO::FETCH_ASSOC);
+
         $stmt = $db->prepare("DELETE FROM drivers WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
         $params = [$id];
         if (!$is_admin) $params[] = $customer_id;
         $stmt->execute($params);
+        if ($beforeRow && $stmt->rowCount() > 0) {
+            audit_log('driver.delete', 'driver', $id, $beforeRow, null);
+        }
         $success = 'Motorista removido.';
     } elseif ($action === 'save') {
         $name           = trim($_POST['name'] ?? '');
@@ -49,15 +56,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 if ($id > 0) {
+                    $beforeUpd = $db->prepare("SELECT name, birth_date, cnh_number, cnh_category, cnh_expires_at, tox_exam_expires_at, identifier, is_active FROM drivers WHERE id = ?");
+                    $beforeUpd->execute([$id]);
+                    $beforeRow = $beforeUpd->fetch(PDO::FETCH_ASSOC);
+
                     $sql = "UPDATE drivers SET name=?, birth_date=?, cnh_number=?, cnh_category=?, cnh_expires_at=?, tox_exam_expires_at=?, identifier=?, is_active=? WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
                     $params = [$name, $birth_date, $cnh_number, $cnh_category, $cnh_expires, $tox_expires, $identifier, $active, $id];
                     if (!$is_admin) $params[] = $customer_id;
                     $stmt = $db->prepare($sql);
                     $stmt->execute($params);
+                    if ($beforeRow && $stmt->rowCount() > 0) {
+                        audit_log('driver.update', 'driver', $id, $beforeRow, [
+                            'name' => $name, 'birth_date' => $birth_date, 'cnh_number' => $cnh_number,
+                            'cnh_category' => $cnh_category, 'cnh_expires_at' => $cnh_expires,
+                            'tox_exam_expires_at' => $tox_expires, 'identifier' => $identifier, 'is_active' => $active,
+                        ]);
+                    }
                     $success = 'Motorista atualizado.';
                 } else {
                     $stmt = $db->prepare("INSERT INTO drivers (customer_id, name, birth_date, cnh_number, cnh_category, cnh_expires_at, tox_exam_expires_at, identifier, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
                     $stmt->execute([$owner_id, $name, $birth_date, $cnh_number, $cnh_category, $cnh_expires, $tox_expires, $identifier, $active]);
+                    audit_log('driver.create', 'driver', (int)$db->lastInsertId(), null, [
+                        'customer_id' => $owner_id, 'name' => $name, 'cnh_number' => $cnh_number,
+                        'cnh_category' => $cnh_category, 'is_active' => $active,
+                    ]);
                     $success = 'Motorista criado com sucesso.';
                 }
             } catch (PDOException $e) {

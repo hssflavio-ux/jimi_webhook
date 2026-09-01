@@ -22,10 +22,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_permission('chips', $action === 'delete' ? 'delete' : ($id > 0 ? 'edit' : 'create'));
 
     if ($action === 'delete' && $id > 0) {
+        // v4.15.0 — o "antes" é lido IMEDIATAMENTE antes do DELETE: depois a
+        // linha não existe mais para consultar.
+        $beforeDel = $db->prepare("SELECT carrier, msisdn, iccid, imei, customer_id, is_active FROM sim_cards WHERE id = ?");
+        $beforeDel->execute([$id]);
+        $beforeRow = $beforeDel->fetch(PDO::FETCH_ASSOC);
+
         $stmt = $db->prepare("DELETE FROM sim_cards WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
         $params = [$id];
         if (!$is_admin) $params[] = $customer_id;
         $stmt->execute($params);
+        // rowCount()>0 evita logar um DELETE "fantasma" quando o `AND
+        // customer_id=?` de escopo bloqueou silenciosamente a exclusão de um
+        // chip de outro cliente.
+        if ($beforeRow && $stmt->rowCount() > 0) {
+            audit_log('sim_card.delete', 'sim_card', $id, $beforeRow, null);
+        }
         $success = 'Chip removido.';
     } elseif ($action === 'save') {
         $carrier = trim($_POST['carrier'] ?? '');
@@ -60,18 +72,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 if ($id > 0) {
+                    $beforeUpd = $db->prepare("SELECT carrier, msisdn, iccid, is_active FROM sim_cards WHERE id = ?");
+                    $beforeUpd->execute([$id]);
+                    $beforeRow = $beforeUpd->fetch(PDO::FETCH_ASSOC);
+
                     // `imei` NUNCA entra no SET — preserva o vínculo como está.
                     $sql = "UPDATE sim_cards SET carrier=?, msisdn=?, iccid=?, is_active=? WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
                     $params = [$carrier, $msisdn, $iccid, $active, $id];
                     if (!$is_admin) $params[] = $customer_id;
                     $stmt = $db->prepare($sql);
                     $stmt->execute($params);
+                    if ($beforeRow && $stmt->rowCount() > 0) {
+                        audit_log('sim_card.update', 'sim_card', $id, $beforeRow,
+                            ['carrier' => $carrier, 'msisdn' => $msisdn, 'iccid' => $iccid, 'is_active' => $active]);
+                    }
                     $success = 'Chip atualizado.';
                 } else {
                     // Chip novo nasce sempre livre — vincular é ação do
                     // cadastro de equipamento, nunca deste formulário.
                     $stmt = $db->prepare("INSERT INTO sim_cards (customer_id, carrier, msisdn, iccid, is_active) VALUES (?, ?, ?, ?, ?)");
                     $stmt->execute([$owner_id, $carrier, $msisdn, $iccid, $active]);
+                    audit_log('sim_card.create', 'sim_card', (int)$db->lastInsertId(), null,
+                        ['customer_id' => $owner_id, 'carrier' => $carrier, 'msisdn' => $msisdn, 'iccid' => $iccid, 'is_active' => $active]);
                     $success = 'Chip criado com sucesso.';
                 }
             } catch (PDOException $e) {
