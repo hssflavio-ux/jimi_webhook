@@ -47,10 +47,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $escopo  = ($_POST['escopo'] ?? 'modelo') === 'cliente' ? $customerId : null;
             if ($nome === '' || !$modelId) throw new Exception('Informe nome e modelo.');
 
+            // Resolvido por SELECT dedicado, não por lastInsertId(): no ramo
+            // ON DUPLICATE KEY UPDATE (perfil já existia), lastInsertId()
+            // devolve 0, não o id da linha afetada.
+            $existia = $db->prepare("SELECT id FROM param_profiles WHERE device_model_id = :m AND (customer_id = :c OR (customer_id IS NULL AND :c IS NULL))");
+            $existia->execute([':m' => $modelId, ':c' => $escopo]);
+            $beforeId = $existia->fetchColumn();
+
             $st = $db->prepare("INSERT INTO param_profiles (name, device_model_id, customer_id)
                                 VALUES (:n, :m, :c)
                                 ON DUPLICATE KEY UPDATE name = VALUES(name), is_active = 1");
             $st->execute([':n' => $nome, ':m' => $modelId, ':c' => $escopo]);
+
+            $existia->execute([':m' => $modelId, ':c' => $escopo]);
+            $profileId = (int)$existia->fetchColumn();
+            audit_log($beforeId ? 'param_profile.update' : 'param_profile.create', 'param_profile', $profileId,
+                $beforeId ? ['id' => (int)$beforeId] : null, ['name' => $nome, 'device_model_id' => $modelId, 'customer_id' => $escopo]);
             $ok = 'Perfil salvo.';
 
         } elseif ($acao === 'salvar_valor') {
@@ -66,16 +78,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($cat[$no]['writable'])) {
                 throw new Exception("Parâmetro {$no} não é gravável — só entra em perfil o que o catálogo sabe nomear.");
             }
+            $beforeVal = $db->prepare("SELECT value FROM param_profile_values WHERE profile_id = :p AND param_no = :n AND channel = 0");
+            $beforeVal->execute([':p' => $pid, ':n' => $no]);
+            $beforeValue = $beforeVal->fetchColumn();
+
             $db->prepare("INSERT INTO param_profile_values (profile_id, param_no, channel, value)
                           VALUES (:p, :n, 0, :v)
                           ON DUPLICATE KEY UPDATE value = VALUES(value)")
                ->execute([':p' => $pid, ':n' => $no, ':v' => $val]);
+            audit_log('param_profile_value.set', 'param_profile', $pid,
+                $beforeValue !== false ? ['param_no' => $no, 'value' => $beforeValue] : null,
+                ['param_no' => $no, 'value' => $val]);
             $ok = 'Valor do perfil salvo.';
 
         } elseif ($acao === 'remover_valor') {
             require_permission('config-parametros', 'delete');
+            $pid = (int)$_POST['profile_id'];
+            $no  = (int)$_POST['param_no'];
+            $beforeVal = $db->prepare("SELECT value FROM param_profile_values WHERE profile_id = :p AND param_no = :n AND channel = 0");
+            $beforeVal->execute([':p' => $pid, ':n' => $no]);
+            $beforeValue = $beforeVal->fetchColumn();
+
             $db->prepare("DELETE FROM param_profile_values WHERE profile_id = :p AND param_no = :n")
-               ->execute([':p' => (int)$_POST['profile_id'], ':n' => (int)$_POST['param_no']]);
+               ->execute([':p' => $pid, ':n' => $no]);
+            if ($beforeValue !== false) {
+                audit_log('param_profile_value.remove', 'param_profile', $pid, ['param_no' => $no, 'value' => $beforeValue], null);
+            }
             $ok = 'Valor removido do perfil.';
         }
     } catch (Throwable $e) {

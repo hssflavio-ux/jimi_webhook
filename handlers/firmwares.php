@@ -91,7 +91,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!(int)$st->fetchColumn()) throw new Exception('Modelo inexistente.');
 
             $db->beginTransaction();
+            $beforeRow = null;
             if ($id > 0) {
+                $beforeSel = $db->prepare("SELECT device_model_id, version, url, notes, is_current FROM firmware_releases WHERE id = :id");
+                $beforeSel->execute([':id' => $id]);
+                $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
                 $db->prepare("UPDATE firmware_releases
                                  SET device_model_id = :m, version = :v, url = :u,
                                      notes = :n, is_current = :c
@@ -122,14 +127,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                    ->execute([':m' => $modelId, ':id' => $id]);
             }
             $db->commit();
+            audit_log($beforeRow ? 'firmware_release.update' : 'firmware_release.create', 'firmware_release', $id, $beforeRow,
+                ['device_model_id' => $modelId, 'version' => $versao, 'url' => $url, 'is_current' => $current]);
             $ok = 'Firmware cadastrado.';
 
         } elseif ($acao === 'remover_release') {
             $id = (int)($_POST['id'] ?? 0);
+            $beforeSel = $db->prepare("SELECT device_model_id, version, url, is_active, is_current FROM firmware_releases WHERE id = :id");
+            $beforeSel->execute([':id' => $id]);
+            $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
             // Baixa lógica: a URL pode estar citada num comando já despachado,
             // e apagar a linha faria o histórico perder a referência.
             $db->prepare("UPDATE firmware_releases SET is_active = 0, is_current = 0 WHERE id = :id")
                ->execute([':id' => $id]);
+            if ($beforeRow) {
+                audit_log('firmware_release.deactivate', 'firmware_release', $id, $beforeRow, ['is_active' => 0, 'is_current' => 0]);
+            }
             $ok = 'Firmware desativado.';
         }
     } catch (Throwable $e) {

@@ -98,7 +98,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             try {
+                $auditAfter = ['name' => $name, 'metric' => $metric, 'imei' => $imei, 'interval_km' => $intervalKm,
+                    'interval_hours' => $intervalHours, 'due_date' => $dueDate, 'is_active' => $isActive];
                 if ($id > 0) {
+                    $beforeSel = $db->prepare("SELECT name, metric, imei, interval_km, interval_hours, due_date, is_active FROM maintenance_reminders WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?'));
+                    $beforeParams = $is_admin ? [$id] : [$id, $customer_id];
+                    $beforeSel->execute($beforeParams);
+                    $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
                     $sql = "UPDATE maintenance_reminders SET
                                 name=?, metric=?, imei=?, driver_id=?, interval_km=?, interval_hours=?,
                                 due_date=?, notify_bell=?, notify_email=?, emails=?, is_active=?
@@ -107,6 +114,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                $dueDate, $notifyBell, $notifyEmail, $emailsJson, $isActive, $id];
                     if (!$is_admin) $params[] = $customer_id;
                     $db->prepare($sql)->execute($params);
+                    if ($beforeRow) {
+                        audit_log('maintenance_reminder.update', 'maintenance_reminder', $id, $beforeRow, $auditAfter);
+                    }
                     $success = 'Lembrete atualizado.';
                 } else {
                     $db->prepare("
@@ -118,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ")->execute([$owner_id, $imei, $driverId, $name, $metric, $intervalKm, $intervalHours,
                                   $dueDate, $lastDoneKm, $lastDoneHours, ($lastDoneKm !== null || $lastDoneHours !== null) ? gmdate('Y-m-d H:i:s') : null,
                                   $notifyBell, $notifyEmail, $emailsJson, $isActive, $_SESSION['user_id']]);
+                    audit_log('maintenance_reminder.create', 'maintenance_reminder', (int)$db->lastInsertId(), null, $auditAfter);
                     $success = 'Lembrete criado com sucesso.';
                 }
             } catch (PDOException $e) {
@@ -127,10 +138,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete_reminder') {
         $id = (int)($_POST['id'] ?? 0);
         require_permission('manutencoes', 'delete');
+        $beforeSel = $db->prepare("SELECT name, metric, imei, customer_id FROM maintenance_reminders WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?'));
+        $beforeParams = $is_admin ? [$id] : [$id, $customer_id];
+        $beforeSel->execute($beforeParams);
+        $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
         $sql = "DELETE FROM maintenance_reminders WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
         $params = [$id];
         if (!$is_admin) $params[] = $customer_id;
-        $db->prepare($sql)->execute($params);
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        if ($beforeRow && $stmt->rowCount() > 0) {
+            audit_log('maintenance_reminder.delete', 'maintenance_reminder', $id, $beforeRow, null);
+        }
         $success = 'Lembrete removido.';
     } elseif ($action === 'complete_reminder') {
         $id = (int)($_POST['id'] ?? 0);
@@ -163,6 +183,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->prepare("UPDATE maintenance_reminders SET is_active=0, last_done_at=? WHERE id=?")
                    ->execute([$nowUtc, $id]);
             }
+            audit_log('maintenance_reminder.complete', 'maintenance_reminder', $id,
+                ['last_done_at' => $reminder['last_done_at']], ['last_done_at' => $nowUtc, 'metric' => $reminder['metric']]);
             $success = 'Lembrete marcado como concluído.';
         }
     } elseif ($action === 'save_driver_reminders') {
@@ -170,10 +192,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         require_permission('manutencoes', 'edit');
         $remindCnh = !empty($_POST['remind_cnh']) ? 1 : 0;
         $remindTox = !empty($_POST['remind_tox']) ? 1 : 0;
+        $beforeSel = $db->prepare("SELECT remind_cnh, remind_tox FROM drivers WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?'));
+        $beforeSel->execute($is_admin ? [$driverId] : [$driverId, $customer_id]);
+        $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
+
         $sql = "UPDATE drivers SET remind_cnh=?, remind_tox=? WHERE id=?" . ($is_admin ? '' : ' AND customer_id=?');
         $params = [$remindCnh, $remindTox, $driverId];
         if (!$is_admin) $params[] = $customer_id;
-        $db->prepare($sql)->execute($params);
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        if ($beforeRow && $stmt->rowCount() > 0) {
+            audit_log('driver.reminder_prefs_update', 'driver', $driverId, $beforeRow, ['remind_cnh' => $remindCnh, 'remind_tox' => $remindTox]);
+        }
         $success = 'Preferência de lembrete atualizada.';
     }
 }

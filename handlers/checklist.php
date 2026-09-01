@@ -38,7 +38,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
     } else {
         try {
             $db->beginTransaction();
+            $isNew = !$cfgId;
+            $beforeRow = null;
             if ($cfgId) {
+                $beforeSel = $db->prepare("SELECT name, customer_id FROM checklist_configs WHERE id = ?");
+                $beforeSel->execute([$cfgId]);
+                $beforeRow = $beforeSel->fetch(PDO::FETCH_ASSOC) ?: null;
                 $stmt = $db->prepare("UPDATE checklist_configs SET name=?, customer_id=? WHERE id=?");
                 $stmt->execute([$name, $cust, $cfgId]);
             } else {
@@ -66,6 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') !== 'exclu
             }
 
             $db->commit();
+            audit_log($isNew ? 'checklist_config.create' : 'checklist_config.update', 'checklist_config', $cfgId,
+                $beforeRow, ['name' => $name, 'customer_id' => $cust, 'item_count' => count(array_filter($questions, fn($q) => trim($q) !== ''))]);
             $message = 'Checklist salvo.';
             $messageType = 'success';
         } catch (Exception $e) {
@@ -92,9 +99,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'exclu
     require_permission('checklist', 'delete');
     $delId = (int)$_POST['id'];
 
-    $stmt = $db->prepare("SELECT customer_id FROM checklist_configs WHERE id = ?");
+    $stmt = $db->prepare("SELECT customer_id, name FROM checklist_configs WHERE id = ?");
     $stmt->execute([$delId]);
-    $owner = $stmt->fetchColumn();
+    $beforeRow = $stmt->fetch(PDO::FETCH_ASSOC);
+    $owner = $beforeRow === false ? false : $beforeRow['customer_id'];
 
     // Escopo da exclusão (v4.8.5). `$isAdmin` inclui `user_type='revendedor'`,
     // e usar isso cru deixava um revendedor apagar o checklist de QUALQUER
@@ -120,6 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'exclu
         $stmt->execute([$delId]);
         $stmt = $db->prepare("DELETE FROM checklist_configs WHERE id = ?");
         $stmt->execute([$delId]);
+        audit_log('checklist_config.delete', 'checklist_config', $delId, $beforeRow, null);
         $message = 'Checklist excluído.';
         $messageType = 'success';
     }
