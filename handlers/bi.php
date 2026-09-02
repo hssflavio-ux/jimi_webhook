@@ -346,13 +346,20 @@ require_once __DIR__ . '/../web/layout_base.php';
         }
     });
 
-    // Risk Pie
-    <?php $pLabels=[]; $pVals=[]; $colors=['baixo'=>'#0052ff','medio'=>'#f4b000','alto'=>'#cf202f'];
-    foreach (($chartData['occ_by_risk'] ?? []) as $r) { $pLabels[]=occurrence_risk_label($r['risk']); $pVals[]=(int)$r['cnt']; } ?>
+    // Risk Pie — cor por VALOR do risco, não por posição: a consulta
+    // (occ_by_risk) não tem ORDER BY, então a ordem das fatias não é
+    // garantida e zipar contra um array fixo de cores pintava risco errado
+    // sempre que o MySQL devolvesse as linhas fora da ordem baixo/médio/alto.
+    <?php $pLabels=[]; $pVals=[]; $pColors=[]; $riskColors=['baixo'=>'#0052ff','medio'=>'#f4b000','alto'=>'#cf202f'];
+    foreach (($chartData['occ_by_risk'] ?? []) as $r) {
+        $pLabels[]=occurrence_risk_label($r['risk']);
+        $pVals[]=(int)$r['cnt'];
+        $pColors[]=$riskColors[$r['risk']] ?? '#5b616e';
+    } ?>
     new Chart(document.getElementById('chart-risk-pie'), {
         type: 'doughnut', data: {
             labels: <?= json_encode($pLabels) ?>,
-            datasets: [{ data: <?= json_encode($pVals) ?>, backgroundColor: ['#0052ff','#f4b000','#cf202f'] }]
+            datasets: [{ data: <?= json_encode($pVals) ?>, backgroundColor: <?= json_encode($pColors) ?> }]
         },
         options: { responsive: true, maintainAspectRatio: false,
             plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } }
