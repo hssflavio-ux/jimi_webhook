@@ -314,17 +314,21 @@ require_once __DIR__ . '/../web/layout_base.php';
             </div>
             <?php endif; ?>
 
-            <?php if (!empty($detailOcc['treatment_notes'])): ?>
+            <?php if (!empty($detailOcc['treated_by'])): ?>
+            <!-- Guarda por treated_by, não por treatment_notes: tratativa sem nota
+                 (campo deixado em branco de propósito) ainda é uma tratativa —
+                 esconder o bloco inteiro apagava também o "tratado em", a única
+                 pista de quem/quando resolveu ou descartou. -->
             <div class="mt-24">
                 <h4 style="font-size:13px;font-weight:600;color:var(--muted);">Histórico de Tratativa</h4>
                 <p style="font-size:13px;color:var(--body);margin-top:4px;background:var(--canvas-soft);padding:12px;border-radius:var(--radius-sm);">
-                    <?= nl2br(htmlspecialchars($detailOcc['treatment_notes'])) ?>
+                    <?= !empty($detailOcc['treatment_notes'])
+                        ? nl2br(htmlspecialchars($detailOcc['treatment_notes']))
+                        : '<span style="color:var(--muted);">Nenhuma nota registrada.</span>' ?>
                 </p>
-                <?php if (!empty($detailOcc['treated_by'])): ?>
                 <p style="font-size:11px;color:var(--muted);margin-top:4px;">
                     Tratado em <?= fmt_brt($detailOcc['treated_at'] ?? '') ?>
                 </p>
-                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
