@@ -14,6 +14,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/media.php';
+require_once __DIR__ . '/../includes/vehicle_icons.php';
+require_once __DIR__ . '/../web/components/map_assets.php';
 
 $page_title = 'Dashboard de Ocorrências';
 $current_route = 'ocorrencias';
@@ -59,7 +61,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['occurrence_id'])) {
     }
 }
 
-$extra_head = '<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>';
+$extra_head = '<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.30/dist/uPlot.iife.min.js"></script>' . BC_MAP_ASSETS_HTML . '
+<style>
+#occ-map{z-index:0;}
+.leaflet-div-icon.vehicle-pin-wrap{background:transparent;border:none;}
+.occ-vehicle-pin{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+                  border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
+</style>';
 
 // ── Detalhe de uma ocorrência específica ──────────────────────
 $detailOcc = null;
@@ -74,7 +82,8 @@ if (!empty($_GET['id'])) {
         // nenhum — aí o IMEI volta, como último recurso.
         $stmt = $db->prepare(
             "SELECT o.*, c.name as customer_name, d.name as driver_name,
-                    COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label
+                    COALESCE(NULLIF(dv.device_name, ''), o.imei) AS device_label,
+                    dv.vehicle_type
              FROM occurrences o
              LEFT JOIN customers c ON c.id = o.customer_id
              LEFT JOIN drivers d ON d.id = o.driver_id
@@ -192,6 +201,23 @@ if ($temTsNoDetalhe) {
     $extra_head .= '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>';
 }
 
+// ── Pontos do mapa (localização dos alarmes) ────────────────────
+// Um marcador por alarme com coordenada válida (0,0/NULL = sem fix de GPS
+// no momento do push) — a ocorrência pode agrupar vários alarmes, e cada
+// um vira o seu próprio balão no mapa, não só o ponto do mais recente.
+$occMapPoints = [];
+foreach ($detailEvents as $ev) {
+    $lat = (float)($ev['latitude'] ?? 0);
+    $lng = (float)($ev['longitude'] ?? 0);
+    if ($lat == 0.0 && $lng == 0.0) continue;
+    $occMapPoints[] = [
+        'lat'  => $lat,
+        'lng'  => $lng,
+        'name' => $ev['alarm_name'] ?? 'Alarme',
+        'time' => fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s'),
+    ];
+}
+
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
@@ -218,7 +244,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
-        <!-- Info -->
+        <!-- Info + Alarmes Agrupados + Tratativa (coluna estreita — o mapa fica na outra metade, abaixo dos vídeos) -->
         <div>
             <table style="font-size:13px;">
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Tipo:</td><td><?= htmlspecialchars($detailOcc['alarm_type']) ?></td></tr>
@@ -231,9 +257,79 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Alarmes agrupados:</td><td><?= (int)$detailOcc['alarm_count'] ?></td></tr>
                 <tr><td style="padding:4px 12px 4px 0;color:var(--muted);">Falso positivo:</td><td><?= $detailOcc['false_positive'] ? 'Sim' : 'Não' ?></td></tr>
             </table>
+
+            <!-- Eventos agrupados -->
+            <?php if (!empty($detailEvents)): ?>
+            <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:20px 0 8px;">Alarmes Agrupados</h3>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Alarme</th><th>Data/Hora</th><th>Vídeo</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($detailEvents as $ev): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>
+                        <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
+                        <td>
+                            <?php if ($ev['file_url']): ?>
+                            <a href="<?= htmlspecialchars(media_play_url($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
+                            <?php else: ?>
+                            <button type="button" class="badge" style="border:0;cursor:pointer;"
+                                    id="rv-row-<?= (int)$ev['alarm_id'] ?>"
+                                    onclick="pedirVideo(<?= (int)$ev['alarm_id'] ?>, 'rv-row-<?= (int)$ev['alarm_id'] ?>')"
+                                    title="Pede o vídeo deste alarme de novo à câmera.">
+                                &#8635; Pedir vídeo
+                            </button>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+
+            <!-- Ações de Tratativa -->
+            <?php if ($detailOcc['status'] !== 'resolvida' && $detailOcc['status'] !== 'descartada'): ?>
+            <div style="margin-top:16px;padding:14px;background:var(--canvas-soft);border-radius:var(--radius-md);">
+                <form method="POST" style="display:flex;flex-direction:column;gap:10px;">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="occurrence_id" value="<?= $detailOcc['id'] ?>">
+                    <div class="form-group" style="margin:0;">
+                        <label>Notas de Tratativa</label>
+                        <textarea name="treatment_notes" rows="2" placeholder="Descreva a tratativa..."><?= htmlspecialchars($detailOcc['treatment_notes'] ?? '') ?></textarea>
+                    </div>
+                    <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <input type="checkbox" name="false_positive" value="1" style="width:auto;"> Falso positivo
+                    </label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <?php if ($detailOcc['status'] === 'aguardando'): ?>
+                        <button type="submit" name="new_status" value="em_tratativa" class="btn btn-primary btn-sm">Iniciar Tratativa</button>
+                        <?php endif; ?>
+                        <?php if ($detailOcc['status'] === 'aguardando' || $detailOcc['status'] === 'em_tratativa'): ?>
+                        <button type="submit" name="new_status" value="resolvida" class="btn btn-success btn-sm">Resolver</button>
+                        <button type="submit" name="new_status" value="descartada" class="btn btn-outline btn-sm" style="color:var(--error);">Descartar</button>
+                        <?php endif; ?>
+                    </div>
+                </form>
+            </div>
+            <?php endif; ?>
+
+            <?php if (!empty($detailOcc['treatment_notes'])): ?>
+            <div class="mt-24">
+                <h4 style="font-size:13px;font-weight:600;color:var(--muted);">Histórico de Tratativa</h4>
+                <p style="font-size:13px;color:var(--body);margin-top:4px;background:var(--canvas-soft);padding:12px;border-radius:var(--radius-sm);">
+                    <?= nl2br(htmlspecialchars($detailOcc['treatment_notes'])) ?>
+                </p>
+                <?php if (!empty($detailOcc['treated_by'])): ?>
+                <p style="font-size:11px;color:var(--muted);margin-top:4px;">
+                    Tratado em <?= fmt_brt($detailOcc['treated_at'] ?? '') ?>
+                </p>
+                <?php endif; ?>
+            </div>
+            <?php endif; ?>
         </div>
 
-        <!-- Mídia -->
+        <!-- Mídia + Mapa -->
         <div>
             <?php if ($detailChannels): // ── Player duplo (26/08/2026) — ver §9.9 ── ?>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
@@ -306,79 +402,66 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
             </div>
             <?php endif; endif; ?>
+
+            <!-- Mapa — localização de CADA alarme agrupado, não só o mais recente -->
+            <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:20px 0 8px;">
+                Localização<?= count($occMapPoints) > 1 ? ' (' . count($occMapPoints) . ' alarmes)' : '' ?>
+            </h3>
+            <?php if ($occMapPoints): ?>
+            <div id="occ-map" style="height:280px;border-radius:var(--radius-md);border:1px solid var(--hairline);"></div>
+            <?php else: ?>
+            <div style="background:var(--canvas-soft);border-radius:var(--radius-md);padding:24px;text-align:center;color:var(--muted);font-size:12px;">
+                Sem coordenadas de GPS para os alarmes desta ocorrência
+            </div>
+            <?php endif; ?>
         </div>
     </div>
-
-    <!-- Eventos agrupados -->
-    <?php if (!empty($detailEvents)): ?>
-    <h3 style="font-size:14px;font-weight:600;color:var(--ink);margin:20px 0 10px;">Alarmes Agrupados</h3>
-    <div class="table-wrap">
-        <table>
-            <thead><tr><th>Alarme</th><th>Data/Hora</th><th>Vídeo</th></tr></thead>
-            <tbody>
-            <?php foreach ($detailEvents as $ev): ?>
-            <tr>
-                <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>
-                <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
-                <td>
-                    <?php if ($ev['file_url']): ?>
-                    <a href="<?= htmlspecialchars(media_play_url($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
-                    <?php else: ?>
-                    <button type="button" class="badge" style="border:0;cursor:pointer;"
-                            id="rv-row-<?= (int)$ev['alarm_id'] ?>"
-                            onclick="pedirVideo(<?= (int)$ev['alarm_id'] ?>, 'rv-row-<?= (int)$ev['alarm_id'] ?>')"
-                            title="Pede o vídeo deste alarme de novo à câmera.">
-                        &#8635; Pedir vídeo
-                    </button>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <?php endif; ?>
-
-    <!-- Ações de Tratativa -->
-    <?php if ($detailOcc['status'] !== 'resolvida' && $detailOcc['status'] !== 'descartada'): ?>
-    <div style="margin-top:20px;padding:16px;background:var(--canvas-soft);border-radius:var(--radius-md);">
-        <form method="POST" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
-            <?= csrf_field() ?>
-            <input type="hidden" name="occurrence_id" value="<?= $detailOcc['id'] ?>">
-            <div class="form-group" style="margin:0;flex:1;min-width:200px;">
-                <label>Notas de Tratativa</label>
-                <textarea name="treatment_notes" rows="2" placeholder="Descreva a tratativa..."><?= htmlspecialchars($detailOcc['treatment_notes'] ?? '') ?></textarea>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;padding-bottom:2px;">
-                <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
-                    <input type="checkbox" name="false_positive" value="1" style="width:auto;"> Falso positivo
-                </label>
-            </div>
-            <?php if ($detailOcc['status'] === 'aguardando'): ?>
-            <button type="submit" name="new_status" value="em_tratativa" class="btn btn-primary btn-sm">Iniciar Tratativa</button>
-            <?php endif; ?>
-            <?php if ($detailOcc['status'] === 'aguardando' || $detailOcc['status'] === 'em_tratativa'): ?>
-            <button type="submit" name="new_status" value="resolvida" class="btn btn-success btn-sm">Resolver</button>
-            <button type="submit" name="new_status" value="descartada" class="btn btn-outline btn-sm" style="color:var(--error);">Descartar</button>
-            <?php endif; ?>
-        </form>
-    </div>
-    <?php endif; ?>
-
-    <?php if (!empty($detailOcc['treatment_notes'])): ?>
-    <div class="mt-24">
-        <h4 style="font-size:13px;font-weight:600;color:var(--muted);">Histórico de Tratativa</h4>
-        <p style="font-size:13px;color:var(--body);margin-top:4px;background:var(--canvas-soft);padding:12px;border-radius:var(--radius-sm);">
-            <?= nl2br(htmlspecialchars($detailOcc['treatment_notes'])) ?>
-        </p>
-        <?php if (!empty($detailOcc['treated_by'])): ?>
-        <p style="font-size:11px;color:var(--muted);margin-top:4px;">
-            Tratado em <?= fmt_brt($detailOcc['treated_at'] ?? '') ?>
-        </p>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
 </div>
+
+<?php if ($occMapPoints): ?>
+<script>
+(function() {
+    var VEHICLE_ICONS = <?= json_encode(vehicle_icons_js_catalog(), JSON_UNESCAPED_SLASHES) ?>;
+    var OCC_POINTS = <?= json_encode($occMapPoints, JSON_UNESCAPED_UNICODE) ?>;
+    var OCC_VEHICLE_TYPE = <?= json_encode($detailOcc['vehicle_type'] ?? null) ?>;
+    var OCC_COLOR = <?= json_encode(['baixo' => '#0052ff', 'medio' => '#f4b000', 'alto' => '#cf202f'][$detailOcc['risk']] ?? '#5b616e') ?>;
+
+    // Ícone do veículo (Tabler Icons, ver includes/vehicle_icons.php) em branco
+    // sobre um círculo colorido pelo RISCO da ocorrência — mesmo padrão de
+    // /rastreamento, mas aqui a cor não muda por estado (não é ao vivo).
+    function vehicleIconHtml(type) {
+        var icon = VEHICLE_ICONS[type];
+        if (!icon) return '';
+        var attrs = icon.stroke
+            ? 'fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+            : 'fill="#fff"';
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" ' + attrs + '>' + icon.paths + '</svg>';
+    }
+
+    var pinIcon = L.divIcon({
+        className: 'vehicle-pin-wrap',
+        html: '<div class="occ-vehicle-pin" style="background:' + OCC_COLOR + '">' + vehicleIconHtml(OCC_VEHICLE_TYPE) + '</div>',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+        popupAnchor: [0, -13]
+    });
+
+    var map = L.map('occ-map');
+    bcMapBaseLayers(map);
+    var bounds = [];
+    var multi = OCC_POINTS.length > 1;
+    OCC_POINTS.forEach(function(p, i) {
+        bounds.push([p.lat, p.lng]);
+        var label = multi ? ('Alarme ' + (i + 1) + ' de ' + OCC_POINTS.length + '<br>') : '';
+        L.marker([p.lat, p.lng], {icon: pinIcon})
+            .addTo(map)
+            .bindPopup(label + '<b>' + p.name + '</b><br>' + p.time);
+    });
+    if (bounds.length === 1) { map.setView(bounds[0], 16); }
+    else { map.fitBounds(bounds, {padding: [24, 24]}); }
+})();
+</script>
+<?php endif; ?>
 
 <?php else: ?>
 <!-- ═══════════ DASHBOARD PRINCIPAL ═══════════ -->
