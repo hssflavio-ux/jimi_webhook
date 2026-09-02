@@ -203,9 +203,9 @@ require_once __DIR__ . '/../web/layout_base.php';
             <h2 style="font-size:18px;font-weight:600;color:var(--ink);">
                 Ocorrência #<?= $detailOcc['id'] ?>
                 <?php
-                require_once __DIR__ . '/../web/components/status_pill.php';
                 $status = $detailOcc['status'];
                 $type = 'status';
+                require_once __DIR__ . '/../web/components/status_pill.php';
                 ?>
             </h2>
             <p class="text-muted" style="font-size:12px;">
