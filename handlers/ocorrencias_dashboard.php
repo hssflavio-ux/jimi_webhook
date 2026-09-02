@@ -21,6 +21,16 @@ $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
 $user = get_jimi_user();
 
+// v4.15.x — "Fechar" tem de voltar pra quem abriu a tratativa, não sempre
+// pro dashboard geral: /relatorios/ocorrencias manda o próprio caminho (com
+// filtros/página) em ?return=. Whitelist por prefixo, nunca uma URL livre —
+// aceitar qualquer valor aqui seria open redirect (o link viaja por HTML
+// gerado a partir de $_GET, então precisa ser local e um destino conhecido).
+$returnUrl = $_GET['return'] ?? '';
+if (strpos($returnUrl, '/relatorios/ocorrencias') !== 0) {
+    $returnUrl = '/ocorrencias/dashboard';
+}
+
 // ── POST: Transição de status da tratativa ─────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['occurrence_id'])) {
     csrf_verify();
@@ -204,7 +214,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?= fmt_brt($detailOcc['last_alarm_at']) ?>
             </p>
         </div>
-        <a href="/ocorrencias/dashboard" class="btn btn-outline btn-sm">Fechar</a>
+        <a href="<?= htmlspecialchars($returnUrl) ?>" class="btn btn-outline btn-sm">Fechar</a>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">

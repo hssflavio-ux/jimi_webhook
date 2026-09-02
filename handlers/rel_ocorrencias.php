@@ -14,6 +14,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_login();
 
 require_once __DIR__ . '/../includes/report_templates.php';
+require_once __DIR__ . '/../includes/csrf.php';
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions('rel_ocorrencias', '/relatorios/ocorrencias');
 
@@ -23,6 +24,9 @@ $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+// Descarte em massa (v4.15.x): exclusivo do admin de PLATAFORMA — não do
+// revendedor, que $isAdmin acima também cobre. Mesmo teste de require_admin().
+$isSuperAdmin = ($user['role'] ?? '') === 'admin';
 
 $dateFrom  = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
 $dateTo    = $_GET['date_to'] ?? brt_today();
@@ -89,6 +93,41 @@ if ($filterBranch) {
 if ($filterDriver) {
     $where .= ' AND o.driver_id = :did';
     $params[':did'] = (int)$filterDriver;
+}
+
+// Descarte em massa: quantas ocorrências do filtro atual ainda podem ser
+// descartadas (exclui as já terminais, pra não sobrescrever tratativa feita).
+$discardEligibleCount = 0;
+if ($isSuperAdmin) {
+    try {
+        $deStmt = $db->prepare("SELECT COUNT(*) FROM occurrences o $where AND o.status NOT IN ('resolvida','descartada')");
+        $deStmt->execute($params);
+        $discardEligibleCount = (int)$deStmt->fetchColumn();
+    } catch (Exception $e) {}
+}
+
+// POST do descarte em massa. A query string carrega os MESMOS filtros que a
+// grade usa (o form aponta pra ?<filtros>&bulk_discard=1), então $where/
+// $params acima já refletem exatamente o conjunto a descartar — não há
+// parsing duplicado de filtro entre a leitura (GET) e a ação (POST).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_GET['bulk_discard'])) {
+    if (!$isSuperAdmin) {
+        http_response_code(403);
+        exit('Ação restrita ao administrador do sistema.');
+    }
+    csrf_verify();
+    $updStmt = $db->prepare(
+        "UPDATE occurrences o
+         SET o.status = 'descartada', o.treated_by = :uid, o.treated_at = NOW(),
+             o.treatment_notes = 'Descarte em massa (filtro do relatório de ocorrências)'
+         $where AND o.status NOT IN ('resolvida','descartada')"
+    );
+    $updStmt->execute(array_merge($params, [':uid' => $user['id'] ?? null]));
+    $backQ = $_GET;
+    unset($backQ['bulk_discard']);
+    $backQ['bulk_discarded'] = $updStmt->rowCount();
+    header('Location: /relatorios/ocorrencias?' . http_build_query($backQ));
+    exit;
 }
 
 // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
@@ -183,15 +222,30 @@ try {
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
+<?php $expQ = $_GET; unset($expQ['page'], $expQ['export'], $expQ['bulk_discarded']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Ocorrências</h2>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
+        <?php if ($isSuperAdmin): ?>
+        <form method="POST" action="?<?= $expBase ?>&bulk_discard=1" style="display:inline;"
+              onsubmit="return confirm('Descartar as <?= $discardEligibleCount ?> ocorrência(s) do filtro atual que ainda não foram resolvidas/descartadas? Esta ação não pode ser desfeita.');">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-outline btn-sm" style="color:var(--error);" <?= $discardEligibleCount === 0 ? 'disabled' : '' ?>>
+                Descartar Todos os Filtrados (<?= $discardEligibleCount ?>)
+            </button>
+        </form>
+        <?php endif; ?>
         <?php if (report_has_query()) echo report_back_button('/relatorios/ocorrencias'); ?>
     </div>
 </div>
+
+<?php if (isset($_GET['bulk_discarded'])): ?>
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--success);font-size:13px;color:var(--muted);">
+    <?= (int)$_GET['bulk_discarded'] ?> ocorrência(s) descartada(s) em massa.
+</div>
+<?php endif; ?>
 
 <?php render_template_bar('rel_ocorrencias', '/relatorios/ocorrencias'); ?>
 
@@ -324,7 +378,15 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= $r['false_positive'] ? '<span class="badge badge-warning">Sim</span>' : 'Não' ?></td>
                 <td><span class="badge <?= $statusBadges[$r['status']] ?? 'badge' ?>"><?= $statusLabels[$r['status']] ?? $r['status'] ?></span></td>
                 <td style="text-align:center;">
-                    <a href="/ocorrencias/dashboard?id=<?= $r['id'] ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Abrir</a>
+                    <?php
+                    // v4.15.x — leva a URL de volta pra este relatório (com os
+                    // MESMOS filtros/página) pro botão "Fechar" da tratativa
+                    // não jogar o usuário no dashboard geral. Ver
+                    // ocorrencias_dashboard.php ($returnUrl).
+                    $returnQ = $_GET; unset($returnQ['bulk_discarded']);
+                    $returnUrl = '/relatorios/ocorrencias' . ($returnQ ? '?' . http_build_query($returnQ) : '');
+                    ?>
+                    <a href="/ocorrencias/dashboard?id=<?= $r['id'] ?>&return=<?= urlencode($returnUrl) ?>" class="btn btn-outline btn-sm" style="padding:4px 10px;font-size:12px;">Abrir</a>
                 </td>
             </tr>
             <?php endforeach; endif; ?>
