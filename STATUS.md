@@ -1,4 +1,34 @@
-# STATUS.md — Jimi Webhook System v4.17.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.4 (YUV Parity)
+
+> ### 📍 v4.17.4 — Rastreamento: coluna unica e escolha do que vai ao mapa
+>
+> Pedido do dono do produto: *"mescle a selecao de cliente e selecao de
+> veiculos na mesma coluna, cliente acima; e coloque a opcao de escolhermos
+> o(s) veiculo(s) que queremos exibir no mapa ao vivo."*
+>
+> - **Uma coluna de navegacao (300 px)**: Cliente (`<select>`) em cima,
+>   Ativos embaixo. O mapa fica com a largura das duas antigas.
+> - **Caixa por ativo decide o pino no mapa**, mais Todos/Nenhum e contador
+>   `N de M no mapa`. Guardado por cliente em `localStorage` — guardamos os
+>   OCULTOS, para que veiculo novo nasca aparecendo.
+> - Ativo sem posicao nasce com a caixa desabilitada e o contador diz
+>   quantos sao (`5 de 5 no mapa · 22 sem posicao`).
+>
+> **🔴 Vazamento entre clientes achado no caminho:** `/rastreamento` aceitava
+> `?customer_id=` CRU, sem `report_customer_scope()`. Medido: operador do
+> cliente 2 abrindo `?customer_id=1` recebia os **28 veiculos do cliente 1 ao
+> vivo** (placa, posicao, velocidade, ignicao), e a coluna "Clientes" listava
+> o NOME de todos os clientes da base. O `?ajax=1`, que atualiza o mapa de 30
+> em 30 s, vazava igual. Depois: so os 21 ativos do proprio cliente, e o
+> seletor nem e desenhado para nao-admin.
+>
+> **🔴 O refresh de 30 s teria desfeito a selecao:** o ciclo fazia
+> `.addTo(map)` em marcador novo, entao o veiculo recem-desmarcado
+> reapareceria sozinho — com a caixa ainda desmarcada. Quem decide agora e
+> `aplicarVisibilidade()`.
+>
+> Verificado em Chromium real (15 assercoes) + Chrome do usuario; suite nova
+> `tests/rastreamento_selecao.spec.js` com 7 testes.
 
 > ### 📍 v4.17.3 — a regra de fuso, conferida em producao
 >

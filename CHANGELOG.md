@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.4
+
+**Pedido do dono do produto: "na tela de rastreamento mescle a seleção de cliente e seleção de veículos na mesma coluna, seleção de cliente acima da seleção de veículos, além disso, coloque a opção de escolhermos o(s) veículo(s) que queremos exibir no mapa ao vivo."**
+
+### Added
+- **Uma coluna só de navegação** (300 px) com **Cliente em cima** e **Ativos embaixo**, no lugar das duas colunas separadas de antes (Clientes 240 px + Ativos 260 px). O mapa ganha a largura das duas. O seletor de cliente virou um `<select>`, no mesmo molde dos quinze relatórios.
+- **Escolha de quais veículos aparecem no mapa ao vivo**: caixa de seleção por ativo, mais **Todos** / **Nenhum**, e um contador `N de M no mapa`.
+  - **A escolha é guardada por cliente** (`localStorage`), então sobrevive ao recarregar. Guardamos os **ocultos**, não os visíveis — assim veículo cadastrado depois nasce **aparecendo**; guardar os visíveis o deixaria invisível para sempre para quem já tivesse mexido no filtro.
+  - **Ativo sem posição conhecida nasce com a caixa desabilitada**, em vez de marcada e sem efeito, e o contador diz quantos são (`5 de 5 no mapa · 22 sem posição`) — "0 de 0" ao lado de 20 linhas manda o operador procurar um defeito que não existe.
+  - **`Nenhum` com a busca preenchida só mexe no que está filtrado.** Esvaziar a frota inteira enquanto a tela mostra uma linha seria uma armadilha silenciosa.
+  - **Clicar num ativo oculto o reexibe** — pedir para ver e não ver nada seria um clique que não faz nada, sem dizer por quê.
+
+### Fixed — vazamento entre clientes na mesma tela
+- 🔴 **`/rastreamento` aceitava `?customer_id=` CRU, sem `report_customer_scope()`.** Medido antes da correção: um operador do cliente 2 (`user_type='cliente'`, `role='operator'`) abrindo `/rastreamento?customer_id=1` recebia os **28 veículos do cliente 1 ao vivo no mapa** — placa, posição, velocidade e ignição — e a antiga coluna "Clientes" ainda listava o **nome de todos os clientes da base** para ele, porque `report_customer_options()` devolve tudo para quem não é revendedor. O endpoint de polling (`?ajax=1`), que é o que atualiza o mapa de 30 em 30 s, vazava igual. Depois: o mesmo pedido devolve só os 21 ativos do cliente 2, e o seletor de cliente nem é desenhado para não-admin.
+- 🔴 **O auto-refresh de 30 s teria desfeito a seleção.** O ciclo faz `.addTo(map)` em marcador novo; com a seleção existindo, o veículo recém-desmarcado reapareceria sozinho meio minuto depois — e com a caixa ainda desmarcada, ou seja, a tela se contradizendo sem ninguém ter tocado nela. Quem decide agora é `aplicarVisibilidade()`, e o marcador novo entra desligado do mapa.
+- ⚠️ **`.btn` é `inline-flex` com `align-items` e sem `justify-content`**: esticado por `flex:1`, o rótulo encosta na esquerda e o botão passa a parecer campo de texto. Corrigido nos dois botões novos (não no `.btn` global, que serve o produto inteiro).
+
+### Verificado em navegador real
+- 15 asserções num Chromium dirigido por Playwright, mais conferência manual no Chrome do usuário: duas colunas (`300px 1fr`), `#customer-list` inexistente, ordem Cliente→Ativos, `<select>` de cliente, todo ativo com posição vira pino, desmarcar tira / remarcar traz, `Nenhum` zera e `Todos` repõe, a escolha sobrevive ao reload, **o refresh não reexibe o desmarcado** (o marcador é recriado, porém oculto), clicar num oculto o reexibe, e `Nenhum` sob busca move só a linha filtrada (5 → 4, não 5 → 0). Zero erros de JS no console.
+- Suíte nova `tests/rastreamento_selecao.spec.js` — 7 testes, incluindo o do auto-refresh.
+
 ## [Unreleased] — 4.17.3
 
 **Pergunta do dono do produto: "ficou confusa a questão da hora gmt ou não, sempre temos que tratar a hora local, gmt-3, tanto para a exibição do snapshot da hora quanto para fazer a análise dos dados vindos dos equipamentos, que não são gmt-3, certo?"**
