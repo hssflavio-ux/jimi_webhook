@@ -1,4 +1,48 @@
-# STATUS.md — Jimi Webhook System v4.16.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.0 (YUV Parity)
+
+> ### 📍 v4.17.0 — catálogo de alarmes JIMI COMPLETO: 95 → 197 códigos
+>
+> Pedido do dono do produto na sequência da análise do VL01. Depois desta
+> migração **nenhum código publicado pela fabricante cai mais como
+> `Código NNNN (JIMI)`** nos relatórios — 197 é o total da Alarm Reference
+> oficial.
+>
+> - `alarm_name_en` é a descrição **oficial copiada literalmente**; `category`
+>   vem das **9 subseções em que a própria Jimi agrupa os alarmes**. Só o
+>   `alarm_name_pt` é meu.
+> - **30 dos 102 entram como `is_diagnostic = 1`** (bateria interna, cartão SD,
+>   erro de chip, MAC de Bluetooth, uso de dados): é o que o equipamento diz ao
+>   SISTEMA. Sem isso, cadastrar 102 códigos afogaria a tela em ruído.
+>
+> #### 🔴 A colisão JIMI × JT/T, que era o cuidado pedido
+>
+> O espaço JIMI vai até **262**; o nosso JT/T começa em **256**. Eles se cruzam
+> e há **um** caso real:
+>
+> | | JIMI (msgClass=0) | JT/T (msgClass=1) |
+> |---|---|---|
+> | **262** | Fim de Movimento | Comportamento de Condução Irregular |
+>
+> **Não é duplicidade e não se apaga**: a chave é `(alarm_code, protocol)` e
+> `alarm_label_sql()` desempata pelo `msg_class` gravado na chegada. O que
+> precisava de cuidado era o NOME — o filtro dos relatórios casa por
+> `alarm_name_pt`. Travado em `diagnostico_guard.test.php`, que também exige
+> que **só o 262** exista nos dois protocolos.
+>
+> #### Ocorrência e notificação: 98 dos 102 não mudam nada
+>
+> Notificação nasce de OCORRÊNCIA, e ocorrência exige parâmetro casado por
+> NOME. 98 nomes são novos → sem ocorrência, sem sino. Os **4 restantes**
+> (`90`, `106`, `135`, `183`) herdam o parâmetro do irmão porque compartilham
+> o nome — e isso é o certo: se o capotamento pelo código 45 abre ocorrência, o
+> mesmo capotamento pelo 106 tem de abrir também.
+>
+> #### ✅ Registros sem dono: DECIDIDO, é o comportamento certo
+>
+> Ver o bloco de 03/09 abaixo. A proposta de gravar `devices.customer_id` na
+> ausência de instalação está **arquivada** e marcada como "não implemente" no
+> CLAUDE.md.
+
 
 > ### 📍 ESTADO EM 03/09/2026 — o primeiro JM-VL01 real está no ar e foi analisado; a v4.16.0 JÁ ESTÁ EM PRODUÇÃO
 >
@@ -35,7 +79,25 @@
 > desnormalizado), e **prova antes de renomear** que nenhuma
 > `occurrence_config_params`/`notification_rules` casa pelos nomes antigos.
 >
-> #### 🔴 ACHADO GRANDE, PRÉ-EXISTENTE E NÃO CORRIGIDO: 28% dos alarmes estão INVISÍVEIS
+> #### ✅ DECIDIDO EM 03/09/2026: os "órfãos" são o comportamento CERTO — não mexer
+>
+> **Decisão do dono do produto, textual:** *"somente devemos ter registros
+> legíveis no sistema depois de completo o processo de cadastramento no
+> sistema, chip–equipamento–veículo; aí sim, as posições estão completas com
+> seus respectivos donos."*
+>
+> Ou seja: linha sem `customer_id` **não é dado perdido, é dado ainda não
+> cadastrado**. O snapshot NULL antes da instalação é o que impede que posição
+> de um equipamento em bancada, em teste ou em estoque entre na operação de um
+> cliente. **A proposta de gravar `devices.customer_id` como dono de recurso
+> fica ARQUIVADA** — implementá-la faria o oposto do que o produto quer.
+>
+> ⚠️ Quem for mexer nisso depois: o número abaixo é a MEDIDA do comportamento
+> esperado, não o tamanho de um bug. E o "sintoma" de relatório vazio tem
+> resposta de suporte, não de código: **complete o cadastro chip → equipamento →
+> veículo**, e daí em diante os registros nascem com dono.
+>
+> #### 📏 A medida do que fica fora até o cadastro terminar (30 dias, produção)
 >
 > Medido em produção, últimos 30 dias:
 >
@@ -52,20 +114,11 @@
 > cliente filtra por `customer_id`, então a linha existe no banco e **não
 > aparece em lugar nenhum**.
 >
-> É o design funcionando como especificado, mas ninguém tinha visto o tamanho:
-> um JC371 (`865478070649936`) tem **1.694 posições, TODAS órfãs**, de 12 a
-> 20/08. E o próprio VL01 perdeu **116 das 122 posições e os DOIS alarmes**,
-> porque transmitiu das 23:18 até 01:29 antes de ser instalado no veículo.
->
-> ⚠️ **Sintoma que o operador vai relatar:** "cadastrei o equipamento, ele está
-> mandando posição, e o relatório está vazio."
->
-> **Proposta (NÃO implementada — muda a semântica da Fase 2 e é decisão de
-> produto):** quando não houver instalação aberta, gravar ao menos
-> `devices.customer_id` como dono e deixar `vehicle_id` NULL. Isso **não**
-> reabre o bug que a Fase 2 fechou — aquele era LER o dono atual numa consulta
-> histórica; aqui é gravar, no momento do evento, o único dono conhecido
-> naquele momento. Some um backfill para o passado.
+Exemplos: um JC371 (`865478070649936`) tem **1.694 posições sem dono**, de 12 a
+> 20/08 — equipamento transmitindo sem estar instalado em veículo nenhum. E o
+> VL01 tem **116 das 122 posições e os DOIS alarmes** assim, porque transmitiu
+> das 23:18 até 01:29, antes de ser instalado. Nos dois casos o dado passa a
+> nascer completo assim que o cadastro é fechado — que é o desenho.
 >
 > #### Menor, e já existente
 > Alarme com `latitude/longitude = 0,0` (o `255` veio assim, sem fix de GPS).

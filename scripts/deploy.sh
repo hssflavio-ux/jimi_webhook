@@ -458,6 +458,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.15.0" "mysql/migration_v4.15.0.sql" "audit_log — auditoria de acoes de usuario / seguranca operacional"
     run_migration "4.16.0" "mysql/migration_v4.16.0.sql" "JM-VL01/JM-VL02 (rastreadores) + device_models.family + alarmes da linha VL"
     run_migration "4.16.1" "mysql/migration_v4.16.1.sql" "alarmes 254/50 corrigidos contra a Alarm Reference oficial (medido no 1o JM-VL01 real)"
+    run_migration "4.17.0" "mysql/migration_v4.17.0.sql" "cadastro COMPLETO dos alarmes JIMI: 95 -> 197 codigos (Alarm Reference oficial)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

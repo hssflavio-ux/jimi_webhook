@@ -73,5 +73,44 @@ if (!$temColuna) {
     exit(2);
 }
 
-echo $falhas ? "\n$falhas falha(s)\n" : "\nTodos os " . count($casos) . " casos passaram\n";
+// ── v4.17.0: a colisão de NÚMERO entre JIMI e JT/T ─────────────────────────
+//
+// 🔴 O espaço de códigos JIMI vai até 262 e o JT/T do catálogo começa em 256:
+// eles se cruzam. Depois do cadastro completo há um caso real —
+//   JIMI 262 = Fim de Movimento
+//   JT/T 262 = Comportamento de Condução Irregular
+// As duas linhas convivem porque a chave é (alarm_code, protocol) e quem
+// desempata na leitura é o `msg_class` gravado na chegada. Este teste existe
+// porque a próxima pessoa que olhar a tabela vai ver "262 duplicado" e sentir
+// vontade de apagar um — e o sintoma de apagar seria o alarme de um protocolo
+// aparecer com o nome do outro, sem erro nenhum.
+echo "\n── Colisão de número JIMI x JT/T (v4.17.0) ──\n";
+$colisao = [
+    // [código, msg_class, nome esperado]
+    ['262', 0, 'Fim de Movimento'],
+    ['262', 1, 'Comportamento de Condução Irregular'],
+];
+$stmt = $db->prepare("SELECT alarm_name_pt FROM alarm_types
+                       WHERE alarm_code = :c AND protocol = IF(:m = 1, 'JTT', 'JIMI')");
+foreach ($colisao as [$cod, $mc, $esperado]) {
+    $stmt->execute([':c' => $cod, ':m' => $mc]);
+    $obtido = $stmt->fetchColumn();
+    $ok = ($obtido === $esperado);
+    if (!$ok) $falhas++;
+    printf("  %s %-50s esperado=%-38s obtido=%s\n", $ok ? 'OK ' : 'FALHA',
+           "código $cod com msg_class=$mc", $esperado, var_export($obtido, true));
+}
+
+// E o inverso: nenhum OUTRO número pode ter caído em cima do JT/T sem que
+// alguém tenha pensado nisso. A lista é o retrato de hoje; crescer sem revisão
+// é o que se quer pegar.
+$dupl = $db->query("SELECT alarm_code FROM alarm_types GROUP BY alarm_code
+                     HAVING COUNT(DISTINCT protocol) > 1 ORDER BY CAST(alarm_code AS UNSIGNED)")
+           ->fetchAll(PDO::FETCH_COLUMN);
+$ok = ($dupl === ['262']);
+if (!$ok) $falhas++;
+printf("  %s %-50s esperado=%-38s obtido=%s\n", $ok ? 'OK ' : 'FALHA',
+       '🔴 só o 262 existe nos dois protocolos', "['262']", '[' . implode(',', $dupl) . ']');
+
+echo $falhas ? "\n$falhas falha(s)\n" : "\nTodos os " . (count($casos) + count($colisao) + 1) . " casos passaram\n";
 exit($falhas ? 1 : 0);

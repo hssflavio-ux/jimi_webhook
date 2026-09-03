@@ -5,6 +5,35 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.0
+
+**Pedido do dono do produto: "precisamos cadastrá-los completamente e corretamente no nosso banco para termos a informação certa nos relatórios, e esteja atento se algum código de número semelhante trabalhe também com JT/T, para não termos confusão futura."**
+
+### Added
+- **`mysql/migration_v4.17.0.sql` — o catálogo JIMI vai de 95 para 197 códigos**, que é o total da Alarm Reference oficial. Depois desta migração **nenhum código publicado pela fabricante cai mais como `Código NNNN (JIMI)`** nos relatórios.
+  - `alarm_name_en` é a descrição **oficial copiada literalmente** — não uma tradução minha de volta ao inglês.
+  - `category` vem das **9 subseções em que a própria Jimi agrupa os alarmes** (GNSS / Device status / Vehicle status / Personal safety / Vehicle safety / Peripheral / Driving behavior / Algorithm / Other), mapeadas para as categorias que já existiam. Só o `alarm_name_pt` é meu.
+  - **30 entram como `is_diagnostic = 1`** — carga de bateria interna, cartão SD, erro de chip, MAC de Bluetooth, uso de dados. É o que o equipamento diz ao SISTEMA, não ao operador. Sem isso, cadastrar 102 códigos afogaria a tela de alarmes em ruído de infraestrutura, que é o oposto de "informação certa nos relatórios".
+
+### Changed — a confusão JIMI × JT/T que você pediu para vigiar
+- 🔴 **O espaço JIMI vai até 262 e o nosso JT/T começa em 256: eles se cruzam, e há UM caso real.** `262` é **`Fim de Movimento`** em JIMI e **`Comportamento de Condução Irregular`** em JT/T. **Não é duplicidade e não deve ser "consertado"**: a chave é `(alarm_code, protocol)` e `alarm_label_sql()` desempata por `msg_class`, gravado na chegada. O cuidado necessário era o **nome** — o filtro dos relatórios casa por `alarm_name_pt`, e dois rótulos parecidos no mesmo número fariam o operador marcar um e achar que perdeu eventos. Os dois nomes não se confundem.
+- **Travado em `tests/helpers/diagnostico_guard.test.php`**: o `262` resolve para o nome certo em cada `msg_class`, e **só o `262`** pode existir nos dois protocolos — número novo caindo nessa faixa passa a ser decidido, não descoberto depois.
+- **Nomes repetidos de propósito**: a fabricante publica o mesmo evento em mais de um código, e o filtro casa por nome. `Capotamento` = 45 + 106 + 183; `Excesso de Velocidade` = 6 + 135; `Porta Aberta`/`Porta Fechada` = 28/29 + 80/81; `Cinto Afivelado` = 166 + 131; `Impacto Violento Detectado` = 101 + 55; `Dispositivo Arrancado` = 50 + 191. Nomes diferentes partiriam o evento em dois chips.
+- 🔑 **`182 = Reboque do Veículo`** é o alarme de reboque de verdade — e só foi possível cadastrá-lo com esse nome porque a v4.16.1 tirou "Alerta de Reboque" do `50`. Tivesse ficado, haveria dois "reboque" diferentes na lista.
+
+### Efeito em ocorrência e notificação — 98 dos 102 não mudam nada
+- `notify_from_occurrence()` só é chamado por `occurrence_engine.php`, que retorna cedo quando não há parâmetro casado por **nome**. Para 98 códigos o nome é novo → sem ocorrência, sem sino: o alarme só passa a ter **nome** nos relatórios.
+- 🔴 **Os outros 4 herdam o parâmetro do irmão porque compartilham o nome** — `106`/`183` (Capotamento, do `45`), `135` (Excesso de Velocidade, do `6`) e `90` (Tensão Externa Baixa, do `14`). É o comportamento **certo**, não um efeito colateral: se o capotamento pelo código 45 abre ocorrência, o mesmo capotamento anunciado pelo 106 tem de abrir também — hoje não abre porque cai como "Código 106" e o motor não o reconhece. A conferência da migração lista exatamente esses 4; linha a mais significa colisão acidental de nome.
+
+### Decidido — os registros sem dono são o comportamento CERTO
+- ✅ **Decisão do dono do produto:** *"somente devemos ter registros legíveis no sistema depois de completo o processo de cadastramento, chip–equipamento–veículo; aí sim, as posições estão completas com seus respectivos donos."* Linha sem `customer_id` **não é dado perdido, é dado ainda não cadastrado** — é o que impede posição de bancada, teste ou estoque de entrar na operação de um cliente. Os 28% de alarmes e 9% de posições medidos na v4.16.1 são a **medida do comportamento esperado**, não o tamanho de um bug. A proposta de gravar `devices.customer_id` na ausência de instalação fica **arquivada**, e está registrada no CLAUDE.md como "não implemente".
+
+### Verificação
+- Validação mecânica antes de gerar o SQL: todos os 102 estão na Alarm Reference oficial, **nenhum já existia**, categoria e severidade dentro do que a tabela aceita, e **nenhum código oficial ficou de fora** (a checagem falha se sobrar).
+- Migração aplicada **duas vezes** contra MySQL real: idempotente, 197 códigos JIMI, 32 diagnósticos.
+- `diagnostico_guard.test.php`: **17/17** (era 14 — 3 casos novos da colisão).
+- ⚠️ O recorte da doc é **por seção**, não por varredura do documento: um parser ingênuo engole as tabelas de **bits de status** (`0: ACC OFF 1: ACC ON`) e "descobre" que o alarme 2 significa "0: North latitude". A primeira tentativa fez exatamente isso.
+
 ## [Unreleased] — 4.16.1
 
 **Primeiro JM-VL01 real em produção (`868982050616424`), analisado em 03/09/2026. O equipamento funciona ponta a ponta — e a análise achou dois nomes de alarme errados, um deles introduzido pela v4.16.0.**
