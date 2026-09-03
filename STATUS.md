@@ -1,4 +1,39 @@
-# STATUS.md — Jimi Webhook System v4.17.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.2 (YUV Parity)
+
+> ### 📍 v4.17.2 — o contador On/Off tinha quatro respostas diferentes
+>
+> Pergunta do dono do produto: *"qual e o parametro para o on e off no alto
+> direito da tela e do quadro de conectividade? nao parece ser o status atual
+> da frota."*
+>
+> **O parametro:** `devices.last_communication` a **5 min ou menos** de
+> `NOW()` (UTC), entre os `is_active = 1` do cliente da sessao. Nao tem
+> relacao com ignicao nem movimento — e recencia de comunicacao.
+> ⚠️ Convivem DOIS "online" de proposito: as telas de operacao (`/comandos`,
+> `/firmwares`, `/video-aovivo`, Status da Frota) usam 30 min
+> (`OFFLINE_GAP_SECONDS`) porque respondem "da pra mandar comando agora?".
+>
+> **O que estava errado**, medido em producao no mesmo instante:
+> - contador do topo + card Conectividade: **On 8 / Off 2**;
+>   KPI de `/ocorrencias` + selos de `/equipamentos`: **On 8 / Off 7**.
+>   Os 5 de diferenca eram os equipamentos DESATIVADOS — tres dos cinco
+>   pontos que faziam a conta nao filtravam `is_active`.
+> - 🔴 `last_communication` NULL sumia das DUAS colunas (`TIMESTAMPDIFF` de
+>   NULL nao e `<=5` nem `>5`). No banco de dev isso escondia **22 de 27**
+>   ativos: o contador dizia `On 0 / Off 5`.
+> - 🔴 `// or on-the-fly if stale` NUNCA conferia idade: o gatilho era "os
+>   quatro sao zero". Cron parado = numero congelado sob o rotulo "Tempo
+>   real", para sempre, sem erro. Agora vence em 15 min.
+> - ⚠️ `$customerId ?? 1` no fallback de ocorrencias do Resumo.
+>
+> **Ponto unico:** `device_connectivity_counts()` e `metrics_snapshot_stale()`
+> em `includes/fleet_state.php`, consumidos pelo cron, Resumo, `/painel` e
+> `/ocorrenciasdata`. Invariante garantida: **On + Off = ativos**.
+>
+> 📝 Corrigido comentario FALSO em `device_last_seen_sql()` ("nao ha trigger
+> no banco; conferido"): ha **quatro stored procedures** que gravam
+> `last_communication`. Conferido: a coluna e o `GREATEST` deram o mesmo
+> minuto em 10 de 10 equipamentos ativos de producao.
 
 > ### 📍 v4.17.1 — os três relatórios sem seleção de cliente
 >

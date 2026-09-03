@@ -11,6 +11,7 @@
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // device_connectivity_counts()
 
 if (!auth_init()) {
     echo json_encode(['code' => 401, 'message' => 'Não autenticado']);
@@ -90,17 +91,12 @@ try {
     $kpiStmt->execute($params);
     $kpis = $kpiStmt->fetch();
 
-    // Devices
-    $devStmt = $db->prepare("
-        SELECT
-            COUNT(*) as total,
-            SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
-            SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
-        FROM devices d2 WHERE 1=1 " . ($customerId ? 'AND d2.customer_id = :cid2' : '')
-    );
-    $devParams = $customerId ? [':cid2' => $customerId] : [];
-    $devStmt->execute($devParams);
-    $devices = $devStmt->fetch();
+    // Devices — ponto único (`device_connectivity_counts()`).
+    // 🔴 A cópia que morava aqui não filtrava `is_active`, então esta tela
+    // somava os equipamentos DESATIVADOS em "Off" e contradizia o contador do
+    // topo no mesmo instante: medido em produção 03/09/2026, On 8/Off 2 no
+    // cabeçalho contra On 8/Off 7 aqui, com 5 equipamentos desativados.
+    $devices = device_connectivity_counts($db, $customerId ? (int)$customerId : null);
 
     $total = (int)($kpis['total'] ?? 0);
     $riskLow  = $total > 0 ? round((int)($kpis['risco_baixo'] ?? 0) / $total * 100) : 0;
@@ -168,7 +164,10 @@ try {
                 'em_tratativa' => (int)($kpis['em_tratativa'] ?? 0), 'resolvida' => (int)($kpis['resolvida'] ?? 0),
                 'descartada' => (int)($kpis['descartada'] ?? 0),
             ],
-            'devices' => ['online' => (int)($devices['online'] ?? 0), 'offline' => (int)($devices['offline'] ?? 0), 'total' => (int)($devices['total'] ?? 0)],
+            // `active` e o denominador de online+offline (os dois so contam
+            // is_active=1); `total` continua sendo a frota cadastrada inteira.
+            'devices' => ['online' => (int)($devices['online'] ?? 0), 'offline' => (int)($devices['offline'] ?? 0),
+                          'active' => (int)($devices['active'] ?? 0), 'total' => (int)($devices['total'] ?? 0)],
             'risk_distribution' => ['baixo' => $riskLow, 'medio' => $riskMed, 'alto' => $riskHigh],
             'rows' => $data, 'page' => $page, 'total_pages' => $totalPages, 'total_rows' => $totalRows,
         ],
@@ -181,7 +180,7 @@ try {
         'code' => 0,
         'data' => [
             'kpis' => ['total' => 0, 'aguardando' => 0, 'em_tratativa' => 0, 'resolvida' => 0, 'descartada' => 0],
-            'devices' => ['online' => 0, 'offline' => 0, 'total' => 0],
+            'devices' => ['online' => 0, 'offline' => 0, 'active' => 0, 'total' => 0],
             'risk_distribution' => ['baixo' => 0, 'medio' => 0, 'alto' => 0],
             'rows' => [], 'page' => 1, 'total_pages' => 1, 'total_rows' => 0,
         ],

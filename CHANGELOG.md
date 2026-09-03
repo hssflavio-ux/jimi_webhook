@@ -5,6 +5,29 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.2
+
+**Pergunta do dono do produto: "qual é o parâmetro para o on e off no alto direito da tela e do quadro de conectividade? não parece ser o status atual da frota, verifique."**
+
+### O parâmetro
+- **On** = `devices.last_communication` a **5 minutos ou menos** de `NOW()` (UTC), entre os equipamentos com `is_active = 1` do cliente da sessão. **Off** = o resto desse mesmo universo. Não tem relação com ignição, movimento ou estado do veículo: é **recência de comunicação**, e só.
+- ⚠️ **Convivem DOIS "online" no produto, de propósito.** As telas de operação (`/comandos`, `/comandos-sms`, `/configuracoes-ia`, `/firmwares`, `/video-aovivo`, Status da Frota) usam `device_last_seen_sql()` com `OFFLINE_GAP_SECONDS` = **30 min**, porque respondem "dá para mandar comando agora?" e um falso offline ali esconde um botão que funcionaria. O contador responde "está transmitindo agora?", e o intervalo normal de reporte é de 30 s a 5 min. Os dois números agora estão nomeados (`CONNECTIVITY_ONLINE_MINUTES` e `OFFLINE_GAP_SECONDS`) em vez de repetidos como literal.
+
+### Fixed — a mesma pergunta tinha QUATRO respostas diferentes na mesma tela
+- 🔴 **`/ocorrencias` e os selos de `/equipamentos` contavam equipamento DESATIVADO como "Off".** Medido em produção 03/09/2026, mesmo instante, mesmo cliente: contador do topo e card Conectividade diziam **On 8 / Off 2**; o KPI de `/ocorrencias` e os selos de `/equipamentos` diziam **On 8 / Off 7**. Os 5 de diferença eram exatamente os 5 equipamentos desativados dos 15 cadastrados. `ocorrenciasdata.php` e os dois fallbacks (`resumo.php`, `dashboard_widgets.php`) não filtravam `is_active`; o cron e o `/camerasdata` filtravam. Equipamento desativado não está "fora do ar" — está fora da operação, e contá-lo inflava o número que o operador usa para decidir se vai atrás de alguém.
+- 🔴 **Equipamento com `last_communication` NULL sumia das DUAS colunas.** `TIMESTAMPDIFF(MINUTE, NULL, NOW())` é NULL, e NULL não é `<= 5` nem `> 5`: câmera recém-cadastrada que ainda não transmitiu não entrava em On nem em Off, e On+Off ficava menor que "ativos" sem nada na tela explicando o buraco. No banco de desenvolvimento isso escondia **22 de 27** equipamentos ativos — o contador dizia `On 0 / Off 5`. `rel_status_frota` e o widget `model_status` já tratavam o NULL; o contador principal, não.
+- 🔴 **`// KPIs from cache (or on-the-fly if stale)` nunca conferiu staleness.** O gatilho do fallback era "os quatro números são zero", nunca a IDADE da snapshot. Com o cron `scripts/metrics_rollup.php` parado, o card Conectividade — que fica logo abaixo do rótulo **"Tempo real"** — exibiria os números da última rodada indefinidamente, sem erro, sem envelhecer e sem nada que os denunciasse. É literalmente o "não parece ser o status atual da frota". Agora a snapshot vence em `METRICS_SNAPSHOT_MAX_AGE_MIN` = 15 min (duas rodadas perdidas de tolerância) e a tela cai para a consulta ao vivo.
+- ⚠️ **`$customerId ?? 1` no fallback de ocorrências de `resumo.php`** — o fallback proibido do CLAUDE.md. Era inofensivo enquanto o bloco só rodava com banco vazio; virou risco real ao passar a rodar também com snapshot vencida. Sem cliente resolvido, não se filtra por um chutado.
+- **`/equipamentos`: equipamento inativo mostra `—`, não o selo vermelho "Offline".** A coluna Status ao lado já diz "Inativo"; o selo vermelho era o que fazia o operador contar 7 offline numa tela e 2 no cabeçalho.
+
+### Changed
+- **`device_connectivity_counts()` (`includes/fleet_state.php`) é o ponto ÚNICO da contagem On/Off**, consumido por `scripts/metrics_rollup.php`, `handlers/resumo.php`, `handlers/ocorrenciasdata.php` e `includes/dashboard_widgets.php`. Garante as duas regras que nenhuma das cinco cópias garantia: universo `is_active = 1` (o card fica ao lado de "Equipamentos 10/15" — On+Off tem de fechar com os 10) e `last_communication IS NULL` contando como **Off**.
+- **`metrics_snapshot_stale()`** no mesmo arquivo, usada pelas duas telas que leem `metrics_snapshots`.
+- 📝 **Corrigido um comentário FALSO em `device_last_seen_sql()`**: ele afirmava "não há trigger no banco; conferido", e o banco tem **quatro stored procedures** que gravam `devices.last_communication` (`update_device_stats_after_gps`/`_heartbeat`/`_alarm`/`_event`). Na prática a coluna acompanha GPS e batimento — conferido nos 10 equipamentos ativos de produção, `last_communication` e o `GREATEST` deram o MESMO minuto em 10 de 10. A expressão continua valendo (protege se uma procedure se perder numa migração), mas quem estivesse caçando divergência entre telas por essa pista não a acharia.
+
+### Verificado
+- Local, após a correção, as três superfícies passam a dizer o mesmo número pelos DOIS caminhos (snapshot fresca e fallback ao vivo): Resumo `27/28` + `On 0 / Off 27`, `/painel` `On 0 / Off 27`, `/ocorrenciasdata` `{"online":0,"offline":27,"active":27,"total":28}`. O cron reescrito grava `online + offline = active` nos dois clientes. `/equipamentos?filter_status=0` mostra `—` no lugar do selo vermelho.
+
 ## [Unreleased] — 4.17.1
 
 **Pedido do dono do produto: "os relatórios de posições, deslocamento e cercas não têm a seleção do cliente, já listam automaticamente todos os veículos."**

@@ -16,6 +16,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // device_connectivity_counts(), metrics_snapshot_stale()
 require_login();
 
 $db = Database::getInstance()->getConnection();
@@ -46,30 +47,35 @@ $devOffline = get_metric($db, $customerId, 'devices_offline', 0);
 $occTotal   = get_metric($db, $customerId, 'occurrences_total', 0);
 $occWaiting = get_metric($db, $customerId, 'occurrences_waiting', 0);
 
-// On-the-fly fallback if no cached metrics
-if ($devTotal == 0 && $devActive == 0 && $devOnline == 0 && $devOffline == 0) {
-    try {
-        $kpiStmt = $db->prepare("
-            SELECT COUNT(*) as total,
-                   SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active,
-                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
-                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
-            FROM devices WHERE customer_id = :cid
-        ");
-        $kpiStmt->execute([':cid' => $customerId ?? 1]);
-        $devKpiFb = $kpiStmt->fetch();
-        $devTotal   = $devKpiFb['total'] ?? 0;
-        $devActive  = $devKpiFb['active'] ?? 0;
-        $devOnline  = $devKpiFb['online'] ?? 0;
-        $devOffline = $devKpiFb['offline'] ?? 0;
-    } catch (Exception $e) {}
+// Fallback ao vivo — dispara quando NÃO HÁ snapshot **ou quando ela venceu**.
+// 🔴 O gatilho era só "os quatro são zero", apesar do comentário acima dizer
+// "or on-the-fly if stale": a idade nunca era conferida. Com o cron
+// `scripts/metrics_rollup.php` parado, o card "Conectividade" — que fica logo
+// abaixo do rótulo "Tempo real" — exibia os números da última rodada
+// indefinidamente, sem erro e sem envelhecer.
+$metricsStale = metrics_snapshot_stale($db, $customerId);
+if ($metricsStale || ($devTotal == 0 && $devActive == 0 && $devOnline == 0 && $devOffline == 0)) {
+    // Ponto único da contagem On/Off — ver device_connectivity_counts().
+    // A cópia que morava aqui somava equipamento DESATIVADO em "Off" (faltava
+    // `is_active`) e perdia quem tem `last_communication` NULL nas duas
+    // colunas, então On+Off não fechava com "ativos" do card ao lado.
+    $devKpiFb   = device_connectivity_counts($db, $customerId !== null ? (int)$customerId : null);
+    $devTotal   = $devKpiFb['total'];
+    $devActive  = $devKpiFb['active'];
+    $devOnline  = $devKpiFb['online'];
+    $devOffline = $devKpiFb['offline'];
 
     try {
+        // ⚠️ `?? 1` aqui era o fallback proibido do CLAUDE.md: sessão sem
+        // cliente resolvido passava a ver as ocorrências do tenant de id 1
+        // como se fossem suas. Passou a doer de verdade quando este bloco
+        // deixou de rodar só no caso "banco vazio" e passou a rodar também
+        // com snapshot vencida. Sem cliente, não se filtra por um chutado.
         $occStmt = $db->prepare("
             SELECT COUNT(*) as total, SUM(CASE WHEN status='aguardando' THEN 1 ELSE 0 END) as waiting
-            FROM occurrences WHERE customer_id = :cid
-        ");
-        $occStmt->execute([':cid' => $customerId ?? 1]);
+            FROM occurrences" . ($customerId ? " WHERE customer_id = :cid" : "")
+        );
+        $occStmt->execute($customerId ? [':cid' => $customerId] : []);
         $occKpiFb = $occStmt->fetch();
         $occTotal   = $occKpiFb['total'] ?? 0;
         $occWaiting = $occKpiFb['waiting'] ?? 0;

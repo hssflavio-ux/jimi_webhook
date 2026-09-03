@@ -849,7 +849,16 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php else: echo '—'; endif; ?>
                 </td>
                 <td>
-                    <?php if ($d['is_online']): ?>
+                    <?php /* Equipamento DESATIVADO não é "offline": ele está fora da
+                            operação, e não se espera que transmita. O selo vermelho
+                            aqui fazia o operador somar 15 linhas e achar 7 offline
+                            enquanto o contador do topo dizia 2 — a mesma divergência
+                            que a v4.17.2 fechou nos contadores (ver
+                            device_connectivity_counts()). A coluna Status ao lado já
+                            diz "Inativo"; esta cala. */ ?>
+                    <?php if (!$d['is_active']): ?>
+                    <span style="color:var(--muted);">—</span>
+                    <?php elseif ($d['is_online']): ?>
                     <span class="badge badge-success">Online</span>
                     <?php else: ?>
                     <span class="badge badge-error">Offline</span>

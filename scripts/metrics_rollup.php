@@ -17,6 +17,7 @@
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/functions.php';
+require_once __DIR__ . '/../includes/fleet_state.php'; // device_connectivity_counts()
 
 $db = Database::getInstance()->getConnection();
 $snapTime = date('Y-m-d H:i:s');
@@ -33,20 +34,15 @@ foreach ($customers as $cust) {
     $cid = (int)$cust['id'];
     $metrics = [];
 
-    // Devices
-    $dev = $db->prepare("
-        SELECT COUNT(*) as total,
-               SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
-               SUM(CASE WHEN is_active = 1 AND TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
-               SUM(CASE WHEN is_active = 1 AND TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
-        FROM devices WHERE customer_id = :cid
-    ");
-    $dev->execute([':cid' => $cid]);
-    $dev = $dev->fetch();
-    $metrics['devices_total']   = $dev['total'] ?? 0;
-    $metrics['devices_active']  = $dev['active'] ?? 0;
-    $metrics['devices_online']  = $dev['online'] ?? 0;
-    $metrics['devices_offline'] = $dev['offline'] ?? 0;
+    // Devices — conta pelo ponto único (`device_connectivity_counts()`).
+    // A cópia que morava aqui esquecia o `last_communication IS NULL`, então
+    // equipamento recém-cadastrado que ainda não transmitiu não entrava nem em
+    // online nem em offline e a soma não fechava com `devices_active`.
+    $dev = device_connectivity_counts($db, $cid);
+    $metrics['devices_total']   = $dev['total'];
+    $metrics['devices_active']  = $dev['active'];
+    $metrics['devices_online']  = $dev['online'];
+    $metrics['devices_offline'] = $dev['offline'];
 
     // Occurrences
     $occ = $db->prepare("

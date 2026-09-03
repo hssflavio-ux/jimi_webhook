@@ -10,6 +10,8 @@
  * `resumo.php` não é tocado por este arquivo em nenhuma hipótese.
  */
 
+require_once __DIR__ . '/fleet_state.php'; // device_connectivity_counts(), METRICS_SNAPSHOT_MAX_AGE_MIN
+
 /** Catálogo: chave => rótulo (picker de edição) + tamanho no grid (sm=3/12, md=6/12, lg=12/12). */
 const DASHBOARD_WIDGETS = [
     'kpi_devices'      => ['label' => 'Equipamentos',                    'size' => 'sm'],
@@ -132,23 +134,22 @@ function dashboard_device_kpis(PDO $db, int $cid): array
     $total = $get('devices_total'); $active = $get('devices_active');
     $online = $get('devices_online'); $offline = $get('devices_offline');
 
-    if ($total === 0 && $active === 0 && $online === 0 && $offline === 0) {
-        try {
-            $stmt = $db->prepare("
-                SELECT COUNT(*) as total,
-                       SUM(CASE WHEN is_active=1 THEN 1 ELSE 0 END) as active,
-                       SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as online,
-                       SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > 5 THEN 1 ELSE 0 END) as offline
-                FROM devices WHERE customer_id = :cid
-            ");
-            $stmt->execute([':cid' => $cid]);
-            $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            $total = (int)($r['total'] ?? 0); $active = (int)($r['active'] ?? 0);
-            $online = (int)($r['online'] ?? 0); $offline = (int)($r['offline'] ?? 0);
-        } catch (Throwable $e) {}
+    // 🔴 O gatilho do fallback era "os quatro são zero", nunca a IDADE da
+    // snapshot — e "Conectividade" é o único KPI desta tela que se propõe a
+    // ser tempo real (o rótulo acima dele diz "Tempo real"). Com o cron
+    // `metrics_rollup.php` parado, os números da última rodada ficavam na tela
+    // para sempre, sem envelhecer e sem nada que os denunciasse: é exatamente
+    // o "não parece ser o status atual da frota". Agora a snapshot vence, e
+    // vencida ela é ignorada em favor da consulta ao vivo.
+    if (metrics_snapshot_stale($db, $cid) || ($total === 0 && $active === 0 && $online === 0 && $offline === 0)) {
+        // Ponto único da contagem — ver device_connectivity_counts().
+        $r = device_connectivity_counts($db, $cid);
+        $total = $r['total']; $active = $r['active'];
+        $online = $r['online']; $offline = $r['offline'];
     }
     return $cache[$cid] = ['total' => $total, 'active' => $active, 'online' => $online, 'offline' => $offline];
 }
+
 
 function dashboard_occurrence_kpis(PDO $db, int $cid): array
 {

@@ -53,11 +53,22 @@ const OFFLINE_GAP_SECONDS = 1800;
 /**
  * Expressão SQL do ÚLTIMO SINAL de um equipamento — ponto único.
  *
- * 🔴 `devices.last_communication` sozinho engana: só `pushalarm.php` e
- * `pushlbs.php` escrevem nessa coluna. GPS e heartbeat **não** a tocam (não há
- * trigger no banco; conferido). Um equipamento que reporta posição e batimento
- * mas parou de mandar LBS/alarme ficaria "sem comunicar" para sempre, mesmo
- * transmitindo — e a tela diria offline para um device que está no ar.
+ * 🔴 `devices.last_communication` sozinho engana no CÓDIGO PHP: só
+ * `pushalarm.php` e `pushlbs.php` escrevem nessa coluna a partir do PHP. Um
+ * equipamento que reportasse posição e batimento mas parasse de mandar
+ * LBS/alarme ficaria "sem comunicar" para sempre, mesmo transmitindo — e a
+ * tela diria offline para um device que está no ar.
+ *
+ * ⚠️ **Correção de 03/09/2026, medida em produção:** a afirmação anterior
+ * deste bloco ("não há trigger no banco; conferido") estava ERRADA. Existem
+ * QUATRO stored procedures que gravam a coluna — `update_device_stats_after_gps`,
+ * `_after_heartbeat`, `_after_alarm` e `_after_event` — então na prática
+ * `last_communication` acompanha GPS e batimento. Conferido nos 10
+ * equipamentos ativos: `last_communication` e este `GREATEST` deram o MESMO
+ * minuto em 10 de 10. Isto **não** torna a expressão dispensável: ela é o que
+ * garante a leitura correta se uma procedure for perdida numa migração, e o
+ * que impede a tela de depender de um detalhe de implementação do banco. Mas
+ * quem estiver caçando divergência entre telas não a encontrará aqui hoje.
  *
  * Por isso o último sinal é o MAIOR entre as quatro marcas: qualquer uma delas
  * é prova de que o equipamento falou com o servidor.
@@ -101,6 +112,110 @@ function device_presence(?int $min): array
     if ($min <= 60)                             return ['nivel' => 'aguardando', 'rotulo' => 'há ' . $min . ' min'];
     if ($min <= 1440)                           return ['nivel' => 'aguardando', 'rotulo' => 'há ' . intdiv($min, 60) . 'h'];
     return ['nivel' => 'erro', 'rotulo' => 'há ' . intdiv($min, 1440) . 'd'];
+}
+
+/**
+ * Minutos de silêncio a partir dos quais o contador On/Off marca "Off".
+ *
+ * NÃO é o `OFFLINE_GAP_SECONDS` (30 min) das telas de operação, e a diferença
+ * é deliberada: aquele responde "dá para MANDAR COMANDO agora?", e tolera
+ * sombra e roaming porque um falso "offline" ali esconde um botão que
+ * funcionaria; este responde "o equipamento está TRANSMITINDO agora?", e o
+ * intervalo normal de reporte é de 30 s a 5 min — cinco minutos de silêncio já
+ * são anormais. Os dois números convivem de propósito; o que não pode existir
+ * é a MESMA pergunta respondida com dois números, que é o que esta constante
+ * passou a impedir ao ser lida por todos os contadores de uma vez.
+ */
+const CONNECTIVITY_ONLINE_MINUTES = 5;
+
+/**
+ * Idade máxima de uma linha de `metrics_snapshots` ainda exibível.
+ *
+ * O cron `scripts/metrics_rollup.php` roda de 5 em 5 min; 15 min tolera duas
+ * rodadas perdidas (deploy, pico) antes de a tela abandonar a snapshot e
+ * consultar ao vivo. Sem este teto, cron parado = número congelado na tela
+ * para sempre, sem erro e sem envelhecer — o modo de falhar mais caro, porque
+ * o operador não tem como perceber.
+ */
+const METRICS_SNAPSHOT_MAX_AGE_MIN = 15;
+
+/**
+ * A snapshot de `metrics_snapshots` deste cliente venceu?
+ *
+ * Ausência de snapshot conta como vencida (banco novo, cliente novo, cron
+ * nunca rodou) — o chamador cai na consulta ao vivo, que é sempre correta,
+ * só mais cara.
+ *
+ * @param PDO      $db  Conexão ativa
+ * @param int|null $cid Cliente; `null` = sem escopo (nunca há snapshot assim → vencida)
+ * @returns bool
+ */
+function metrics_snapshot_stale(PDO $db, ?int $cid): bool
+{
+    if ($cid === null) return true;
+    try {
+        $stmt = $db->prepare("SELECT TIMESTAMPDIFF(MINUTE, MAX(snapshot_at), NOW()) FROM metrics_snapshots WHERE customer_id = :cid");
+        $stmt->execute([':cid' => $cid]);
+        $age = $stmt->fetchColumn();
+        return ($age === null || $age === false) || (int)$age > METRICS_SNAPSHOT_MAX_AGE_MIN;
+    } catch (Throwable $e) {
+        return true;   // falha fechada: sem saber a idade, prefira o dado ao vivo
+    }
+}
+
+/**
+ * Contagem On/Off da frota — ponto ÚNICO, a mesma para todas as telas.
+ *
+ * 🔴 Existe porque a conta estava copiada em CINCO lugares e três deles
+ * discordavam do contador do topo da tela, no mesmo instante e para o mesmo
+ * cliente. Medido em produção (03/09/2026, cliente 1, 15 equipamentos, 10
+ * ativos): contador do topo e card Conectividade diziam **On 8 / Off 2**
+ * enquanto o KPI de `/ocorrencias` e os selos de `/equipamentos` diziam
+ * **On 8 / Off 7**. Os 5 de diferença eram exatamente os equipamentos
+ * DESATIVADOS: `ocorrenciasdata.php` e os dois fallbacks (`resumo.php`,
+ * `dashboard_widgets.php`) somavam `is_active = 0` em "Off", enquanto o cron
+ * `metrics_rollup.php` e o `/camerasdata` não. Equipamento desativado não está
+ * "fora do ar" — ele está fora da operação, e contá-lo como falha inflava o
+ * número que o operador usa para decidir se precisa ir atrás de alguém.
+ *
+ * Duas regras que a conta garante e que nenhuma cópia garantia:
+ *  - o universo é `is_active = 1` — o card fica ao lado de "Equipamentos
+ *    10/15", então On + Off tem de fechar com os 10, não com os 15;
+ *  - **`last_communication IS NULL` conta como Off.** `TIMESTAMPDIFF(MINUTE,
+ *    NULL, NOW())` é NULL, e NULL não é `<= 5` nem `> 5`: um equipamento
+ *    recém-cadastrado que ainda não transmitiu sumia das DUAS colunas, e
+ *    On + Off ficava menor que o total de ativos sem nada na tela explicando
+ *    o buraco. `handlers/rel_status_frota.php` e o widget `model_status` já
+ *    tratavam o NULL; o contador principal, não.
+ *
+ * @param PDO      $db  Conexão ativa
+ * @param int|null $cid Cliente do escopo; `null` = sem filtro (admin de plataforma)
+ * @returns array{online:int, offline:int, active:int, total:int}
+ */
+function device_connectivity_counts(PDO $db, ?int $cid): array
+{
+    $lim   = CONNECTIVITY_ONLINE_MINUTES;
+    $scope = $cid !== null ? 'WHERE customer_id = :cid' : '';
+    try {
+        $stmt = $db->prepare("
+            SELECT COUNT(*) AS total,
+                   SUM(is_active = 1) AS active,
+                   SUM(is_active = 1 AND TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= $lim) AS online,
+                   SUM(is_active = 1 AND (last_communication IS NULL
+                        OR TIMESTAMPDIFF(MINUTE, last_communication, NOW()) > $lim)) AS offline
+            FROM devices $scope
+        ");
+        $stmt->execute($cid !== null ? [':cid' => $cid] : []);
+        $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'online'  => (int)($r['online']  ?? 0),
+            'offline' => (int)($r['offline'] ?? 0),
+            'active'  => (int)($r['active']  ?? 0),
+            'total'   => (int)($r['total']   ?? 0),
+        ];
+    } catch (Throwable $e) {
+        return ['online' => 0, 'offline' => 0, 'active' => 0, 'total' => 0];
+    }
 }
 
 /**
