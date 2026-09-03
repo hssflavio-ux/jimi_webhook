@@ -62,8 +62,11 @@ test.describe('Comandos — lista sensível ao modelo', () => {
     // wiki". Enquanto a frota inteira era câmera, "não trava por modelo" e
     // "vale para todo mundo" eram a mesma frase; com um rastreador na lista,
     // "libera todos" passaria a significar oferecer `RECORDSW`/`VOLUME`/
-    // `SSID`/`WIFIAP` a um aparelho sem vídeo e sem WiFi. A regra agora é por
+    // `SSID`/`WIFIAP` a um aparelho que não os entende. A regra agora é por
     // FAMÍLIA — e é isso que o teste passa a exigir.
+    //
+    // ⚠️ Não é "rastreador não tem WiFi": o JM-VL01 tem, e configura pelo
+    // comando `HOTSPOT`. É a FORMA que difere, não o recurso.
     test('comando universal libera as famílias que ele documenta — e só elas', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);

@@ -169,7 +169,8 @@ Token-based auth using cookie `jimi_token` (64-char hex) + `sessions` table in M
 ### Rastreadores JM-VL — nem todo equipamento é câmera (v4.16.0)
 `JM-VL01` / `JM-VL02` são RASTREADORES: mesmo protocolo JIMI (`msgClass=0`), mesmos webhooks, mesmos comandos proNo 128, **`camera_count = 0`** — sem vídeo, sem canal, sem DMS/ADAS. `device_models.family` (`camera`/`tracker`) separa os dois mundos.
 - O prefixo é **JM**, não JC (JC = linha de câmeras). `model_name` é UNIQUE e vira chave de `command_catalog.modelos`, `firmware_releases` e da trava por modelo — renomear depois quebra o casamento em silêncio.
-- 🔴 **`universal` no catálogo de comandos passou a valer por FAMÍLIA**, derivada de `modelos`. Antes queria dizer "libera a frota inteira" — com um rastreador na lista isso oferecia `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` a um aparelho sem vídeo.
+- 🔴 **`universal` no catálogo de comandos passou a valer por FAMÍLIA**, derivada de `modelos`. Antes queria dizer "libera a frota inteira" — com um rastreador na lista isso oferecia `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` a um aparelho que não os entende.
+- ⚠️ **"Rastreador não tem WiFi" é FALSO.** O JM-VL01 é hotspot WiFi (`HOTSPOT,S,N,P#`) e ainda entra como cliente numa rede pelo Android dele; o que ele não entende é `WIFIAP`/`SSID`, a forma da linha JC. O JM-VL02 é que não tem rádio WiFi (Cat-M1/NB2).
 - **Entrada nova no catálogo só onde a aridade/formato muda**; onde a sintaxe é idêntica, o modelo entra no `modelos` da entrada existente. `SPEED` tem três formatos reais (JC, VL01, VL02) e no da VL01 o 2º campo é o TEMPO, não a forma de aviso.
 - 🔴 **Placeholder só vale como `P1..Pn` ou letra única maiúscula** (`montarComando()`); `SW`/`T1`/`ΔV1` da wiki ficariam crus no comando, e token fixo de uma letra é indistinguível de placeholder.
 - ⚠️ `params` com contagem != placeholders desabilita o Enviar para sempre (`faltaParametro()`). E em JS, `parseInt(x) || 1` transforma `camera_count = 0` em 1.

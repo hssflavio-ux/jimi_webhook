@@ -11,7 +11,9 @@
  *      e enquanto toda a frota era câmera "não trava por modelo" e "vale para
  *      todo mundo" eram a mesma frase. Com um rastreador na lista, soltar a
  *      trava passou a oferecer `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um
- *      aparelho que não tem vídeo nem WiFi. A trava agora é por FAMÍLIA.
+ *      aparelho que não os entende. A trava agora é por FAMÍLIA.
+ *      ⚠️ O JM-VL01 TEM WiFi (é hotspot, e o Android dele entra numa rede) — o
+ *      que ele não entende é `WIFIAP`/`SSID`: a forma dele é `HOTSPOT`.
  *   2. O cadastro aceita `0` canais. O campo tinha `min="1"`, e o navegador
  *      recusava o formulário do único valor certo para um rastreador.
  *   3. As variantes de aridade da linha VL existem e ficam presas aos modelos

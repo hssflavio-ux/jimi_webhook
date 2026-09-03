@@ -1,4 +1,86 @@
-# STATUS.md — Jimi Webhook System v4.16.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.16.1 (YUV Parity)
+
+> ### 📍 ESTADO EM 03/09/2026 — o primeiro JM-VL01 real está no ar e foi analisado; a v4.16.0 JÁ ESTÁ EM PRODUÇÃO
+>
+> **A v4.16.0 foi publicada** — `JM-VL01`/`JM-VL02`, `device_models.family` e os
+> 14 alarmes da linha VL estão no banco de produção. O primeiro rastreador real
+> é o **`868982050616424`**, cliente 1, instalado no veículo 16 em
+> 03/09 01:29 UTC.
+>
+> #### ✅ O equipamento funciona ponta a ponta, e não falta handler nenhum
+>
+> GPS a cada 60 s, heartbeat a cada 3 min, evento `LOGIN` (com
+> `timezone: GMT-03:00`) e o par de alarmes 254/255. As chaves de **121 pushes
+> de GPS**, **40 heartbeats** e dos alarmes foram cruzadas uma a uma com as
+> colunas das tabelas: **`pushgps`/`pushhb`/`pushalarm` já cobrem tudo que a
+> linha VL manda.** Não há campo novo a mapear nem handler novo a escrever —
+> que era a pergunta que abriu esta linha de trabalho.
+>
+> O `255` chegou como `Código 255 (JIMI)`, provando que o catálogo da v4.16.0
+> era necessário; já aparece resolvido na tela porque `alarm_label_sql()`
+> re-resolve o rótulo genérico na leitura.
+>
+> #### 🔴 v4.16.1 — dois nomes de alarme errados, um deles meu
+>
+> - **`254` era "Status de Ignição Alterado".** A doc oficial publica, em dois
+>   lugares independentes, `254 = Ignition turned on` e `255 = Ignition turned
+>   off`: são os DOIS LADOS de um par. O VL01 confirmou na prática — `255` às
+>   23:33 (desligou), `254` às 23:39 (ligou). Vale para toda a linha JIMI.
+> - **`50` era "Alerta de Reboque", e o erro entrou na v4.16.0.** A wiki da VL
+>   rotula o `0x32` com a palavra solta "Puxar"; a doc oficial diz
+>   `Device was plugged out` — é o EQUIPAMENTO arrancado da instalação, irmão
+>   do `19`. Havia fonte melhor e escolhi a mais curta.
+>
+> A migração corrige o catálogo **e o histórico** (`alarms.alarm_name` é
+> desnormalizado), e **prova antes de renomear** que nenhuma
+> `occurrence_config_params`/`notification_rules` casa pelos nomes antigos.
+>
+> #### 🔴 ACHADO GRANDE, PRÉ-EXISTENTE E NÃO CORRIGIDO: 28% dos alarmes estão INVISÍVEIS
+>
+> Medido em produção, últimos 30 dias:
+>
+> | tabela | linhas | sem `customer_id` | |
+> |---|---|---|---|
+> | `alarms` | 13.736 | **3.898** | **28,4%** |
+> | `gps_data` | 19.755 | 1.815 | 9,2% |
+> | `heartbeats` | 86.182 | 3.722 | 4,3% |
+> | `events` | 2.080 | 125 | 6,0% |
+>
+> **Causa:** desde a Fase 2 (v4.12.0) o dono é gravado como SNAPSHOT resolvido
+> por `resolve_installation_for_imei()`. Sem instalação aberta em
+> `device_installations`, o snapshot é **NULL** — e toda tela com escopo de
+> cliente filtra por `customer_id`, então a linha existe no banco e **não
+> aparece em lugar nenhum**.
+>
+> É o design funcionando como especificado, mas ninguém tinha visto o tamanho:
+> um JC371 (`865478070649936`) tem **1.694 posições, TODAS órfãs**, de 12 a
+> 20/08. E o próprio VL01 perdeu **116 das 122 posições e os DOIS alarmes**,
+> porque transmitiu das 23:18 até 01:29 antes de ser instalado no veículo.
+>
+> ⚠️ **Sintoma que o operador vai relatar:** "cadastrei o equipamento, ele está
+> mandando posição, e o relatório está vazio."
+>
+> **Proposta (NÃO implementada — muda a semântica da Fase 2 e é decisão de
+> produto):** quando não houver instalação aberta, gravar ao menos
+> `devices.customer_id` como dono e deixar `vehicle_id` NULL. Isso **não**
+> reabre o bug que a Fase 2 fechou — aquele era LER o dono atual numa consulta
+> histórica; aqui é gravar, no momento do evento, o único dono conhecido
+> naquele momento. Some um backfill para o passado.
+>
+> #### Menor, e já existente
+> Alarme com `latitude/longitude = 0,0` (o `255` veio assim, sem fix de GPS).
+> Não é da linha VL: em 90 dias são **736 casos no JC182**. As telas de mapa
+> plotam isso no Golfo da Guiné em vez de dizer "sem posição".
+>
+> #### 📋 Pendente
+> - 🔴 **~100 códigos JIMI da doc oficial não estão no catálogo** (temos 95).
+>   Plausíveis na frota: `80`/`81` (porta), `84` (antena GNSS), `90` (tensão
+>   externa baixa), `95` (excesso dentro de cerca), `106` (tombamento), `111`
+>   (falha de cartão SD), `119`–`124` (tensão/temperatura ADC), `131` (colisão).
+> - Nenhum comando disparado contra o JM-VL01 real — o primeiro deve ser
+>   `STATUS#` ou `GPRSSET#`.
+
+
 
 > ### 📍 ESTADO EM 02/09/2026 — a frota deixou de ser só de câmeras: JM-VL01 e JM-VL02 cadastráveis, NÃO publicados e NÃO exercitados contra equipamento real
 >
@@ -68,8 +150,15 @@
 > páginas de **câmera** da wiki", e a tela o traduzia como "libera a frota
 > inteira". Enquanto toda a frota era câmera, as duas frases eram a mesma. Com
 > um rastreador na lista, "liberar a frota" passou a significar oferecer
-> `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho sem vídeo e sem WiFi —
+> `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho que não os entende —
 > comandos que voltariam como "não suportado" horas depois, no callback.
+>
+> ⚠️ **Não é "rastreador não tem WiFi"** (corrigido pelo dono do produto,
+> 03/09/2026): o **JM-VL01 TEM** — hotspot WiFi é recurso de capa na wiki dele,
+> e o Android embarcado ainda o conecta como cliente a uma rede. O que ele não
+> entende é `WIFIAP`/`SSID`: a forma dele é `HOTSPOT,S,N,P#`, já catalogada.
+> Mesmo recurso, comando outro — como `LED` (JC/VL01) contra `LEDSLEEP` (VL02).
+> O JM-VL02, esse sim, não tem rádio WiFi (Cat-M1/NB2).
 >
 > Agora `universal` libera **as famílias que o próprio comando documenta**,
 > derivadas de `modelos` via `device_models.family`. Não há chave nova no

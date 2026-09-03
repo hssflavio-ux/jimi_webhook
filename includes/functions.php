@@ -1498,9 +1498,13 @@ function resource_list_ttl_minutes(): int
  * dizer "não trava a seleção por modelo", e foi DERIVADO de "presente em >= 5
  * das 6 páginas de CÂMERA da wiki". Enquanto a frota inteira era câmera, "não
  * trava" e "vale para todo mundo" eram a mesma frase. Com os rastreadores da
- * linha JM-VL (sem vídeo, sem WiFi) deixaram de ser: soltar a trava passou a
- * oferecer `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho que não os
- * tem. A família é o que devolve a `universal` o sentido que ele sempre teve.
+ * linha JM-VL deixaram de ser: soltar a trava passou a oferecer `RECORDSW`,
+ * `VOLUME`, `SSID` e `WIFIAP` a um aparelho que não os entende. A família é o
+ * que devolve a `universal` o sentido que ele sempre teve.
+ *
+ * ⚠️ "Rastreador não tem vídeo" é verdade; "não tem WiFi" NÃO é. O JM-VL01 é
+ * hotspot WiFi e também entra como cliente numa rede pelo Android dele — só
+ * que a forma dele é o comando `HOTSPOT`, não `WIFIAP`/`SSID`.
  *
  * 🔴 PONTO ÚNICO de propósito: DUAS telas travam a seleção pelo MESMO catálogo
  * — `/comandos` (proNo 128 pelo IoT Hub) e `/comandos-sms` (o mesmo catálogo

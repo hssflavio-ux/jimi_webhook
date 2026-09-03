@@ -884,8 +884,15 @@ function imeisMarcados() {
  *
  * A regra 2 é o que impede `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` — universais
  * porque estão em 5 das 6 páginas de CÂMERA da wiki — de chegarem a um
- * rastreador da linha VL, que não tem vídeo nem WiFi. Antes disso, `universal`
- * queria dizer "toda a frota", e a frota era só de câmeras.
+ * rastreador da linha VL. Antes disso, `universal` queria dizer "toda a frota",
+ * e a frota era só de câmeras.
+ *
+ * ⚠️ E o motivo NÃO é "rastreador não tem WiFi": o JM-VL01 TEM. Hotspot WiFi é
+ * recurso de capa na wiki dele, e o Android embarcado ainda o conecta como
+ * CLIENTE a uma rede. O que ele não entende é `WIFIAP`/`SSID` — a forma dele é
+ * `HOTSPOT,S,N,P#`. Mesmo recurso, comando outro, como `LED` (JC/VL01) contra
+ * `LEDSLEEP` (VL02). Mandar a forma da câmera não dá erro visível: dá recusa
+ * no callback, minutos depois.
  */
 function comandoAceitaLinha(cmd, row) {
     if (!cmd) return true;

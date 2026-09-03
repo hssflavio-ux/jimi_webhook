@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.16.1
+
+**Primeiro JM-VL01 real em produção (`868982050616424`), analisado em 03/09/2026. O equipamento funciona ponta a ponta — e a análise achou dois nomes de alarme errados, um deles introduzido pela v4.16.0.**
+
+### Fixed
+- 🔴 **Alarme JIMI `254` era `Status de Ignição Alterado`** — a Alarm Reference oficial publica, em dois lugares independentes, `254 = Ignition turned on` e `255 = Ignition turned off`. São os **dois lados de um par**, não um evento genérico de "mudou", e o nome antigo apagava exatamente a informação que o operador quer. Confirmado também por medição: o VL01 mandou `255` às 23:33 (desligou) e `254` às 23:39 (ligou). Vale para toda a linha JIMI, não só para a VL.
+- 🔴 **Alarme JIMI `50` era `Alerta de Reboque` — erro introduzido pela v4.16.0.** A wiki da linha VL rotula o `0x32` com a palavra solta "Puxar", que foi lida como guincho; a doc oficial diz `Device was plugged out` — é o **equipamento sendo arrancado da instalação**, irmão do `19` (`Device was removed`). Renomeado para `Dispositivo Arrancado`. É o modo de falha que o CLAUDE.md chama de "batizar por palpite": havia fonte melhor e escolheu-se a mais curta.
+- `alarm_name_en` do `255` alinhado com a doc (`ACC Off` → `Ignition turned off`) — rótulo de par tem de ler igual dos dois lados.
+- **`mysql/migration_v4.16.1.sql`** corrige o catálogo **e o histórico já gravado**: `alarms.alarm_name` é desnormalizado e o re-resolve da leitura só reescreve rótulo genérico (`Código NNNN`), nunca um nome de verdade — sem o `UPDATE` em `alarms`, todo alarme antigo continuaria com o nome errado para sempre. Antes de renomear, a migração **prova** que nenhuma `occurrence_config_params` nem `notification_rules` casa pelos nomes antigos (as duas consultas vieram vazias em produção), e traz o remapeamento mesmo assim, para instalação que tenha criado a regra à mão.
+
+### Changed — a correção que o dono do produto apontou
+- 🔴 **"Rastreador não tem WiFi" é FALSO, e eu tinha escrito isso em seis lugares.** O **JM-VL01 TEM**: hotspot WiFi é recurso de capa na wiki dele (`HOTSPOT,S,N,P#`, já catalogado desde a v4.16.0) e o Android embarcado ainda o conecta como **cliente** de uma rede, por USB/Vysor — não por comando. O que ele não entende é `WIFIAP`/`SSID`, que são a forma da **linha JC**: mesmo recurso, comando outro, como `LED` (JC/VL01) contra `LEDSLEEP` (VL02). A trava por família continua igual e certa; o que estava errado era a **justificativa** — e justificativa errada é o que faz o próximo leitor "consertar" adicionando `JM-VL01` ao `WIFIAP`, trocando uma recusa silenciosa por outra. O **JM-VL02**, esse sim, não tem rádio WiFi (Cat-M1/NB2).
+- Corrigido em `handlers/comandos.php`, `includes/command_catalog.php` (cabeçalho + entrada do `HOTSPOT`), `includes/functions.php`, `tests/comandos.spec.js`, `tests/rastreador_vl.spec.js`, `CLAUDE.md`, `AGENTS.md` e `STATUS.md`.
+- A nota da `/wiki` ganhou o parágrafo "sem câmera não quer dizer sem recurso": hotspot WiFi e relé no VL01, segunda saída / sensor de porta / colisão no VL02.
+
+### Verificação (medida no equipamento real, não na wiki)
+- O JM-VL01 está **cadastrado e transmitindo em produção**: GPS a cada 60 s, heartbeat a cada 3 min, evento `LOGIN` com `timezone: GMT-03:00`, e o par de alarmes 254/255.
+- **Nenhum campo do payload ficou sem mapear.** As chaves de `gps_data` (121 pushes), `heartbeats` (40) e dos alarmes foram cruzadas uma a uma com as colunas: `pushgps`/`pushhb`/`pushalarm` já cobrem tudo que a linha VL manda. Não há handler novo a escrever.
+- **O `255` chegou como `Código 255 (JIMI)`** — prova de que o catálogo da v4.16.0 era necessário. Já aparece resolvido na tela, porque `alarm_label_sql()` re-resolve o rótulo genérico na leitura.
+- Migração aplicada **duas vezes** contra MySQL real: idempotente.
+
+### Pendente
+- 🔴 **~100 códigos JIMI da doc oficial não estão no catálogo** (temos 95). Vários são plausíveis na frota: `80`/`81` (porta), `84` (antena GNSS), `90` (tensão externa baixa), `95` (excesso dentro de cerca), `106` (tombamento), `111` (falha de cartão SD), `119`–`124` (tensão/temperatura ADC), `131` (colisão). Cadastrar exige o mesmo cuidado desta versão — cruzar cada um com a doc, e não pelo parser cru, que confunde tabela de bits de status com tabela de alarme.
+- Nenhum comando ainda foi disparado contra o JM-VL01 real. O primeiro deve ser `STATUS#` ou `GPRSSET#`.
+
 ## [Unreleased] — 4.16.0
 
 **Pedido do dono do produto: cadastrar dois equipamentos NOVOS que não são câmeras — os rastreadores `JM-VL01` e `JM-VL02`. Mesmo protocolo JIMI (`msgClass=0`), mesmos webhooks, mesmos comandos de texto proNo 128; sem vídeo, sem canal, sem DMS/ADAS. São os dois primeiros modelos do sistema com `camera_count = 0`.**

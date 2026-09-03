@@ -116,7 +116,15 @@
  * 128, sem câmera. Isso quebra uma premissa silenciosa de `universal`: ele foi
  * derivado de "presente em >= 5 das 6 páginas de CÂMERA da wiki", e "não trava
  * a seleção por modelo" passou a significar oferecer `RECORDSW`, `VOLUME`,
- * `SSID` e `WIFIAP` a um aparelho que não tem vídeo nem WiFi.
+ * `SSID` e `WIFIAP` a um aparelho que não os entende.
+ *
+ * ⚠️ Cuidado com o atalho "rastreador não tem WiFi": o **JM-VL01 TEM**. Hotspot
+ * WiFi é recurso de capa na wiki dele, e o Android embarcado ainda o conecta
+ * como CLIENTE a uma rede (procedimento por USB/Vysor, não por comando). O que
+ * ele não entende é `WIFIAP`/`SSID`: a forma dele é `HOTSPOT,S,N,P#`. Mesmo
+ * recurso, comando outro — como `LED` (JC/VL01) contra `LEDSLEEP` (VL02). Quem
+ * "consertar" isto adicionando JM-VL01 ao `WIFIAP` troca uma recusa silenciosa
+ * por outra. (O JM-VL02, esse sim, não tem rádio WiFi: é Cat-M1/NB2.)
  *
  * 🔴 A trava de `handlers/comandos.php` deixou de ser "universal libera todo
  * mundo" e virou "universal libera as FAMÍLIAS que o próprio comando
@@ -6806,7 +6814,7 @@ return [
   'HOTSPOT,P1,P2,P3#' => [
     'cmd' => 'HOTSPOT',
     'nome' => 'Hotspot WiFi',
-    'desc' => 'Só o JM-VL01 tem rádio WiFi — o JM-VL02 (Cat-M1/NB2) não.',
+    'desc' => '🔑 O JM-VL01 É hotspot WiFi — recurso de capa na wiki dele, não um extra. Este é o comando que o liga; `WIFIAP`/`SSID` (a forma da linha JC) ele NÃO entende. O JM-VL02 não tem rádio WiFi (é Cat-M1/NB2). ⚠️ Conectar o VL01 como CLIENTE de uma rede WiFi existe, mas não por comando: é pelo Android embarcado, via USB/Vysor (wiki "JM-VL01 - Android").',
     'categoria' => 'rede',
     'modelos' => ['JM-VL01'],
     'universal' => false,

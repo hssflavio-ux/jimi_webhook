@@ -1532,6 +1532,13 @@ JC371, JC450, JC181, JC182) é a linha de <strong>câmeras</strong>; <em>JM</em>
 de rastreadores. Vários comandos existem nas duas com o mesmo nome e um número
 diferente de campos — por isso a tela de Comandos só oferece a forma certa depois
 que você marca o equipamento.
+<br><br>
+<strong>Sem câmera não quer dizer sem recurso.</strong> O <strong>JM-VL01</strong>
+é <strong>hotspot WiFi</strong> — dá para abrir a rede pelo comando
+<code>HOTSPOT</code>, em Comandos. Ele também tem bloqueio por relé, botão de
+pânico, cerca gravada no próprio equipamento, alarme de movimento e aviso de corte
+de energia. O <strong>JM-VL02</strong> não tem rádio WiFi (é Cat-M1/NB2), mas
+ganha uma segunda saída (<code>OUT2</code>), sensor de porta e alarme de colisão.
 </div>
 
 <h3 id="geocercas">Geocercas</h3>
