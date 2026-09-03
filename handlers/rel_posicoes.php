@@ -21,6 +21,7 @@ $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
 $selImei    = $_GET['imei'] ?? '';
+$filterCust = $_GET['customer_id'] ?? null;
 $dateFrom   = $_GET['date_from'] ?? brt_today();
 $dateTo     = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
@@ -34,11 +35,18 @@ $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 $generated = !empty($_GET['gerar']);
 
+// Escopo multi-tenant centralizado — ver report_customer_scope().
+// Resolvido AQUI, antes de tudo, porque é ele quem decide de qual cliente
+// vêm as placas do seletor: a lista carregada com o cliente da SESSÃO
+// ignorava o filtro da tela, e o admin que trocasse de cliente no formulário
+// continuava vendo as placas do anterior. Para não-admin o `?customer_id=`
+// é ignorado (não validado) dentro da própria função.
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+
 // Lista de placas — carregada AQUI porque o export síncrono roda antes da
 // grade e precisa dela para pôr a PLACA (não o IMEI) no subtítulo do PDF.
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid AND d.is_active = 1 ORDER BY d.device_name");
-$devices->execute([':cid' => $customerId]);
-$devices = $devices->fetchAll();
+$devices   = report_device_options($db, $scopeCust);
+$customers = $isAdmin ? report_customer_options($db) : [];
 
 // Ordenação: só por data/hora; default crescente (mais antigo no topo)
 [$sort, $order] = report_sort_params(['gps_time'], 'gps_time', 'ASC');
@@ -64,7 +72,7 @@ if ($generated && $selImei) {
         // `imei`, então trocar o parâmetro `?imei=` na URL mostrava a posição
         // de QUALQUER cliente. Fase 2 do fluxo chip→câmera→veículo: usa o
         // dono GRAVADO no ponto (snapshot do momento), não o atual da câmera.
-        $scopeCust = report_customer_scope(null, $isAdmin, $customerId);
+        // ($scopeCust já foi resolvido lá em cima, junto com a lista de placas)
         if ($scopeCust !== null) {
             $where .= ' AND g.customer_id = :cid';
             $params[':cid'] = $scopeCust;
@@ -212,6 +220,17 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <input type="hidden" name="gerar" value="1">
+        <?php if ($isAdmin): ?>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+                <option value="">Todos</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">

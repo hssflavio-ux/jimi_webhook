@@ -27,8 +27,9 @@ $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
 
-$mode     = ($_GET['mode'] ?? 'viagens') === 'diario' ? 'diario' : 'viagens';
-$selImei  = $_GET['imei'] ?? '';
+$mode       = ($_GET['mode'] ?? 'viagens') === 'diario' ? 'diario' : 'viagens';
+$selImei    = $_GET['imei'] ?? '';
+$filterCust = $_GET['customer_id'] ?? null;
 $dateFrom = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
 $dateTo   = $_GET['date_to'] ?? brt_today();
 $timeFrom = $_GET['time_from'] ?? '';
@@ -48,11 +49,18 @@ $rows = [];
 $totalRows = 0;
 $totalPages = 1;
 
+// Escopo multi-tenant centralizado — ver report_customer_scope(). Resolvido
+// AQUI porque é ele quem decide de qual cliente vêm as placas do seletor: a
+// lista carregada com o cliente da SESSÃO ignorava o filtro da tela, e o
+// admin que trocasse de cliente no formulário continuava vendo as placas do
+// anterior. Para não-admin o `?customer_id=` é ignorado (não validado)
+// dentro da própria função.
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+
 // Lista de placas — carregada AQUI e não depois da grade, porque o export
 // síncrono roda antes e precisa dela para montar o subtítulo do PDF.
-$devices = $db->prepare("SELECT d.imei, d.device_name FROM devices d WHERE d.customer_id = :cid AND d.is_active = 1 ORDER BY d.device_name");
-$devices->execute([':cid' => $customerId]);
-$devices = $devices->fetchAll();
+$devices   = report_device_options($db, $scopeCust);
+$customers = $isAdmin ? report_customer_options($db) : [];
 
 /**
  * Subtítulo do export: o FILTRO aplicado, não só o período.
@@ -111,9 +119,11 @@ if ($generated) {
     [$utcFrom, $utcTo] = brt_datetime_range_to_utc($dateFrom, $dateTo, $timeFrom, $timeTo);
     $params = [':df' => $utcFrom, ':dt' => $utcTo];
 
-    if ($customerId) {
+    // Snapshot do dono no momento da viagem (`trips.customer_id`), nunca o
+    // dono ATUAL da câmera via JOIN em devices — ver Fase 2 no CLAUDE.md.
+    if ($scopeCust !== null) {
         $where .= ' AND t.customer_id = :cid';
-        $params[':cid'] = $customerId;
+        $params[':cid'] = $scopeCust;
     }
     if ($selImei) {
         $where .= ' AND t.imei = :imei';
@@ -260,6 +270,12 @@ $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_quer
 // rel_deslocamento_rota.php e rel_deslocamento_replay.php.
 $backQ = $_GET; unset($backQ['export']);
 $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
+// O cliente filtrado viaja junto no link: as duas telas de destino escopam
+// pelo MESMO report_customer_scope(), e sem este parâmetro elas cairiam no
+// cliente da SESSÃO — a linha aparecia na grade e o mapa dizia "não
+// encontrada". Vazio quando o filtro está em "Todos" ou o usuário não é admin.
+$drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
+    ? '&customer_id=' . (int)$scopeCust : '';
 ?>
 <div class="flex-between mb-16">
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Deslocamento</h2>
@@ -277,6 +293,17 @@ $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <input type="hidden" name="gerar" value="1">
+        <?php if ($isAdmin): ?>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+                <option value="">Todos</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Modalidade</label>
             <select name="mode" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
@@ -371,7 +398,7 @@ $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td><?= (int)$r['viagens'] ?></td>
-                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a></td>
+                <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a></td>
             </tr>
             <?php endforeach; ?>
             <?php else: ?>
@@ -386,8 +413,8 @@ $returnTo = urlencode('/relatorios/deslocamento?' . http_build_query($backQ));
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
-                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
-                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Replay</a>
+                    <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
+                    <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Replay</a>
                 </td>
             </tr>
             <?php endforeach; endif; ?>

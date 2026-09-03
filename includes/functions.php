@@ -1036,7 +1036,9 @@ function protocol_label(?string $proto): string {
  * antigos inalcançáveis") — mas a v4.12.7 já tinha decidido o contrário para
  * o mesmo dropdown em `rel_deslocamento.php`/`rel_alarmes.php`/
  * `rel_posicoes.php`/`relatorios.php`/`exportar.php` (cada um com a consulta
- * copiada inline, com `is_active = 1`), e essa função COMPARTILHADA — usada
+ * copiada inline, com `is_active = 1`; `rel_deslocamento.php` e
+ * `rel_posicoes.php` passaram a usar ESTA função na v4.17.1, junto com o
+ * seletor de cliente que lhes faltava), e essa função COMPARTILHADA — usada
  * por `rel_ocorrencias.php`, `rel_geocercas.php`, `rel_velocidade.php`,
  * `rel_ignicao.php`, `rel_status_frota.php`, `report_segments.php` — ficou
  * de fora da varredura porque não é uma cópia da mesma query, é uma função à

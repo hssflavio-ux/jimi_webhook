@@ -1,4 +1,31 @@
-# STATUS.md — Jimi Webhook System v4.17.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.1 (YUV Parity)
+
+> ### 📍 v4.17.1 — os três relatórios sem seleção de cliente
+>
+> Relato do dono do produto: *"os relatórios de posições, deslocamento e
+> cercas não têm a seleção do cliente, já listam automaticamente todos os
+> veículos."* Eram os **únicos três dos quinze** que não passavam por
+> `report_customer_scope()` — filtravam por `if ($customerId)`, o cliente da
+> SESSÃO, sem campo no formulário.
+>
+> - **Seletor de Cliente** nos três, no molde de `rel_velocidade.php`:
+>   `report_customer_options()`, só para admin/revendedor, "Todos" por padrão.
+> - 🔴 **As listas do formulário seguiam a sessão enquanto a grade seguia o
+>   filtro** — placas (e cercas, em geocercas) carregadas inline com
+>   `WHERE customer_id = :cid`. O seletor sozinho faria o admin trocar de
+>   cliente e continuar escolhendo a placa do anterior. As três listas agora
+>   leem o MESMO `$scopeCust` da grade.
+> - 🔴 **Drill-down divergia da grade**: `rel_deslocamento_rota.php` e
+>   `rel_deslocamento_replay.php` escopavam por sessão — a viagem aparecia na
+>   lista e o mapa dizia "Viagem não encontrada". Passaram a
+>   `report_customer_scope()`, com `&customer_id=` propagado no link.
+> - 🔒 **Correção de segurança de brinde**: `if ($customerId)` não filtrava
+>   NADA com sessão sem cliente resolvido (`get_customer_id()` NULL) — usuário
+>   comum nessa condição via a base inteira. Agora falha fechada (`= 0`).
+> - ✅ **Verificado em execução**, não só `php -l`: placas 45/26/19 por
+>   cliente, cercas 3/3/0, deslocamento 4/4/0 viagens, posições 1/0 linhas;
+>   exports XLSX/PDF íntegros; operador não-admin com `?customer_id=` de outro
+>   tenant tem o parâmetro ignorado e não vê o seletor.
 
 > ### 📍 v4.17.0 — catálogo de alarmes JIMI COMPLETO: 95 → 197 códigos
 >

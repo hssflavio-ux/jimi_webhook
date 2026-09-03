@@ -39,6 +39,7 @@ $dateFrom = $_GET['date_from'] ?? brt_today();
 $dateTo   = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo);
 
+$filterCust  = $_GET['customer_id'] ?? null;
 $filterFence = !empty($_GET['geofence_id']) ? (int)$_GET['geofence_id'] : null;
 $filterImei  = trim($_GET['imei'] ?? '');
 $filterType  = in_array($_GET['event_type'] ?? '', ['entrada', 'saida'], true) ? $_GET['event_type'] : '';
@@ -52,10 +53,13 @@ $validSorts = ['event_time', 'imei', 'event_type'];
 $where = 'WHERE e.event_time BETWEEN :df AND :dt';
 $params = [':df' => $utcFrom, ':dt' => $utcTo];
 
-// Escopo multi-tenant: o customer_id do evento vem da cerca que o gerou
-if ($customerId) {
+// Escopo multi-tenant centralizado — ver report_customer_scope(). O
+// customer_id do evento vem da cerca que o gerou. Para não-admin o
+// `?customer_id=` é ignorado (não validado) dentro da própria função.
+$scopeCust = report_customer_scope($filterCust, $isAdmin, $customerId);
+if ($scopeCust !== null) {
     $where .= ' AND e.customer_id = :cid';
-    $params[':cid'] = $customerId;
+    $params[':cid'] = $scopeCust;
 }
 if ($filterFence) {
     $where .= ' AND e.geofence_id = :gid';
@@ -234,21 +238,24 @@ try {
     $tableMissing = true;
 }
 
-// ── Dropdowns de cerca e de placa ──────────────────────────────
+// ── Dropdowns de cliente, cerca e placa ────────────────────────
 // A placa virou seleção (era caixa de texto de busca): o usuário não decora o
 // IMEI, e digitar parte dele trazia mais de um veículo sem avisar.
-// `$customerId ?:` e não `!== null`: o resto deste arquivo trata 0 e '' como
-// "sem cliente" (ver o `if ($customerId)` da lista de cercas, logo abaixo), e
-// `(int)''` viraria `customer_id = 0` — uma lista vazia sem motivo.
-$devices = report_device_options($db, $customerId ? (int)$customerId : null);
+// As três listas seguem o MESMO $scopeCust da grade: carregá-las com o
+// cliente da SESSÃO enquanto a grade obedecia ao filtro fazia o admin trocar
+// de cliente e continuar vendo as cercas e as placas do anterior.
+$devices   = report_device_options($db, $scopeCust);
+$customers = $isAdmin ? report_customer_options($db) : [];
 
 $fenceList = [];
 try {
-    if ($customerId) {
+    if ($scopeCust !== null) {
         $stmt = $db->prepare("SELECT id, name FROM geofences WHERE customer_id = :cid ORDER BY name");
-        $stmt->execute([':cid' => $customerId]);
+        $stmt->execute([':cid' => $scopeCust]);
         $fenceList = $stmt->fetchAll();
     } else {
+        // $scopeCust null só acontece para admin de PLATAFORMA — o revendedor
+        // sem cliente resolvido cai em 0 e a lista vem vazia, falha fechada.
         $fenceList = $db->query("SELECT id, name FROM geofences ORDER BY name")->fetchAll();
     }
 } catch (Throwable $e) {}
@@ -278,6 +285,17 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
+        <?php if ($isAdmin): ?>
+        <div>
+            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+                <option value="">Todos</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Modalidade</label>
             <select name="view" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">

@@ -20,6 +20,11 @@ require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
+$user       = get_jimi_user();
+$isAdmin    = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+
+// MESMO escopo da grade de origem — ver a nota em rel_deslocamento_rota.php.
+$scopeCust = report_customer_scope($_GET['customer_id'] ?? null, $isAdmin, $customerId);
 
 $tripId = (int)($_GET['trip_id'] ?? 0);
 $error = '';
@@ -36,10 +41,10 @@ if (!preg_match('#^/relatorios/deslocamento(\?.*)?$#', $returnTo)) {
 
 $sql = "SELECT t.*, COALESCE(d.device_name, t.imei) AS device_name, d.vehicle_type
         FROM trips t LEFT JOIN devices d ON d.imei = t.imei
-        WHERE t.id = :id" . ($customerId ? " AND t.customer_id = :cid" : "");
+        WHERE t.id = :id" . ($scopeCust !== null ? " AND t.customer_id = :cid" : "");
 $stmt = $db->prepare($sql);
 $p = [':id' => $tripId];
-if ($customerId) $p[':cid'] = $customerId;
+if ($scopeCust !== null) $p[':cid'] = $scopeCust;
 try {
     $stmt->execute($p);
     $trip = $stmt->fetch();
@@ -109,11 +114,11 @@ if (!$error) {
             LEFT JOIN occurrence_events oe ON oe.occurrence_id = o.id
             LEFT JOIN alarms a ON a.id = oe.alarm_id AND a.latitude IS NOT NULL AND a.latitude <> 0
             WHERE o.imei = :imei AND o.first_alarm_at BETWEEN :df AND :dt"
-            . ($customerId ? " AND o.customer_id = :cid" : "") . "
+            . ($scopeCust !== null ? " AND o.customer_id = :cid" : "") . "
             ORDER BY o.id, a.alarm_time";
     $stmt = $db->prepare($sql);
     $p2 = [':imei' => $imei, ':df' => $utcFrom, ':dt' => $utcTo];
-    if ($customerId) $p2[':cid'] = $customerId;
+    if ($scopeCust !== null) $p2[':cid'] = $scopeCust;
     $stmt->execute($p2);
     $occs = [];
     while ($r = $stmt->fetch()) {

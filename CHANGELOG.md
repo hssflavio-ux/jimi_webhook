@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.1
+
+**Pedido do dono do produto: "os relatórios de posições, deslocamento e cercas não têm a seleção do cliente, já listam automaticamente todos os veículos."**
+
+### Fixed — os três relatórios que ficaram de fora do escopo centralizado
+- **Seletor de Cliente em `/relatorios/posicoes`, `/relatorios/deslocamento` e `/relatorios/geocercas`** — os únicos três dos quinze relatórios que não passavam por `report_customer_scope()`. Cada um filtrava por `if ($customerId)`, o cliente da **sessão**, sem campo no formulário: o admin não tinha como escolher de qual cliente era o relatório, e o `?customer_id=` da URL era simplesmente ignorado. Agora seguem o mesmo molde de `rel_velocidade.php`/`rel_alarmes.php`: `<select name="customer_id">` alimentado por `report_customer_options()`, visível só para admin/revendedor, com "Todos" como padrão.
+- 🔴 **As LISTAS do formulário seguiam o cliente da SESSÃO enquanto a grade seguia o filtro** — a armadilha que o seletor sozinho não resolveria. `rel_posicoes.php` e `rel_deslocamento.php` carregavam as placas com `SELECT … WHERE d.customer_id = :cid` inline, e `rel_geocercas.php` carregava placas E cercas do mesmo jeito. Com o seletor no ar mas as listas presas à sessão, o admin trocaria de cliente e continuaria escolhendo a placa do anterior — filtro que, aplicado, devolve grade vazia sem dizer por quê. As três listas passaram a `report_device_options($db, $scopeCust)` / `WHERE customer_id = :scopeCust`, o **mesmo** valor que a grade usa. É a mesma classe do bug de `/equipamentos` na v4.9.26: campo do formulário que não lê o mesmo escopo da tela.
+- 🔴 **A grade obedecia ao filtro e o drill-down não** — `rel_deslocamento_rota.php` e `rel_deslocamento_replay.php` escopavam por `if ($customerId)` cru. Sem correção, o admin que filtrasse por um cliente diferente do da sua sessão veria a viagem na grade e levaria **"Viagem não encontrada"** ao clicar em Ver rota/Replay. Os dois passaram a `report_customer_scope()`, e `rel_deslocamento.php` propaga o `customer_id` no link (`$drillCust`). Regra geral: **tela que escopa por sessão e recebe link de uma tela que escopa por filtro precisa receber o filtro junto**.
+- 🔒 **Efeito colateral que é correção de segurança:** `if ($customerId)` **não filtrava nada** quando a sessão estava sem cliente resolvido (`get_customer_id()` NULL — ver o bullet do CLAUDE.md), então um usuário comum nessa condição via a base inteira nos três relatórios. `report_customer_scope()` devolve `0` para não-admin sem cliente, e `customer_id = 0` não casa com nada: falha **fechada**. Conferido com sessão de operador (`user_type='cliente'`) tentando `?customer_id=` de outro tenant — parâmetro ignorado, placas e linhas continuam as do próprio cliente, seletor nem é desenhado.
+
+### Verificado em execução (não só `php -l`)
+- Servidor local, sessão de admin de plataforma: placas por cliente **45 (todos) / 26 (cliente 1) / 19 (cliente 2)** nos três relatórios, cercas **3 / 3 / 0**, grade de deslocamento **4 / 4 / 0** viagens, grade de posições **1 / 0** linhas. Exports XLSX e PDF dos três continuam íntegros (`Microsoft Excel 2007+` / `PDF 1.4`), e o link de Ver rota sai com `&customer_id=1`.
+
 ## [Unreleased] — 4.17.0
 
 **Pedido do dono do produto: "precisamos cadastrá-los completamente e corretamente no nosso banco para termos a informação certa nos relatórios, e esteja atento se algum código de número semelhante trabalhe também com JT/T, para não termos confusão futura."**

@@ -15,6 +15,16 @@ require_login();
 
 $db = Database::getInstance()->getConnection();
 $customerId = get_customer_id();
+$user       = get_jimi_user();
+$isAdmin    = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+
+// MESMO escopo da grade que trouxe o usuário até aqui — a tela de origem
+// passa o `customer_id` adiante no link. Sem isso, o admin que filtrasse o
+// relatório por um cliente diferente do da sua sessão via a linha na grade e
+// levava "Viagem não encontrada" ao clicar em Ver rota: a grade obedecia ao
+// filtro e o drill-down ao cliente da sessão. Para não-admin o parâmetro é
+// ignorado (não validado) dentro de report_customer_scope().
+$scopeCust = report_customer_scope($_GET['customer_id'] ?? null, $isAdmin, $customerId);
 
 $tripId = (int)($_GET['trip_id'] ?? 0);
 $selImei = $_GET['imei'] ?? '';
@@ -40,10 +50,10 @@ try {
         // Modalidade por deslocamento: janela = a própria viagem
         $sql = "SELECT t.*, COALESCE(d.device_name, t.imei) AS device_name
                 FROM trips t LEFT JOIN devices d ON d.imei = t.imei
-                WHERE t.id = :id" . ($customerId ? " AND t.customer_id = :cid" : "");
+                WHERE t.id = :id" . ($scopeCust !== null ? " AND t.customer_id = :cid" : "");
         $stmt = $db->prepare($sql);
         $p = [':id' => $tripId];
-        if ($customerId) $p[':cid'] = $customerId;
+        if ($scopeCust !== null) $p[':cid'] = $scopeCust;
         $stmt->execute($p);
         $trip = $stmt->fetch();
         if (!$trip) {
@@ -70,10 +80,10 @@ try {
                        SUM(t.alarm_count) AS alarm_count, COUNT(*) AS viagens
                 FROM trips t LEFT JOIN devices d ON d.imei = t.imei
                 WHERE t.imei = :imei AND t.started_at BETWEEN :df AND :dt"
-                . ($customerId ? " AND t.customer_id = :cid" : "");
+                . ($scopeCust !== null ? " AND t.customer_id = :cid" : "");
         $stmt = $db->prepare($sql);
         $p = [':imei' => $selImei, ':df' => $dayFrom, ':dt' => $dayTo];
-        if ($customerId) $p[':cid'] = $customerId;
+        if ($scopeCust !== null) $p[':cid'] = $scopeCust;
         $stmt->execute($p);
         $day = $stmt->fetch();
         if (!$day || !$day['primeira_on']) {
@@ -142,11 +152,11 @@ if (!$error) {
             LEFT JOIN occurrence_events oe ON oe.occurrence_id = o.id
             LEFT JOIN alarms a ON a.id = oe.alarm_id AND a.latitude IS NOT NULL AND a.latitude <> 0
             WHERE o.imei = :imei AND o.first_alarm_at BETWEEN :df AND :dt"
-            . ($customerId ? " AND o.customer_id = :cid" : "") . "
+            . ($scopeCust !== null ? " AND o.customer_id = :cid" : "") . "
             ORDER BY o.id, a.alarm_time";
     $stmt = $db->prepare($sql);
     $p = [':imei' => $imei, ':df' => $utcFrom, ':dt' => $utcTo];
-    if ($customerId) $p[':cid'] = $customerId;
+    if ($scopeCust !== null) $p[':cid'] = $scopeCust;
     $stmt->execute($p);
 
     $statusLabels = ['aguardando' => 'Aguardando', 'em_tratativa' => 'Em tratativa',
