@@ -147,26 +147,68 @@ $cat = require __DIR__ . '/../../includes/command_catalog.php';
 // "ler valor atual". `REBOOT#`, `FORMAT#` e `RESET#` têm forma nua — ela
 // simplesmente não é uma pergunta. Um dia alguém regenera o catálogo da wiki
 // por script e essa distinção some sozinha se não estiver travada aqui.
-$destrutivos = ['REBOOT','RESTORE','RELAY','FORMAT','RESET','RESTART','UPDATE'];
+// v4.16.0 — `OUT2` e `FACTORY` entram na lista com a linha VL. A wiki da Jimi
+// documenta consulta para os dois (`OUT2#`, e `FACTORY` restaura tudo), mas
+// aqui vale a mesma régua já aplicada ao `RELAY`, que a wiki também documenta:
+// acionar uma saída no veículo e apagar a configuração do equipamento são
+// AÇÃO, não pergunta. `FACTORY` é o pior deles — leva junto servidor e APN, e
+// depois disso o equipamento só volta por SMS ou serial.
+$destrutivos = ['REBOOT','RESTORE','RELAY','FORMAT','RESET','RESTART','UPDATE','OUT2','FACTORY'];
 $violam = [];
 foreach ($cat as $syn => $d) {
     if (!empty($d['consulta']) && in_array(strtoupper($d['cmd']), $destrutivos, true)) $violam[] = $d['cmd'];
 }
 checa('🔴 nenhum comando destrutivo oferece consulta', [], array_values(array_unique($violam)));
 
-// A consulta é sempre a forma NUA do próprio comando — nunca um setter.
+// A consulta é sempre a forma NUA — nunca um setter com valores dentro.
+//
+// "Nua" tem duas grafias legítimas, e por isso a checagem aceita as duas:
+//   1. `CMD#` — o caso comum (`APN#`, `STATUS#`, `FENCE#`).
+//   2. a própria sintaxe SEM os placeholders — que é o que a família
+//      `EVENTSET` precisa: o "comando" ali é `EVENTSET,<EVENTO>`, e
+//      `EVENTSET#` sozinho não diz de qual evento se está perguntando.
+//      `EVENTSET,ACD,P1#` → `EVENTSET,ACD#`.
+// O que a regra continua proibindo é o que importa: consulta que carregue
+// VALOR (`APN,vivo#`), porque isso escreve em vez de ler.
 $formaErrada = [];
 foreach ($cat as $syn => $d) {
     if (empty($d['consulta'])) continue;
-    if ($d['consulta'] !== strtoupper($d['cmd']) . '#') $formaErrada[] = $d['cmd'] . '=>' . $d['consulta'];
+    $nua = strtoupper($d['cmd']) . '#';
+    // sintaxe sem placeholders: tira todo token `P1..Pn` / letra única
+    $toks = explode(',', rtrim($syn, '#'));
+    $semPh = implode(',', array_filter($toks, fn($t, $i) => $i === 0 || !preg_match('/^(P\d+|[A-Z])$/', $t),
+                                       ARRAY_FILTER_USE_BOTH)) . '#';
+    if ($d['consulta'] !== $nua && $d['consulta'] !== $semPh) {
+        $formaErrada[] = $syn . '=>' . $d['consulta'];
+    }
 }
-checa('consulta é sempre `CMD#`', [], $formaErrada);
+checa('consulta é sempre a forma nua', [], $formaErrada);
 
-// Um comando com várias sintaxes (a família EVENTSET) não pode oferecer N
-// botões idênticos: só a primeira entrada carrega a consulta.
-$porCmd = [];
-foreach ($cat as $d) if (!empty($d['consulta'])) $porCmd[$d['cmd']] = ($porCmd[$d['cmd']] ?? 0) + 1;
-checa('nenhuma consulta duplicada por comando', [], array_keys(array_filter($porCmd, fn($n) => $n > 1)));
+// Um comando com várias sintaxes não pode oferecer N botões idênticos.
+//
+// 🔴 v4.16.0 — a regra deixou de ser "uma consulta por NOME de comando" e
+// passou a ser "uma consulta por nome DENTRO de um mesmo modelo". O motivo é
+// concreto: a linha VL tem `SPEED` de quatro campos (JM-VL01) e de cinco
+// (JM-VL02), com significados distintos, e a linha JC tem a sua. São três
+// entradas do mesmo comando, e cada uma precisa do seu botão de ler — senão o
+// operador de rastreador fica sem "ler o valor atual" porque a única consulta
+// do `SPEED` mora numa entrada que a trava por modelo esconde dele.
+//
+// O que a regra protege continua protegido: `montarListaComandos()` filtra o
+// catálogo pelos modelos marcados, então duas entradas com modelos DISJUNTOS
+// nunca aparecem juntas — e é exatamente a interseção que se confere aqui.
+$comConsulta = [];
+foreach ($cat as $syn => $d) if (!empty($d['consulta'])) $comConsulta[$syn] = $d;
+$colidem = [];
+foreach ($comConsulta as $synA => $a) {
+    foreach ($comConsulta as $synB => $b) {
+        if ($synA >= $synB || $a['cmd'] !== $b['cmd']) continue;
+        $comum = array_intersect($a['modelos'], $b['modelos']);
+        if ($comum) $colidem[] = $a['cmd'] . ': ' . $synA . ' x ' . $synB
+                                 . ' (ambos em ' . implode(',', $comum) . ')';
+    }
+}
+checa('nenhuma consulta duplicada dentro do mesmo modelo', [], $colidem);
 
 // Toda consulta declara ONDE vale e DE ONDE veio — sem procedência, `medido`
 // e `wiki` viram a mesma coisa, e não são.
@@ -409,6 +451,105 @@ checa('variante de aridade não duplica a consulta', [], $comConsulta);
 // trava por modelo é a única coisa entre o operador e esse silêncio.
 $universalDemais = array_values(array_filter($variantes, fn($k) => !empty($cat[$k]['universal'])));
 checa('🔴 variante de aridade fica presa ao JC371', [], $universalDemais);
+
+// ── v4.16.0: a linha VL (JM-VL01 / JM-VL02) ───────────────────────────────
+//
+// Rastreadores no mesmo catálogo das câmeras. O que precisa ficar travado aqui
+// é o que uma regeneração do catálogo por script desfaria em silêncio.
+echo "\n── Catálogo: linha VL (rastreadores) ──\n";
+
+$vl = ['JM-VL01', 'JM-VL02'];
+
+// 🔴 O NOME é JM, não JC. `model_name` é UNIQUE e vira a chave da trava por
+// modelo, de `firmware_releases` e do `modelos` daqui; trocar o prefixo depois
+// quebra o casamento sem erro nenhum, do mesmo jeito que renomear
+// `alarm_types.alarm_name_pt` desliga o motor de ocorrências.
+$modelosNoCat = [];
+foreach ($cat as $d) foreach ($d['modelos'] as $m) $modelosNoCat[$m] = 1;
+foreach ($vl as $m) checa("modelo $m presente no catálogo", true, isset($modelosNoCat[$m]));
+checa('🔴 nenhum modelo com prefixo JC-VL (o certo é JM-VL)', [],
+      array_values(array_filter(array_keys($modelosNoCat), fn($m) => stripos($m, 'JC-VL') === 0)));
+
+// 🔴 `universal` não pode vazar comando de CÂMERA para rastreador. A trava da
+// tela solta a seleção pelas FAMÍLIAS que o comando documenta (derivadas de
+// `modelos`), então basta que estes quatro NÃO listem modelo VL — se alguém os
+// listar, um rastreador passa a receber comando de vídeo/WiFi que ele não tem.
+$soCamera = ['RECORDSW', 'VOLUME', 'SSID', 'WIFIAP', 'CHECKVIDEO', 'STATUSVIDEO'];
+$vazaram = [];
+foreach ($cat as $syn => $d) {
+    if (!in_array($d['cmd'], $soCamera, true)) continue;
+    if (array_intersect($d['modelos'], $vl)) $vazaram[] = $syn;
+}
+checa('🔴 comando exclusivo de câmera não lista modelo VL', [], $vazaram);
+
+// 🔴 Nenhuma entrada da VL pode ser `universal`: elas existem PORQUE a aridade
+// ou a ordem dos campos é diferente da linha JC, e soltar a trava reintroduz
+// exatamente o erro que a entrada separada evita (`SPEED` da VL01 tem tempo no
+// 2º campo; o da JC tem a forma de aviso — mandar um pelo outro é aceito).
+$vlUniversalDemais = [];
+foreach ($cat as $syn => $d) {
+    if (!empty($d['universal']) && $d['modelos'] && !array_diff($d['modelos'], $vl)) {
+        $vlUniversalDemais[] = $syn;
+    }
+}
+checa('🔴 entrada exclusiva da VL nunca é universal', [], $vlUniversalDemais);
+
+// 🔴 Placeholder que `montarComando()` não reconhece fica CRU no comando
+// enviado: ele só troca token que case `/^(P\d+|[A-Z])$/`. A wiki da VL usa
+// `SW`, `T1`, `ΔV1` — todos inválidos aqui —, então toda entrada da VL COM
+// TEMPLATE tem de declarar tantos parâmetros quantos placeholders a sintaxe
+// tem, nem mais nem menos (a mais, `faltaParametro()` desabilita o Enviar para
+// sempre — foi o que aconteceu com o `SOSALM`; a menos, sobra placeholder
+// literal no que vai ao equipamento).
+//
+// ⚠️ `template => false` é o caso oposto e legítimo: a sintaxe já é o comando
+// pronto e `montarComando()` a devolve inteira, sem trocar nada. É por isso que
+// `CENTER,D#` pode ter um `D` que "parece" placeholder — sem campo desenhado,
+// nada é substituído. O que a checagem proíbe é `template => true` com a
+// contagem errada, e `template => false` com parâmetro declarado (que
+// desenharia caixa cujo valor o comando ignora — o buraco descrito no CLAUDE.md).
+$vlDescasado = [];
+foreach ($cat as $syn => $d) {
+    if (!array_intersect($d['modelos'], $vl)) continue;
+    $toks = explode(',', rtrim($syn, '#'));
+    array_shift($toks);
+    $ph = array_filter($toks, fn($t) => preg_match('/^(P\d+|[A-Z])$/', $t));
+    $esperado = empty($d['template']) ? 0 : count($ph);
+    if ($esperado !== count($d['params'])) {
+        $vlDescasado[] = $syn . ' (template=' . (empty($d['template']) ? '0' : '1')
+                       . ', placeholders=' . count($ph) . ', params=' . count($d['params']) . ')';
+    }
+}
+checa('🔴 entrada da VL: params casam com os placeholders', [], $vlDescasado);
+
+// Regressão do `SOSALM,A,B#`: tinha CINCO params para DOIS placeholders, o que
+// deixava o comando inenviável (cinco caixas obrigatórias na tela). É o caso
+// que a checagem acima generaliza; ancorado aqui pelo nome porque foi um bug
+// real, não uma hipótese.
+checa('SOSALM,A,B# tem exatamente 2 parâmetros', 2, count($cat['SOSALM,A,B#']['params'] ?? []));
+
+// A linha VL responde ao `VERSION#` num formato que NÃO é o da linha JC —
+// `NT06L_GT06L_WAAG_V7.0_210112.0927` (wiki, "Consultas - VL01"), sem o prefixo
+// de modelo e sem os pares `CHAVE:valor` da JC. `/firmwares` compara versão por
+// IGUALDADE, então basta a leitura devolver a string inteira e estável; o que
+// não pode acontecer é ela devolver NULL e a coluna ficar vazia para sempre.
+checa('[JM-VL] VERSION# do rastreador é lido',
+      'NT06L_GT06L_WAAG_V7.0_210112.0927',
+      firmware_parse_version('[VERSION]NT06L_GT06L_WAAG_V7.0_210112.0927'));
+
+// Toda entrada EXCLUSIVA da VL declara de onde veio — a disciplina do
+// `fonte`/`doc_ref` do resto do catálogo. Aqui a fonte é sempre a wiki, nunca
+// medição: NENHUM destes comandos foi disparado contra equipamento real ainda.
+//
+// ⚠️ Entrada COMPARTILHADA (`STATUS#`, `VERSION#`, `TIMER,A,B#`…) fica de fora
+// de propósito: o `fonte` dela descreve a procedência ORIGINAL, da linha JC, e
+// sobrescrevê-lo com "wiki VL" mentiria sobre de onde a sintaxe veio.
+$vlSemFonte = [];
+foreach ($cat as $syn => $d) {
+    if (!$d['modelos'] || array_diff($d['modelos'], $vl)) continue; // só as exclusivas
+    if (trim((string)($d['fonte'] ?? '')) === '') $vlSemFonte[] = $syn;
+}
+checa('toda entrada exclusiva da VL declara a fonte', [], $vlSemFonte);
 
 // A contagem por categoria também é comentário, e envelhece igual à outra.
 // Categoria fora do mapa de `handlers/comandos.php` cai no rótulo cru.

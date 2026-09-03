@@ -1491,6 +1491,69 @@ function resource_list_ttl_minutes(): int
     return $v > 0 ? $v : 30;
 }
 
+/**
+ * Família de cada modelo do catálogo: `camera` ou `tracker` (v4.16.0).
+ *
+ * 🔴 POR QUE ISTO EXISTE. O flag `universal` do `command_catalog.php` quer
+ * dizer "não trava a seleção por modelo", e foi DERIVADO de "presente em >= 5
+ * das 6 páginas de CÂMERA da wiki". Enquanto a frota inteira era câmera, "não
+ * trava" e "vale para todo mundo" eram a mesma frase. Com os rastreadores da
+ * linha JM-VL (sem vídeo, sem WiFi) deixaram de ser: soltar a trava passou a
+ * oferecer `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho que não os
+ * tem. A família é o que devolve a `universal` o sentido que ele sempre teve.
+ *
+ * 🔴 PONTO ÚNICO de propósito: DUAS telas travam a seleção pelo MESMO catálogo
+ * — `/comandos` (proNo 128 pelo IoT Hub) e `/comandos-sms` (o mesmo catálogo
+ * por SMS). Corrigir só uma deixaria a outra oferecendo comando de câmera para
+ * rastreador, que é o defeito inteiro, por um caminho diferente.
+ *
+ * ⚠️ try/catch com default 'camera': a coluna vem da migração v4.16.0, e
+ * migração nova NÃO roda no deploy que a traz (CLAUDE.md). No intervalo entre
+ * os dois deploys as telas continuam funcionando exatamente como funcionavam
+ * antes — que é o que "todo mundo é câmera" quer dizer.
+ *
+ * @param  PDO $db Conexão
+ * @returns array<string,string> model_name => 'camera'|'tracker'
+ */
+function device_model_families(PDO $db): array
+{
+    $mapa = [];
+    try {
+        foreach ($db->query("SELECT model_name, family FROM device_models") as $m) {
+            $mapa[$m['model_name']] = $m['family'] ?: 'camera';
+        }
+    } catch (Throwable $e) {
+        // `class_exists` porque este arquivo é o ÚNICO de `includes/` que não
+        // depende do Logger — ele é carregado por `auth.php` ANTES do
+        // `core/Logger.php`, e por scripts de CLI que não carregam nenhum dos
+        // dois. Um "Class Logger not found" aqui trocaria um aviso por um fatal.
+        if (class_exists('Logger')) {
+            Logger::warning('device_model_families: coluna `family` indisponível — aplique a migração v4.16.0',
+                            ['erro' => $e->getMessage()]);
+        }
+    }
+    return $mapa;
+}
+
+/**
+ * Famílias que um comando do catálogo documenta, derivadas de `modelos`.
+ *
+ * Comando sem modelo nenhum cai em `['camera']` — o comportamento anterior à
+ * v4.16.0, e a resposta conservadora: quem não sabe a que família pertence não
+ * ganha rastreador de brinde.
+ *
+ * @param  array<int,string>    $modelos  `modelos` da entrada do catálogo
+ * @param  array<string,string> $familias Saída de `device_model_families()`
+ * @returns array<int,string> Famílias distintas
+ */
+function command_families(array $modelos, array $familias): array
+{
+    if (!$modelos) return ['camera'];
+    $f = [];
+    foreach ($modelos as $m) $f[$familias[$m] ?? 'camera'] = 1;
+    return array_keys($f);
+}
+
 function video_stream_config() {
     $flvBase = rtrim(getenv('STREAM_URL') ?: 'http://localhost:8881', '/');
     $host = parse_url($flvBase, PHP_URL_HOST) ?: 'localhost';

@@ -99,13 +99,34 @@
  *
  * `fonte` guarda a linha de origem na planilha (A007, G014…).
  *
- * Total: 193 entradas / 143 comandos distintos (16 universais), 63 com consulta.
- * Por categoria: alarme=45, audio=4, ia=16, manutencao=21, outros=24, posicao=25, rede=22, video=36.
+ * Total: 237 entradas / 168 comandos distintos (16 universais), 100 com consulta.
+ * Por categoria: alarme=68, audio=4, energia=1, ia=15, manutencao=25, outros=26, posicao=34, rede=27, video=37.
  *
  * ⚠️ Estes números eram 219/143/video=29 e estavam ERRADOS desde a v4.9.27 — o
  * arquivo já tinha 220/144/video=30 antes da v4.9.32. Contagem em comentário
  * envelhece sem avisar; `tests/helpers/command_response.test.php` passou a
- * conferi-la contra o array de verdade.
+ * conferi-la contra o array de verdade. (E envelheceu DE NOVO: entre a v4.9.32
+ * e a v4.16.0 o arquivo andou para 195/144 sem o cabeçalho acompanhar, com o
+ * teste vermelho o tempo todo. Atualizar estas duas linhas faz parte de mexer
+ * neste arquivo.)
+ *
+ * ── v4.16.0 — a linha VL entra, e `universal` passa a ter FAMÍLIA ──────────
+ *
+ * `JM-VL01` e `JM-VL02` são RASTREADORES: mesmo protocolo JIMI, mesmo proNo
+ * 128, sem câmera. Isso quebra uma premissa silenciosa de `universal`: ele foi
+ * derivado de "presente em >= 5 das 6 páginas de CÂMERA da wiki", e "não trava
+ * a seleção por modelo" passou a significar oferecer `RECORDSW`, `VOLUME`,
+ * `SSID` e `WIFIAP` a um aparelho que não tem vídeo nem WiFi.
+ *
+ * 🔴 A trava de `handlers/comandos.php` deixou de ser "universal libera todo
+ * mundo" e virou "universal libera as FAMÍLIAS que o próprio comando
+ * documenta" — e a família sai de `modelos`, via `device_models.family`. Não
+ * há chave nova aqui: um comando universal que valha para rastreador é um
+ * comando que lista `JM-VL01`/`JM-VL02` em `modelos` (é o caso de `STATUS`,
+ * `VERSION`, `TIMER` e `RELAY`). Quem não lista continua preso às câmeras.
+ *
+ * O bloco da linha VL fica no FIM do arquivo, com o detalhe do que entrou como
+ * modelo em entrada existente e o que precisou de entrada própria.
  *
  * ── v4.13.0 — 45 comandos de ADAS/DMS/velocidade saíram daqui ───────────────
  * `EVENTSET`/`EVENTALERT` de eventos ADAS/DMS, `DMSSP`, `DMSSW,P1,P2#`,
@@ -255,20 +276,24 @@ return [
     'nome' => 'APN automática',
     'desc' => 'Liga ou desliga a seleção automática de APN. P1: ON/OFF, padrão ON.',
     'categoria' => 'rede',
+    // v4.16.0: os rastreadores JM-VL01/JM-VL02 documentam a MESMA sintaxe de um
+    // campo (ON/OFF) — entram na entrada existente em vez de ganhar uma cópia.
     'modelos' => [
       0 => 'JC182',
+      1 => 'JM-VL01',
+      2 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'ASETAPN#',
-    'consulta_modelos' => ['JC182'],
-    'consulta_ref' => 'medido',
+    'consulta_modelos' => ['JC182', 'JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'medido+wiki',
     'params' => [
       0 => [
         'p' => 'P1',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação da seleção automática de APN',
+        'format' => 'ON / OFF',
+        'default' => 'ON',
       ],
     ],
     'exemplos' => [
@@ -1980,22 +2005,25 @@ return [
   'GPSDUP,A#' => [
     'cmd' => 'GPSDUP',
     'nome' => 'Duplicidade de GPS',
-    'desc' => 'A: ON/OFF.',
+    'desc' => 'A: ON/OFF. Com ON o equipamento continua mandando posição mesmo sem fixar GPS, parado ou suspenso.',
     'categoria' => 'posicao',
+    // v4.16.0: mesma sintaxe de um campo na linha VL.
     'modelos' => [
       0 => 'JC181',
+      1 => 'JM-VL01',
+      2 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'GPSDUP#',
-    'consulta_modelos' => ['JC181'],
+    'consulta_modelos' => ['JC181', 'JM-VL01', 'JM-VL02'],
     'consulta_ref' => 'wiki',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Envio de posição sem GPS fixado / parado / suspenso',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
       ],
     ],
     'exemplos' => [
@@ -2769,12 +2797,17 @@ return [
     'nome' => 'Imobilização remota via relé (RELAY)',
     'desc' => 'Controla remotamente o abastecimento de combustível ou o fornecimento de energia do veículo (corte/restauração).',
     'categoria' => 'ia',
+    // v4.16.0: a linha VL documenta `RELAY,C#` com o MESMO campo (0/1) — os
+    // dois modelos entram aqui, e é o que faz `universal` continuar valendo
+    // para as duas famílias (a trava por família lê `modelos`, ver o cabeçalho).
     'modelos' => [
       0 => 'JC371',
       1 => 'JC450',
       2 => 'JC181',
       3 => 'JC400D',
       4 => 'JC400AD',
+      5 => 'JM-VL01',
+      6 => 'JM-VL02',
     ],
     'universal' => true,
     'template' => true,
@@ -2809,8 +2842,11 @@ return [
     'nome' => 'Reiniciar (RESET)',
     'desc' => '🔴 Reinicia o equipamento. Equivalente a REBOOT# e RESTART#.',
     'categoria' => 'manutencao',
+    // v4.16.0: a linha VL documenta `RESET#` idêntico (resposta "OK!").
     'modelos' => [
       0 => 'JC371',
+      1 => 'JM-VL01',
+      2 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => false,
@@ -3056,48 +3092,45 @@ return [
     'nome' => 'SOS',
     'desc' => 'Para configurar o envio de alarme SOS, envie',
     'categoria' => 'alarme',
+    // v4.16.0: o JM-VL01 documenta os MESMOS dois campos (ON/OFF + forma de
+    // aviso). O JM-VL02 tem um terceiro (atraso do disparo) e por isso ganhou
+    // entrada própria, `SOSALM,P1,P2,P3#`.
     'modelos' => [
       0 => 'JC400D',
       1 => 'JC400AD',
+      2 => 'JM-VL01',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'SOSALM#',
-    'consulta_modelos' => ['JC181', 'JC182'],
-    'consulta_ref' => 'medido',
+    'consulta_modelos' => ['JC181', 'JC182', 'JM-VL01'],
+    'consulta_ref' => 'medido+wiki',
+    // 🔴 v4.16.0 — esta lista tinha CINCO parâmetros para DOIS placeholders, e
+    // não era cosmético: `faltaParametro()` (handlers/comandos.php) exige TODO
+    // campo renderizado preenchido, então a tela desenhava cinco caixas e o
+    // botão Enviar ficava desabilitado até preencherem as cinco — para um
+    // comando de dois campos. O comando era, na prática, inenviável fora do
+    // modo livre. As três linhas extras eram lixo de raspagem da wiki
+    // ("Este parâmetro deve ser mantido valor A"), não campos do protocolo.
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0 - GPRS, 1 - SMS+GPRS, 2 - GPRS+SMS+Ligação, 3 - GPRS+Ligação',
-        'format' => '',
-        'default' => '',
-      ],
-      2 => [
-        'p' => 'A',
-        'desc' => 'Este parâmetro deve ser mantido valor A',
-        'format' => '',
-        'default' => '',
-      ],
-      3 => [
-        'p' => 'D',
-        'desc' => 'Este parâmetro deve ser mantido valor A',
-        'format' => '',
-        'default' => '',
-      ],
-      4 => [
-        'p' => 'A',
-        'desc' => '1, 2 ou 3',
-        'format' => '',
-        'default' => '2 Para adicionar os números na central d',
+        'desc' => 'Forma de aviso',
+        'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação',
+        'default' => '2',
       ],
     ],
     'exemplos' => [
+      0 => [
+        'cmd' => 'SOSALM,ON,0#',
+        'desc' => 'exemplo literal da wiki VL — liga o alarme com aviso só por GPRS',
+      ],
     ],
   ],
   // v4.13.12 — corrigido cruzando com docs/JC181_Command_List_V1.0.7_20250811.xlsx,
@@ -3173,13 +3206,16 @@ return [
     'nome' => 'Frenagem brusca (detecção)',
     'desc' => 'Queda de velocidade em N segundos para caracterizar frenagem brusca.',
     'categoria' => 'alarme',
+    // v4.16.0: o JM-VL02 documenta os MESMOS cinco campos, na mesma ordem
+    // (ativação, forma de aviso, tempo, ΔV de aceleração, ΔV de frenagem).
     'modelos' => [
       0 => 'JC181',
+      1 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'SPEEDCHECK#',
-    'consulta_modelos' => ['JC181'],
+    'consulta_modelos' => ['JC181', 'JM-VL02'],
     'consulta_ref' => 'wiki',
     'params' => [
       0 => [
@@ -3255,11 +3291,14 @@ return [
       3 => 'JC181',
       4 => 'JC400D',
       5 => 'JC400AD',
+      // v4.16.0 — a linha VL documenta o STATUS# com a mesma forma nua.
+      6 => 'JM-VL01',
+      7 => 'JM-VL02',
     ],
     'universal' => true,
     'template' => false,
     'consulta' => 'STATUS#',
-    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450', 'JM-VL01', 'JM-VL02'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
@@ -3282,13 +3321,15 @@ return [
     'nome' => 'Curva brusca (detecção)',
     'desc' => 'Tempo de detecção para caracterizar curva brusca.',
     'categoria' => 'alarme',
+    // v4.16.0: o JM-VL02 documenta os MESMOS cinco campos, na mesma ordem.
     'modelos' => [
       0 => 'JC181',
+      1 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => true,
     'consulta' => 'SWERVE#',
-    'consulta_modelos' => ['JC181'],
+    'consulta_modelos' => ['JC181', 'JM-VL02'],
     'consulta_ref' => 'wiki',
     'params' => [
       0 => [
@@ -3358,25 +3399,29 @@ return [
     'nome' => 'Posição',
     'desc' => 'Para configurar o tempo de envio de posição, envie',
     'categoria' => 'posicao',
+    // v4.16.0: a linha VL documenta a MESMA sintaxe de dois campos.
     'modelos' => [
       0 => 'JC371',
       1 => 'JC182',
       2 => 'JC181',
       3 => 'JC400D',
       4 => 'JC400AD',
+      5 => 'JM-VL01',
+      6 => 'JM-VL02',
     ],
     'universal' => true,
     'template' => true,
     'consulta' => 'TIMER#',
-    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D'],
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JM-VL01', 'JM-VL02'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
-      // ⚠️ A wiki não descreve os campos, e nenhuma planilha da fabricante
-      // traz esta sintaxe de dois campos — só a de um (`TIMER,A#`, C001 do
-      // JC371, intervalo em segundos). As posições vêm da sintaxe; o
-      // significado de cada uma segue sem fonte, e fica em branco.
-      0 => ['p' => 'A', 'desc' => '', 'format' => '', 'default' => ''],
-      1 => ['p' => 'B', 'desc' => '', 'format' => '', 'default' => ''],
+      // ⚠️ Nenhuma planilha da fabricante traz esta sintaxe de dois campos —
+      // só a de um (`TIMER,A#`, C001 do JC371, intervalo em segundos). Quem
+      // descreve os dois é a wiki da linha VL: T1 = intervalo com ignição
+      // LIGADA, T2 = com ignição desligada, ambos 0 ou 5–18000 s. É a única
+      // fonte que temos, e ela fala das VL — por isso o texto diz de onde vem.
+      0 => ['p' => 'A', 'desc' => 'Intervalo com ignição LIGADA (wiki VL; 0 desliga)', 'format' => '0 ou 5–18000 (segundos)', 'default' => ''],
+      1 => ['p' => 'B', 'desc' => 'Intervalo com ignição DESLIGADA (wiki VL; 0 desliga)', 'format' => '0 ou 5–18000 (segundos)', 'default' => ''],
     ],
     'exemplos' => [
     ],
@@ -3757,6 +3802,9 @@ return [
     'nome' => 'Firmware',
     'desc' => '',
     'categoria' => 'manutencao',
+    // v4.16.0 — a linha VL responde `[VERSION]NT06L_GT06L_WAAG_V7.0_210112.0927`
+    // (wiki, Consultas VL01): formato DIFERENTE do da linha JC, ver
+    // `firmware_capture()` em includes/firmware.php.
     'modelos' => [
       0 => 'JC371',
       1 => 'JC450',
@@ -3764,11 +3812,13 @@ return [
       3 => 'JC181',
       4 => 'JC400D',
       5 => 'JC400AD',
+      6 => 'JM-VL01',
+      7 => 'JM-VL02',
     ],
     'universal' => true,
     'template' => false,
     'consulta' => 'VERSION#',
-    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
+    'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450', 'JM-VL01', 'JM-VL02'],
     'consulta_ref' => 'medido+wiki',
     'params' => [
     ],
@@ -5198,28 +5248,33 @@ return [
     'nome' => 'Hodômetro (ajuste manual)',
     'desc' => 'Enable or disable mileage feature',
     'categoria' => 'posicao',
+    // v4.16.0: mesma sintaxe de dois campos na linha VL.
     'modelos' => [
       0 => 'JC400AD',
       1 => 'JC400D',
+      2 => 'JM-VL01',
+      3 => 'JM-VL02',
     ],
     'universal' => false,
     'template' => true,
-    'consulta' => NULL,
-    'consulta_modelos' => [],
-    'consulta_ref' => NULL,
-    'fonte' => 'planilha JIMI V5.0.3 D006',
+    // A consulta `MILEAGE#` está documentada só na wiki da linha VL — por isso
+    // `consulta_modelos` traz SÓ as VL, mesmo o comando valendo nas quatro.
+    'consulta' => 'MILEAGE#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'planilha JIMI V5.0.3 D006 + wiki VL',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Ativação da contagem de hodômetro',
+        'format' => 'ON / OFF',
+        'default' => 'OFF',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'current mileage value, default is 0, unit is meter',
-        'format' => '',
-        'default' => '',
+        'desc' => '🔴 Valor inicial do hodômetro — a UNIDADE muda com o modelo: a planilha da linha JC diz METROS, a wiki da linha VL diz QUILÔMETROS (0 a 999999). Confira no equipamento antes de gravar.',
+        'format' => 'JC400: metros / JM-VL: km (0–999999)',
+        'default' => '0',
       ],
     ],
     'exemplos' => [
@@ -6597,6 +6652,883 @@ return [
         'cmd' => 'Picture,in',
         'desc' => 'exemplo oficial (A012)',
       ],
+    ],
+  ],
+  // ══ Linha VL — rastreadores JM-VL01 / JM-VL02 (v4.16.0) ═══════════════════
+  //
+  // Fonte: wiki oficial da Jimi Brasil (https://wiki.jimibrasil.com.br),
+  // páginas "Configurações - VL01" / "Configurações - VL02" e "Consultas -
+  // VL01". Mesmo protocolo JIMI (msgClass=0), mesmo proNo 128, mesma forma de
+  // plataforma (separador vírgula, terminador `#`).
+  //
+  // 🔴 SÓ ENTRA AQUI O QUE MUDA. Comando que a VL compartilha com a linha JC
+  // na MESMA aridade e com o MESMO significado não ganha entrada nova — ganha
+  // o modelo na lista de `modelos` da entrada que já existe (`STATUS#`,
+  // `VERSION#`, `RESET#`, `TIMER,A,B#`, `RELAY,P1#`, `MILEAGE,A,B#`,
+  // `GPSDUP,A#`, `ASETAPN,P1#`, `SOSALM,A,B#`, `SWERVE,…`, `SPEEDCHECK,…`).
+  // Duplicar a entrada só porque o modelo é outro encheria a tela de linhas
+  // idênticas; o que precisa ser sensível ao modelo é a QUANTIDADE e o FORMATO
+  // dos parâmetros — e é exatamente aí que a entrada separada se justifica.
+  //
+  // 🔴 PLACEHOLDER SÓ VALE COMO `P1..Pn` OU LETRA ÚNICA MAIÚSCULA.
+  // `montarComando()` (handlers/comandos.php) troca todo token que case
+  // `/^(P\d+|[A-Z])$/` pelo valor digitado, na ordem. Duas consequências que a
+  // wiki não avisa e que decidem a grafia de tudo aqui:
+  //   1. `SW`, `T1`, `ΔV1` — as letras que a wiki usa — NÃO casam, e ficariam
+  //      cruas no comando enviado. Por isso toda entrada da VL usa `P1..Pn` e
+  //      guarda o nome da wiki no `desc` do parâmetro.
+  //   2. Token FIXO de uma letra maiúscula é indistinguível de placeholder:
+  //      `SOS,A,P1#` faria o valor digitado cair no lugar do `A`. Por isso
+  //      `SOS` e `CENTER` viram `P1,P2#`, com a ação (A/D) como primeiro campo.
+  //
+  // ⚠️ `P1..Pn` também é o que dá chave DISTINTA quando a VL tem a mesma
+  // aridade da câmera com significado diferente (`DEFENSE`, `SPEED`, `LED`) —
+  // o catálogo é indexado pela sintaxe, e duas entradas não podem colidir.
+
+  // ── Rede e servidor ───────────────────────────────────────────────────────
+  'APN,P1#' => [
+    'cmd' => 'APN',
+    'nome' => 'APN do chip (só o nome)',
+    'desc' => 'Define a APN quando a operadora não exige usuário e senha. Forma curta documentada para a linha VL.',
+    'categoria' => 'rede',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'APN#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "APN"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Nome da APN — pergunte à operadora do chip', 'format' => '', 'default' => 'allcombl.br'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'APN,teste.teste.com.br#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'APN,P1,P2,P3#' => [
+    'cmd' => 'APN',
+    'nome' => 'APN do chip, com usuário e senha',
+    'desc' => 'Forma completa da linha VL: nome da APN, usuário e senha. Três campos — a JC371 usa quatro e a JC400 até quatorze, por isso a entrada é separada.',
+    'categoria' => 'rede',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "APN"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Nome da APN', 'format' => '', 'default' => 'allcombl.br'],
+      ['p' => 'P2', 'desc' => 'Usuário da APN', 'format' => '', 'default' => 'allcom'],
+      ['p' => 'P3', 'desc' => 'Senha da APN', 'format' => '', 'default' => 'allcom'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'APN,teste.teste.com.br,teste,teste#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'SERVER,P1,P2,P3,P4#' => [
+    'cmd' => 'SERVER',
+    'nome' => 'Servidor (endereço, porta e protocolo)',
+    'desc' => '🔴 Aponta o equipamento para outro servidor. Quatro campos na linha VL — a entrada universal da linha JC tem três, e mandar a aridade errada é ACEITO e mal interpretado, sem erro nenhum.',
+    'categoria' => 'rede',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SERVER#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Servidor"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Modo do endereço', 'format' => '0 = IP / 1 = domínio (DNS)', 'default' => '0'],
+      ['p' => 'P2', 'desc' => 'IP ou domínio do servidor', 'format' => '', 'default' => '186.248.143.197'],
+      ['p' => 'P3', 'desc' => 'Porta do servidor', 'format' => '', 'default' => '21100'],
+      ['p' => 'P4', 'desc' => 'Protocolo de transporte', 'format' => '0 = TCP / 1 = UDP', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SERVER,1,gpsdev.tracksolid.com,21100,0#', 'desc' => 'exemplo literal da wiki (domínio, TCP)'],
+    ],
+  ],
+  'GPRSON,P1#' => [
+    'cmd' => 'GPRSON',
+    'nome' => 'Ligar/desligar a rede GPRS',
+    'desc' => '⚠️ Desligar a rede corta a comunicação do rastreador com a plataforma — só volta por SMS ou serial.',
+    'categoria' => 'rede',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'GPRSON#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Habilitar/desabilitar GPRS"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Estado da rede', 'format' => '0 = desabilita / 1 = habilita', 'default' => '1'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'GPRSON,1#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'GPRSALM,P1#' => [
+    'cmd' => 'GPRSALM',
+    'nome' => 'Alarme de bloqueio de GPRS (jammer)',
+    'desc' => 'Gera alarme quando a rede é bloqueada/inibida.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'GPRSALM#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Alerta de bloqueio de GPRS"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação do alarme', 'format' => 'ON / OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'GPRSALM,OFF#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'GPRSSET#' => [
+    'cmd' => 'GPRSSET',
+    'nome' => 'Diagnóstico de rede (APN + servidor + URL)',
+    'desc' => 'Consulta pura, sem forma de escrita: devolve numa resposta só o estado do GPRS, a APN em uso, o servidor com a porta e a URL de mapa. É o retrato de rede mais completo que a linha VL dá.',
+    'categoria' => 'manutencao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'GPRSSET#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Consultas VL01, "Rede"',
+    'params' => [],
+    'exemplos' => [
+      ['cmd' => 'GPRSSET#', 'desc' => 'resposta medida na wiki: GPRS:ON; Currently use APN:allcom.vivo.com.br,allcom,allcom; Server:1,gpsdev.tracksolid.com,21100,0; URL:http://maps.google.com/maps?q=;'],
+    ],
+  ],
+  'HOTSPOT,P1,P2,P3#' => [
+    'cmd' => 'HOTSPOT',
+    'nome' => 'Hotspot WiFi',
+    'desc' => 'Só o JM-VL01 tem rádio WiFi — o JM-VL02 (Cat-M1/NB2) não.',
+    'categoria' => 'rede',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'HOTSPOT#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "WiFi(Hotspot)"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Estado do hotspot', 'format' => '0 = desligado / 1 = abre / 2 = abre o tempo todo', 'default' => '0'],
+      ['p' => 'P2', 'desc' => 'Nome da rede (SSID)', 'format' => '', 'default' => 'quatro últimos dígitos do IMEI'],
+      ['p' => 'P3', 'desc' => 'Senha da rede', 'format' => '', 'default' => '11111111'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'HOTSPOT,1,1234,11111111#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+
+  // ── Fuso horário ──────────────────────────────────────────────────────────
+  'GMT,P1,P2,P3#' => [
+    'cmd' => 'GMT',
+    'nome' => 'Fuso horário do equipamento',
+    'desc' => '⚠️ O sistema grava tudo em UTC e converte na exibição (CLAUDE.md). Mexer no fuso do equipamento muda o carimbo que ele usa para NOMEAR arquivo e para os relógios locais — não muda a hora do webhook.',
+    'categoria' => 'manutencao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'GMT#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Fuso horário (GMT)"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Hemisfério do fuso', 'format' => 'E = leste / W = oeste', 'default' => 'W (Brasil)'],
+      ['p' => 'P2', 'desc' => 'Horas de diferença', 'format' => '0–12', 'default' => '3'],
+      ['p' => 'P3', 'desc' => 'Fração de hora', 'format' => '0 / 15 / 30 / 45', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'GMT,W,3,0#', 'desc' => 'exemplo literal da wiki — é o fuso de Brasília (UTC−3)'],
+    ],
+  ],
+  'ASETGMT,P1#' => [
+    'cmd' => 'ASETGMT',
+    'nome' => 'Fuso horário automático',
+    'desc' => 'Deixa o equipamento resolver o fuso pela rede, em vez do valor fixo do GMT.',
+    'categoria' => 'manutencao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'ASETGMT#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Fuso horário automático (GMT)"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => ''],
+    ],
+    'exemplos' => [],
+  ],
+
+  // ── Posição e telemetria ──────────────────────────────────────────────────
+  'DISTANCE,P1#' => [
+    'cmd' => 'DISTANCE',
+    'nome' => 'Envio de posição por distância',
+    'desc' => '⚠️ Excludente com o envio por tempo: ligar a distância zera o TIMER, e ligar o TIMER zera a distância. A wiki avisa nos dois comandos.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'DISTANCE#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Envio de posição por distância"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Distância entre posições', 'format' => '0 (desliga) ou 50–10000 (metros)', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'DISTANCE,0#', 'desc' => 'desliga o envio por distância e devolve o controle ao TIMER'],
+    ],
+  ],
+  'LBSON,P1,P2,P3#' => [
+    'cmd' => 'LBSON',
+    'nome' => 'Envio de posição por LBS (torre de celular)',
+    'desc' => 'Posição aproximada pela antena quando o GPS não fixa. Chega pelo /pushlbs.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'LBSON#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Upload de dados LBS"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '10–3600 (segundos)', 'default' => '60'],
+      ['p' => 'P3', 'desc' => 'Tempo sem fixar GPS até começar a mandar LBS', 'format' => '10–3600 (segundos)', 'default' => '60'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'LBSON,ON,60,60#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'ANGLEREP,P1,P2,P3#' => [
+    'cmd' => 'ANGLEREP',
+    'nome' => 'Posição extra por mudança de ângulo',
+    'desc' => 'Três campos na VL01 (ativação, ângulo, janela de detecção) — a entrada universal da linha JC tem dois e a variante do JC371 tem um.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL01, "Posição por ângulo"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'ON'],
+      ['p' => 'P2', 'desc' => 'Limiar do ângulo', 'format' => '5–180 (graus)', 'default' => ''],
+      ['p' => 'P3', 'desc' => 'Janela de detecção', 'format' => '2–5 (segundos)', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'ANGLEREP,ON,180,5#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'SENDS,P1#' => [
+    'cmd' => 'SENDS',
+    'nome' => 'Tempo de vibração que acorda o GPS',
+    'desc' => 'Quanto tempo de vibração é preciso para o equipamento ligar o GPS. A entrada antiga do JC181 é um literal `SENDS,5#` sem campo — esta é a forma com parâmetro.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SENDS#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Tempo de GPS por vibração"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Tempo de detecção de vibração', 'format' => '0–300 (minutos)', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SENDS,5#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'SF,P1#' => [
+    'cmd' => 'SF',
+    'nome' => 'Efeito estrela (filtro de posição parada)',
+    'desc' => 'Com ON, o equipamento filtra as posições geradas com o veículo parado — é o que evita o "chuveiro de pontos" em cima do mesmo lugar no mapa.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SF#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Efeito estrela"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação do filtro', 'format' => 'ON / OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SF,OFF#', 'desc' => 'exemplo literal da wiki — passa a enviar também as posições paradas'],
+    ],
+  ],
+  'ADT,P1,P2,P3#' => [
+    'cmd' => 'ADT',
+    'nome' => 'Envio da tensão da bateria externa',
+    'desc' => 'Três campos na VL01: um intervalo para ignição ligada e outro para desligada.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'ADT#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "Envio de tensão de bateria externa"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Intervalo com ignição LIGADA (0 = não envia)', 'format' => '0–3600 (segundos)', 'default' => '60'],
+      ['p' => 'P3', 'desc' => 'Intervalo com ignição DESLIGADA (0 = não envia)', 'format' => '0–3600 (segundos)', 'default' => '60'],
+    ],
+    'exemplos' => [],
+  ],
+  'ADT,P1,P2#' => [
+    'cmd' => 'ADT',
+    'nome' => 'Envio da tensão da bateria externa',
+    'desc' => 'Dois campos na VL02 — um intervalo só, sem distinguir ignição ligada de desligada.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL02, "Envio de tensão de bateria externa"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Intervalo de envio', 'format' => '5–3600 (segundos)', 'default' => '600'],
+    ],
+    'exemplos' => [],
+  ],
+
+  // ── Alarmes ───────────────────────────────────────────────────────────────
+  'SENALM,P1,P2#' => [
+    'cmd' => 'SENALM',
+    'nome' => 'Alarme de vibração',
+    'desc' => 'Dois campos na linha VL (ativação e forma de aviso) — a entrada da linha JC tem cinco.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SENALM#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Alarme de vibração"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SENALM,ON,0#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'BATALM,P1,P2#' => [
+    'cmd' => 'BATALM',
+    'nome' => 'Alarme de bateria interna baixa',
+    'desc' => '',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'BATALM#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Alarme de bateria baixa"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '1'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'BATALM,ON,0#', 'desc' => 'exemplo literal da wiki'],
+      ['cmd' => 'BATALM,OFF#', 'desc' => 'a wiki documenta esta forma curta para DESLIGAR o alarme — use o modo livre, ela tem um campo só'],
+    ],
+  ],
+  'SOSALM,P1,P2,P3#' => [
+    'cmd' => 'SOSALM',
+    'nome' => 'Alarme de SOS (pânico)',
+    'desc' => 'Três campos na VL02 — o terceiro é o atraso do disparo, que a VL01 e a linha JC não têm.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SOSALM#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Configuração de SOS(pânico)"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação', 'default' => '2'],
+      ['p' => 'P3', 'desc' => 'Atraso do disparo (quanto tempo o botão precisa ficar pressionado)', 'format' => '100–10000 (milissegundos)', 'default' => '3000'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SOSALM,ON,100#', 'desc' => '⚠️ exemplo literal da wiki — tem só DOIS valores para três campos declarados. A própria fabricante está inconsistente aqui; confirme no equipamento antes de usar em produção.'],
+    ],
+  ],
+  'MOVING,P1,P2,P3#' => [
+    'cmd' => 'MOVING',
+    'nome' => 'Alarme de movimento (raio de estacionamento)',
+    'desc' => 'Alarma quando o veículo sai de um raio ao redor do ponto onde parou.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'MOVING#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Alarme de movimento"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Raio de movimentação', 'format' => '100–1000 (metros)', 'default' => '300'],
+      ['p' => 'P3', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação', 'default' => '1'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'MOVING,ON,300,0#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'SPEED,P1,P2,P3,P4#' => [
+    'cmd' => 'SPEED',
+    'nome' => 'Alarme de excesso de velocidade',
+    'desc' => '🔴 Quatro campos como na linha JC, mas em ORDEM DIFERENTE: aqui o 2º é o TEMPO e o 4º é a forma de aviso; na JC o 2º é a forma e o 4º é o tempo. Trocar os dois é aceito sem erro e vira um limite absurdo.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SPEED#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "Alarme de excesso de velocidade"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Tempo acima do limite para disparar', 'format' => '5–600 (segundos)', 'default' => '20'],
+      ['p' => 'P3', 'desc' => 'Limite de velocidade', 'format' => '1–255 (km/h)', 'default' => '100'],
+      ['p' => 'P4', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação', 'default' => '1'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SPEED,ON,5,60,0#', 'desc' => 'exemplo literal da wiki — 60 km/h mantidos por 5 s, aviso só por GPRS'],
+    ],
+  ],
+  'SPEED,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'SPEED',
+    'nome' => 'Alarme de excesso de velocidade (com buzzer)',
+    'desc' => 'Cinco campos na VL02 — o quinto liga o buzzer da saída DOUT. A wiki repete este mesmo comando na seção "Buzzer": é o MESMO comando, não um segundo.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SPEED#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Alarme de excesso de velocidade" / "Buzzer"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Tempo acima do limite para disparar', 'format' => '5–600 (segundos)', 'default' => '20'],
+      ['p' => 'P3', 'desc' => 'Limite de velocidade', 'format' => '1–255 (km/h)', 'default' => '100'],
+      ['p' => 'P4', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação / 3 = GPRS+ligação', 'default' => '1'],
+      ['p' => 'P5', 'desc' => 'Buzzer na saída DOUT — ⚠️ só a partir do firmware NT06L_GT06L_WAAD_MEBNEW_V1.0.0_231020.1633', 'format' => 'ON / OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SPEED,ON,5,60,1,ON#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'ACCALM,P1,P2,P3,P4#' => [
+    'cmd' => 'ACCALM',
+    'nome' => 'Aviso de mudança de ignição (ACC)',
+    'desc' => 'Alimenta os alarmes 254/255 (ignição ligada/desligada).',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'ACCALM#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "Alteração de status ACC"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'ON'],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+      ['p' => 'P3', 'desc' => 'Tempo de estabilização (debounce)', 'format' => '5–60 (segundos)', 'default' => '10'],
+      ['p' => 'P4', 'desc' => 'Qual mudança avisar', 'format' => '0 = qualquer / 1 = só ao desligar / 2 = só ao ligar', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'ACCALM,ON,0,5,0#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'POWERALM,P1,P2,P3,P4#' => [
+    'cmd' => 'POWERALM',
+    'nome' => 'Alarme de corte de alimentação',
+    'desc' => 'Avisa quando a alimentação externa some — é o alarme 2 (corte de alimentação).',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'POWERALM#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Alarme de corte de energia"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação', 'default' => '2'],
+      ['p' => 'P3', 'desc' => 'Tempo sem alimentação para confirmar o corte', 'format' => '0–60 (segundos)', 'default' => '5'],
+      ['p' => 'P4', 'desc' => 'Tempo mínimo de recarga antes de poder alarmar de novo', 'format' => '0–3600 (segundos)', 'default' => '300'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'POWERALM,ON,0,5,300#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'FATIGUE,P1,P2,P3,P4,P5#' => [
+    'cmd' => 'FATIGUE',
+    'nome' => 'Fadiga por tempo de direção',
+    'desc' => '🔑 Na VL01 a fadiga é por RELÓGIO, não por câmera: cinco campos e nenhum sensor de rosto. A entrada de quatro campos da linha JC é a versão das câmeras, e a aridade errada é aceita sem erro. Gera o alarme 71.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'FATIGUE#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "Fadiga(Tempo de direção)"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Tempo dirigindo que caracteriza fadiga', 'format' => '1–1440 (minutos)', 'default' => '240'],
+      ['p' => 'P3', 'desc' => 'Atraso do alarme', 'format' => '1–60 (minutos)', 'default' => '20'],
+      ['p' => 'P4', 'desc' => 'Tempo de descanso que zera a contagem (0 = zera assim que desligar)', 'format' => '0 / 1 (minutos)', 'default' => '30'],
+      ['p' => 'P5', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+    ],
+    'exemplos' => [],
+  ],
+  'TURN,P1,P2,P3,P4#' => [
+    'cmd' => 'TURN',
+    'nome' => 'Alarme de curva brusca',
+    'desc' => 'Gera os alarmes 42/43 (curva brusca à esquerda/direita).',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL01, "Alerta de curva brusca"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Aceleração lateral que dispara (unidade de 0,1 m/s²)', 'format' => '20–60', 'default' => '40'],
+      ['p' => 'P3', 'desc' => 'Ângulo que dispara', 'format' => '30–80 (graus)', 'default' => '40'],
+      ['p' => 'P4', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+    ],
+    'exemplos' => [],
+  ],
+  'COLLIDE,P1,P2,P3#' => [
+    'cmd' => 'COLLIDE',
+    'nome' => 'Alarme de colisão',
+    'desc' => 'Três campos na VL02 — a entrada do JC181 tem oito. Quanto MENOR a intensidade, mais fácil disparar.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'COLLIDE#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Alarme de colisão"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => 'OFF'],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS', 'default' => '0'],
+      ['p' => 'P3', 'desc' => 'Intensidade da colisão (menor = mais sensível)', 'format' => '10–1024', 'default' => '800'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'COLLIDE,ON,0,10#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'SENSOR,P1,P2,P3#' => [
+    'cmd' => 'SENSOR',
+    'nome' => 'Tempos do sensor de vibração',
+    'desc' => 'Três campos na VL02 (detecção, atraso e intervalo entre alertas) — a entrada da linha JC tem um só, e é a sensibilidade, não tempo.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SENSOR#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Tempo de vibração do sensor"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Tempo de detecção', 'format' => '10–300 (segundos)', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Atraso até alertar', 'format' => '10–300 (segundos)', 'default' => ''],
+      ['p' => 'P3', 'desc' => 'Intervalo entre alertas de vibração', 'format' => '10–300 (minutos)', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SENSOR,5,30,1#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'LEVEL,P1#' => [
+    'cmd' => 'LEVEL',
+    'nome' => 'Sensibilidade do sensor de vibração',
+    'desc' => '',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'LEVEL#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Sensibilidade de sensor"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Sensibilidade', 'format' => '1–5', 'default' => '2'],
+    ],
+    'exemplos' => [],
+  ],
+  'DEFENSE,P1#' => [
+    'cmd' => 'DEFENSE',
+    'nome' => 'Atraso do alarme de cerca',
+    'desc' => '🔴 MESMO nome e MESMA aridade da entrada da linha JC, significado OUTRO: lá `DEFENSE,A#` liga/desliga o modo de vigilância (ON/OFF); aqui é um ATRASO em minutos antes de o alarme de cerca disparar. Mandar ON para a VL não é recusado — vira valor inválido em silêncio.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'DEFENSE#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Tempo de envio em cerca eletrônica"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Atraso antes de alarmar', 'format' => '1–60 (minutos)', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'DEFENSE,10#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'FENCE,P1,0,P2,P3,P4,P5,P6#' => [
+    'cmd' => 'FENCE',
+    'nome' => 'Cerca eletrônica circular (no equipamento)',
+    'desc' => 'Cerca gravada NO EQUIPAMENTO — não confundir com /geocercas, que é cerca do servidor e vale para qualquer modelo. Esta alarma mesmo sem rede. O `0` fixo no meio da sintaxe é o código da forma (círculo).',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'FENCE#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Criação de cerca"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação da cerca', 'format' => 'ON / OFF', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Latitude do centro', 'format' => '−90 a 90 (graus decimais)', 'default' => ''],
+      ['p' => 'P3', 'desc' => 'Longitude do centro', 'format' => '−180 a 180 (graus decimais)', 'default' => ''],
+      ['p' => 'P4', 'desc' => 'Raio', 'format' => '1–9999 (metros)', 'default' => ''],
+      ['p' => 'P5', 'desc' => 'Quando alarmar (em branco = entrada e saída)', 'format' => 'IN / OUT', 'default' => ''],
+      ['p' => 'P6', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = GPRS+SMS', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'FENCE,ON,0,-23.525339,-46.679023,3,IN,1#', 'desc' => 'exemplo literal da wiki — círculo de 3 m, alarma ao ENTRAR, aviso por GPRS+SMS'],
+    ],
+  ],
+  // ⚠️ A cerca RETANGULAR (`FENCE,B,1,…`) ficou de fora de propósito: a wiki
+  // escreve a sintaxe com SETE campos e logo abaixo descreve OITO (D, E, F e G
+  // são dois pares de coordenadas). Aridade errada no proNo 128 é aceita e mal
+  // interpretada, sem erro nenhum — e aqui o estrago seria uma cerca em cima
+  // do lugar errado. A circular entra porque a wiki traz um exemplo literal
+  // que confere com a sintaxe. Cadastrar a retangular exige medir num
+  // equipamento real primeiro.
+
+  // ── Saídas e periféricos ──────────────────────────────────────────────────
+  'OUT2,P1#' => [
+    'cmd' => 'OUT2',
+    'nome' => 'Saída auxiliar 2',
+    'desc' => '🔴 AÇÃO no veículo, como o RELAY: aciona a segunda saída digital. Sem botão de consulta de propósito — acionamento não é pergunta (mesma regra do RELAY/RESET).',
+    'categoria' => 'energia',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL02, "Acionamento saída 2"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Estado da saída', 'format' => '0 = restaura / 1 = desliga', 'default' => '0'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'OUT2,1#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'DOOR,P1#' => [
+    'cmd' => 'DOOR',
+    'nome' => 'Sensor de porta (tipo de acionamento)',
+    'desc' => 'Define se o sensor de porta é lido por trigger positivo ou negativo. Alimenta os alarmes 28/29 (porta aberta/fechada).',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'DOOR#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Sensor de porta"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Trigger de detecção', 'format' => '0 = negativo / 1 = positivo', 'default' => '1'],
+    ],
+    'exemplos' => [],
+  ],
+  'DOORALM,P1,P2#' => [
+    'cmd' => 'DOORALM',
+    'nome' => 'Alarme de sensor de porta',
+    'desc' => '',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'DOORALM#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Alarme de sensor de porta"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ativação', 'format' => 'ON / OFF', 'default' => ''],
+      ['p' => 'P2', 'desc' => 'Forma de aviso', 'format' => '0 = GPRS / 1 = SMS+GPRS / 2 = GPRS+SMS+ligação', 'default' => '1'],
+    ],
+    'exemplos' => [],
+  ],
+  'LED,P1#' => [
+    'cmd' => 'LED',
+    'nome' => 'Modo de suspensão dos LEDs',
+    'desc' => '⚠️ Mesma aridade da entrada da linha JC e sentido INVERTIDO: aqui ON liga o modo de SUSPENSÃO (a luz apaga sozinha), enquanto na JC `LED,ON` é "LEDs acesos".',
+    'categoria' => 'outros',
+    'modelos' => ['JM-VL01'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'LED#',
+    'consulta_modelos' => ['JM-VL01'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01, "Ativar/Desativar LEDs"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Modo de suspensão (ON = luz apaga sozinha; OFF = sempre acesas)', 'format' => 'ON / OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'LED,ON#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'LEDSLEEP,P1#' => [
+    'cmd' => 'LEDSLEEP',
+    'nome' => 'Modo de suspensão dos LEDs',
+    'desc' => 'Na VL02 o comando mudou de nome — é o `LED` da VL01, com o mesmo efeito.',
+    'categoria' => 'outros',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'LEDSLEEP#',
+    'consulta_modelos' => ['JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL02, "Ativar/Desativar LEDs"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Modo de suspensão (ON = luz apaga sozinha; OFF = sempre acesas)', 'format' => 'ON / OFF', 'default' => 'ON'],
+    ],
+    'exemplos' => [
+      ['cmd' => 'LEDSLEEP,ON#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+
+  // ── Telefones (SOS e central) ─────────────────────────────────────────────
+  'SOS,P1,P2#' => [
+    'cmd' => 'SOS',
+    'nome' => 'Números de SOS (adicionar/apagar)',
+    'desc' => 'Primeiro campo é a AÇÃO: A adiciona, D apaga. A wiki aceita até três números na mesma linha — para mais de um, use o modo livre.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'SOS#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Números para SOS"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ação', 'format' => 'A = adicionar / D = apagar', 'default' => 'A'],
+      ['p' => 'P2', 'desc' => 'Número de telefone', 'format' => '', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'SOS,A,011956661773#', 'desc' => 'exemplo literal da wiki — adiciona'],
+      ['cmd' => 'SOS,D,011956661773#', 'desc' => 'exemplo literal da wiki — apaga'],
+    ],
+  ],
+  'CENTER,P1,P2#' => [
+    'cmd' => 'CENTER',
+    'nome' => 'Central de alarmes (número, adicionar/apagar)',
+    'desc' => '⚠️ É o número da central que recebe os alarmes por SMS — e a wiki avisa que, para BLOQUEAR por SMS (RELAY), o telefone precisa estar cadastrado aqui.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => true,
+    'consulta' => 'CENTER#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Central fixa para recebimento de alarmes"',
+    'params' => [
+      ['p' => 'P1', 'desc' => 'Ação', 'format' => 'A = adicionar / D = apagar', 'default' => 'A'],
+      ['p' => 'P2', 'desc' => 'Número de telefone (ignorado no D)', 'format' => '', 'default' => ''],
+    ],
+    'exemplos' => [
+      ['cmd' => 'CENTER,A,5511956661773#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+  'CENTER,D#' => [
+    'cmd' => 'CENTER',
+    'nome' => 'Apagar a central de alarmes',
+    'desc' => 'Forma sem número: apaga a central cadastrada.',
+    'categoria' => 'alarme',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL01/VL02, "Central fixa para recebimento de alarmes"',
+    'params' => [],
+    'exemplos' => [
+      ['cmd' => 'CENTER,D#', 'desc' => 'exemplo literal da wiki'],
+    ],
+  ],
+
+  // ── Manutenção e consultas ────────────────────────────────────────────────
+  'FACTORY#' => [
+    'cmd' => 'FACTORY',
+    'nome' => 'Restaurar padrões de fábrica',
+    'desc' => '🔴 DESTRUTIVO: apaga toda a configuração do equipamento, INCLUSIVE servidor e APN — depois disso ele só volta a falar com a plataforma por SMS ou serial. Sem botão de consulta de propósito.',
+    'categoria' => 'manutencao',
+    'modelos' => ['JM-VL02'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => NULL,
+    'consulta_modelos' => [],
+    'consulta_ref' => NULL,
+    'fonte' => 'wiki VL — Configurações VL02, "Restaurar para os padrões de fábrica"',
+    'params' => [],
+    'exemplos' => [],
+  ],
+  'WHERE#' => [
+    'cmd' => 'WHERE',
+    'nome' => 'Posição atual (texto)',
+    'desc' => 'Devolve latitude, longitude, curso, velocidade e data/hora numa linha de texto. É leitura direta do equipamento — não passa pelo histórico de posições.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'WHERE#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Consultas VL01, "Coordenadas GPS"',
+    'params' => [],
+    'exemplos' => [
+      ['cmd' => 'WHERE#', 'desc' => 'resposta da wiki: Current position! Lat:S23.525024,Lon:W46.679787,Course:263.28,Speed:0.00Km/h,DateTime:2021-10-29 11:11:43'],
+    ],
+  ],
+  'URL#' => [
+    'cmd' => 'URL',
+    'nome' => 'Posição atual (link de mapa)',
+    'desc' => 'Mesma leitura do WHERE, devolvida como link do Google Maps.',
+    'categoria' => 'posicao',
+    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'universal' => false,
+    'template' => false,
+    'consulta' => 'URL#',
+    'consulta_modelos' => ['JM-VL01', 'JM-VL02'],
+    'consulta_ref' => 'wiki',
+    'fonte' => 'wiki VL — Consultas VL01, "URL"',
+    'params' => [],
+    'exemplos' => [
+      ['cmd' => 'URL#', 'desc' => 'resposta da wiki: <10-29 11:13>http://maps.google.com/maps?q=S23.524992,W46.679947'],
     ],
   ],
 ];

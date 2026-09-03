@@ -109,7 +109,7 @@ New tables in v3.1.0:
 - **`users`** — System users (email/password_hash/role)
 - **`customer_users`** — Customer↔User pivot with role
 - **`sessions`** — Login sessions (PHP session ID ↔ user_id ↔ customer_id)
-- **`device_models`** — Device model catalog (JC400D, JC450, etc. with protocol + camera_count)
+- **`device_models`** — Device model catalog (JC400D, JC450, etc. with protocol + camera_count + **`family`** desde a v4.16.0: `camera` | `tracker`)
 
 Altered tables:
 - **`devices`** — Added `customer_id`, `device_model_id`, `camera_count`, `created_by`
@@ -165,6 +165,15 @@ Token-based auth using cookie `jimi_token` (64-char hex) + `sessions` table in M
 - **Typography**: Inter 400/500/600/700 (display em **peso 400**) + JetBrains Mono em **todo número/IMEI**.
 - CSS inline em `layout_base.php`, `login_template.php`, `setup.php` — **já migrado**. Navegação com grupos-sanfona é alvo da Fase 0. Ver `DESIGN.md` / `DESIGN-coinbase.md`.
 - _(≤3.x usavam a paleta Cursor creme/laranja; a paleta roxa YUV foi proposta e descartada em favor da Coinbase.)_
+
+### Rastreadores JM-VL — nem todo equipamento é câmera (v4.16.0)
+`JM-VL01` / `JM-VL02` são RASTREADORES: mesmo protocolo JIMI (`msgClass=0`), mesmos webhooks, mesmos comandos proNo 128, **`camera_count = 0`** — sem vídeo, sem canal, sem DMS/ADAS. `device_models.family` (`camera`/`tracker`) separa os dois mundos.
+- O prefixo é **JM**, não JC (JC = linha de câmeras). `model_name` é UNIQUE e vira chave de `command_catalog.modelos`, `firmware_releases` e da trava por modelo — renomear depois quebra o casamento em silêncio.
+- 🔴 **`universal` no catálogo de comandos passou a valer por FAMÍLIA**, derivada de `modelos`. Antes queria dizer "libera a frota inteira" — com um rastreador na lista isso oferecia `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` a um aparelho sem vídeo.
+- **Entrada nova no catálogo só onde a aridade/formato muda**; onde a sintaxe é idêntica, o modelo entra no `modelos` da entrada existente. `SPEED` tem três formatos reais (JC, VL01, VL02) e no da VL01 o 2º campo é o TEMPO, não a forma de aviso.
+- 🔴 **Placeholder só vale como `P1..Pn` ou letra única maiúscula** (`montarComando()`); `SW`/`T1`/`ΔV1` da wiki ficariam crus no comando, e token fixo de uma letra é indistinguível de placeholder.
+- ⚠️ `params` com contagem != placeholders desabilita o Enviar para sempre (`faltaParametro()`). E em JS, `parseInt(x) || 1` transforma `camera_count = 0` em 1.
+- Telas que EXCLUEM rastreador: `/video/aovivo`, `/video/playback`, `/configuracoes-ia`, e as abas Ao Vivo/Vídeo de `/ativos/{id}`.
 
 ### Command Polling (v3.1.0)
 After sending a command, the frontend polls `/commandstatus?command_id=X`:

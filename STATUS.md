@@ -1,4 +1,113 @@
-# STATUS.md — Jimi Webhook System v4.14.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.16.0 (YUV Parity)
+
+> ### 📍 ESTADO EM 02/09/2026 — a frota deixou de ser só de câmeras: JM-VL01 e JM-VL02 cadastráveis, NÃO publicados e NÃO exercitados contra equipamento real
+>
+> **v4.16.0 — dois rastreadores entram no catálogo.** `JM-VL01` e `JM-VL02`
+> falam o MESMO protocolo JIMI (`msgClass=0`), chegam pelos MESMOS webhooks e
+> aceitam os MESMOS comandos de texto proNo 128 das câmeras da linha JC. O que
+> muda é que **não têm câmera**: são os dois primeiros modelos do sistema com
+> `camera_count = 0`, e isso quebrou premissas que ninguém tinha escrito.
+>
+> ⚠️ **O nome é `JM`-VL01, não `JC`-VL01.** `JC` é a linha de câmeras; `JM` é a
+> de rastreadores. `model_name` é UNIQUE e vira chave da trava por modelo, de
+> `/firmwares` e do `modelos` do catálogo de comandos.
+>
+> **O que está pronto e verificado (contra MySQL e servidor local, não contra
+> equipamento):**
+> - `migration_v4.16.0.sql` — os 2 modelos, `device_models.family`
+>   (`camera`/`tracker`) e **14 alarmes JIMI** da linha VL que faltavam
+>   (`0`,`19`,`50`,`60`,`61`,`62`,`75`–`79`,`83`,`94`,`255`). Aplicada **duas
+>   vezes** no banco local: idempotente. Linha no `deploy.sh`.
+> - `command_catalog.php`: 42 entradas novas (237 no total). Regra seguida à
+>   risca, a pedido do dono do produto: **entrada nova só onde a quantidade ou o
+>   formato dos parâmetros muda**; onde a sintaxe é a mesma, o modelo entrou na
+>   entrada que já existia.
+> - `/equipamentos` cadastra rastreador (campo Canais aceita 0);
+>   `/video/aovivo`, `/video/playback` e `/configuracoes-ia` não os listam;
+>   `/ativos/{id}` esconde as abas Ao Vivo e Vídeo. Tudo conferido por smoke
+>   autenticado com um JM-VL01 real no banco, **com guarda de não-vacuidade**
+>   (cada "não aparece" acompanhado de um "mas OUTRO equipamento aparece").
+> - `command_response.test.php`: **124/124**. Eram 111/115 — as 4 falhas eram
+>   **pré-existentes** (contagens do cabeçalho envelhecidas desde a v4.9.32 e o
+>   invariante da consulta contra a família `EVENTSET`).
+> - `tests/rastreador_vl.spec.js` (novo): **7/7**. Ele NÃO depende de um JM-VL
+>   cadastrado, de propósito — spec que pula não é cobertura; o que ele exige é
+>   a migração aplicada, e sem ela FALHA, que é o aviso que se quer.
+>
+> ⚠️ **Três specs afirmavam o significado ANTIGO de `universal`** e foram
+> corrigidos junto: o "comando universal libera TODOS os equipamentos"
+> (`comandos.spec.js`), o `CHECK#` do mesmo arquivo e o `UPDATE` de
+> `firmware.spec.js`. Os três asseriam "equipamento nenhum desabilitado" — uma
+> frase que só era verdadeira porque a frota inteira era câmera.
+>
+> **Playwright, 106 testes nos arquivos que esta versão toca**: `comandos` +
+> `firmware` + `comandos_sms` **34 passando**; `video_*` + `equipamento_vinculo`
+> + `navigation` **66 passando**; `rastreador_vl.spec.js` **7/7**.
+>
+> ⚠️ **As 3 falhas restantes são PRÉ-EXISTENTES** — cada uma reproduzida com o
+> código do HEAD (`git stash`) antes de ser descartada:
+> - `comandos.spec.js` × 2 (`VIDETIMEZONE`/`VIDEOTIMEZONE`): é DADO, não código.
+>   O cliente de teste local não tem nenhum **JC371**, e os dois comandos só
+>   existem nesse modelo — a trava desabilita todas as linhas e o `marcarUm()`
+>   do spec não acha checkbox livre. Some assim que houver um JC371 no cliente.
+> - `video_playback_filelist.spec.js` × 1: espera 3 canais no laço do 37381 e
+>   recebe 1. Não investigado — está fora do escopo desta versão, mas **entra na
+>   lista de pendências**, porque é um spec vermelho que ninguém estava vendo.
+>
+> ⚠️ **A suíte COMPLETA (201 testes) não foi rodada até o fim** — leva mais de
+> uma hora com um worker. O que foi rodado é o conjunto que toca os arquivos
+> alterados, e os helpers PHP inteiros.
+>
+> ⚠️ O banco de desenvolvimento local estava em **4.9.32** — sete migrações
+> atrás. Foi migrado até a 4.16.0 para a suíte rodar contra o esquema real (o
+> `senha_temporaria.spec.js` acusava `Unknown column 'must_change_password'`).
+>
+> #### 🔴 A trava por FAMÍLIA — o que a chegada do rastreador quebrou
+>
+> `universal`, no catálogo de comandos, foi derivado de "presente em >= 5 das 6
+> páginas de **câmera** da wiki", e a tela o traduzia como "libera a frota
+> inteira". Enquanto toda a frota era câmera, as duas frases eram a mesma. Com
+> um rastreador na lista, "liberar a frota" passou a significar oferecer
+> `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho sem vídeo e sem WiFi —
+> comandos que voltariam como "não suportado" horas depois, no callback.
+>
+> Agora `universal` libera **as famílias que o próprio comando documenta**,
+> derivadas de `modelos` via `device_models.family`. Não há chave nova no
+> catálogo: comando universal que valha para rastreador é comando que lista
+> `JM-VL01`/`JM-VL02` em `modelos`.
+>
+> #### 🔴 Dois defeitos pré-existentes que só apareceram por causa disso
+>
+> - **`SOSALM,A,B#` era inenviável pela tela** — cinco parâmetros declarados
+>   para dois placeholders (três eram lixo de raspagem da wiki). Como
+>   `faltaParametro()` exige toda caixa preenchida, o botão Enviar nunca
+>   habilitava. Só funcionava pelo modo livre, o que ninguém percebe.
+> - **`parseInt(...) || 1`** em `onModelChange()`: `0` é falsy em JS, então o
+>   modelo de 0 câmeras gravava 1 canal e o rastreador nascia parecendo câmera.
+>   Latente desde sempre, porque até agora todo modelo tinha ao menos 1 canal.
+>
+> 🔴 **O que NÃO foi verificado — leia antes de confiar:**
+> 1. **Nenhum comando foi disparado contra um JM-VL real.** Toda entrada nova
+>    tem `consulta_ref => 'wiki'`, nunca `medido`. O primeiro teste tem de ser
+>    uma consulta inócua (`STATUS#` ou `GPRSSET#`) num equipamento só.
+> 2. **Nenhum webhook de um JM-VL foi lido.** Os 14 alarmes novos vieram da
+>    tabela da wiki, não de payload observado — falta ver o que o IoT Hub
+>    realmente manda (é o próximo passo combinado: o dono do produto vai deixar
+>    um VL01 ligado).
+> 3. **A cerca RETANGULAR (`FENCE,B,1,…`) ficou de fora de propósito**: a wiki
+>    escreve a sintaxe com 7 campos e descreve 8 logo abaixo. Aridade errada no
+>    proNo 128 é aceita sem erro nenhum — aqui daria cerca no lugar errado.
+> 4. Alarmes `33`/`34` não catalogados: a wiki os publica como "Reservado", e
+>    batizar por palpite é erro que este catálogo já pagou.
+> 5. Os 14 alarmes novos **não geram ocorrência** (sem `occurrence_config_params`)
+>    — ligar o motor para evento de rastreador muda volume de tratativa e é
+>    decisão de produto, não de migração.
+>
+> ⚠️ **Migração nova → DOIS deploys** (`--force` duas vezes) ou o `.sql` à mão.
+> No intervalo, `/comandos` cai no `catch` de `device_models.family` e trata
+> todo mundo como câmera — que é exatamente o comportamento anterior, de
+> propósito. As telas de vídeo filtram por `camera_count`, sem depender da
+> coluna nova.
 
 > ### 📍 ESTADO EM 29/08/2026 — canal de SMS implementado, NÃO publicado e NÃO exercitado contra equipamento real
 >

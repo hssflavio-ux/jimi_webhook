@@ -39,6 +39,7 @@ $scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
 $devices = $db->prepare("
     SELECT d.imei, COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name,
            COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+           COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count,
            TIMESTAMPDIFF(MINUTE, " . device_last_seen_sql() . ", UTC_TIMESTAMP()) AS mudo_min
     FROM devices d
     LEFT JOIN device_models dm ON d.device_model_id = dm.id
@@ -48,6 +49,13 @@ $devices = $db->prepare("
 ");
 $devices->execute($scopeParams);
 $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
+// v4.16.0 — ADAS/DMS é câmera com IA: um equipamento sem canal nenhum
+// (rastreador da linha JM-VL) não tem o que configurar aqui. A tela já
+// degradava sozinha ("nenhum comando para este modelo"), mas oferecer o
+// aparelho no seletor para depois dizer que não há nada é o estado vazio que
+// o operador lê como defeito. Filtro em PHP e por `camera_count`, sem depender
+// da coluna `family` (que só existe depois da migração v4.16.0).
+$devices = array_values(array_filter($devices, fn($d) => (int)($d['camera_count'] ?? 1) > 0));
 // Presença pelo ponto único (`device_presence()`) — mesma leitura de
 // handlers/comandos.php. "Ler tudo agora" dispara um comando por consulta do
 // catálogo; sem isso o operador só descobre que a câmera está offline depois

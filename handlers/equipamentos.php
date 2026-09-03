@@ -69,12 +69,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $importErrors[] = "linha $line: modelo \"" . trim($d['model']) . "\" desconhecido (importado sem modelo)";
                 }
                 $channels = (int)($d['channels'] ?? 0);
+                // v4.16.0 — modelo com `camera_count = 0` é RASTREADOR (linha
+                // JM-VL): não tem canal, e a coluna Canais do CSV não pode
+                // inventar um. Sem esta guarda, um CSV com "2" na coluna de
+                // canais faria a tela de vídeo listar um aparelho sem câmera.
+                $modelCams = $model !== null ? (int)$model['camera_count'] : null;
+                $cams = ($modelCams === 0) ? 0 : ($channels > 0 ? $channels : ($modelCams ?? 1));
                 $insertStmt->execute([
                     ':imei' => $imei,
                     ':name' => $name ?: $imei,
                     ':cid'  => $importOwner,
                     ':fw'   => trim($d['firmware'] ?? '') ?: null,
-                    ':cam'  => $channels > 0 ? $channels : (int)($model['camera_count'] ?? 1),
+                    ':cam'  => $cams,
                     ':mid'  => $model['id'] ?? null,
                 ]);
                 $imported++;
@@ -560,16 +566,25 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <option value="">— Selecione —</option>
                     <?php foreach ($models as $m):
                         $sel = ($editDevice['device_model_id'] ?? '') == $m['id'] ? 'selected' : ''; ?>
-                    <option value="<?= $m['id'] ?>" data-cam="<?= $m['camera_count'] ?>" <?= $sel ?>>
-                        <?= htmlspecialchars($m['model_name']) ?> (<?= $m['protocol'] ?>, <?= $m['camera_count'] ?> câm.)
+                    <option value="<?= $m['id'] ?>" data-cam="<?= (int)$m['camera_count'] ?>" <?= $sel ?>>
+                        <?= htmlspecialchars($m['model_name']) ?> (<?= $m['protocol'] ?>,
+                        <?= (int)$m['camera_count'] === 0 ? 'rastreador, sem câmera' : (int)$m['camera_count'] . ' câm.' ?>)
                     </option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div class="form-group">
                 <label>Canais (Câmeras)</label>
-                <input type="number" name="camera_count" id="camera_count" min="1" max="8"
-                       value="<?= $editDevice['camera_count'] ?? 1 ?>">
+                <?php /* v4.16.0 — `min="0"`, não `min="1"`: os rastreadores da
+                        linha JM-VL não têm canal nenhum, e com o mínimo em 1 o
+                        navegador recusava o formulário do único valor certo
+                        para eles. `0` aqui não é "não sei quantas" — é "não
+                        tem", e é o que faz as telas de vídeo os esconderem. */ ?>
+                <input type="number" name="camera_count" id="camera_count" min="0" max="8"
+                       value="<?= (int)($editDevice['camera_count'] ?? 1) ?>">
+                <small id="camera_count_hint" class="text-muted" style="font-size:11px;display:none">
+                    Rastreador — sem canal de vídeo.
+                </small>
             </div>
         </div>
 
@@ -804,8 +819,14 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <td><?= htmlspecialchars($d['device_name'] ?? '—') ?></td>
                 <td>
                     <?= htmlspecialchars($d['model_name'] ?? $d['device_model'] ?? '—') ?>
-                    <?php if ($d['camera_count']): ?>
-                    <span style="font-size:10px;color:var(--muted);">(<?= $d['camera_count'] ?>ch)</span>
+                    <?php /* v4.16.0 — 0 canais é rastreador, e "0" sozinho ao
+                            lado do modelo se lê como defeito de cadastro. O
+                            `if` antigo escondia a informação inteira (0 é
+                            falsy), o que dava na mesma. */ ?>
+                    <?php if ($d['camera_count'] !== null && (int)$d['camera_count'] === 0): ?>
+                    <span style="font-size:10px;color:var(--muted);">(rastreador)</span>
+                    <?php elseif ($d['camera_count']): ?>
+                    <span style="font-size:10px;color:var(--muted);">(<?= (int)$d['camera_count'] ?>ch)</span>
                     <?php endif; ?>
                 </td>
                 <td><?= htmlspecialchars($d['customer_name'] ?? '—') ?></td>
@@ -899,12 +920,43 @@ require_once __DIR__ . '/../web/layout_base.php';
 <script>
 function onModelChange(sel) {
     var opt = sel.options[sel.selectedIndex];
-    var cam = parseInt(opt.dataset.cam) || 1;
+    // 🔴 v4.16.0 — `|| 1` estava errado desde que existe rastreador: `0` é
+    // falsy em JS, então escolher um JM-VL (0 câmeras) virava 1 canal, o
+    // equipamento nascia parecendo câmera e aparecia nas telas de vídeo.
+    // `isNaN` é a pergunta certa aqui — "não tem valor" e "vale zero" são
+    // coisas diferentes.
+    var cam = parseInt(opt.dataset.cam, 10);
+    if (isNaN(cam)) cam = 1;                     // opção "— Selecione —"
     // camera_count do modelo é o MÁXIMO de canais; o valor é o default
-    var input = document.getElementById('camera_count');
-    input.value = cam;
-    input.max = cam;
+    document.getElementById('camera_count').value = cam;
+    ajustarCampoCanais(cam);
 }
+
+/**
+ * Teto e estado do campo de canais, SEM tocar no valor.
+ *
+ * ⚠️ Separado de `onModelChange()` de propósito: a inicialização na abertura
+ * do formulário precisa do teto e da nota, mas NÃO pode reescrever o valor —
+ * um equipamento com 2 canais instalados num modelo de até 3 voltaria para 3
+ * só por abrir a tela de edição.
+ */
+function ajustarCampoCanais(cam) {
+    var input = document.getElementById('camera_count');
+    input.max = cam;
+    // Rastreador não tem canal para escolher: o campo vira leitura.
+    input.readOnly = (cam === 0);
+    document.getElementById('camera_count_hint').style.display = (cam === 0) ? 'block' : 'none';
+}
+
+// Ao ABRIR o formulário de edição de um equipamento que já existe, `onchange`
+// nunca dispara — sem isto, a linha de rastreador abria com o campo de canais
+// editável e sem a nota, como se fosse câmera.
+document.addEventListener('DOMContentLoaded', function () {
+    var sel = document.querySelector('select[name="device_model_id"]');
+    if (!sel || !sel.value) return;
+    var cam = parseInt(sel.options[sel.selectedIndex].dataset.cam, 10);
+    if (!isNaN(cam)) ajustarCampoCanais(cam);
+});
 
 function showImportModal() { document.getElementById('import-modal').style.display = 'flex'; }
 function closeImportModal() { document.getElementById('import-modal').style.display = 'none'; }

@@ -27,6 +27,18 @@ $tabs = [
     ['id' => 'configuracoes',  'label' => 'Configurações'],
 ];
 
+// v4.16.0 — RASTREADOR (linha JM-VL, `camera_count = 0`) não tem vídeo: as
+// abas "Ao Vivo" e "Vídeo" saem, pela mesma razão pela qual "Parâmetros" só
+// aparece em JT/T (logo abaixo) — aba que não se aplica some, não abre vazia.
+// Trajetos, Alertas, Log, Relatórios e Comandos continuam: rastreador tem GPS,
+// alarme e comando proNo 128 como qualquer câmera da linha JC.
+if (!empty($asset['is_tracker'])) {
+    $tabs = array_values(array_filter(
+        $tabs,
+        fn($t) => !in_array($t['id'], ['ao-vivo', 'video'], true)
+    ));
+}
+
 // Parâmetros (v4.9.12) — SÓ para equipamento JT/T. Os comandos 33027/33028/
 // 33030 são da seção 2 da doc (msgClass=1) e câmera JIMI não os entende
 // (ADR-001). A aba não aparece vazia para JIMI: ela não aparece, porque tela

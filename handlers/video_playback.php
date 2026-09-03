@@ -89,6 +89,14 @@ $devices = $db->prepare("
 $devices->execute($scopeParams);
 $devices = $devices->fetchAll();
 
+// 🔴 v4.16.0 — mesma regra do vídeo ao vivo: equipamento com `camera_count = 0`
+// (rastreador da linha JM-VL) não entra numa tela de vídeo. Aqui o descuido
+// seria pior que uma lista suja: `$selCam = max(1, camera_count)` logo abaixo
+// transformaria o 0 em 1, e a tela ofereceria "canal 1" de uma câmera que não
+// existe. Filtro em PHP para não depender da coluna `family`, que só existe
+// depois da migração (que não roda no deploy que a traz — CLAUDE.md).
+$devices = array_values(array_filter($devices, fn($d) => (int)($d['camera_count'] ?? 1) > 0));
+
 // IMEI do GET só vale se pertencer ao cliente da sessão (multi-tenant)
 $selImei   = $_GET['imei'] ?? '';
 $selDevice = null;

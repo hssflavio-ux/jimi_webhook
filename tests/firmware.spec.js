@@ -36,14 +36,21 @@ test.describe('Firmware — UPDATE e cadastro de URLs', () => {
         expect(upd.p[0].d).toMatch(/URL/i);
     });
 
-    test('com UPDATE escolhido, nenhum equipamento fica desabilitado', async ({ authedPage }) => {
+    test('com UPDATE escolhido, nenhuma CÂMERA fica desabilitada', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         await authedPage.selectOption('#cmd-sel', 'T:UPDATE,P1#');
 
+        // v4.16.0 — a asserção era "equipamento nenhum", e valia enquanto a
+        // frota inteira era câmera. O `UPDATE` é universal para a linha JC (é a
+        // exceção manual que este spec protege), e os rastreadores JM-VL, que
+        // nem sequer documentam o comando, ficam de fora por FAMÍLIA — não por
+        // uma trava de modelo que o `UPDATE` justamente não deve ter.
+        //
         // O estado REAL do checkbox, não o texto do aviso.
         const desabilitados = await authedPage.$$eval('.dev-row',
-            rows => rows.filter(r => r.querySelector('.dev-chk').disabled).length);
-        expect(desabilitados, 'UPDATE não pode desabilitar equipamento nenhum').toBe(0);
+            rows => rows.filter(r => (r.dataset.familia || 'camera') === 'camera'
+                                  && r.querySelector('.dev-chk').disabled).length);
+        expect(desabilitados, 'UPDATE não pode desabilitar câmera nenhuma').toBe(0);
     });
 
     test('UPDATE com dois modelos marcados bloqueia o envio', async ({ authedPage }) => {

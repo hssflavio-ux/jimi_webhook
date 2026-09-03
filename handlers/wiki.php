@@ -1512,6 +1512,28 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <tr><td><strong>Limite de velocidade</strong></td><td>Limite em km/h só deste equipamento, usado no relatório de <a href="#rel-velocidade" style="color:inherit">Excesso de Velocidade</a>. Em branco, vale o limite padrão do cliente</td></tr>
 </table>
 
+<div class="callout">
+<strong>Nem todo equipamento é câmera: os rastreadores JM-VL01 e JM-VL02.</strong>
+Os dois modelos da linha <strong>JM</strong> são <em>rastreadores</em> — têm GPS, ignição,
+botão de pânico, bloqueio por relé e alarmes, mas <strong>nenhuma câmera</strong>.
+Ao escolher um deles no campo <em>Modelo</em>, o campo <em>Canais</em> vai para
+<strong>0</strong> e trava: é o valor certo, não um cadastro incompleto.
+<br><br>
+Um veículo com rastreador continua aparecendo no Rastreamento, nos Trajetos, nos
+Alertas e nos Relatórios como qualquer outro — o que não aparece são as telas de
+vídeo (<em>Ao Vivo</em>, <em>Playback</em> e as abas de vídeo do ativo) e as
+<em>Configurações IA</em>, porque dependem de câmera. Os <a href="#comandos" style="color:inherit">Comandos</a>
+funcionam normalmente: a linha JM tem comandos próprios (cerca no equipamento,
+hotspot WiFi, alarme de movimento, corte de energia), e a tela mostra só os que
+valem para o modelo marcado.
+<br><br>
+⚠️ <strong>Não confunda a linha JM com a linha JC.</strong> <em>JC</em> (JC400,
+JC371, JC450, JC181, JC182) é a linha de <strong>câmeras</strong>; <em>JM</em> é a
+de rastreadores. Vários comandos existem nas duas com o mesmo nome e um número
+diferente de campos — por isso a tela de Comandos só oferece a forma certa depois
+que você marca o equipamento.
+</div>
+
 <h3 id="geocercas">Geocercas</h3>
 <p><strong>Objetivo:</strong> Desenhar áreas no mapa e ser avisado quando um veículo entra ou sai delas — pátio, base do cliente, região proibida, ponto de coleta.</p>
 

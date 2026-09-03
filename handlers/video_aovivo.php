@@ -70,6 +70,18 @@ $devices = $db->prepare("
 $devices->execute($scopeParams);
 $devices = $devices->fetchAll();
 
+// 🔴 v4.16.0 — equipamento SEM canal não entra numa tela de vídeo. Os
+// rastreadores da linha JM-VL são os primeiros modelos com `camera_count = 0`,
+// e o `COALESCE(NULLIF(d.camera_count,0), dm.camera_count, 1)` acima devolve
+// 0 para eles (o `1` do fim só socorre quem não tem modelo nenhum). Sem este
+// filtro a tela os listaria e desenharia zero botão de canal — um aparelho
+// escolhível sem nada para tocar, que o operador lê como defeito.
+//
+// ⚠️ O filtro é em PHP, não no SQL, de propósito: assim não depende da coluna
+// `device_models.family`, que só existe depois da migração v4.16.0 — e
+// migração nova não roda no deploy que a traz (CLAUDE.md).
+$devices = array_values(array_filter($devices, fn($d) => (int)($d['camera_count'] ?? 1) > 0));
+
 // Formatação em PHP, não em SQL: `DATE_FORMAT()` imprimia o UTC cru como se
 // fosse hora local e a tela mostrava a última comunicação **3 h no futuro**.
 // `fmt_brt()` é o ponto único de conversão do projeto (ver CLAUDE.md).

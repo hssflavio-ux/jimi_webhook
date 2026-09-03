@@ -55,16 +55,59 @@ test.describe('Comandos — lista sensível ao modelo', () => {
         await expect(authedPage.locator('#lock-note')).toBeVisible();
     });
 
-    test('comando universal do proNo 128 libera todos os equipamentos', async ({ authedPage }) => {
+    // 🔴 v4.16.0 — este teste dizia "libera TODOS os equipamentos", e essa
+    // afirmação morreu com a chegada dos rastreadores da linha JM-VL.
+    //
+    // `universal` foi derivado de "presente em >= 5 das 6 páginas de CÂMERA da
+    // wiki". Enquanto a frota inteira era câmera, "não trava por modelo" e
+    // "vale para todo mundo" eram a mesma frase; com um rastreador na lista,
+    // "libera todos" passaria a significar oferecer `RECORDSW`/`VOLUME`/
+    // `SSID`/`WIFIAP` a um aparelho sem vídeo e sem WiFi. A regra agora é por
+    // FAMÍLIA — e é isso que o teste passa a exigir.
+    test('comando universal libera as famílias que ele documenta — e só elas', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
         const univ = cat.find(c => c.u);
         expect(univ, 'catálogo precisa ter ao menos um comando universal').toBeTruthy();
+        expect(univ.f, 'comando universal precisa declarar as famílias').toBeTruthy();
 
         await authedPage.selectOption('#cmd-sel', 'T:' + univ.s);
-        const desabilitados = await authedPage.$$eval('.dev-row',
-            rows => rows.filter(r => r.querySelector('.dev-chk').disabled).length);
-        expect(desabilitados).toBe(0);
+
+        const estado = await authedPage.$$eval('.dev-row', rows => rows.map(r => ({
+            modelo: r.dataset.modelo,
+            familia: r.dataset.familia || 'camera',
+            desabilitado: r.querySelector('.dev-chk').disabled,
+        })));
+        expect(estado.length, 'a tela precisa listar algum equipamento').toBeGreaterThan(0);
+
+        for (const d of estado) {
+            const deveriaAceitar = univ.f.includes(d.familia) || univ.m.includes(d.modelo);
+            expect(d.desabilitado, `${d.modelo} (${d.familia}) para ${univ.c}`).toBe(!deveriaAceitar);
+        }
+    });
+
+    // A outra metade da mesma regra, e a que realmente protege o equipamento:
+    // um comando que só as câmeras documentam não pode alcançar um rastreador.
+    // Pula quando o cliente de teste não tem rastreador — e o skip é explícito
+    // para não se confundir com "passou".
+    test('🔴 comando universal só de câmera não alcança rastreador', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+
+        const temRastreador = await authedPage.$$eval('.dev-row',
+            rows => rows.some(r => r.dataset.familia === 'tracker'));
+        test.skip(!temRastreador, 'este cliente não tem rastreador cadastrado');
+
+        // Universal cuja lista de famílias NÃO inclui rastreador (ex.: RECORDSW).
+        const soCamera = cat.find(c => c.u && c.f && !c.f.includes('tracker'));
+        expect(soCamera, 'precisa haver universal exclusivo de câmera').toBeTruthy();
+
+        await authedPage.selectOption('#cmd-sel', 'T:' + soCamera.s);
+        const rastreadoresLivres = await authedPage.$$eval('.dev-row',
+            rows => rows.filter(r => r.dataset.familia === 'tracker'
+                                  && !r.querySelector('.dev-chk').disabled)
+                        .map(r => r.dataset.modelo));
+        expect(rastreadoresLivres, 'rastreador habilitado para comando de câmera').toEqual([]);
     });
 
     test('parâmetros viram campos e o preview monta a string final', async ({ authedPage }) => {
@@ -163,8 +206,13 @@ test.describe('Comandos — o CHECK# e as sintaxes do JC371 (v4.9.40)', () => {
         // regeneração do catálogo por script a desfaz em silêncio, e o sintoma
         // seria este — equipamento desabilitado numa consulta de LEITURA.
         await authedPage.selectOption('#cmd-sel', 'T:CHECK#');
+        // v4.16.0 — "na linha JC inteira" passou a ser literal: o filtro por
+        // família exclui os rastreadores JM-VL, para os quais o `CHECK#` não é
+        // documentado. Antes disso a asserção era sobre TODA a frota, porque
+        // toda a frota era da linha JC.
         const presos = await authedPage.$$eval('.dev-row',
-            rows => rows.filter(r => r.querySelector('.dev-chk').disabled)
+            rows => rows.filter(r => (r.dataset.familia || 'camera') === 'camera'
+                                  && r.querySelector('.dev-chk').disabled)
                         .map(r => r.dataset.modelo));
         expect(presos, 'CHECK# é leitura e vale na linha JC inteira').toEqual([]);
 

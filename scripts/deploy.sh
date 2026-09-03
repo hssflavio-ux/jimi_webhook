@@ -456,6 +456,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.13.21" "mysql/migration_v4.13.21.sql" "senha temporaria por e-mail (users + password_reset_log)"
     run_migration "4.14.0" "mysql/migration_v4.14.0.sql" "sms_settings + sms_commands — comandos proNo 128 via SMS (Allcance)"
     run_migration "4.15.0" "mysql/migration_v4.15.0.sql" "audit_log — auditoria de acoes de usuario / seguranca operacional"
+    run_migration "4.16.0" "mysql/migration_v4.16.0.sql" "JM-VL01/JM-VL02 (rastreadores) + device_models.family + alarmes da linha VL"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

@@ -98,7 +98,11 @@ if ($hasCamera) {
             SELECT d.*, s.last_latitude, s.last_longitude, s.last_speed, s.last_acc_status,
                    s.is_online, s.total_distance_km AS total_distance, s.total_gps_count, s.total_alarm_count,
                    COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-                   COALESCE(dm.protocol, '') AS protocol
+                   COALESCE(dm.protocol, '') AS protocol,
+                   -- v4.16.0: canais EFETIVOS (0 = rastreador da linha JM-VL).
+                   -- `d.*` acima traz o `camera_count` do EQUIPAMENTO; este
+                   -- alias cai no do MODELO quando o do equipamento e 0.
+                   COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count_eff
             FROM devices d
             LEFT JOIN device_statistics s ON d.imei = s.imei
             LEFT JOIN device_models dm ON d.device_model_id = dm.id
@@ -111,7 +115,11 @@ if ($hasCamera) {
             SELECT d.*, NULL as last_latitude, NULL as last_longitude, NULL as last_speed, NULL as last_acc_status,
                    NULL as is_online, NULL as total_distance, NULL as total_gps_count, NULL as total_alarm_count,
                    COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-                   COALESCE(dm.protocol, '') AS protocol
+                   COALESCE(dm.protocol, '') AS protocol,
+                   -- v4.16.0: canais EFETIVOS (0 = rastreador da linha JM-VL).
+                   -- `d.*` acima traz o `camera_count` do EQUIPAMENTO; este
+                   -- alias cai no do MODELO quando o do equipamento e 0.
+                   COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS camera_count_eff
             FROM devices d
             LEFT JOIN device_models dm ON d.device_model_id = dm.id
             WHERE d.imei = ?
@@ -131,9 +139,20 @@ if (!$asset) {
         'last_latitude' => null, 'last_longitude' => null, 'last_speed' => null, 'last_acc_status' => null,
         'is_online' => null, 'total_distance' => null, 'total_gps_count' => null, 'total_alarm_count' => null,
         'model_display' => '-', 'protocol' => '', 'camera_count' => null, 'activation_date' => null,
-        'last_communication' => null,
+        'camera_count_eff' => null, 'last_communication' => null,
     ];
 }
+
+// 🔴 v4.16.0 — o equipamento instalado é um RASTREADOR (linha JM-VL,
+// `camera_count = 0`)? Então as abas de vídeo não se aplicam. A regra do
+// arquivo já era essa para os Parâmetros (só JT/T): tela que não se aplica
+// não aparece VAZIA, ela não aparece — porque tela vazia o operador lê como
+// defeito do sistema, não como "não vale para este aparelho".
+//
+// `camera_count_eff` só é 0 quando o modelo diz 0; sem modelo cadastrado o
+// COALESCE devolve 1 e nada muda, que é o comportamento anterior.
+$isTracker = $hasCamera && (int)($asset['camera_count_eff'] ?? 1) === 0;
+$asset['is_tracker'] = $isTracker;
 
 // v4.10.1 — odômetro atual (item 3, bônus do CLAUDE.md: total_distance era
 // coluna inexistente, o SELECT sempre caía no catch e o KPI mostrava zero).
@@ -326,11 +345,28 @@ include __DIR__ . '/../web/layout_ativo_sidebar.php';
 // veículo). Visão Geral e Relatórios também ficam de fora — a primeira é
 // onde mora o instalar/desinstalar, a segunda só lê contadores.
 $liveOnlyTabs = ['ao-vivo', 'comandos', 'configuracoes', 'parametros'];
+// v4.16.0 — a sidebar já esconde estas duas para rastreador, mas a URL não
+// some junto: `?tab=video` continua digitável (e sobrevive num favorito feito
+// quando o veículo tinha câmera). Sem esta guarda, a aba abriria vazia — que é
+// justamente o que esconder a aba quis evitar.
+$videoTabs = ['ao-vivo', 'video'];
 if (!$hasCamera && in_array($current_tab, $liveOnlyTabs, true)):
 ?>
 <div class="empty-state">
     <h3>Nenhuma câmera instalada</h3>
     <p>Este veículo ainda não tem câmera — instale uma na aba <strong>Visão Geral</strong>.</p>
+    <a href="/ativos/<?= $vehicleId ?>" class="btn btn-primary mt-16">Ir para Visão Geral</a>
+</div>
+<?php
+elseif ($isTracker && in_array($current_tab, $videoTabs, true)):
+?>
+<div class="empty-state">
+    <h3>Equipamento sem câmera</h3>
+    <p>
+        <strong><?= htmlspecialchars($asset['model_display'] ?? '-') ?></strong> é um rastreador —
+        tem GPS, alarmes e comandos, mas nenhum canal de vídeo. Trajetos, Alertas e Comandos
+        continuam valendo normalmente.
+    </p>
     <a href="/ativos/<?= $vehicleId ?>" class="btn btn-primary mt-16">Ir para Visão Geral</a>
 </div>
 <?php
@@ -487,7 +523,10 @@ case 'visao-geral':
             <tr><td style="padding:4px 0;color:var(--muted);width:100px">IMEI</td><td style="font-family:'JetBrains Mono',monospace;font-size:12px"><?= htmlspecialchars($asset['imei']) ?></td></tr>
             <tr><td style="padding:4px 0;color:var(--muted)">Modelo</td><td><?= htmlspecialchars($asset['model_display']) ?></td></tr>
             <tr><td style="padding:4px 0;color:var(--muted)">Protocolo</td><td><span class="badge" style="background:<?= $asset['protocol']==='JIMI'?'#e8f5ef':'#eef4fa' ?>;color:<?= $asset['protocol']==='JIMI'?'var(--success)':'#5a7fa8' ?>"><?= $asset['protocol'] ?: '-' ?></span></td></tr>
-            <tr><td style="padding:4px 0;color:var(--muted)">Câmeras</td><td><?= $asset['camera_count'] ?? 1 ?></td></tr>
+            <?php /* v4.16.0 — "Câmeras: 0" num rastreador se lê como cadastro
+                    incompleto. E o número mostrado é o EFETIVO (o do modelo
+                    quando o do equipamento é 0), não o cru da linha. */ ?>
+            <tr><td style="padding:4px 0;color:var(--muted)">Câmeras</td><td><?= $isTracker ? 'Rastreador (sem câmera)' : (int)($asset['camera_count_eff'] ?? $asset['camera_count'] ?? 1) ?></td></tr>
             <tr><td style="padding:4px 0;color:var(--muted)">Ativação</td><td><?= $asset['activation_date'] ? date('d/m/Y', strtotime($asset['activation_date'])) : '-' ?></td></tr>
             <tr><td style="padding:4px 0;color:var(--muted)">Última Com.</td><td><?= fmt_brt_dt($asset['last_communication']) ?></td></tr>
         </table>

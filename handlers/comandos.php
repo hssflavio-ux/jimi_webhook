@@ -105,6 +105,13 @@ $mostrarCliente = ($scopeCust === null);
 foreach ($devices as &$d) { $d['presenca'] = device_presence(isset($d['mudo_min']) ? (int)$d['mudo_min'] : null); }
 unset($d);
 
+// ── Família de cada modelo: câmera x rastreador (v4.16.0) ──────────────────
+// Ponto único em `device_model_families()` — a MESMA trava vale em
+// `/comandos-sms`, que despacha o mesmo catálogo por outro transporte.
+$familiaPorModelo = device_model_families($db);
+/** Família de um modelo; 'camera' para modelo desconhecido (status quo). */
+$familiaDe = fn(?string $modelo) => $familiaPorModelo[$modelo ?? ''] ?? 'camera';
+
 // ── Catálogo de comandos de texto (proNo 128) ──────────────────────────────
 $catalogo = require __DIR__ . '/../includes/command_catalog.php';
 
@@ -123,6 +130,10 @@ foreach ($catalogo as $syn => $d) {
         's' => $syn, 'c' => $d['cmd'], 'n' => $d['nome'],
         'd' => $d['desc'], 'k' => $d['categoria'],
         'm' => $d['modelos'], 'u' => (bool)$d['universal'], 't' => (bool)$d['template'],
+        // `f`: famílias que este comando documenta, derivadas de `modelos`.
+        // Só tem efeito quando `u` é true — é o que impede a trava solta de
+        // liberar um comando de câmera para um rastreador.
+        'f' => command_families($d['modelos'], $familiaPorModelo),
         // Forma de consulta (v4.9.25): `q` é o que enviar, `qm` os modelos em
         // que ela é sabidamente aceita, `qr` a procedência (medido/wiki).
         'q' => $d['consulta'] ?? null, 'qm' => $d['consulta_modelos'] ?? [],
@@ -473,6 +484,7 @@ include __DIR__ . '/../web/layout_base.php';
         <label class="dev-row" data-imei="<?= htmlspecialchars($d['imei']) ?>"
                data-modelo="<?= htmlspecialchars($d['model_display']) ?>"
                data-proto="<?= htmlspecialchars($d['protocol']) ?>"
+               data-familia="<?= htmlspecialchars($familiaDe($d['model_display'])) ?>"
                data-cams="<?= (int)$d['camera_count'] ?>"
                data-presenca="<?= htmlspecialchars($d['presenca']['nivel']) ?>">
           <input type="checkbox" class="dev-chk" value="<?= htmlspecialchars($d['imei']) ?>" onchange="aoMarcarDevice()">
@@ -863,32 +875,51 @@ function imeisMarcados() {
 }
 
 /**
- * Aplica a trava: com um comando NÃO universal escolhido, só ficam habilitados
- * os equipamentos cujo modelo a documentação cobre. Sem comando escolhido, o
- * primeiro modelo marcado define a trava.
+ * Um equipamento aceita o comando escolhido?
+ *
+ * 🔴 v4.16.0 — a regra deixou de ser "universal libera todo mundo". Ela é:
+ *   1. o modelo está na lista `m` do comando → liberado, sempre; ou
+ *   2. o comando é `universal` E a FAMÍLIA do equipamento é uma das que o
+ *      comando documenta (`f`, derivada de `m` no PHP).
+ *
+ * A regra 2 é o que impede `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` — universais
+ * porque estão em 5 das 6 páginas de CÂMERA da wiki — de chegarem a um
+ * rastreador da linha VL, que não tem vídeo nem WiFi. Antes disso, `universal`
+ * queria dizer "toda a frota", e a frota era só de câmeras.
+ */
+function comandoAceitaLinha(cmd, row) {
+    if (!cmd) return true;
+    if (cmd.m && cmd.m.indexOf(row.dataset.modelo) >= 0) return true;
+    if (!cmd.u) return false;
+    var fam = row.dataset.familia || 'camera';
+    return (cmd.f || ['camera']).indexOf(fam) >= 0;
+}
+
+/**
+ * Aplica a trava: com um comando escolhido, só fica habilitado o equipamento
+ * que `comandoAceitaLinha()` aceita. Sem comando escolhido, todos ficam
+ * habilitados — é a escolha do comando que restringe a lista, não o contrário.
  */
 function aplicarTrava() {
     var nota = document.getElementById('lock-note');
-    var marcados = modelosMarcados();
-    var permitidos = null, motivo = '';
+    var motivo = '';
 
     if (cmdAtual && !cmdAtual.u) {
-        permitidos = cmdAtual.m;
         motivo = '<strong>' + cmdAtual.c + '</strong> é documentado só para ' + cmdAtual.m.join(', ') +
                  '. Equipamentos de outro modelo estão desabilitados — enviar para eles devolveria ' +
                  '“comando não suportado” minutos depois, no callback.';
     } else if (cmdAtual && cmdAtual.u) {
-        permitidos = null;
+        var fams = cmdAtual.f || ['camera'];
+        var rotFam = fams.map(function (f) { return f === 'tracker' ? 'rastreadores' : 'câmeras'; }).join(' e ');
         motivo = '<strong>' + cmdAtual.c + '</strong> é do núcleo comum do proNo 128 (documentado em ' +
-                 cmdAtual.m.length + ' modelos). Trava liberada: dá para enviar para a frota inteira.';
-    } else if (marcados.length === 1) {
-        permitidos = null;
-        motivo = '';
+                 cmdAtual.m.length + ' modelos). Trava liberada para <strong>' + rotFam + '</strong>' +
+                 (fams.length === 1 ? ' — os equipamentos da outra família continuam desabilitados, ' +
+                                      'porque o comando não é documentado para eles.' : '.');
     }
 
     document.querySelectorAll('.dev-row').forEach(function (row) {
         var chk = row.querySelector('.dev-chk');
-        var ok = !permitidos || permitidos.indexOf(row.dataset.modelo) >= 0;
+        var ok = comandoAceitaLinha(cmdAtual, row);
         chk.disabled = !ok;
         row.classList.toggle('dev-off', !ok);
         if (!ok && chk.checked) chk.checked = false;
@@ -950,8 +981,19 @@ function montarListaComandos() {
         protos[c.closest('.dev-row').dataset.proto] = 1;
     });
 
+    // Linhas marcadas — a lista só oferece comando que PELO MENOS UMA delas
+    // aceita. v4.16.0: o teste passou a ser `comandoAceitaLinha()`, o mesmo da
+    // trava, em vez de "é universal OU o modelo está na lista". Com as duas
+    // famílias na frota, o atalho `!x.u` mostrava comando de câmera para quem
+    // tinha só rastreador marcado — e a trava logo depois desabilitava todas as
+    // linhas, deixando um comando escolhível e nenhum destino possível.
+    var linhasMarcadas = Array.prototype.slice.call(document.querySelectorAll('.dev-chk:checked'))
+        .map(function (c) { return c.closest('.dev-row'); });
+
     var itens = CATALOGO.filter(function (x) {
-        if (mods.length && !x.u && !mods.some(function (m) { return x.m.indexOf(m) >= 0; })) return false;
+        if (linhasMarcadas.length && !linhasMarcadas.some(function (row) {
+                return comandoAceitaLinha(x, row);
+            })) return false;
         if (!busca) return true;
         return (x.n + ' ' + x.s + ' ' + x.c + ' ' + x.d).toLowerCase().indexOf(busca) >= 0;
     }).map(function (x) {

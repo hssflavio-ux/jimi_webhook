@@ -5,6 +5,54 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.16.0
+
+**Pedido do dono do produto: cadastrar dois equipamentos NOVOS que não são câmeras — os rastreadores `JM-VL01` e `JM-VL02`. Mesmo protocolo JIMI (`msgClass=0`), mesmos webhooks, mesmos comandos de texto proNo 128; sem vídeo, sem canal, sem DMS/ADAS. São os dois primeiros modelos do sistema com `camera_count = 0`.**
+
+Fonte: wiki oficial da Jimi Brasil (`https://wiki.jimibrasil.com.br`) — páginas "Configurações/Consultas/Alarmes - VL01" e "- VL02".
+
+⚠️ **O nome é `JM-VL01`/`JM-VL02`, com JM.** `JC` é a linha de câmeras (JC400, JC371…); `JM` é a de rastreadores, e é o nome da fabricante. `device_models.model_name` é UNIQUE e vira chave da trava por modelo, de `/firmwares` e do `modelos` do catálogo de comandos — renomear depois quebra o casamento em silêncio, como já acontece com `alarm_types.alarm_name_pt`.
+
+### Added
+- **`mysql/migration_v4.16.0.sql`** — os dois modelos + `device_models.family` (`camera`/`tracker`, DEFAULT `camera`) + **14 alarmes JIMI** que a linha VL publica e o catálogo não tinha (`0`, `19`, `50`, `60`, `61`, `62`, `75`–`79`, `83`, `94`, `255`). Linha no `deploy.sh`.
+- **`includes/command_catalog.php`** — bloco da linha VL no fim do arquivo: 42 entradas novas (237 no total, 168 comandos distintos). São os comandos que a linha JC **não tem** (`FENCE`, `HOTSPOT`, `MOVING`, `GMT`, `CENTER`, `LBSON`, `DISTANCE`, `POWERALM`, `BATALM`, `LEVEL`, `DOOR`/`DOORALM`, `OUT2`, `LEDSLEEP`, `SF`, `ADT`, `TURN`, `ACCALM`, `GPRSON`/`GPRSALM`/`GPRSSET`, `ASETGMT`, `FACTORY`, `WHERE`, `URL`) e as **variantes de aridade** dos que já existem com formato diferente.
+- **Trava por FAMÍLIA em `/comandos` E `/comandos-sms`** — `universal` deixou de significar "libera a frota inteira" e passou a significar "libera as famílias que o próprio comando documenta", derivadas de `modelos` via `device_models.family`. Ponto único em **`device_model_families()` / `command_families()`** (`includes/functions.php`): as duas telas travam a seleção pelo MESMO catálogo, e corrigir só uma deixaria a outra oferecendo comando de câmera para rastreador pelo outro transporte.
+- **7 invariantes novos** em `tests/helpers/command_response.test.php` (linha VL): nome com prefixo JM, comando exclusivo de câmera sem modelo VL, entrada da VL nunca universal, params casando com placeholders, fonte declarada, leitura do `VERSION#` no formato da linha VL, e `OUT2`/`FACTORY` na lista de destrutivos (sem botão de consulta).
+- **`tests/rastreador_vl.spec.js`** — 7 testes de navegador que **não dependem de um JM-VL cadastrado** (spec que pula não é cobertura): modelo no `<select>` rotulado como rastreador, `min="0"` no campo de canais, o `0` sobrevivendo ao `onModelChange()`, comando de câmera sem família tracker, as variantes de aridade presas aos modelos da VL, e destrutivo sem consulta.
+- Nota na `/wiki` (seção Equipamentos) explicando ao operador o que muda com um rastreador e por que a linha JM não é a linha JC.
+
+### Changed
+- **Só entrou entrada nova onde a QUANTIDADE ou o FORMATO dos parâmetros muda.** Onde a sintaxe é idêntica, os dois modelos entraram no `modelos` da entrada existente (`STATUS#`, `VERSION#`, `RESET#`, `TIMER,A,B#`, `RELAY,P1#`, `MILEAGE,A,B#`, `GPSDUP,A#`, `ASETAPN,P1#`, `SOSALM,A,B#`, `SWERVE,…`, `SPEEDCHECK,…`) — decisão explícita do dono do produto para não encher a tela de linhas repetidas.
+- `/equipamentos`: campo "Canais" aceita **0** (era `min="1"`, que recusava o único valor certo para um rastreador); o `<select>` de modelo rotula "rastreador, sem câmera"; a grade mostra "(rastreador)" em vez de esconder o número.
+- `/video/aovivo`, `/video/playback` e `/configuracoes-ia` deixam de listar equipamento com `camera_count = 0`.
+- `/ativos/{id}`: as abas **Ao Vivo** e **Vídeo** somem para rastreador (mesma regra da aba Parâmetros, que só aparece em JT/T), e a URL direta responde com um aviso em vez de tela vazia. Trajetos, Alertas, Log, Relatórios e Comandos continuam.
+
+### Fixed
+- 🔴 **`SOSALM,A,B#` era INENVIÁVEL pela tela.** A entrada declarava **cinco** parâmetros para dois placeholders (três eram lixo de raspagem: "Este parâmetro deve ser mantido valor A"). `faltaParametro()` exige toda caixa preenchida, então a tela desenhava cinco campos e o botão Enviar nunca habilitava — só pelo modo livre. Bug pré-existente, achado ao mapear a linha VL.
+- 🔴 **`onModelChange()` (`/equipamentos`) usava `parseInt(...) || 1`** — `0` é falsy em JS, então escolher um modelo de 0 câmeras gravava **1 canal**, e o rastreador nascia parecendo câmera. Latente enquanto todo modelo tinha ao menos um canal.
+- Cabeçalho do `command_catalog.php`: as contagens estavam erradas desde a v4.9.32 (dizia 193/143, o arquivo tinha 195/144) e o teste que as confere estava **vermelho** desde então. O invariante "consulta é sempre `CMD#`" também estava vermelho por causa da família `EVENTSET`, cujo comando é `EVENTSET,<EVENTO>` — a regra passou a aceitar a sintaxe sem placeholders, que é o que "forma nua" quer dizer ali.
+- Invariante "nenhuma consulta duplicada por comando" virou **"por comando dentro do mesmo modelo"**: com três `SPEED` diferentes (JC, VL01 e VL02), a regra antiga deixaria dois deles sem botão de "ler o valor atual".
+- **Três specs codificavam o significado ANTIGO de `universal`** e passaram a afirmar a regra por família: `comandos.spec.js` ("comando universal libera TODOS os equipamentos" → "libera as famílias que documenta, e só elas", mais um teste novo provando que o universal de câmera não alcança rastreador), o `CHECK#` do mesmo arquivo e o `UPDATE` de `firmware.spec.js` (os dois asseriam "equipamento nenhum desabilitado"; agora asserem "câmera nenhuma"). Sem isso a suíte ficaria vermelha por causa da mudança de significado, não de um defeito.
+
+### Verificação
+- `php -l` limpo em `handlers/ config/ core/ includes/ web/`; `bash -n scripts/deploy.sh`.
+- **Migração aplicada duas vezes** contra MySQL local real (idempotência conferida): 8 modelos, 95 alarmes JIMI, zero código VL sem catálogo.
+- **8/8 testes PHP de helper verdes**, incluindo 123/123 em `command_response.test.php` (eram 111/115 antes, com 4 falhas pré-existentes).
+- **Smoke autenticado contra as 10 telas afetadas** (sessão injetada, servidor PHP local, equipamento `JM-VL01` real no banco): nenhum erro de PHP, e as asserções de que o rastreador APARECE em `/equipamentos` e `/comandos` e NÃO aparece em `/video/aovivo`, `/video/playback` e `/configuracoes-ia` — cada uma com uma guarda que prova que a tela lista OUTRO equipamento (senão a asserção passaria por vacuidade).
+- **`/ativos/{id}` conferido nos dois sentidos**: rastreador sem as abas de vídeo, câmera com elas.
+- **Playwright, 106 testes nos arquivos que esta versão toca**: `rastreador_vl.spec.js` **7/7** (novo); `comandos` + `firmware` + `comandos_sms` **34 passando**; `video_*` + `equipamento_vinculo` + `navigation` **66 passando**.
+- As **3 falhas restantes foram provadas PRÉ-EXISTENTES**, cada uma reproduzida com o código do HEAD via `git stash`:
+  - `comandos.spec.js` × 2 (`VIDETIMEZONE`/`VIDEOTIMEZONE`) — causa é o DADO local: o cliente de teste não tem nenhum **JC371**, e os dois comandos só existem nesse modelo; a trava desabilita todas as linhas e o `marcarUm()` do spec não acha checkbox livre.
+  - `video_playback_filelist.spec.js` × 1 (`JT/T: uma requisição cobre TODOS os canais`) — espera 3 canais e recebe 1.
+- O banco de desenvolvimento local estava em **4.9.32** e foi migrado até a **4.16.0** para a suíte rodar contra o esquema de verdade (o `senha_temporaria.spec.js` acusava `Unknown column 'must_change_password'`).
+
+### Pendente
+- 🔴 **Nenhum comando da linha VL foi disparado contra equipamento real.** Toda entrada nova tem `consulta_ref => 'wiki'`, nunca `medido`. O primeiro teste deve ser uma consulta inócua (`STATUS#`, `GPRSSET#`).
+- **Cerca RETANGULAR (`FENCE,B,1,…`) ficou de fora**: a wiki escreve a sintaxe com 7 campos e descreve 8 logo abaixo. Aridade errada no proNo 128 é aceita sem erro — aqui viraria cerca no lugar errado. A circular entrou porque tem exemplo literal que confere.
+- Alarmes `33`/`34` da VL02 não foram catalogados: a wiki os publica como "Reservado".
+- Os 14 alarmes novos **não geram ocorrência** (sem linha em `occurrence_config_params`) — ligar o motor para evento de rastreador muda volume de tratativa e é decisão de produto.
+- Leitura dos payloads reais de um JM-VL01 no ar, para ver o que mais falta nas strings recebidas (pedido do dono do produto).
+
 ## [Unreleased] — 4.15.1
 
 **Pedido do dono do produto na sequência da auditoria (v4.15.0): relatórios exportáveis. Alinhado com ele: só exportação síncrona (sem entrar no agendamento por e-mail), e 3 relatórios SEPARADOS por finalidade em vez de um genérico.**

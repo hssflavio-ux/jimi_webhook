@@ -140,6 +140,15 @@ foreach ($devices as &$d) {
 }
 unset($d);
 
+// ── Família de cada modelo: câmera x rastreador (v4.16.0) ──────────────────
+// 🔴 A MESMA trava do /comandos, e ela precisa existir NAS DUAS TELAS. O
+// catálogo é o mesmo; só muda o transporte. Corrigir só o IoT Hub deixaria o
+// SMS oferecendo `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` a um rastreador — o
+// defeito inteiro, por um caminho diferente. Ponto único:
+// `device_model_families()` / `command_families()` em includes/functions.php.
+$familiaPorModelo = device_model_families($db);
+$familiaDe = fn(?string $modelo) => $familiaPorModelo[$modelo ?? ''] ?? 'camera';
+
 // ── Catálogo (o MESMO do /comandos) ─────────────────────────────────────────
 $catalogo = require __DIR__ . '/../includes/command_catalog.php';
 
@@ -157,6 +166,8 @@ foreach ($catalogo as $syn => $dd) {
         's' => $syn, 'c' => $dd['cmd'], 'n' => $dd['nome'],
         'd' => $dd['desc'], 'k' => $dd['categoria'],
         'm' => $dd['modelos'], 'u' => (bool)$dd['universal'], 't' => (bool)$dd['template'],
+        // Famílias que o comando documenta — só tem efeito quando `u` é true.
+        'fam' => command_families($dd['modelos'], $familiaPorModelo),
         'q' => $dd['consulta'] ?? null, 'qm' => $dd['consulta_modelos'] ?? [],
         'p' => array_map(fn($p) => ['p' => $p['p'], 'd' => $p['desc'],
                                     'f' => $p['format'], 'v' => $p['default']], $dd['params']),
@@ -343,6 +354,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <tbody>
         <?php foreach ($devices as $d): ?>
             <tr data-modelo="<?= htmlspecialchars($d['model_display']) ?>"
+                data-familia="<?= htmlspecialchars($familiaDe($d['model_display'])) ?>"
                 data-imei="<?= htmlspecialchars($d['imei']) ?>"
                 class="<?= $d['msisdn_ok'] === null ? 'linha-bloqueada' : '' ?>">
                 <td>
@@ -624,7 +636,16 @@ function aplicarTravaModelo() {
     // não se lê o atributo `disabled` do próprio checkbox, que esta função
     // escreve — isso faria o estado depender da ordem das chamadas.
     const semNumero = tr.classList.contains('linha-bloqueada');
-    const travado = !!(atual && !atual.u && atual.m.length && !atual.m.includes(tr.dataset.modelo));
+    // v4.16.0 — a trava deixou de ser "universal libera todo mundo". Aceita quem:
+    //   1. tem o modelo listado no comando; ou
+    //   2. é universal E a FAMÍLIA do equipamento é uma das que o comando
+    //      documenta (`fam`, derivada de `m` no PHP).
+    // Comando sem modelo declarado continua não travando ninguém, como antes.
+    const familia = tr.dataset.familia || 'camera';
+    const aceita  = !atual || !atual.m.length
+                    || atual.m.includes(tr.dataset.modelo)
+                    || (atual.u && (atual.fam || ['camera']).includes(familia));
+    const travado = !aceita;
 
     tr.classList.toggle('modelo-travado', travado);
     cb.disabled = travado || semNumero;
