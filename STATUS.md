@@ -1,4 +1,37 @@
-# STATUS.md — Jimi Webhook System v4.17.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.3 (YUV Parity)
+
+> ### 📍 v4.17.3 — a regra de fuso, conferida em producao
+>
+> Pergunta do dono do produto: *"ficou confusa a questao da hora gmt ou nao,
+> sempre temos que tratar a hora local, gmt-3?"*
+>
+> **A regra: UTC no MIOLO, BRT so nas DUAS BORDAS.** Guardar, comparar,
+> somar, agrupar e ordenar e sempre em UTC. Converter e operacao de borda, e
+> sao so duas: saida (UTC->BRT, `fmt_brt()`) e entrada de dia digitado
+> (BRT->UTC, `brt_day_range_to_utc()`).
+> **Resposta: sim para a EXIBICAO, nao para a ANALISE** — o dado do
+> equipamento ja chega em GMT 0, analisa-lo exige NAO converter.
+>
+> **Conferido, nao deduzido:**
+> - os quatro relogios (php.ini, PHP, sessao MySQL, SO) todos UTC, batendo
+>   ao segundo;
+> - a cadeia `gps_time` -> `gateway_time` -> `server_time` diverge em
+>   SEGUNDOS (0-6s), nao em horas: GMT 0 nos tres saltos;
+> - `metrics_snapshots.snapshot_at` em UTC (idade 2 min, nao -180);
+> - a excecao do NOME do arquivo reconferida em 12 de 12 pelo vinculo REAL
+>   (`alarms.file_url LIKE %nome%`): nome + 3h cai a 0-12 min do alarme;
+> - auditoria dos tres erros classicos: ZERO ocorrencias.
+>
+> **Duas fragilidades corrigidas:**
+> - ⚠️ `metrics_rollup.php` gravava `snapshot_at` com `date()` — acertava so
+>   porque o php.ini esta em UTC. Em php.ini BRT a snapshot nasceria
+>   PERMANENTEMENTE vencida pela regra da v4.17.2, em silencio. `gmdate()`
+>   agora, mais os 7 fallbacks dos `push*.php`.
+> - 🔴 O `#server-clock` do cabecalho mostrava o relogio do PC do OPERADOR,
+>   nao o do servidor (o FUSO estava certo, o INSTANTE nao). PC em UTC
+>   desloca exatamente 3h e o sintoma e indistinguivel de bug de fuso —
+>   candidato forte a ter causado parte da confusao. Simulado com +47min,
+>   +5min e -180min: agora mostra a hora do servidor nos tres.
 
 > ### 📍 v4.17.2 — o contador On/Off tinha quatro respostas diferentes
 >

@@ -90,7 +90,7 @@ class PushResourceListHandler extends WebhookHandler {
         $errors = 0;
 
         // Instante ÚNICO desta listagem — ver a nota no execute() abaixo.
-        $capturaEm = date('Y-m-d H:i:s');
+        $capturaEm = gmdate('Y-m-d H:i:s');
 
         // Prepara query fora do loop
         try {

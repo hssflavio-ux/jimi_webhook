@@ -54,8 +54,8 @@ class PushLBSHandler extends WebhookHandler {
         $address = $lbsJson['address'] ?? $item['address'] ?? null;
 
         // Tempos
-        $lbsTime  = $item['lbsTime']  ?? $item['gpsTime'] ?? $item['time'] ?? date('Y-m-d H:i:s');
-        $gateTime = $item['gateTime'] ?? $item['gateway_time'] ?? date('Y-m-d H:i:s');
+        $lbsTime  = $item['lbsTime']  ?? $item['gpsTime'] ?? $item['time'] ?? gmdate('Y-m-d H:i:s');
+        $gateTime = $item['gateTime'] ?? $item['gateway_time'] ?? gmdate('Y-m-d H:i:s');
 
         $savedCount = 0;
         foreach ($towers as $tower) {

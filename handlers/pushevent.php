@@ -62,7 +62,7 @@ class PushEventHandler extends WebhookHandler {
                   ?? $item['eventTime'] 
                   ?? $item['gps_time']
                   ?? $item['gpsTime']
-                  ?? date('Y-m-d H:i:s');
+                  ?? gmdate('Y-m-d H:i:s');
         
         // Coordenadas
         $latitude = $item['latitude'] ?? $item['lat'] ?? null;

@@ -21,7 +21,7 @@ class PushHeartbeatHandler extends WebhookHandler {
         $heartbeatTime = $item['gateway_time'] 
                       ?? $item['heartbeat_time'] 
                       ?? $item['gps_time'] 
-                      ?? date('Y-m-d H:i:s');
+                      ?? gmdate('Y-m-d H:i:s');
         
         // Campos básicos: bateria e sinal GSM
         $battery    = $item['battery']     ?? $item['powerLevel'] ?? null;

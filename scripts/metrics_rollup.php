@@ -20,7 +20,15 @@ require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../includes/fleet_state.php'; // device_connectivity_counts()
 
 $db = Database::getInstance()->getConnection();
-$snapTime = date('Y-m-d H:i:s');
+// `gmdate`, não `date`: esta string vira `metrics_snapshots.snapshot_at`, que
+// `metrics_snapshot_stale()` compara contra o `NOW()` do MySQL — e esse NOW()
+// é UTC por causa do `time_zone = '+00:00'` da conexão. `date()` só acerta
+// porque o php.ini de produção está em UTC; um `date.timezone` mudado para
+// America/Sao_Paulo gravaria a snapshot 3 h no passado e ela nasceria
+// PERMANENTEMENTE vencida — os números continuariam certos (a tela cairia no
+// fallback ao vivo) e o único sintoma seria carga de banco a mais, em
+// silêncio. O `gmdate` tira a dependência do php.ini.
+$snapTime = gmdate('Y-m-d H:i:s');
 
 $customers = $db->query("SELECT id FROM customers WHERE is_active = 1")->fetchAll();
 

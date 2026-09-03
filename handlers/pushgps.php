@@ -70,8 +70,8 @@ class PushGPSHandler extends WebhookHandler {
         $imei = $this->validateRequired($item, 'imei', 'IMEI');
         
         // Extrair campos documentados com fallback para múltiplos formatos
-        $gpsTime        = $item['gps_time']    ?? $item['gpsTime']     ?? date('Y-m-d H:i:s');
-        $gatewayTime    = $item['gateway_time'] ?? $item['gateTime']   ?? $item['gate_time'] ?? date('Y-m-d H:i:s');
+        $gpsTime        = $item['gps_time']    ?? $item['gpsTime']     ?? gmdate('Y-m-d H:i:s');
+        $gatewayTime    = $item['gateway_time'] ?? $item['gateTime']   ?? $item['gate_time'] ?? gmdate('Y-m-d H:i:s');
         $latitude       = $item['latitude']    ?? $item['lat']         ?? null;
         $longitude      = $item['longitude']   ?? $item['lng']         ?? $item['lon'] ?? null;
         $speed          = $item['speed']       ?? $item['gpsSpeed']    ?? 0;

@@ -57,7 +57,7 @@ if (!is_dir($logDir)) {
 // Um arquivo por dia — mesma convenção de nomenclatura do core/Logger.php,
 // o que faz o log_cleanup.php purgar este arquivo junto com os demais.
 $logFile   = $logDir . '/terminal_realtime_status_' . date('Y-m-d') . '.log';
-$timestamp = date('Y-m-d H:i:s');
+$timestamp = gmdate('Y-m-d H:i:s');
 
 $logEntry  = "[{$timestamp}] PAYLOAD RECEIVED:\n";
 $logEntry .= $payload . "\n";

@@ -134,7 +134,7 @@ class PushAlarmHandler extends WebhookHandler {
         $description = $msg['description'] ?? null;
 
         // Tempos
-        $alarmTime   = $msg['alarmTime'] ?? date('Y-m-d H:i:s');
+        $alarmTime   = $msg['alarmTime'] ?? gmdate('Y-m-d H:i:s');
         $gpsTime     = $item['gps_time'] ?? $msg['gpsTime'] ?? null;
         $gatewayTime = $item['gateway_time'] ?? $item['gateTime'] ?? null;
 

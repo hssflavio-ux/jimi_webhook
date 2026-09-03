@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.3
+
+**Pergunta do dono do produto: "ficou confusa a questão da hora gmt ou não, sempre temos que tratar a hora local, gmt-3, tanto para a exibição do snapshot da hora quanto para fazer a análise dos dados vindos dos equipamentos, que não são gmt-3, certo?"**
+
+### A regra, em uma frase
+- **UTC no miolo, BRT só nas duas bordas.** Guardar, comparar, somar, agrupar e ordenar é **sempre em UTC**. Converter é operação de **borda**, e são só duas: a **saída** (UTC→BRT, `fmt_brt()`) e a **entrada** de dia digitado pelo usuário (BRT→UTC, `brt_day_range_to_utc()`). Tratar tudo em BRT — inclusive a análise — é justamente o caminho para a classe de bug de 3 h.
+- **A resposta à pergunta é "sim para a exibição, não para a análise".** Os dados que chegam dos equipamentos **já vêm em GMT 0**, e são gravados assim: analisá-los exige *não* converter.
+
+### Conferido em produção, não deduzido
+- **Os quatro relógios, todos UTC e batendo ao segundo**: `php.ini date.timezone` = UTC, `date_default_timezone_get()` = UTC, `@@session.time_zone` = `+00:00` (`NOW()` idêntico a `UTC_TIMESTAMP()`), SO em UTC.
+- **A cadeia de três carimbos do `gps_data`** (`gps_time` do device → `gateway_time` do hub → `server_time` nosso) diverge em **segundos** (0–6 s), não em horas: confirma GMT 0 nos três saltos, do equipamento até o nosso disco.
+- **`metrics_snapshots.snapshot_at` está em UTC** — idade de 2 min contra o `NOW()` do MySQL, e não os −180 que apareceriam se estivesse gravado em BRT. É a coluna que o `metrics_snapshot_stale()` da v4.17.2 compara.
+- **A exceção do NOME do arquivo, reconferida em 12 de 12** anexos de evento, agora pelo vínculo REAL (`alarms.file_url LIKE '%nome%'`) e não por "alarme mais próximo" — heurística circular que na primeira tentativa deu falso negativo em 4 amostras. `nome + 3 h` cai a **0–12 min** do `alarm_time`: o nome está mesmo em BRT.
+- **Auditoria dos três erros clássicos: zero ocorrências** — nenhum `fmt_brt()` sobre coluna DATE pura, nenhum `CONVERT_TZ` num `WHERE` fora da única exceção legítima (`report_time_window()`, faixa horária repetida em cada dia, onde o predicado É sobre hora local e o custo em índice está documentado).
+
+### Fixed — as duas fragilidades que a verificação expôs
+- ⚠️ **`scripts/metrics_rollup.php` gravava `snapshot_at` com `date()`, não `gmdate()`.** Acertava só porque o php.ini de produção está em UTC — correto por coincidência de ambiente, não por construção. Com `date.timezone = America/Sao_Paulo` a snapshot nasceria 3 h no passado e **permanentemente vencida** pela regra nova da v4.17.2: os números continuariam certos (a tela cairia no fallback ao vivo) e o único sintoma seria carga de banco a mais, em silêncio. Trocado por `gmdate()`, junto com os **sete** `?? date('Y-m-d H:i:s')` de fallback dos `push*.php` — os que carimbam a hora quando o equipamento omite o campo.
+- 🔴 **O relógio `#server-clock` do cabeçalho mostrava o relógio da MÁQUINA DO OPERADOR, não o do servidor.** Era `new Date()` com `timeZone: 'America/Sao_Paulo'`: o **fuso** estava certo (a tela é sempre BRT, qualquer que seja o fuso do SO do usuário), o **instante** não. PC adiantado — ou configurado em UTC, que desloca exatamente as 3 h — exibia no cabeçalho uma hora que não batia com carimbo nenhum das telas, e o sintoma é **indistinguível de bug de fuso do sistema**; é candidato forte a ter sido parte da confusão relatada. O PHP passa a carimbar o epoch UTC na renderização e o JS anda a partir do desvio medido uma vez. Simulado com desvios de +47 min, +5 min e −180 min: o cabeçalho mostra a hora do servidor nos três. ⚠️ De passagem: `/camerasdata` já devolvia um `serverTime` correto em BRT que **nenhum front-end lia** desde que existe.
+
 ## [Unreleased] — 4.17.2
 
 **Pergunta do dono do produto: "qual é o parâmetro para o on e off no alto direito da tela e do quadro de conectividade? não parece ser o status atual da frota, verifique."**

@@ -1591,9 +1591,20 @@ function toggleMobileSidebar() {
 })();
 
 // ── Clock ─────────────────────────────────────────────
+// 🔴 O elemento se chama `server-clock` e mostrava `new Date()` — o relógio da
+// MÁQUINA DO OPERADOR, não o do servidor. O `timeZone: 'America/Sao_Paulo'`
+// resolvia o FUSO (a tela é sempre BRT, qualquer que seja o fuso do SO do
+// usuário) mas não o INSTANTE: PC com relógio adiantado mostrava no cabeçalho
+// uma hora que não bate com nenhum carimbo das telas, e o sintoma é
+// indistinguível de bug de fuso do sistema.
+// O servidor carimba o epoch UTC na renderização; guardamos o desvio uma vez e
+// o relógio passa a andar a partir do instante DELE.
+const BC_SERVER_EPOCH_MS = <?= (int)(time()) ?> * 1000;
+const BC_CLOCK_SKEW_MS   = BC_SERVER_EPOCH_MS - Date.now();
 function updateClock() {
     const el = document.getElementById('server-clock');
-    if (el) el.textContent = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    if (el) el.textContent = new Date(Date.now() + BC_CLOCK_SKEW_MS)
+        .toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 }
 updateClock();
 setInterval(updateClock, 30000);
