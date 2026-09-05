@@ -75,8 +75,14 @@ class PushHeartbeatHandler extends WebhookHandler {
             ':extra'=> json_encode($item, JSON_UNESCAPED_UNICODE)
         ]);
         
+        // 🔴 `$acc` vai junto desde a v4.17.8. Ele era extraído acima, gravado
+        // em `heartbeats.acc` e descartado aqui — `device_statistics.last_acc_status`
+        // só era atualizado por GPS, então a ignição exibida nas telas tinha a
+        // idade do último PONTO, não a da última leitura. Medido em produção:
+        // `heartbeats.acc` 100% preenchido (6806/6806 em 2 dias) e a ignição do
+        // `400D` atrasada 382 minutos com o valor certo chegando o tempo todo.
         $this->callProcedure('update_device_stats_after_heartbeat', [
-            $imei, $heartbeatTime, $battery, $gsmSignal
+            $imei, $heartbeatTime, $battery, $gsmSignal, $acc
         ]);
 
         update_engine_hours($this->db, $imei, $engineHours);

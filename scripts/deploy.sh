@@ -460,6 +460,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.16.1" "mysql/migration_v4.16.1.sql" "alarmes 254/50 corrigidos contra a Alarm Reference oficial (medido no 1o JM-VL01 real)"
     run_migration "4.17.0" "mysql/migration_v4.17.0.sql" "cadastro COMPLETO dos alarmes JIMI: 95 -> 197 codigos (Alarm Reference oficial)"
     run_migration "4.17.5" "mysql/migration_v4.17.5.sql" "update_device_stats_after_gps comparava com NULL e descartava a posicao (JM-VL02 nao selecionavel)"
+    run_migration "4.17.8" "mysql/migration_v4.17.8.sql" "ignicao passa a vir tambem do heartbeat (last_acc_status atrasava ate 6h atras do GPS)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.8
+
+**Decisão do dono do produto: "a bolinha é o status da ign, não da comunicação."** Achado ao dimensionar essa mudança: a própria leitura de ignição estava velha.
+
+### Fixed
+
+- **A ignição só era atualizada por GPS, e atrasava até 6h22 atrás do heartbeat.** `heartbeats.acc` está **100% preenchido** em produção (6806 de 6806 heartbeats em 2 dias — 2468 ON, 4338 OFF), mas `update_device_stats_after_heartbeat` não recebia nem gravava `acc`: `pushhb.php` extraía `$acc`, gravava em `heartbeats` e **descartava na chamada da procedure**. `device_statistics.last_acc_status` ficava com a idade do último PONTO, não da última leitura — o `400D` mostrava ignição de **382 minutos** atrás com o valor certo chegando a cada heartbeat. Sem sintoma nenhum: o número existe, é plausível, e só está velho.
+  - Isso passou a importar com a v4.17.6/v4.17.7, que exibem `IGN: ON/OFF` na linha de cada ativo, e mais ainda com a decisão de que **a bolinha da lista é o status da ignição** — sinal que vira a cor da linha não pode ser o de seis horas atrás.
+  - ⚠️ `last_acc_status` passa a significar "a leitura de ignição **mais recente, de qualquer fonte**", e por isso as **duas** procedures comparam contra o `GREATEST` das duas marcas, não cada uma contra a sua. Sem isso elas disputariam a coluna e o valor oscilaria entre o certo e o velho a cada push — pior que atrasar de forma estável.
+  - 🔴 Em `_heartbeat`, `last_acc_status` é atribuído **antes** de `last_heartbeat_time`: o `ON DUPLICATE KEY UPDATE` avalia da esquerda para a direita e as linhas seguintes já veem os valores novos, então na ordem inversa o `GREATEST` leria o próprio `p_hb_time` e a guarda contra heartbeat fora de ordem sumiria em silêncio. Mesma armadilha da v4.17.5.
+  - `p_acc IS NOT NULL` é a outra guarda — o campo é opcional no payload e um heartbeat sem ele não pode apagar leitura boa.
+  - A migração alcança o atraso já existente a partir do heartbeat mais recente de cada equipamento (`migration_v4.17.8.sql`).
+  - **Verificado no ambiente local exercitando as procedures**, 6 casos: GPS grava; heartbeat mais novo vence (era descartado); heartbeat fora de ordem não retrocede; `acc` NULL não apaga; GPS mais velho que o heartbeat não vence; GPS mais novo vence e atualiza a posição junto.
+
 ## [Unreleased] — 4.17.7
 
 **Correção do dono do produto sobre a v4.17.6: "o horario deve ser o da ultima comunicação, com o estado atual da ign, se houver mudança de posição, os equipamentos tem funcionalidade para enviar nova posição com ign off, como no caso de ser rebocado."**

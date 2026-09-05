@@ -729,7 +729,13 @@ BEGIN
         last_latitude = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_lat, last_latitude),
         last_longitude = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_lon, last_longitude),
         last_speed = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_speed, last_speed),
-        last_acc_status = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_acc, last_acc_status),
+        -- Espelho do passo do heartbeat: last_acc_status e' "a leitura de
+        -- ignicao MAIS RECENTE, de qualquer fonte". Sem o GREATEST as duas
+        -- procedures disputam a coluna e o valor oscila a cada push (v4.17.8).
+        last_acc_status = IF(p_acc IS NOT NULL
+                             AND p_gps_time >= GREATEST(COALESCE(last_gps_time, '2000-01-01'),
+                                                        COALESCE(last_heartbeat_time, '2000-01-01')),
+                             p_acc, last_acc_status),
         gsm_signal = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_gsm, gsm_signal),
         total_distance_km = total_distance_km + COALESCE(p_dist, 0),
         total_gps_count = total_gps_count + 1,
@@ -747,14 +753,24 @@ CREATE PROCEDURE `update_device_stats_after_heartbeat`(
     IN p_imei VARCHAR(20), 
     IN p_hb_time DATETIME, 
     IN p_bat INT, 
-    IN p_gsm INT
+    IN p_gsm INT,
+    IN p_acc TINYINT
 )
 BEGIN
     INSERT INTO device_statistics (
-        imei, last_heartbeat_time, battery_level, gsm_signal, is_online, updated_at
+        imei, last_heartbeat_time, battery_level, gsm_signal, last_acc_status, is_online, updated_at
     )
-    VALUES (p_imei, p_hb_time, p_bat, p_gsm, 1, NOW())
+    VALUES (p_imei, p_hb_time, p_bat, p_gsm, p_acc, 1, NOW())
     ON DUPLICATE KEY UPDATE
+        -- 🔴 last_acc_status vem ANTES de last_heartbeat_time de proposito: o
+        -- ON DUPLICATE KEY UPDATE avalia da esquerda para a direita e as linhas
+        -- seguintes ja veem os valores NOVOS. Invertido, o GREATEST leria o
+        -- proprio p_hb_time e a comparacao viraria sempre verdadeira, sumindo
+        -- com a protecao contra heartbeat fora de ordem (v4.17.8).
+        last_acc_status = IF(p_acc IS NOT NULL
+                             AND p_hb_time >= GREATEST(COALESCE(last_gps_time, '2000-01-01'),
+                                                       COALESCE(last_heartbeat_time, '2000-01-01')),
+                             p_acc, last_acc_status),
         last_heartbeat_time = IF(p_hb_time > COALESCE(last_heartbeat_time, '2000-01-01'), p_hb_time, last_heartbeat_time),
         battery_level = COALESCE(p_bat, battery_level),
         gsm_signal = COALESCE(p_gsm, gsm_signal),
