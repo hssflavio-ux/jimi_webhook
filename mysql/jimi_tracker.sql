@@ -708,13 +708,29 @@ BEGIN
         p_imei, p_gps_time, p_lat, p_lon, p_speed, 
         COALESCE(p_dist, 0), p_gsm, 1, 1, p_acc, NOW()
     )
+    -- 🔴 O COALESCE das seis comparações NÃO é decoração (v4.17.5). A linha em
+    -- `device_statistics` costuma ser criada por `_heartbeat`/`_event`, que a
+    -- inserem SEM `last_gps_time` — e `p_gps_time >= NULL` é NULL, não TRUE:
+    -- o `IF` cai no ramo *else* e mantém a posição em NULL. Como
+    -- `last_gps_time` também nunca é gravado, a condição jamais vira
+    -- verdadeira e a linha fica travada em NULL para sempre, com o
+    -- `total_gps_count` subindo normalmente ao lado. Medido no JM-VL02 em
+    -- 05/09/2026: 34 posições boas gravadas em `gps_data`, nenhuma refletida
+    -- aqui, ativo não selecionável em `/rastreamento`. As outras três
+    -- `update_device_stats_after_*` sempre usaram esta mesma sentinela.
+    --
+    -- ⚠️ As SEIS linhas levam COALESCE. O `ON DUPLICATE KEY UPDATE` avalia da
+    -- esquerda para a direita e as seguintes já veem o valor NOVO de
+    -- `last_gps_time`, então só a primeira seria estritamente necessária — mas
+    -- isso amarra a correção à ORDEM das linhas, e reordenar o bloco traria o
+    -- defeito de volta em silêncio.
     ON DUPLICATE KEY UPDATE
-        last_gps_time = IF(p_gps_time > last_gps_time, p_gps_time, last_gps_time),
-        last_latitude = IF(p_gps_time >= last_gps_time, p_lat, last_latitude),
-        last_longitude = IF(p_gps_time >= last_gps_time, p_lon, last_longitude),
-        last_speed = IF(p_gps_time >= last_gps_time, p_speed, last_speed),
-        last_acc_status = IF(p_gps_time >= last_gps_time, p_acc, last_acc_status),
-        gsm_signal = IF(p_gps_time >= last_gps_time, p_gsm, gsm_signal),
+        last_gps_time = IF(p_gps_time > COALESCE(last_gps_time, '2000-01-01'), p_gps_time, last_gps_time),
+        last_latitude = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_lat, last_latitude),
+        last_longitude = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_lon, last_longitude),
+        last_speed = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_speed, last_speed),
+        last_acc_status = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_acc, last_acc_status),
+        gsm_signal = IF(p_gps_time >= COALESCE(last_gps_time, '2000-01-01'), p_gsm, gsm_signal),
         total_distance_km = total_distance_km + COALESCE(p_dist, 0),
         total_gps_count = total_gps_count + 1,
         is_online = 1,

@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.5
+
+**Relato do dono do produto: "o equipamento jm-vl02 não está disponível para check na tela de rastreamento se ele está ligado e conectado."**
+
+### Fixed
+
+- **`update_device_stats_after_gps` comparava com NULL e descartava a posição — o ativo ficava sem posição para sempre.** Medido em produção no JM-VL02 (`863282040221152`): equipamento ligado, transmitindo, **34 posições boas em `gps_data`** (a última a 3s do `server_time`), e `device_statistics` com `last_gps_time`/`last_latitude`/`last_longitude` **NULL** — com o `total_gps_count` subindo normalmente ao lado (22 → 34 em meia hora). A procedure é a única das quatro `update_device_stats_after_*` sem `COALESCE`: `IF(p_gps_time >= last_gps_time, …)` contra NULL devolve NULL, o `IF` cai no ramo *else* e mantém a posição em NULL; como `last_gps_time` também nunca é gravado, **a condição jamais vira verdadeira e a linha trava em NULL permanentemente**. Corrigido com a mesma sentinela `'2000-01-01'` das outras três, nas seis comparações, e com o passo que destrava as linhas já presas a partir do último ponto real de `gps_data` (`migration_v4.17.5.sql`, `mysql/jimi_tracker.sql`).
+  - **Como a linha nasce em NULL:** `_heartbeat` e `_event` inserem a linha sem `last_gps_time`. Basta o equipamento mandar heartbeat ou evento antes da primeira posição — o caso normal de equipamento ligado antes de fixar satélite. No VL02 foram **4h16**: evento 19:36:02, heartbeat 19:37:17, primeira posição 23:52:07.
+  - **Por que só apareceu agora, com um rastreador:** `update_device_stats_after_alarm` grava lat/lng **incondicionalmente** quando o alarme traz coordenada — é o conserto acidental que mascarava o defeito na frota de câmeras. O JM-VL01 tem 5 alarmes e escapou por aí; o JM-VL02 tem **zero**. Rastreador não gera alarme DMS/ADAS, então a linha `JM-VL0x` é a única sem esse conserto de graça. O defeito é antigo e geral; a frota nova é que o expôs.
+  - **Sintoma na tela:** `/rastreamento` monta `has_pos` a partir de `device_statistics` (não de `gps_data`), então a caixa de seleção nascia `disabled` com "Sem posição conhecida — nada a exibir"; e `resolve_live_state()` devolve `offline` com `last_gps_time` NULL, deixando o ativo cinza no fim da lista **enquanto o contador On/Off do cabeçalho o contava como On** (ele lê `devices.last_communication`, que era atualizada). Um sintoma só, não dois.
+  - 🔴 **Não era fuso.** Medido nos 34 pontos: `gps_time` → `server_time` entre **2 e 7 segundos** (média 5s), zero fora de 3000s — uma defasagem BRT apareceria como ~10800s. A cadeia dos três carimbos bate (`gps_time 01:34:59 → gateway_time 01:35:00 → server_time 01:35:02`): o corpo do webhook chega em GMT 0 como no resto da frota.
+
 ## [Unreleased] — 4.17.4
 
 **Pedido do dono do produto: "na tela de rastreamento mescle a seleção de cliente e seleção de veículos na mesma coluna, seleção de cliente acima da seleção de veículos, além disso, coloque a opção de escolhermos o(s) veículo(s) que queremos exibir no mapa ao vivo."**
