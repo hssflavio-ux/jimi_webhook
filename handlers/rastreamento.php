@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Rastreamento v4.17.4
+ * JIMI Webhook System — Rastreamento v4.17.6
  * Rota: /rastreamento
  *
  * Mapa ao vivo. UMA coluna de navegação (Cliente em cima, Ativos embaixo) +
@@ -8,6 +8,11 @@
  *
  * Cada ativo tem uma caixa de seleção que decide se ele aparece no mapa — a
  * lista é o filtro do mapa, não só um índice para centralizar nele.
+ *
+ * Sob a placa, cada linha traz IGN (ON/OFF) e o horário da última posição —
+ * dado de operação no lugar do IMEI, que é número de cadastro. Os três sinais
+ * da linha (bolinha, IGN, horário) vêm todos de `device_statistics`, da MESMA
+ * leitura, de propósito: ver o comentário no bloco da lista.
  *
  * 🔴 Até a v4.17.3 esta tela aceitava `?customer_id=` CRU e o usava direto nas
  * duas consultas, sem passar por `report_customer_scope()`. Medido: um
@@ -115,7 +120,12 @@ if (!empty($_GET['ajax'])) {
         return ['imei' => $p['imei'], 'lat' => (float)$p['latitude'], 'lng' => (float)$p['longitude'],
                 'name' => $p['device_name'], 'speed' => (float)$p['speed'], 'ignition' => $p['ignition'],
                 'state' => $p['state'], 'vehicleType' => $p['vehicle_type'],
-                'online' => $p['state'] !== 'offline', 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', '')];
+                'online' => $p['state'] !== 'offline', 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', ''),
+                // Campo à parte, não uma troca de formato do `time`: o balão do
+                // mapa mostra a data cheia com segundos, e a linha da lista tem
+                // 244 px úteis dentro dos 300 px da coluna. Um formato só
+                // obrigaria uma das duas a ficar errada.
+                'timeShort' => fmt_brt($p['gps_time'], 'd/m H:i', '—')];
     }, $positions)], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -200,7 +210,29 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <div style="font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                         <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?>
                     </div>
-                    <div class="text-mono" style="font-size:10px;color:var(--muted);"><?= htmlspecialchars($d['imei']) ?></div>
+                    <?php /* Ignição + horário da última posição no lugar do IMEI
+                            (v4.17.6). O IMEI é número de cadastro, não informação
+                            de operação: quem olha o mapa quer saber se o motor
+                            está ligado e quando o veículo falou pela última vez.
+                            Ele continua no `data-imei` e `filterDevices()` continua
+                            achando por ele — saiu da vista, não da busca.
+
+                            ⚠️ O horário é o da ÚLTIMA POSIÇÃO
+                            (`device_statistics.last_gps_time`), a MESMA leitura de
+                            onde vêm o IGN ao lado e a bolinha online/offline à
+                            esquerda — NÃO `devices.last_communication`, que conta
+                            também heartbeat e evento. As duas fontes na mesma
+                            linha produziriam "IGN: ON" carimbado com um instante
+                            em que não houve leitura de ignição nenhuma, e a
+                            bolinha (offline por `last_gps_time`) contradiria o
+                            horário ao lado dela — a mesma classe de contradição
+                            que o CLAUDE.md descreve nos "dois online" do produto. */ ?>
+                    <?php $ign = $d['ignition'] === null ? '—' : ((int)$d['ignition'] === 1 ? 'ON' : 'OFF'); ?>
+                    <div class="device-meta text-mono" style="font-size:10px;color:var(--muted);"
+                         title="Ignição e horário da última posição recebida">
+                        IGN: <span class="ign-val" style="<?= $ign === 'ON' ? 'color:var(--ink);font-weight:600;' : '' ?>"><?= $ign ?></span>
+                        · <span class="last-seen"><?= htmlspecialchars(fmt_brt($d['last_gps_time'], 'd/m H:i', '—')) ?></span>
+                    </div>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -396,6 +428,46 @@ function filterDevices() {
     });
 }
 
+// A linha da lista agora carrega dado AO VIVO (ignição e horário da última
+// posição), então o refresh de 30 s tem de atualizá-la junto com os pinos —
+// senão a coluna da esquerda congela no estado da carga da página enquanto o
+// mapa se move, que é a contradição mais fácil de produzir nesta tela.
+function atualizarLinha(p) {
+    var el = document.querySelector('#device-list [data-imei="' + p.imei + '"]');
+    if (!el) return;
+
+    var ign = el.querySelector('.ign-val');
+    if (ign) {
+        // `== null` pega null e undefined de uma vez; `Number(0) === 1` é
+        // falso, e é o que separa OFF de "sem leitura". Não usar `p.ignition
+        // ? …` aqui: 0 é falsy e viraria "—", apagando a diferença entre
+        // "motor desligado" e "nunca reportou ignição".
+        var v = (p.ignition == null) ? '—' : (Number(p.ignition) === 1 ? 'ON' : 'OFF');
+        ign.textContent = v;
+        ign.style.color = v === 'ON' ? 'var(--ink)' : '';
+        ign.style.fontWeight = v === 'ON' ? '600' : '';
+    }
+
+    var ls = el.querySelector('.last-seen');
+    if (ls) ls.textContent = p.timeShort || '—';
+
+    var dot = el.querySelector('.device-dot');
+    if (dot) { dot.classList.toggle('online', !!p.online); dot.classList.toggle('offline', !p.online); }
+
+    // Ativo que ganhou posição depois da carga da página: sem isto a linha
+    // passaria a exibir IGN e horário frescos ao lado de uma caixa ainda
+    // desabilitada dizendo "sem posição conhecida" — a linha se contradiria
+    // sozinha. O contador de `aplicarVisibilidade()` se recalcula a partir de
+    // `[disabled]`, então ele se acerta junto.
+    var cb = el.querySelector('.device-toggle');
+    if (cb && cb.disabled && p.lat && p.lat !== 0) {
+        cb.disabled = false;
+        cb.title = 'Exibir no mapa';
+        cb.style.cursor = 'pointer';
+        cb.checked = visivel(p.imei);
+    }
+}
+
 setTimeout(function() { map.invalidateSize(); }, 300);
 
 // D2 (v4.2.0 — YUV): auto-refresh 30s sem reload — atualiza pins in-place
@@ -405,6 +477,11 @@ setInterval(function() {
     fetch(url.toString()).then(function(r) { return r.json(); }).then(function(resp) {
         if (!resp || resp.code !== 0) return;
         (resp.positions || []).forEach(function(p) {
+            // ANTES do descarte por falta de posição: a linha da lista existe
+            // para todo ativo do escopo, inclusive o que ainda não tem ponto,
+            // e é justamente nele que o IGN/horário mudando de "—" para um
+            // valor real é a informação mais útil da tela.
+            atualizarLinha(p);
             if (!p.lat || p.lat === 0) return;
             var m = markers[p.imei];
             if (m) {

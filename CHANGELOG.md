@@ -5,6 +5,19 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.6
+
+**Pedido do dono do produto: "Na tela de rastreamento substitua a informação do IMEI abaixo da placa, na lista da barra a esquerda, por estado da ignição (IGN: "ON" ou "OFF") e horario da ultima informação enviada."**
+
+### Changed
+
+- **`/rastreamento` — sob a placa, `IGN: ON · 05/09 01:37` no lugar do IMEI.** O IMEI é número de cadastro, não informação de operação; quem olha o mapa quer saber se o motor está ligado e quando o veículo falou pela última vez. Ele continua no `data-imei` e a **busca continua achando por IMEI** — saiu da vista, não da busca.
+  - ⚠️ **O horário é o da última POSIÇÃO** (`device_statistics.last_gps_time`), a mesma leitura de onde vêm o IGN ao lado e a bolinha online/offline à esquerda — **não** `devices.last_communication`, que conta também heartbeat e evento. As duas fontes na mesma linha produziriam "IGN: ON" carimbado com um instante em que não houve leitura de ignição nenhuma, e a bolinha (offline por `last_gps_time`) contradiria o horário ao lado dela: a mesma classe de contradição dos "dois online" do produto.
+  - `ON` se distingue por **peso e contraste**, não por cor: a bolinha verde da mesma linha já significa online/offline, e um segundo verde ao lado dela com outro sentido faria o operador conflar os dois.
+  - **`—` quando não há leitura**, distinto de `OFF`. No JS a checagem é `p.ignition == null`, nunca `p.ignition ? …` — `0` é falsy e apagaria a diferença entre "motor desligado" e "nunca reportou ignição".
+  - O **auto-refresh de 30 s passa a atualizar a linha** (IGN, horário e bolinha) junto com os pinos, antes do descarte por falta de posição — senão a coluna da esquerda congelaria no estado da carga da página enquanto o mapa se move. Payload ganhou `timeShort` (`d/m H:i`) como campo à parte: o balão do mapa mostra a data cheia com segundos e a linha tem 244 px úteis, um formato só deixaria uma das duas errada.
+  - Ativo que **ganha posição depois da carga** tem a caixa de seleção habilitada no refresh — sem isso a linha exibiria IGN e horário frescos ao lado de uma caixa desabilitada dizendo "sem posição conhecida", contradizendo a si mesma.
+
 ## [Unreleased] — 4.17.5
 
 **Relato do dono do produto: "o equipamento jm-vl02 não está disponível para check na tela de rastreamento se ele está ligado e conectado."**

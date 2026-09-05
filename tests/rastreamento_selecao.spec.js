@@ -182,3 +182,44 @@ test.describe('Rastreamento — escolher os veículos do mapa', () => {
         await authedPage.click('button:has-text("Todos")');
     });
 });
+
+/**
+ * A linha da lista (v4.17.6) — IGN + horário da última posição no lugar do IMEI.
+ *
+ * O que se protege aqui não é o texto em si, e sim as duas armadilhas:
+ *
+ *  - O IMEI saiu da VISTA, não da BUSCA. Ele continua no `data-imei`, e
+ *    `filterDevices()` continua casando por ele. Um teste que só conferisse a
+ *    ausência do IMEI na tela passaria com a busca quebrada.
+ *  - `—` (sem leitura) tem de continuar distinto de `OFF` (motor desligado).
+ *    A checagem no JS é `p.ignition == null` exatamente porque `0` é falsy:
+ *    um `p.ignition ? …` transformaria "desligado" em "sem leitura" e o
+ *    operador perderia a informação achando que o equipamento está mudo.
+ */
+test.describe('Rastreamento — a linha do ativo', () => {
+    test('mostra IGN e horário no lugar do IMEI, e o IMEI ainda é buscável', async ({ authedPage }) => {
+        await authedPage.goto('/rastreamento');
+        const primeira = authedPage.locator('#device-list .device-list-item').first();
+        await expect(primeira).toBeVisible();
+
+        const imei = await primeira.getAttribute('data-imei');
+        expect(imei).toBeTruthy();
+
+        // A linha sob a placa traz IGN, e o IMEI não aparece mais nela.
+        const meta = primeira.locator('.device-meta');
+        await expect(meta).toBeVisible();
+        const texto = (await meta.textContent()).trim();
+        expect(texto).toMatch(/^IGN:\s*(ON|OFF|—)\s*·/);
+        expect(texto).not.toContain(imei);
+
+        // ON/OFF/— e nada além disso: um valor cru do banco vazando aqui
+        // (`1`, `0`, `null`) é o sintoma de alguém ter trocado o ternário.
+        const ign = (await primeira.locator('.ign-val').textContent()).trim();
+        expect(['ON', 'OFF', '—']).toContain(ign);
+
+        // 🔴 O IMEI saiu da tela mas a busca por ele tem de continuar achando.
+        await authedPage.fill('#device-search', imei);
+        await expect(primeira).toBeVisible();
+        await authedPage.fill('#device-search', '');
+    });
+});
