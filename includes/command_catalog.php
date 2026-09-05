@@ -3044,10 +3044,30 @@ return [
   //
   // ⚠️ Este é o ÚLTIMO comando da troca de endereços (ordem da planilha, ver o
   // cabeçalho do `UPLOAD`): HTTP e RTMP primeiro, TCP por último.
+  //
+  // 🔴 v4.17.9 — A FORMA MUDA DE MODELO PARA MODELO, e a entrada universal não
+  // vale para todos eles. Levantado ao migrar a frota para `iothub.bycamera.ia.br`:
+  //
+  //   JC400AD/400D  `SERVER,<0|1>,<end>,<porta>`   planilha JC400 V5.0.3 A002
+  //   JC181         `SERVER,<0|1>,<end>,<porta>`   planilha JC181 V1.0.7 A010
+  //                                                 (ex.: SERVER,0,193.193.165.165,30531)
+  //   JC371         `SERVER,<end>,<porta>,NA,NA,NA,NA`  planilha JC371 A022 — SEM
+  //                                                 campo de modo; ver a entrada
+  //                                                 de 6 campos mais abaixo
+  //   JC182         sem planilha. A LEITURA real devolve QUATRO campos
+  //                 (`SERVER:0,186.248.143.197,21122,1` — fixado em
+  //                 tests/helpers/command_response.test.php), e o 4º não está
+  //                 documentado em fonte nenhuma. Escrever 3 campos pode zerá-lo.
+  //                 Prefira o parâmetro JT/T `19`+`24` por `33027` (/parametros),
+  //                 que grava só o que você nomeia e registra o valor anterior.
+  //
+  // ⚠️ Ler no formato da resposta e escrever nele é ERRO no JC371: ele RESPONDE
+  // `SERVER:0,IP,21122` (3 campos, com modo) e a planilha só documenta a escrita
+  // de 6 campos, sem modo. Leitura e escrita têm formatos diferentes ali.
   'SERVER,A,B,C#' => [
     'cmd' => 'SERVER',
     'nome' => 'Servidor da plataforma (TCP)',
-    'desc' => '⚠️ Aponta o equipamento para a plataforma. Endereço errado tira a câmera do ar e só se recupera por SMS, em campo. A câmera REINICIA depois deste comando. A porta varia por modelo (21100 na linha JC400, 21122 no JC371/JC182) — confirme com o CHECK# antes.',
+    'desc' => '⚠️ Aponta o equipamento para a plataforma. Endereço errado tira a câmera do ar e só se recupera por SMS, em campo. A câmera REINICIA depois deste comando. A porta varia por modelo (21100 na linha JC400, 21122 no JC371/JC182) — confirme com o SERVER# antes. 🔴 No JC371 use a entrada de SEIS campos (A022), não esta: a forma documentada dele não tem campo de modo. No JC182 prefira o parâmetro 19 em /parametros — a leitura dele devolve um 4º campo não documentado.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC371',
