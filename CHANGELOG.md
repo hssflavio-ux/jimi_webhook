@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.7
+
+**Correção do dono do produto sobre a v4.17.6: "o horario deve ser o da ultima comunicação, com o estado atual da ign, se houver mudança de posição, os equipamentos tem funcionalidade para enviar nova posição com ign off, como no caso de ser rebocado."**
+
+### Fixed
+
+- **`/rastreamento` — o horário da linha passa a ser `devices.last_communication`**, qualquer transmissão do equipamento (GPS, heartbeat, alarme, evento), com o estado ATUAL da ignição ao lado. A v4.17.6 usava `device_statistics.last_gps_time` por receio de que "IGN: ON" carimbado com um instante sem leitura de ignição fosse contraditório — **o receio era infundado**: estes equipamentos reportam posição nova com a ignição desligada (é assim que um veículo **rebocado** aparece se mexendo no mapa), então ignição e comunicação são sinais independentes e ambos ao vivo. A pergunta que o operador faz na lista é "quando este equipamento falou comigo pela última vez?", e só `last_communication` a responde.
+  - **Medido em produção no momento da troca: 10 dos 11 ativos mudam de horário**, com atrasos de 45 min a **6h09** (o `400D` marcava `16:49` porque foi a última POSIÇÃO, enquanto comunicava às `22:58` por heartbeat). E **8 dos 11 estavam com a bolinha cinza tendo comunicado nos últimos 2 minutos** — a lista escondia que a frota estava no ar.
+  - Payload do refresh: `timeShort` virou **`commTime`**, de outra fonte. O `time` continua sendo a hora do PONTO e alimenta o balão do mapa — são perguntas diferentes, e o nome do campo agora diz qual é qual.
+  - ⚠️ **A bolinha continua vindo de `last_gps_time`** (via `resolve_live_state()`, que também dá a cor do pino no mapa) — não foi alterada nesta versão. Equipamento que manda heartbeat sem fixar GPS aparece com bolinha cinza e horário recente; o `title` da linha diz qual campo é qual para que a leitura não fique por adivinhação.
+
 ## [Unreleased] — 4.17.6
 
 **Pedido do dono do produto: "Na tela de rastreamento substitua a informação do IMEI abaixo da placa, na lista da barra a esquerda, por estado da ignição (IGN: "ON" ou "OFF") e horario da ultima informação enviada."**

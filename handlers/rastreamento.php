@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Rastreamento v4.17.6
+ * JIMI Webhook System — Rastreamento v4.17.7
  * Rota: /rastreamento
  *
  * Mapa ao vivo. UMA coluna de navegação (Cliente em cima, Ativos embaixo) +
@@ -9,10 +9,12 @@
  * Cada ativo tem uma caixa de seleção que decide se ele aparece no mapa — a
  * lista é o filtro do mapa, não só um índice para centralizar nele.
  *
- * Sob a placa, cada linha traz IGN (ON/OFF) e o horário da última posição —
- * dado de operação no lugar do IMEI, que é número de cadastro. Os três sinais
- * da linha (bolinha, IGN, horário) vêm todos de `device_statistics`, da MESMA
- * leitura, de propósito: ver o comentário no bloco da lista.
+ * Sob a placa, cada linha traz IGN (ON/OFF) e o horário da última COMUNICAÇÃO
+ * — dado de operação no lugar do IMEI, que é número de cadastro. Os três
+ * sinais da linha respondem perguntas DIFERENTES de propósito: a bolinha e o
+ * IGN vêm de `device_statistics` (último ponto), o horário vem de
+ * `devices.last_communication` (qualquer transmissão). Ver o comentário no
+ * bloco da lista antes de "unificar" as fontes.
  *
  * 🔴 Até a v4.17.3 esta tela aceitava `?customer_id=` CRU e o usava direto nas
  * duas consultas, sem passar por `report_customer_scope()`. Medido: um
@@ -60,7 +62,7 @@ $custParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
 $devices = [];
 try {
     $devStmt = $db->prepare("
-        SELECT d.imei, d.device_name, d.vehicle_type,
+        SELECT d.imei, d.device_name, d.vehicle_type, d.last_communication,
                dm.model_name,
                ds.last_gps_time, ds.last_acc_status AS ignition, ds.last_speed AS speed,
                ds.last_latitude, ds.last_longitude
@@ -91,6 +93,7 @@ $positions = [];
 try {
     $posStmt = $db->prepare("
         SELECT d.imei, COALESCE(d.device_name, d.imei) AS device_name, d.vehicle_type, d.speed_limit_kmh,
+               d.last_communication,
                c.default_speed_limit_kmh,
                ds.last_latitude AS latitude, ds.last_longitude AS longitude, ds.last_speed AS speed,
                ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition
@@ -121,11 +124,13 @@ if (!empty($_GET['ajax'])) {
                 'name' => $p['device_name'], 'speed' => (float)$p['speed'], 'ignition' => $p['ignition'],
                 'state' => $p['state'], 'vehicleType' => $p['vehicle_type'],
                 'online' => $p['state'] !== 'offline', 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', ''),
-                // Campo à parte, não uma troca de formato do `time`: o balão do
-                // mapa mostra a data cheia com segundos, e a linha da lista tem
-                // 244 px úteis dentro dos 300 px da coluna. Um formato só
-                // obrigaria uma das duas a ficar errada.
-                'timeShort' => fmt_brt($p['gps_time'], 'd/m H:i', '—')];
+                // Campo à parte, e de OUTRA FONTE, não uma troca de formato do
+                // `time`: o balão do mapa fala do PONTO (hora do fix, data cheia
+                // com segundos), a linha da lista fala do EQUIPAMENTO (última
+                // transmissão de qualquer tipo, em 244 px úteis). São perguntas
+                // diferentes — o nome do campo diz qual é qual, para ninguém
+                // "simplificar" reaproveitando o `time` aqui.
+                'commTime' => fmt_brt($p['last_communication'], 'd/m H:i', '—')];
     }, $positions)], JSON_UNESCAPED_UNICODE);
     exit;
 }
@@ -210,28 +215,42 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <div style="font-size:12px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                         <?= htmlspecialchars($d['device_name'] ?? $d['imei']) ?>
                     </div>
-                    <?php /* Ignição + horário da última posição no lugar do IMEI
-                            (v4.17.6). O IMEI é número de cadastro, não informação
-                            de operação: quem olha o mapa quer saber se o motor
-                            está ligado e quando o veículo falou pela última vez.
-                            Ele continua no `data-imei` e `filterDevices()` continua
-                            achando por ele — saiu da vista, não da busca.
+                    <?php /* Ignição atual + horário da ÚLTIMA COMUNICAÇÃO no lugar
+                            do IMEI (v4.17.6, fonte do horário corrigida na v4.17.7).
+                            O IMEI é número de cadastro, não informação de operação:
+                            quem olha o mapa quer saber se o motor está ligado e
+                            quando o veículo falou pela última vez. Ele continua no
+                            `data-imei` e `filterDevices()` continua achando por ele
+                            — saiu da vista, não da busca.
 
-                            ⚠️ O horário é o da ÚLTIMA POSIÇÃO
-                            (`device_statistics.last_gps_time`), a MESMA leitura de
-                            onde vêm o IGN ao lado e a bolinha online/offline à
-                            esquerda — NÃO `devices.last_communication`, que conta
-                            também heartbeat e evento. As duas fontes na mesma
-                            linha produziriam "IGN: ON" carimbado com um instante
-                            em que não houve leitura de ignição nenhuma, e a
-                            bolinha (offline por `last_gps_time`) contradiria o
-                            horário ao lado dela — a mesma classe de contradição
-                            que o CLAUDE.md descreve nos "dois online" do produto. */ ?>
+                            🔴 O horário é `devices.last_communication` — QUALQUER
+                            transmissão (GPS, heartbeat, alarme, evento), atualizada
+                            pelas quatro `update_device_stats_after_*`. A v4.17.6
+                            usava `device_statistics.last_gps_time` por receio de
+                            que "IGN: ON" ao lado de um instante sem leitura de
+                            ignição fosse contraditório; **o receio é infundado, e
+                            corrigido a pedido do dono do produto**: estes
+                            equipamentos reportam POSIÇÃO NOVA com a ignição
+                            desligada — é assim que um veículo sendo REBOCADO
+                            aparece se mexendo no mapa. Ignição e comunicação são
+                            sinais independentes e ambos ao vivo, e a pergunta que
+                            o operador faz aqui é "quando este equipamento falou
+                            comigo pela última vez?", que só `last_communication`
+                            responde.
+
+                            ⚠️ Consequência aceita, e é informação, não defeito: a
+                            bolinha à esquerda continua vindo de `last_gps_time`
+                            (via `resolve_live_state()`, que alimenta também a cor
+                            do pino no mapa). Equipamento que manda heartbeat sem
+                            fixar GPS aparece com bolinha CINZA e horário RECENTE —
+                            "está falando comigo, mas não tenho posição nova dele".
+                            O `title` diz qual é qual para que a leitura não fique
+                            por conta da adivinhação. */ ?>
                     <?php $ign = $d['ignition'] === null ? '—' : ((int)$d['ignition'] === 1 ? 'ON' : 'OFF'); ?>
                     <div class="device-meta text-mono" style="font-size:10px;color:var(--muted);"
-                         title="Ignição e horário da última posição recebida">
+                         title="Ignição atual e horário da última comunicação recebida (qualquer transmissão do equipamento)">
                         IGN: <span class="ign-val" style="<?= $ign === 'ON' ? 'color:var(--ink);font-weight:600;' : '' ?>"><?= $ign ?></span>
-                        · <span class="last-seen"><?= htmlspecialchars(fmt_brt($d['last_gps_time'], 'd/m H:i', '—')) ?></span>
+                        · <span class="last-seen"><?= htmlspecialchars(fmt_brt($d['last_communication'], 'd/m H:i', '—')) ?></span>
                     </div>
                 </div>
             </div>
@@ -448,8 +467,12 @@ function atualizarLinha(p) {
         ign.style.fontWeight = v === 'ON' ? '600' : '';
     }
 
+    // `commTime`, não `time`: a linha mostra a última COMUNICAÇÃO do
+    // equipamento, e o `time` do payload é a hora do PONTO, que alimenta o
+    // balão do mapa. Trocar um pelo outro aqui faz a lista voltar a responder
+    // a pergunta errada sem nenhum sintoma visível.
     var ls = el.querySelector('.last-seen');
-    if (ls) ls.textContent = p.timeShort || '—';
+    if (ls) ls.textContent = p.commTime || '—';
 
     var dot = el.querySelector('.device-dot');
     if (dot) { dot.classList.toggle('online', !!p.online); dot.classList.toggle('offline', !p.online); }

@@ -184,7 +184,13 @@ test.describe('Rastreamento — escolher os veículos do mapa', () => {
 });
 
 /**
- * A linha da lista (v4.17.6) — IGN + horário da última posição no lugar do IMEI.
+ * A linha da lista (v4.17.6) — IGN atual + horário da última COMUNICAÇÃO no
+ * lugar do IMEI. A fonte do horário foi corrigida na v4.17.7: é
+ * `devices.last_communication` (qualquer transmissão), NÃO
+ * `device_statistics.last_gps_time`. Medido em produção no dia da troca: 10
+ * dos 11 ativos mudavam de horário, um deles em 6 horas — a lista dizia
+ * "última vez que vi este equipamento" mostrando a última vez que ele mandou
+ * POSIÇÃO, enquanto ele seguia comunicando por heartbeat.
  *
  * O que se protege aqui não é o texto em si, e sim as duas armadilhas:
  *
