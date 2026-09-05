@@ -1701,8 +1701,14 @@ return [
     'consulta_modelos' => [],
     'consulta_ref' => NULL,
     'fonte' => 'planilha JC371 V1.0.1 A022',
+    // 🔑 NÃO HÁ campo de modo aqui. A forma de três campos da linha JC400 começa
+    // com `0/1` (IP ou domínio); esta começa direto no endereço, e o domínio
+    // entra no lugar do IP sem nada mais mudar — o segundo exemplo da própria
+    // planilha A022 é `SERVER,iothub.tracksolidpro.com,21122,NA,NA,NA,NA#`, o
+    // endpoint de equipamentos da Tracksolid Pro. Mandar `SERVER,1,<dom>,…`
+    // aqui grava `1` como endereço do servidor e derruba a câmera.
     'params' => [
-      0 => ['p' => 'A', 'desc' => 'Endereço do servidor principal', 'format' => '', 'default' => '186.248.143.197'],
+      0 => ['p' => 'A', 'desc' => 'Endereço do servidor principal — IP ou domínio, sem campo de modo', 'format' => '', 'default' => '186.248.143.197'],
       1 => ['p' => 'B', 'desc' => 'Porta do servidor principal', 'format' => '', 'default' => '21122'],
       2 => ['p' => 'C', 'desc' => 'Endereço do servidor reserva — NA para nenhum', 'format' => '', 'default' => 'NA'],
       3 => ['p' => 'D', 'desc' => 'Porta do servidor reserva — NA para nenhum', 'format' => '', 'default' => 'NA'],
@@ -1711,6 +1717,7 @@ return [
     ],
     'exemplos' => [
       0 => ['cmd' => 'SERVER,186.248.143.197,21122,NA,NA,NA,NA#', 'desc' => 'só o principal, sem mexer em ID nem placa'],
+      1 => ['cmd' => 'SERVER,iothub.tracksolidpro.com,21122,NA,NA,NA,NA#', 'desc' => 'por DOMÍNIO — exemplo literal da planilha A022, sem campo de modo'],
     ],
   ],
   'BCD,A,B#' => [
@@ -2905,10 +2912,19 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 v4.17.9 — o 2º parâmetro NÃO EXISTIA e o operador era obrigado a
+  // preenchê-lo. A raspagem da wiki inventou `B = Porta` (a wiki mostra
+  // endereço e porta em células separadas), mas o TEMPLATE tem um placeholder
+  // só: `montarComando()` percorre os tokens de `RSERVICE,A#`, consome `vals[0]`
+  // e **descarta `vals[1]` em silêncio**, enquanto `faltaParametro()` exige a
+  // caixa fantasma preenchida para liberar o envio. A planilha oficial
+  // (`JC400 & JC261 Command List V5.0.3`, A005) publica `RSERVICE,<A>` com UM
+  // campo, e o exemplo dela mostra por quê: `RSERVICE,192.168.0.1:1935/live` —
+  // host, porta e caminho vão JUNTOS, num campo só. Mesmo defeito do `UPLOAD`.
   'RSERVICE,A#' => [
     'cmd' => 'RSERVICE',
-    'nome' => 'Streaming',
-    'desc' => 'Para alterar o servidor de streaming do equipamento, envie',
+    'nome' => 'Servidor de streaming (RTMP)',
+    'desc' => 'Endereço RTMP para onde o equipamento EMPURRA o vídeo ao vivo do `RTMP,ON`. Um campo só — host, porta e caminho na mesma string (`servidor:1935/live`), sem vírgula (a vírgula é o separador do proNo 128 e partiria o comando).',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400D',
@@ -2919,21 +2935,17 @@ return [
     'consulta' => 'RSERVICE#',
     'consulta_modelos' => ['JC400D'],
     'consulta_ref' => 'wiki',
+    'fonte' => 'planilha JC400 & JC261 V5.0.3 A005',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Endereço do servidor HTTP',
-        'format' => '',
-        'default' => '',
-      ],
-      1 => [
-        'p' => 'B',
-        'desc' => 'Porta',
-        'format' => '',
+        'desc' => 'Endereço RTMP completo — host[:porta][/caminho], sem vírgula',
+        'format' => 'servidor:1935/live',
         'default' => '',
       ],
     ],
     'exemplos' => [
+      0 => ['cmd' => 'RSERVICE,192.168.0.1:1935/live#', 'desc' => 'exemplo literal da planilha A005'],
     ],
   ],
   // v4.13.12 — reescrito a partir de docs/JC181_Command_List_V1.0.7_20250811.xlsx,
@@ -3020,10 +3032,22 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 v4.17.9 — o EXEMPLO tinha DOIS campos para um template de TRÊS.
+  // `SERVER,gpsdev.tracksolid.com,21100#` veio da wiki sem o campo de modo, e
+  // quem o copiasse mandaria o domínio na posição do `0/1` e a porta na posição
+  // do endereço. A planilha oficial (`JC400 & JC261 V5.0.3`, A002) publica
+  // `SERVER,<M>,<A>,<P>` — M=0 IP / 1 domínio — e acrescenta o que nenhuma
+  // outra fonte diz: **"The device will restart after the address of the TCP
+  // server is changed"**. Ou seja, sumiço de alguns minutos depois do envio é o
+  // comportamento normal, não o sintoma de endereço errado; reenviar por
+  // impaciência é que estraga.
+  //
+  // ⚠️ Este é o ÚLTIMO comando da troca de endereços (ordem da planilha, ver o
+  // cabeçalho do `UPLOAD`): HTTP e RTMP primeiro, TCP por último.
   'SERVER,A,B,C#' => [
     'cmd' => 'SERVER',
-    'nome' => 'Servidor',
-    'desc' => 'Para configurar o servidor, envie',
+    'nome' => 'Servidor da plataforma (TCP)',
+    'desc' => '⚠️ Aponta o equipamento para a plataforma. Endereço errado tira a câmera do ar e só se recupera por SMS, em campo. A câmera REINICIA depois deste comando. A porta varia por modelo (21100 na linha JC400, 21122 no JC371/JC182) — confirme com o CHECK# antes.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC371',
@@ -3038,30 +3062,35 @@ return [
     'consulta' => 'SERVER#',
     'consulta_modelos' => ['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450'],
     'consulta_ref' => 'medido+wiki',
+    'fonte' => 'planilha JC400 & JC261 V5.0.3 A002 + wiki',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'IP(0) ou Domínio(1)',
-        'format' => '',
-        'default' => '',
+        'desc' => 'Tipo do endereço — 0: IP, 1: nome de domínio',
+        'format' => '0/1',
+        'default' => '0',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Servidor',
+        'desc' => 'Endereço do servidor (IP ou domínio, conforme o campo A)',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => 'Porta de conexão',
+        'desc' => 'Porta — 21100 na linha JC400, 21122 no JC371/JC182',
         'format' => '',
         'default' => '',
       ],
     ],
     'exemplos' => [
       0 => [
-        'cmd' => 'SERVER,gpsdev.tracksolid.com,21100#',
-        'desc' => 'Definir IP/domínio e porta do servidor',
+        'cmd' => 'SERVER,0,186.248.143.197,21100#',
+        'desc' => 'por IP (o modo em que a frota está hoje)',
+      ],
+      1 => [
+        'cmd' => 'SERVER,1,iothub.bycamera.ia.br,21100#',
+        'desc' => 'por domínio — o campo A muda para 1 junto com o endereço',
       ],
     ],
   ],
@@ -3712,10 +3741,23 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 v4.17.9 — mesmo defeito do `RSERVICE` logo acima: `B = Porta` foi
+  // inventado pela raspagem e o template tem UM placeholder, então a porta
+  // digitada era descartada em silêncio enquanto a caixa fantasma travava o
+  // envio. Planilha oficial (`JC400 & JC261 V5.0.3`, A003): `UPLOAD,<A>`, com
+  // `A = HTTP address` — uma **URL inteira**, não host+porta:
+  // `UPLOAD,http://www.baidu.com/upload`.
+  //
+  // ⚠️ ORDEM OBRIGATÓRIA, publicada nas linhas A001/A003/A005/A006 da mesma
+  // planilha: ao trocar os endereços de um equipamento, primeiro a lógica de
+  // trabalho (`COREKITSW`), depois os endereços **HTTP e RTMP** (`UPLOAD`,
+  // `RSERVICE`, `FILELIST`) e **só então** o TCP (`SERVER`) — que reinicia o
+  // equipamento. Fazer o `SERVER` antes deixa a câmera reiniciando com metade
+  // dos endereços apontando para o lugar antigo.
   'UPLOAD,A#' => [
     'cmd' => 'UPLOAD',
-    'nome' => 'Upload de vídeos',
-    'desc' => 'Para alterar o endereço de upload de vídeos da câmera, envie',
+    'nome' => 'Endereço HTTP de upload',
+    'desc' => 'URL HTTP para onde a câmera sobe arquivo. Um campo só, URL inteira (`http://servidor/upload`), sem vírgula. É o valor que o `CHECK#` devolve na linha `UPLOAD`. Troque este ANTES do `SERVER` — a ordem é da planilha.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC371',
@@ -3728,21 +3770,17 @@ return [
     'consulta' => 'UPLOAD#',
     'consulta_modelos' => ['JC400D'],
     'consulta_ref' => 'wiki',
+    'fonte' => 'planilha JC400 & JC261 V5.0.3 A003',
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Endereço do servidor HTTP',
-        'format' => '',
-        'default' => '',
-      ],
-      1 => [
-        'p' => 'B',
-        'desc' => 'Porta',
-        'format' => '',
+        'desc' => 'URL HTTP completa que recebe o arquivo — sem vírgula',
+        'format' => 'http://<servidor>/upload',
         'default' => '',
       ],
     ],
     'exemplos' => [
+      0 => ['cmd' => 'UPLOAD,http://www.baidu.com/upload#', 'desc' => 'exemplo literal da planilha A003'],
     ],
   ],
   'UPLOADSW#' => [

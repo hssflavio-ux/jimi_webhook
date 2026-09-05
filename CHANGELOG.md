@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.9
+
+**Preparação para as câmeras apontarem para `iothub.bycamera.ia.br` em vez do IP.** Ao levantar o que precisa mudar, três defeitos do catálogo apareceram — dois deles tornam **impossível** configurar pela tela justamente os endereços que a migração precisa trocar.
+
+### Fixed
+
+- **`UPLOAD` e `RSERVICE` exigiam uma porta que era descartada em silêncio.** Os dois declaravam `B = Porta`, inventado pela raspagem da wiki, contra um template de UM placeholder (`UPLOAD,A#`): `montarComando()` (`handlers/comandos.php:1231`) percorre os tokens do template, consome `vals[0]` e ignora `vals[1]`, enquanto `faltaParametro()` **exige toda caixa desenhada preenchida** para liberar o envio. Resultado: o operador era obrigado a digitar uma porta que nunca era enviada. É a armadilha já documentada no CLAUDE.md ("`params` com contagem diferente dos placeholders desabilita o comando"), aqui na variante inversa — o comando saía, mutilado.
+  - A planilha oficial (`docs/JC400 & JC261 Command List V5.0.3`, A003/A005) publica **um campo só** nos dois, e o exemplo explica por quê: o endereço vai inteiro numa string (`UPLOAD,http://www.baidu.com/upload`, `RSERVICE,192.168.0.1:1935/live`) — host, porta e caminho juntos. **Corroborado pela resposta real do `CHECK#`** já fixada em `tests/helpers/command_response.test.php`: `RSERVICE:rtmp://186.248.143.197:1936/live`, um valor único.
+- **O exemplo do `SERVER` universal tinha DOIS campos para um template de TRÊS.** `SERVER,gpsdev.tracksolid.com,21100#` veio da wiki sem o campo de modo; copiado da tela, mandaria o domínio na posição do `0/1` e a porta na posição do endereço — no comando que tira a câmera da plataforma. Trocado pelos dois exemplos certos (por IP e por domínio), com os `params` renomeados conforme a planilha A002 (`SERVER,<M>,<A>,<P>`).
+
+### Added
+
+- **A ordem de troca de endereços, publicada pela fabricante, entrou no catálogo** (cabeçalho do `UPLOAD`): primeiro a lógica de trabalho (`COREKITSW`), depois os endereços **HTTP e RTMP**, e **só então** o TCP (`SERVER`) — que, segundo a mesma planilha, **reinicia o equipamento**. É o contrário do instinto (começar pelo mais importante), e sem ela um sumiço de alguns minutos depois do `SERVER` é lido como endereço errado.
+- **O exemplo oficial de domínio no `SERVER` de 6 campos do JC371** (A022): `SERVER,iothub.tracksolidpro.com,21122,NA,NA,NA,NA#` — o próprio endpoint de equipamentos da Tracksolid Pro. 🔑 Esta forma **não tem campo de modo**: o domínio entra direto no lugar do IP, e mandar `SERVER,1,<domínio>,…` aqui gravaria `1` como endereço e derrubaria a câmera. A forma de três campos da linha JC400 é que começa com `0/1`.
+- **`iothub.bycamera.ia.br` no `ServerAlias`** de `docs/apache/bycamera.conf`, com a linha espelho no redirect HTTPS. Sem o alias, um POST com `Host: iothub.…` não casa com nenhum `ServerName` e cai no vhost default do Apache — `/var/www/html`, 404 no `/filelist/`, sem rastro do nosso lado. ⚠️ Infra fora do git: o `deploy.sh` não instala esse arquivo, e publicar o nome exige `certbot --expand` junto (o cookie de sessão leva `secure` derivado do request, então o nome não pode ficar servindo HTTP puro).
+
 ## [Unreleased] — 4.17.8
 
 **Decisão do dono do produto: "a bolinha é o status da ign, não da comunicação."** Achado ao dimensionar essa mudança: a própria leitura de ignição estava velha.
