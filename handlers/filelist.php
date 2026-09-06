@@ -116,6 +116,13 @@ $corpo = $corpo === false ? '' : $corpo;
 $truncado = strlen($corpo) > FILELIST_MAX_BYTES;
 if ($truncado) $corpo = substr($corpo, 0, FILELIST_MAX_BYTES);
 
+// Payload cru também no banco (v4.17.12): o arquivo em disco continua sendo
+// a cópia fiel (inclusive dos multipart), e a linha em `webhook_payloads`
+// põe o /filelist na MESMA consulta dos demais webhooks — que é a razão de
+// a tabela existir. Depois do gate de IMEI conhecido, nunca antes.
+require_once __DIR__ . '/../includes/webhook_raw.php';
+webhook_capture_raw('filelist', $corpo, ['imei' => $imei]);
+
 // Alguns firmwares mandam multipart em vez de corpo cru — capturar os dois,
 // porque descobrir qual é depois de descartar um deles custaria outra rodada
 // de campo.

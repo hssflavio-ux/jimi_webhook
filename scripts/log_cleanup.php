@@ -17,14 +17,20 @@
  *    `*.log`, então até aqui nada limpava esse diretório. Agora que a tela de
  *    playback dispara o upload de verdade (v4.9.34), ele cresce sozinho.
  *    Mesma retenção dos logs (LOG_RETENTION_DAYS).
- * 4. Purga de relatórios (v4.7.1): storage/reports cresce para sempre — um
+ * 4. Purga do payload CRU dos webhooks (v4.17.12): `webhook_payloads` guarda
+ *    o corpo exato de tudo que os equipamentos enviam. Medido em produção:
+ *    5.429 requisições/dia com 12 equipamentos (~2,7 MB/dia), então a tabela
+ *    cresce sozinha e proporcional à frota. RAW_PAYLOAD_RETENTION_DAYS
+ *    (default 30); 0 desliga a purga.
+ * 5. Purga de relatórios (v4.7.1): storage/reports cresce para sempre — um
  *    agendamento diário gera 1 arquivo por dia, e cada arquivo é uma cópia de
  *    dado de cliente parada em disco. REPORT_RETENTION_DAYS (default 30) apaga
  *    os arquivos antigos e, junto, as linhas de report_schedule_runs além da
  *    mesma idade, para o histórico não crescer sem teto.
  *
- * ⚠️ O item 4 é o antigo 3 — a numeração andou com a entrada do FILELIST. A
- * conexão PDO citada logo abaixo é a dele.
+ * ⚠️ A numeração já andou duas vezes (FILELIST na v4.9.34, payload cru na
+ * v4.17.12): o item 5 é o antigo 3. A conexão PDO citada logo abaixo é a
+ * dele, e o item 4 abre a sua própria pelo mesmo motivo.
  *
  * NÃO usa a classe Database: o construtor dela dá exit em falha de conexão e a
  * limpeza precisa rodar mesmo com o banco fora. A conexão do item 3 é PDO
@@ -96,7 +102,62 @@ echo sprintf(
 );
 
 // ════════════════════════════════════════════════════════════
-// 3) Purga de relatórios gerados (v4.7.1)
+// 4) Purga do payload CRU dos webhooks (v4.17.12)
+//
+// 🔴 ANTES da purga de relatórios de propósito: aquela seção faz `exit(0)`
+// quando REPORT_RETENTION_DAYS é 0, e um bloco colocado depois dela nunca
+// rodaria para quem desligou a purga de relatórios — a tabela cresceria para
+// sempre, em silêncio.
+//
+// Dimensionado em produção (05/09/2026): 5.429 requisições/dia com 12
+// equipamentos, ~2,7 MB/dia. Em 30 dias, ~80 MB. Escala com a frota.
+// ════════════════════════════════════════════════════════════
+// Mesmo cuidado com `?:` da seção abaixo: '0' é falsy, e o operador devolveria
+// o default de 30 justamente para quem escreveu 0 querendo DESLIGAR a purga.
+$rawWebhook  = getenv('RAW_PAYLOAD_RETENTION_DAYS');
+$rawWebhook  = ($rawWebhook === false) ? '' : trim($rawWebhook);
+$webhookDays = ($rawWebhook === '') ? 30 : (int)$rawWebhook;
+
+if ($webhookDays <= 0) {
+    echo sprintf("[%s] webhook_payloads — purga desligada (RAW_PAYLOAD_RETENTION_DAYS=%s)
+",
+        Logger::stamp(), $rawWebhook);
+} else {
+    try {
+        $pdo = new PDO(
+            sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+                getenv('DB_HOST') ?: 'localhost', getenv('DB_PORT') ?: '3306',
+                getenv('DB_NAME') ?: 'jimi_tracker'),
+            getenv('DB_USER') ?: 'root', getenv('DB_PASS') ?: '',
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+        );
+        // Apaga em lotes: um DELETE único de centenas de milhares de linhas
+        // segura o binlog e trava a tabela que os webhooks estão escrevendo.
+        $totalRemovido = 0;
+        do {
+            $st = $pdo->prepare(
+                'DELETE FROM webhook_payloads
+                  WHERE received_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL :d DAY)
+                  LIMIT 5000'
+            );
+            $st->bindValue(':d', $webhookDays, PDO::PARAM_INT);
+            $st->execute();
+            $lote = $st->rowCount();
+            $totalRemovido += $lote;
+        } while ($lote === 5000 && $totalRemovido < 500000);
+        echo sprintf("[%s] webhook_payloads OK — retenção %dd: %d linha(s) removida(s)
+",
+            Logger::stamp(), $webhookDays, $totalRemovido);
+    } catch (Throwable $e) {
+        // Tabela ainda não criada (deploy trouxe o código antes da migração —
+        // ver CLAUDE.md) não pode derrubar a limpeza de disco.
+        echo sprintf("[%s] webhook_payloads — não purgado (%s)
+",
+            Logger::stamp(), $e->getMessage());
+    }
+}
+// ════════════════════════════════════════════════════════════
+// 5) Purga de relatórios gerados (v4.7.1)
 // ════════════════════════════════════════════════════════════
 // `?:` não serve para ler este valor: '0' é falsy em PHP e o operador
 // devolveria o default de 30 dias justamente para quem escreveu 0 querendo

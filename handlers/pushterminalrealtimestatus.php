@@ -49,6 +49,10 @@
 // Payload bruto da requisição, exatamente como chegou
 $payload = file_get_contents('php://input');
 
+// Payload cru no banco, além do arquivo (v4.17.12) — ver includes/webhook_raw.php
+require_once __DIR__ . '/../includes/webhook_raw.php';
+webhook_capture_raw('pushterminalrealtimestatus', $payload === false ? '' : $payload);
+
 $logDir = __DIR__ . '/../logs';
 if (!is_dir($logDir)) {
     mkdir($logDir, 0755, true);

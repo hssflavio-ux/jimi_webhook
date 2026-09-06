@@ -13,6 +13,7 @@
 require_once __DIR__ . '/database.php';
 require_once __DIR__ . '/../includes/functions.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../includes/webhook_raw.php';
 
 abstract class WebhookHandler {
     protected $db, $handlerName, $startTime, $validToken;
@@ -87,6 +88,18 @@ abstract class WebhookHandler {
             $this->sendEarlySuccess('Accepted and Processing', ['queue_hash' => $payloadHash]);
 
             // --- A PARTIR DAQUI O PHP-FPM PROCESSARÁ EM BACKGROUND ---
+
+            // Payload CRU (v4.17.12) — ANTES da idempotência e ANTES da
+            // transação, de propósito. Reenvio do hub É coisa que o
+            // equipamento mandou e sumiria se a captura viesse depois do
+            // bloqueio de replay; e dentro da transação sumiria justo nos
+            // itens que falharam ao processar, que é quando o corpo cru mais
+            // importa. Ver includes/webhook_raw.php.
+            webhook_capture_raw($this->handlerName, null, [
+                'imei'         => webhook_raw_sniff_imei($dataList),
+                'item_count'   => count($dataList),
+                'payload_hash' => $payloadHash,
+            ]);
 
             // Checagem de idempotência: rejeita payloads duplicados (replay/retry)
             if ($this->isDuplicateRequest($payloadHash)) {

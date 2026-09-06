@@ -99,6 +99,12 @@ if ($segredo === '' || $k === '' || !hash_equals($segredo, $k)) {
 }
 
 // ── Corpo ───────────────────────────────────────────────────────────────────
+// Payload cru no banco (v4.17.12) — AQUI, depois do `hash_equals` do segredo:
+// gravar corpo de requisição não autenticada é convite a encher disco por
+// quem descobrir a URL. Ver includes/webhook_raw.php.
+require_once __DIR__ . '/../includes/webhook_raw.php';
+webhook_capture_raw('pushsms', (string)$raw);
+
 $payload = json_decode($raw ?: '', true);
 $itens   = sms_webhook_itens(is_array($payload) ? $payload : null);
 

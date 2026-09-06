@@ -5,6 +5,34 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.12
+
+**`webhook_payloads`: o corpo CRU de tudo que os equipamentos enviam.** Pedido do dono do produto, nascido da investigação do "motivo da transmissão" (v4.17.11), que esbarrou num fato incômodo: `handlers/pushgps.php` lê uma lista **fixa** de chaves e `gps_data` não tem `raw_data` — campo novo do fabricante era descartado sem deixar rastro, e não havia como saber sequer se existia.
+
+🔴 **O que se guarda é o corpo como chegou, não o parse.** É a diferença que dá valor à tabela: o parse é a nossa interpretação (já provada incompleta); o corpo é o fato. Guardar o array decodificado repetiria exatamente o filtro que criou o problema.
+
+### Added
+
+- **Tabela `webhook_payloads`** (`mysql/migration_v4.17.12.sql`): `endpoint`, `imei`, `item_count`, `payload_hash`, `content_type`, `body_bytes`, `truncated`, `body`, `received_at` (UTC). Índices por data, por `(imei, data)`, por `(endpoint, data)` e por hash.
+- **`includes/webhook_raw.php`** — ponto único de captura, ligado nos **quatro** pontos de entrada. Uma captura só no `WebhookHandler` deixaria três de fora: `/filelist` (a câmera JIMI subindo a lista de gravações, o corpo de ~78 KB), `/pushterminalrealtimestatus` e `/pushsms` **não estendem a classe base**.
+- **Retenção** no cron que já existe (`scripts/log_cleanup.php`): `RAW_PAYLOAD_RETENTION_DAYS` (default 30, `0` desliga), apagando em lotes de 5.000 para não segurar o binlog nem travar a tabela que os webhooks estão escrevendo. Dimensionado com medição de produção (05/09/2026): **5.429 requisições/dia** com 12 equipamentos (64% heartbeat), ~2,7 MB/dia — ~80 MB em 30 dias, contra 70 GB livres. Escala com a frota.
+
+### Decisões que valem por si
+
+- 🔴 **Captura DEPOIS da validação de token, nunca antes.** Gravar corpo de requisição não autenticada transforma a tabela em vetor de enchimento de disco por quem descobrir a URL — e o endpoint é público por natureza. Verificado: `token` inválido devolve 401 e **não** cria linha.
+- 🔴 **ANTES da checagem de idempotência**, de propósito: reenvio do hub (a doc promete 3 tentativas) **é** coisa que o equipamento mandou, e sumiria se a captura viesse depois do bloqueio de replay. Verificado: mesmo payload duas vezes → **2 linhas** em `webhook_payloads` e **1** em `gps_data`. O `payload_hash` distingue reenvio de dado novo.
+- 🔴 **FORA da transação do handler.** `handle()` abre transação e faz `rollBack()` em erro — a captura dentro dela sumiria justamente nos itens que falharam ao processar, que é quando o corpo cru mais importa.
+- **Falha da captura nunca derruba o webhook.** Verificado renomeando a tabela e disparando um `/pushgps`: HTTP 200 e a posição gravada normalmente, com WARNING no log. É o cenário real do deploy que traz o código antes da migração (CLAUDE.md).
+- ⚠️ **`body_bytes` vem do `Content-Length`, não do `strlen()` do que foi lido.** A leitura para em `teto + 1` de propósito; sem essa correção um payload de 4.396 bytes com teto de 1.024 registrava "1025" e enganaria quem investigasse tamanho. Em `chunked` — que é justamente o `/filelist` — o cabeçalho não existe e os bytes lidos são a melhor medida disponível.
+
+### Achado no caminho (não corrigido)
+
+- ⚠️ **O carregador do `.env` ignora variável de ambiente cujo valor seja `"0"`.** `config/database.php:36` e `scripts/log_cleanup.php` fazem `if (!getenv($key)) putenv(...)` — e `getenv()` devolvendo a string `'0'` é **falsy**, então o valor do arquivo sobrescreve o que veio do ambiente. Medido: `RAW_PAYLOAD_RETENTION_DAYS=0 php scripts/log_cleanup.php` rodou com a retenção de 7 do arquivo. É a mesma família do `?:` já documentada nesses arquivos, uma camada acima, e **vale para toda variável do projeto**. O caminho que o operador usa (valor no `.env`) funciona: verificado desligando purga e captura.
+- ⚠️ **Mudar `RAW_PAYLOAD_*` no `.env` não pega em worker de PHP-FPM aquecido** — `putenv` persiste no processo. Exige `systemctl reload php8.3-fpm`. Documentado no `.env.example` e no cabeçalho do helper.
+
+### Deploy
+
+- 🔴 **Migração nova: precisa de DOIS deploys** (regra do CLAUDE.md). No intervalo o código roda contra o esquema velho — e aqui isso é benigno por construção: sem a tabela, a captura falha em silêncio (WARNING) e todo o resto do webhook segue funcionando, como foi verificado.
 ## [Unreleased] — 4.17.11
 
 **O mapa do relatório de posições mostrava a PÁGINA e o rodapé contava o PERÍODO.** Investigado a pedido do dono do produto ("o mapa tem muito menos pontos que o relatório"). Eram quatro causas somadas; a decisão foi remover o mapa de período em vez de consertá-lo.
