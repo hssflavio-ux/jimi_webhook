@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.10
+
+**As datas do BI saíam em ISO (`2026-08-01`) no único lugar do sistema que não passava por `fmt_brt()`.** Ao varrer o resto atrás da mesma classe, o formato estava certo em toda parte — mas o *dia* era calculado em UTC em nove pontos.
+
+### Fixed
+
+- **O eixo de "Eventos por Dia" do `/bi` mostrava `2026-08-01`.** `handlers/bi.php` empilhava `$r['dt']` cru — o `DATE(CONVERT_TZ(...))` da consulta — direto nos `labels` do Chart.js. Era o único gráfico do produto com data no eixo: os do `/painel` e do `/resumo` já montavam o rótulo como `d/m` (`dashboard_series_window()`). Agora o eixo sai em `dd/mm/aa` e o tooltip em `dd/mm/aaaa`.
+  - 🔴 **A reformatação é `date()` sobre a string, NUNCA `fmt_brt()`.** `dt` já é o dia **BRT** (a consulta aplica `CONVERT_TZ` antes do `DATE`); passá-lo pelo conversor o trataria como UTC e o dia andaria 3 h para trás — a mesma armadilha das colunas DATE puras (`activation_date`, `cnh_expires_at`) documentada no CLAUDE.md.
+- **Nove `date('Y-m-d')` calculavam o dia em UTC onde a pergunta era sobre o dia BRT.** O `php.ini` roda em UTC (de propósito), então das 21:00 à meia-noite BRT esses pontos já estavam no dia seguinte:
+  - **Faixas-padrão dos filtros** — `/bi`, `/relatorios`, `/relatorios/deslocamento`, `/relatorios/ocorrencias` e `/video/playback` abriam com um período deslocado um dia, e no `/bi` o `date_from` era UTC enquanto o `date_to` ao lado já usava `brt_today()`.
+  - **Vencimento de CNH e de exame toxicológico** (`/motoristas`, `/manutencoes`) — comparados contra `date('Y-m-d')`, o documento era marcado como vencido **3 h antes** de vencer, na noite anterior. Todos passaram a `brt_today()`.
+
+### Auditado (sem alteração)
+
+- Varredura das ~50 telas, dos 15 relatórios, dos exports (CSV/XLSX/PDF), dos endpoints JSON e dos e-mails: **nenhuma outra data fora do padrão brasileiro**. O texto visível renderizado não contém uma única data ISO. O `value` dos `<input type="date">` continua em `Y-m-d` porque o HTML exige — o navegador é quem exibe `dd/mm/aaaa`.
 ## [Unreleased] — 4.17.9
 
 **Preparação para as câmeras apontarem para `iothub.bycamera.ia.br` em vez do IP.** Ao levantar o que precisa mudar, três defeitos do catálogo apareceram — dois deles tornam **impossível** configurar pela tela justamente os endereços que a migração precisa trocar.

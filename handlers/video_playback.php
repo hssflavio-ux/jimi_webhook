@@ -110,8 +110,8 @@ $selCam      = $selDevice ? max(1, (int)($selDevice['camera_count'] ?? 1)) : 1;
 $selProtocol = $selDevice['protocol'] ?? 'JTT';
 $selChannel  = (int)($_GET['channel'] ?? 1);
 if ($selChannel < 1 || $selChannel > $selCam) $selChannel = 1;
-$dateFrom   = $_GET['date_from'] ?? date('Y-m-d', strtotime('-1 day'));
-$dateTo     = $_GET['date_to'] ?? date('Y-m-d');
+$dateFrom   = $_GET['date_from'] ?? brt_today('Y-m-d', '-1 day');
+$dateTo     = $_GET['date_to'] ?? brt_today();
 $requested  = !empty($_GET['request']);
 
 /**

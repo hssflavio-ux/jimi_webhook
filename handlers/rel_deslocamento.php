@@ -30,7 +30,7 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 $mode       = ($_GET['mode'] ?? 'viagens') === 'diario' ? 'diario' : 'viagens';
 $selImei    = $_GET['imei'] ?? '';
 $filterCust = $_GET['customer_id'] ?? null;
-$dateFrom = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
+$dateFrom = $_GET['date_from'] ?? brt_today('Y-m-d', '-7 days');
 $dateTo   = $_GET['date_to'] ?? brt_today();
 $timeFrom = $_GET['time_from'] ?? '';
 $timeTo   = $_GET['time_to'] ?? '';

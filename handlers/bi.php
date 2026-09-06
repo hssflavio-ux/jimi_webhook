@@ -24,7 +24,7 @@ $filterMotorista = $_GET['driver_id'] ?? '';
 // `['']`, e `!empty([''])` é verdadeiro — o filtro virava `IN ('')` e zerava
 // TODOS os gráficos em toda análise gerada sem chip marcado.
 $filterAlarmes  = array_values(array_filter(array_map('trim', explode(',', $_GET['alarm_types'] ?? ''))));
-$dateFrom       = $_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days'));
+$dateFrom       = $_GET['date_from'] ?? brt_today('Y-m-d', '-30 days');
 $dateTo         = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $generated      = !empty($_GET['gerar']);
@@ -366,16 +366,31 @@ require_once __DIR__ . '/../web/layout_base.php';
         }
     });
 
-    // Daily alarms
-    <?php $dLabels=[]; $dVals=[];
-    foreach (($chartData['alarms_by_day'] ?? []) as $r) { $dLabels[]=$r['dt']; $dVals[]=(int)$r['cnt']; } ?>
+    // Eventos por dia — rótulo no padrão brasileiro (dd/mm/aa no eixo,
+    // dd/mm/aaaa no tooltip). `dt` já é o DIA BRT (a consulta aplica
+    // CONVERT_TZ antes do DATE), então isto é reformatação de calendário pura:
+    // 🔴 NADA de `fmt_brt()` aqui — ele converteria de novo e o dia andaria
+    // 3 h para trás (mesma regra das colunas DATE puras, CLAUDE.md).
+    <?php $dLabels=[]; $dFull=[]; $dVals=[];
+    foreach (($chartData['alarms_by_day'] ?? []) as $r) {
+        $ts = strtotime((string)$r['dt']);
+        $dLabels[] = $ts ? date('d/m/y', $ts) : (string)$r['dt'];
+        $dFull[]   = $ts ? date('d/m/Y', $ts) : (string)$r['dt'];
+        $dVals[]   = (int)$r['cnt'];
+    } ?>
     new Chart(document.getElementById('chart-alarm-daily'), {
         type: 'line', data: {
             labels: <?= json_encode($dLabels) ?>,
             datasets: [{ data: <?= json_encode($dVals) ?>, borderColor: '#0052ff', backgroundColor: 'rgba(0,82,255,0.06)', fill: true, tension: 0.3, pointRadius: 2 }]
         },
         options: { responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: false },
+                // O eixo mostra dd/mm/aa (cabe em até 31 pontos); o tooltip mostra
+                // o dia por extenso, dd/mm/aaaa.
+                tooltip: { callbacks: { title: function (itens) {
+                    var cheias = <?= json_encode($dFull) ?>;
+                    return cheias[itens[0].dataIndex] || itens[0].label;
+                } } } },
             scales: { x: { ticks: { font: { size: 10 }, maxTicksLimit: 15 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { font: { size: 10 } }, grid: { color: '#eef0f3' } } }
         }
     });

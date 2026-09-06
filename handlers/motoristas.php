@@ -11,7 +11,7 @@ $db = Database::getInstance()->getConnection();
 $user = get_jimi_user();
 $customer_id = get_customer_id();
 $is_admin = ($user['role'] ?? '') === 'admin';
-$today = date('Y-m-d');
+$today = brt_today();   // dia BRT: com date() (php.ini em UTC) a CNH vencia 3 h cedo
 $error   = null;
 $success = null;
 

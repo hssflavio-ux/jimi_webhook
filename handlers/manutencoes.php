@@ -410,7 +410,7 @@ mrToggleFields();
 </script>
 
 <?php else: // ── Aba Documentos ──────────────────────────────────────────
-    $today = date('Y-m-d');
+    $today = brt_today();   // dia BRT, não o dia UTC do servidor
     $drvWhere2 = $is_admin ? '1=1' : 'customer_id = :cid';
     $stmt = $db->prepare("SELECT * FROM drivers WHERE $drvWhere2 AND is_active=1 ORDER BY name");
     $stmt->execute($devParams);

@@ -28,7 +28,7 @@ $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === '
 // revendedor, que $isAdmin acima também cobre. Mesmo teste de require_admin().
 $isSuperAdmin = ($user['role'] ?? '') === 'admin';
 
-$dateFrom  = $_GET['date_from'] ?? date('Y-m-d', strtotime('-7 days'));
+$dateFrom  = $_GET['date_from'] ?? brt_today('Y-m-d', '-7 days');
 $dateTo    = $_GET['date_to'] ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo); // teto global 31 dias
 $filterCust   = $_GET['customer_id'] ?? null;
