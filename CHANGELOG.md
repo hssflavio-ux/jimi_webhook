@@ -5,6 +5,26 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.11
+
+**O mapa do relatório de posições mostrava a PÁGINA e o rodapé contava o PERÍODO.** Investigado a pedido do dono do produto ("o mapa tem muito menos pontos que o relatório"). Eram quatro causas somadas; a decisão foi remover o mapa de período em vez de consertá-lo.
+
+### Changed
+
+- **`/relatorios/posicoes` lista só transmissões que TÊM coordenada.** Linha sem fixo de GPS (o device grava `0`/NULL) não tem posição a mostrar nem a exportar — some da grade, da contagem e dos três exports de uma vez, porque o filtro entrou no `$where` único. Decisão do dono do produto.
+- **O mapa do período inteiro saiu da tela**, junto com o botão "Ver Posições no Mapa", o container, o CSS e o Leaflet desta rota. A visualização passa a ser **por linha**, no link da coluna Mapa, que já existia. Alarmes continuam no relatório próprio — a ideia de uni-los aqui foi avaliada e descartada.
+
+### Fixed
+
+- 🔴 **O `LEFT JOIN trips` da grade DUPLICAVA a linha da posição.** O join casa por faixa de tempo (`gps_time BETWEEN tr.started_at AND tr.ended_at`) só para resolver o motorista da viagem — e **duas viagens sobrepostas do mesmo IMEI multiplicam o ponto**. Medido com fixture: 20 horários repetidos na página 2, 25 na página 3. Pior: o `COUNT(*)` do rodapé é feito **sem** esse join, então o total e o número de páginas ficavam subestimados e as posições empurradas para além da última página **não apareciam em página nenhuma** — perda silenciosa. Trocado por subconsulta correlacionada (`ORDER BY tr.started_at DESC LIMIT 1`), na grade **e** no export, que tinha o mesmo defeito.
+  - ⚠️ A classe generaliza: `LEFT JOIN` por FAIXA (tempo, distância) para buscar UM valor é sempre candidato a multiplicar linha quando as faixas se sobrepõem. Se a contagem da paginação não usa o mesmo join, o sintoma não é erro — é registro que some.
+
+### Investigado (sem alteração)
+
+- **"Motivo da transmissão" (por que o equipamento mandou aquela posição): o campo existe, a legenda não.** `postMethod` vem preenchido em produção com 8 valores distintos (`0,2,3,4,10,14,27,28`) — é dado real do equipamento, não inferência. Mas a doc oficial publica tabela de valores para `gpsMode`, `postType`, `acc` e para os 32 bits de `status`, e **nenhuma para `postMethod`**: ele só aparece dentro dos exemplos de payload. A descrição "Upload mode (0x00–0x0F)" no nosso schema veio de `docs/_arquivo_morto/API_COVERAGE_v3.0.0.md` e a medição a desmente — `27` e `28` estão fora de `0x0F`. **Nenhum rótulo foi inventado** (regra do CLAUDE.md; ver `MILE#`, `CHECK`, `50 = Alerta de Reboque`).
+  - Descartados por medição: `undecoded_gps_add_info` é a constante `JQQAAAAA` em 1.223/1.223 linhas; a tabela de bits do `status` vai até o bit 31 e não tem bit de gatilho (22–28 reservados, 29–30 tipo de posicionamento, 31 tempo-real/reenvio).
+  - ⚠️ **`handlers/pushgps.php` lê uma lista FIXA de chaves e `gps_data` não tem `raw_data`** — campo que o hub mande fora dessa lista é descartado sem rastro. Confirmar exige capturar o payload cru (`LOG_LEVEL=DEBUG`), e isso **não pega em worker aquecido**: `env_load()` (`config/database.php:36`) só faz `putenv` se a variável ainda não existir, e `putenv` persiste no processo do PHP-FPM — precisa de reload do FPM.
+- **Alarme NÃO gera linha em `gps_data`**: de 827 alarmes não-diagnóstico em 7 dias de produção, só 26 têm posição no mesmo segundo (3%); 824 têm coordenada própria (99,6%). Medição registrada para quem for reavaliar juntar as duas fontes.
 ## [Unreleased] — 4.17.10
 
 **As datas do BI saíam em ISO (`2026-08-01`) no único lugar do sistema que não passava por `fmt_brt()`.** Ao varrer o resto atrás da mesma classe, o formato estava certo em toda parte — mas o *dia* era calculado em UTC em nove pontos.

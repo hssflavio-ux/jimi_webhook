@@ -3,8 +3,13 @@
  * JIMI Webhook System — Relatório de Posições v4.0.0
  * Rota: /relatorios/posicoes
  *
- * Filtro: Ativo + Período + Intervalo + [Gerar] + [Ver posições] (mapa) + Export.
+ * Filtro: Ativo + Período + Intervalo + [Gerar] + Export.
  * Grade: Identificador, Endereço (geocodificado), Motorista, Ignição, Sinal, Velocidade, Horário.
+ *
+ * Lista as transmissões que TÊM coordenada (decisão do dono do produto): é um
+ * relatório de POSIÇÕES, e linha sem fixo de GPS não tem posição a mostrar.
+ * O mapa do período inteiro foi removido — a visualização é por linha, no link
+ * da coluna Mapa. Alarmes ficam no relatório próprio, não entram aqui.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -54,14 +59,17 @@ $customers = $isAdmin ? report_customer_options($db) : [];
 $rows = [];
 $totalRows = 0;
 $totalPages = 1;
-$hasCoords = [];
 $geoCache = [];
 
 if ($generated && $selImei) {
     try {
         // Prefixo g. obrigatório: as queries da grade/export fazem JOIN com devices
         // (imei/id existem nas duas tabelas → coluna ambígua quebrava o relatório)
-        $where = 'WHERE g.imei = :imei AND g.gps_time BETWEEN :df AND :dt';
+        // Só transmissão COM coordenada: sem fixo de GPS o device grava 0/NULL,
+        // e essa linha não tem posição para mostrar nem para exportar.
+        $where = 'WHERE g.imei = :imei AND g.gps_time BETWEEN :df AND :dt'
+               . ' AND g.latitude IS NOT NULL AND g.latitude <> 0'
+               . ' AND g.longitude IS NOT NULL AND g.longitude <> 0';
         // Dias BRT + faixa horária opcional (contínua ou repetida em cada dia)
         [$utcFrom, $utcTo, $timeSql, $timeParams] =
             report_time_window('g.gps_time', $dateFrom, $dateTo, $timeFrom, $timeTo, $timeMode);
@@ -91,14 +99,14 @@ if ($generated && $selImei) {
                 SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                        g.acc AS ignition, g.status AS gps_status, g.gsm_signal,
                        COALESCE(d.device_name, g.imei) as device_name,
-                       COALESCE(dg.name, g.driver_name, dr.name, '—') as driver_name
+                       COALESCE(dg.name, g.driver_name,
+                                (SELECT dr.name FROM trips tr JOIN drivers dr ON dr.id = tr.driver_id
+                          WHERE tr.imei = g.imei AND g.gps_time >= tr.started_at
+                            AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
+                          ORDER BY tr.started_at DESC LIMIT 1), '—') as driver_name
                 FROM gps_data g
                 LEFT JOIN devices d ON d.imei = g.imei
                 LEFT JOIN drivers dg ON dg.id = g.driver_id
-                LEFT JOIN trips tr ON tr.imei = g.imei
-                                  AND g.gps_time >= tr.started_at
-                                  AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
-                LEFT JOIN drivers dr ON dr.id = tr.driver_id
                 $where
                 ORDER BY g.$sort $order
                 LIMIT " . SYNC_EXPORT_MAX_ROWS);
@@ -152,35 +160,20 @@ if ($generated && $selImei) {
                    -- O nível 1 é o que a migração v4.8.0 tornou possível; os
                    -- outros dois mantêm o relatório útil no histórico já
                    -- gravado e nos equipamentos que não enviam o campo.
-                   COALESCE(dg.name, g.driver_name, dr.name, '—') as driver_name
+                   COALESCE(dg.name, g.driver_name,
+                            (SELECT dr.name FROM trips tr JOIN drivers dr ON dr.id = tr.driver_id
+                          WHERE tr.imei = g.imei AND g.gps_time >= tr.started_at
+                            AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
+                          ORDER BY tr.started_at DESC LIMIT 1), '—') as driver_name
             FROM gps_data g
             LEFT JOIN devices d ON d.imei = g.imei
             LEFT JOIN drivers dg ON dg.id = g.driver_id
-            LEFT JOIN trips tr ON tr.imei = g.imei
-                              AND g.gps_time >= tr.started_at
-                              AND g.gps_time <= COALESCE(tr.ended_at, UTC_TIMESTAMP())
-            LEFT JOIN drivers dr ON dr.id = tr.driver_id
             $where
             ORDER BY g.$sort $order
             LIMIT $perPage OFFSET $offset
         ");
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
-
-        foreach ($rows as $r) {
-            if ($r['latitude'] && $r['longitude'] && $r['latitude'] != 0) {
-                // `when` é o que o balão mostra: a placa é a MESMA em todos os
-                // pontos (o relatório é de um equipamento só), então repeti-la
-                // em cada marcador não distinguia um ponto do outro. O que o
-                // usuário precisa saber ao clicar num ponto do trajeto é
-                // QUANDO o veículo esteve ali.
-                $hasCoords[] = [
-                    'lat'  => (float)$r['latitude'],
-                    'lng'  => (float)$r['longitude'],
-                    'when' => fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
-                ];
-            }
-        }
 
         // Endereço geocodificado. Até a v4.7.x havia um orçamento de apenas
         // 3 resoluções por página, imposto pelo rate limit de 1 req/s do
@@ -197,9 +190,6 @@ if ($generated && $selImei) {
 $page_title = 'Relatório de Posições';
 $current_route = 'rel_posicoes';
 
-require_once __DIR__ . '/../web/components/map_assets.php';
-$extra_head = BC_MAP_ASSETS_HTML . '
-<style>#map-container{height:400px;border-radius:var(--radius-lg);border:1px solid var(--hairline);margin-bottom:16px;display:none;}</style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
@@ -266,9 +256,6 @@ require_once __DIR__ . '/../web/layout_base.php';
             </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
-        <?php if ($generated && !empty($hasCoords)): ?>
-        <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()" id="btn-map">Ver Posições no Mapa</button>
-        <?php endif; ?>
     </form>
 </div>
 
@@ -276,10 +263,6 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
 </div>
-<?php endif; ?>
-
-<?php if ($generated && !empty($hasCoords)): ?>
-<div id="map-container"></div>
 <?php endif; ?>
 
 <div class="table-wrap">
@@ -316,31 +299,5 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?= report_pagination($page, $totalPages, $totalRows, 'posições') ?>
-
-<?php if (!empty($hasCoords)): ?>
-<script>
-var mapData = <?= json_encode($hasCoords) ?>;
-var mapInstance = null;
-function toggleMap() {
-    var container = document.getElementById('map-container');
-    if (container.style.display === 'block') { container.style.display = 'none'; return; }
-    container.style.display = 'block';
-    if (!mapInstance) {
-        mapInstance = L.map('map-container');
-        bcMapBaseLayers(mapInstance);
-        var bounds = [];
-        mapData.forEach(function(p) {
-            bounds.push([p.lat, p.lng]);
-            // Data/hora da posição — a placa está no filtro e é a mesma em
-            // todos os pontos (ver a montagem de $hasCoords no PHP).
-            L.marker([p.lat, p.lng]).addTo(mapInstance).bindPopup('<b>' + p.when + '</b>');
-        });
-        if (bounds.length > 0) mapInstance.fitBounds(bounds);
-        else mapInstance.setView([-15.78, -47.93], 5);
-    }
-    setTimeout(function(){ mapInstance.invalidateSize(); }, 100);
-}
-</script>
-<?php endif; ?>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>
