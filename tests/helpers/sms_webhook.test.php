@@ -95,7 +95,15 @@ $i1 = sms_classificar_item($payload['messages'][1]);
 checa('[2] NÃO é resposta',                  false, $i1['e_resposta']);
 checa('[2] status cru, minúsculo',           'entregue celular', $i1['status']);
 checa('[2] referência do número',            'EXEMPLO-REFERENCIA-NUMERO-2', $i1['referencia']);
-checa('[2] data de entrega',                 '2025-04-05 16:42:12', $i1['entregue_em']);
+// 🔴 A Allcance manda hora LOCAL (BRT); a coluna e' UTC. 16:42:12 BRT = 19:42:12 UTC.
+// Medido em producao: 180 min exatos entre o carimbo do provedor e o nosso
+// received_at em UTC. Sem esta conversao a tela mostrava a resposta chegando
+// 3 h ANTES do comando (v4.17.13).
+checa('[2] data de entrega convertida p/ UTC', '2025-04-05 19:42:12', $i1['entregue_em']);
+checa('[2] data de envio convertida p/ UTC',   '2025-04-05 19:35:33', $i1['enviado_em']);
+checa('data ausente continua null',            null, sms_data_utc_ou_null(null));
+checa('string "null" continua null',           null, sms_data_utc_ou_null('null'));
+checa('formato invalido continua null',        null, sms_data_utc_ou_null('05/04/2025 16:42'));
 
 echo "\n  (a distinção que dá valor ao canal)\n";
 // 🔑 "recebido" SOZINHO é status de entrega (confirmação de recebimento).

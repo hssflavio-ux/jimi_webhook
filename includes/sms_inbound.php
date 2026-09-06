@@ -83,24 +83,56 @@ function sms_classificar_item(array $item): array
         // conta (o trim acima resolve).
         'e_resposta'          => ($status === 'recebido' && $msg !== ''),
         'resposta'            => $msg !== '' ? $msg : null,
-        'entregue_em'         => sms_data_ou_null($item['data_entrega'] ?? null),
-        'enviado_em'          => sms_data_ou_null($item['data_envio'] ?? null),
+        'entregue_em'         => sms_data_utc_ou_null($item['data_entrega'] ?? null),
+        'enviado_em'          => sms_data_utc_ou_null($item['data_envio'] ?? null),
     ];
 }
 
 /**
- * Normaliza um campo de data do provedor.
+ * Converte um campo de data do provedor (BRT) para UTC.
+ *
+ * 🔴 A ALLCANCE MANDA HORÁRIO LOCAL, NÃO UTC — e as colunas de destino
+ * (`sms_commands.entregue_em`, `resposta_em`) são UTC como todo o resto do
+ * sistema. Até a v4.17.13 a string ia crua para o banco, e o efeito era
+ * silencioso e absurdo na tela: `comandos_sms.php` renderiza `resposta_em` com
+ * `fmt_brt()`, que subtrai mais 3 h, enquanto `created_at` (TIMESTAMP, tratado
+ * certo pelo MySQL) aparece correto — a MESMA linha mostrava a resposta
+ * chegando 3 h ANTES de o comando ter sido enviado.
+ *
+ * MEDIDO em produção (06/09/2026), não deduzido: nos três payloads capturados
+ * em `webhook_payloads`, a diferença entre o `received_at` que gravamos em UTC
+ * e o `data_entrega`/`data_envio` do provedor foi de **180 minutos exatos**.
+ *
+ * Converte por `America/Sao_Paulo`, não por offset fixo de -3 h: o valor é
+ * hora de PAREDE de uma plataforma brasileira, então a regra de fuso é a certa
+ * se o horário de verão voltar. (É o oposto do `FILELIST_OFFSET_SEGUNDOS`, que
+ * é offset fixo porque o equipamento guarda offset, não regra — ver CLAUDE.md.)
+ *
+ * ⚠️ Se a Allcance algum dia passar a mandar UTC, esta conversão vira o bug.
+ * O detector já existe e é barato: comparar `webhook_payloads.received_at`
+ * (UTC de verdade) com o carimbo do provedor no corpo cru da mesma linha — se
+ * a diferença deixar de ser ~180 min, é aqui que se mexe.
  *
  * A doc mostra `null` literal e strings `Y-m-d H:i:s`. Qualquer outra coisa
  * vira null em vez de ir para uma coluna datetime como lixo.
  *
- * @param mixed $v Valor cru
- * @returns string|null
+ * @param mixed $v Valor cru do provedor (hora local BRT)
+ * @returns string|null Datetime em UTC ('Y-m-d H:i:s'), ou null
  */
-function sms_data_ou_null($v): ?string
+function sms_data_utc_ou_null($v): ?string
 {
     if (!is_string($v)) return null;
     $v = trim($v);
     if ($v === '' || $v === 'null') return null;
-    return preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $v) ? $v : null;
+    if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $v)) return null;
+
+    try {
+        $d = new DateTime($v, new DateTimeZone('America/Sao_Paulo'));
+        $d->setTimezone(new DateTimeZone('UTC'));
+        return $d->format('Y-m-d H:i:s');
+    } catch (Exception $e) {
+        // Data sintaticamente válida que o DateTime recusa não pode derrubar o
+        // webhook — vira null, como qualquer outro lixo.
+        return null;
+    }
 }

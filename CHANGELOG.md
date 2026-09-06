@@ -5,6 +5,35 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.13
+
+**Teste de ponta a ponta do canal de SMS, a pedido do dono do produto ("não recebemos resposta legível na aplicação").** O webhook foi INOCENTADO — e dois defeitos nossos apareceram no caminho.
+
+### O diagnóstico (o webhook está OK)
+
+- `/pushsms` é chamado pela Allcance, autentica pelo segredo, casa a referência e grava. No teste controlado (dois SMS reais, JC181 e equipamento E2E), o comando ao E2E recebeu **`entregue celular` com `entregue_em`** — confirmação de entrega funciona fim a fim.
+- **O que nunca chega é o evento de resposta.** Em todas as chamadas do webhook desde 01/09 o log registra `respostas: 0`, sem exceção; e a captura crua (v4.17.12) mostrou que a Allcance manda só `enviado` e `entregue celular` — nenhum `"status":"recebido"` com `"mensagem"`, que é a forma que a spec do provedor documenta e que o parser espera.
+- Conclusão: o SMS chegou ao aparelho e nenhuma resposta voltou. É pergunta para a Allcance — se o serviço do `cod_servico=11` recebe MO e se os eventos de resposta estão habilitados para a URL da conta. **A API de créditos não devolve o código de cada serviço, então nenhum palpite foi feito sobre qual é o 11.**
+
+### Fixed
+
+- 🔴 **Os carimbos da Allcance vêm em BRT e eram gravados como UTC.** Medido, não deduzido: nos três payloads capturados, a diferença entre o `received_at` que gravamos em UTC e o `data_entrega`/`data_envio` do provedor foi de **180 minutos exatos**. Como `handlers/comandos_sms.php:459` renderiza `resposta_em` com `fmt_brt()` (−3 h) enquanto `created_at` (TIMESTAMP) sai correto, a MESMA linha mostraria **a resposta chegando 3 h antes do comando ter sido enviado**. Sozinho isso já faria a tela parecer quebrada mesmo depois que o canal de volta for destravado.
+  - `sms_data_ou_null()` virou **`sms_data_utc_ou_null()`** — o nome carrega a invariante. Converte por `America/Sao_Paulo` (regra de fuso), não por offset fixo: é hora de parede de uma plataforma brasileira, ao contrário do `FILELIST_OFFSET_SEGUNDOS`, que é offset porque o equipamento guarda offset.
+  - A migração conserta as linhas já gravadas **pela ASSINATURA do defeito** (`entregue_em < created_at - INTERVAL 2 HOUR`), não por corte de data — é o que a torna segura de rodar depois do deploy do código e **idempotente**: linha já correta não casa e não é deslocada duas vezes. Verificado rodando a migração duas vezes seguidas.
+
+### Added
+
+- **`sms_commands.eventos_raw`** — o item do webhook, por comando, exatamente como a Allcance mandou. `webhook_payloads` guarda o corpo inteiro da requisição; esta coluna é o recorte por comando, para responder "o que o provedor disse sobre ESTE envio?" sem garimpar JSON por referência. Acumula por evento, com teto de 50 mantendo os mais recentes.
+
+### Decisões que valem por si
+
+- 🔴 **A gravação do evento cru é auto-contida e à prova de falha, e isso não é zelo.** Na primeira versão eu havia posto `eventos_raw` no `SELECT` principal (fora de try/catch) e a gravação dentro do `try` que também atualiza status/resposta. Entre o deploy do código e a migração — o intervalo que o CLAUDE.md documenta — a coluna não existe, e aquilo teria **derrubado o `/pushsms` inteiro** e impedido a gravação da resposta. Verificado com a coluna REMOVIDA: HTTP 200, `resposta_texto` e `resposta_em` gravados normalmente.
+- ⚠️ **`ADD COLUMN` condicional, não `ALTER` puro** (padrão da v4.16.0): o remédio documentado para migração nova é rodar `deploy.sh --force` duas vezes, então ela roda duas vezes por construção — e um `ADD COLUMN` repetido devolve 1060 e **aborta o script**, deixando o conserto de fuso e a versão sem rodar.
+- ⚠️ **A migração força `SET time_zone = '+00:00'`**: `created_at` é TIMESTAMP e o MySQL o converte para o fuso da sessão; o CLI usa o fuso do SISTEMA (BRT em produção), e sem isso a comparação do conserto compararia BRT com UTC.
+
+### Achado no caminho
+
+- ⚠️ **O SO de produção está em BRT (`-03`), não em UTC** como o CLAUDE.md afirma. PHP e MySQL continuam UTC (conferidos), então nada de dado é afetado — mas `Logger::stamp()` carimba em `America/Sao_Paulo` de propósito, e **correlacionar log com banco exige deslocar 3 h**. Quase li um falso "os webhooks pararam há 3 horas" por causa disso.
 ## [Unreleased] — 4.17.12
 
 **`webhook_payloads`: o corpo CRU de tudo que os equipamentos enviam.** Pedido do dono do produto, nascido da investigação do "motivo da transmissão" (v4.17.11), que esbarrou num fato incômodo: `handlers/pushgps.php` lê uma lista **fixa** de chaves e `gps_data` não tem `raw_data` — campo novo do fabricante era descartado sem deixar rastro, e não havia como saber sequer se existia.

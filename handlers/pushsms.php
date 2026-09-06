@@ -132,6 +132,38 @@ $respostas = 0;
 
 $sel = $db->prepare("SELECT id, imei FROM sms_commands WHERE referencia = :r LIMIT 1");
 
+// Acumula o item do webhook EXATAMENTE como a Allcance mandou (v4.17.13).
+// `webhook_payloads` já guarda o corpo inteiro da requisição; esta coluna é o
+// recorte por comando, para responder "o que o provedor disse sobre ESTE
+// envio?" sem garimpar JSON por referência.
+//
+// 🔴 Coluna JSON: json_encode() SEMPRE. String crua faz o MySQL recusar com
+// 3140 Invalid JSON text — o defeito que quebrou o callback de comando
+// offline por meses em `commands.response_payload` (CLAUDE.md).
+// 🔴 AUTO-CONTIDO E À PROVA DE FALHA, e isso não é zelo: migração nova NÃO
+// roda no deploy que a traz (CLAUDE.md). Entre um e outro a coluna não existe —
+// e se o SELECT dela ficasse na consulta principal, ou se a exceção subisse até
+// o `catch` do laço, o `/pushsms` pararia de gravar STATUS E RESPOSTA. A cópia
+// crua nunca pode valer mais que o dado que ela documenta.
+$gravaEvento = function (int $id, array $item) use ($db) {
+    try {
+        $st = $db->prepare('SELECT eventos_raw FROM sms_commands WHERE id = :id');
+        $st->execute([':id' => $id]);
+        $antes = json_decode((string)$st->fetchColumn(), true);
+        if (!is_array($antes)) $antes = [];
+        // Teto de 50 mantendo os MAIS RECENTES: o provedor reenvia, e um comando
+        // que ficasse repicando encheria a coluna sem fim.
+        $antes[] = ['em' => gmdate('Y-m-d H:i:s'), 'item' => $item];
+        if (count($antes) > 50) $antes = array_slice($antes, -50);
+        // Coluna JSON: json_encode() SEMPRE. String crua faz o MySQL recusar com
+        // 3140 Invalid JSON text (CLAUDE.md).
+        $db->prepare('UPDATE sms_commands SET eventos_raw = :e WHERE id = :id')
+           ->execute([':e' => json_encode($antes, JSON_UNESCAPED_UNICODE), ':id' => $id]);
+    } catch (Throwable $e) {
+        Logger::warning('SMS: evento cru não gravado', ['id' => $id, 'erro' => $e->getMessage()]);
+    }
+};
+
 foreach ($itens as $item) {
     $c = sms_classificar_item($item);
 
@@ -150,6 +182,10 @@ foreach ($itens as $item) {
     }
 
     try {
+        // Antes de interpretar: o item cru fica gravado no comando,
+        // aconteça o que acontecer com a interpretação abaixo.
+        $gravaEvento((int)$linha['id'], $item);
+
         if ($c['e_resposta']) {
             // 🔑 A RESPOSTA DO EQUIPAMENTO. Grava o texto e a hora, e NÃO
             // sobrescreve status_entrega: a entrega já aconteceu (o aparelho
