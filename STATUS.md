@@ -1,4 +1,31 @@
-# STATUS.md — Jimi Webhook System v4.17.18 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.19 (YUV Parity)
+
+> ### 📍 v4.17.19 — Downloads: fora IMEI e Modelo; export igual à tela
+>
+> Pedido do dono do produto: *"remova as colunas IMEI e Modelo, essas
+> informações não [são] relevantes para o usuário final, além disso,
+> padronize a impressão do xls e pdf na mesma disposição da exibição na tela"*.
+>
+> Grade e export agora na mesma ordem: **Cliente · Placa · Canal · Alarme ·
+> Hora do alarme · Início do vídeo · Requisitado em · Arquivo · Status**.
+>
+> ⚠️ **O `imei` continua no SELECT** — é a chave que casa o arquivo com o
+> alarme e o prefixo que o nome esmaece. Sumiu da TELA, não da consulta; essa
+> meia-remoção é o que volta pelo export se ninguém travar, e por isso virou
+> spec.
+>
+> 🔴 **Cabeçalho, larguras e células do export saem do MESMO array de flags.**
+> A tela esconde Cliente/Placa quando um equipamento único está filtrado, e o
+> export passa a esconder junto — com três listas separadas existiria o estado
+> em que uma mudou e as outras não.
+>
+> Duas diferenças permanecem por construção: "Download" é botão e não existe em
+> planilha; "Hora do alarme" é a segunda linha da célula de Alarme na tela e
+> vira coluna na planilha, colada na de Alarme.
+>
+> ⚠️ Saíram do export **"Tamanho (MB)" e "Baixado em"** — não têm coluna na
+> tela. Consequência direta de "mesma disposição"; voltam como colunas finais
+> se fizerem falta.
 
 > ### 📍 v4.17.18 — Downloads: o arquivo pedido pelo operador diz "On demand"
 >

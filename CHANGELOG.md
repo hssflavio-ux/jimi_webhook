@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.19
+
+**Downloads: IMEI e Modelo saem da grade, e o export passa a sair na mesma disposição da tela.**
+
+Pedido do dono do produto: *"remova as colunas IMEI e Modelo, essas informações não [são] relevantes para o usuário final, além disso, padronize a impressão do xls e pdf na mesma disposição da exibição na tela"*.
+
+### Removed
+
+- **Colunas IMEI e Modelo**, na tela **e** no export. Quem opera procura pela **placa**; o IMEI é identificador de equipamento e o modelo é dado de cadastro.
+  - ⚠️ **O `imei` continua no SELECT** — é a chave que casa o arquivo com o alarme (`media_alarmes_dos_arquivos()`) e o prefixo que o nome do arquivo esmaece. Sumiu da tela, não da consulta. Essa meia-remoção é exatamente o que volta pelo export se ninguém travar, e por isso virou spec.
+  - O `LEFT JOIN device_models` saiu das duas consultas junto com a coluna que era o único motivo dele.
+
+### Changed
+
+- 🔴 **O export (XLSX/PDF/CSV) segue a MESMA disposição da tela.** Antes as duas listas divergiam em ordem **e** em conteúdo: o export abria por "Requisitado em" e a tela por Cliente. Quem conferisse um contra o outro reconciliava coluna a coluna. Ordem agora idêntica: **Cliente · Placa · Canal · Alarme · Hora do alarme · Início do vídeo · Requisitado em · Arquivo · Status**.
+  - **As colunas também somem juntas.** A tela esconde Cliente/Placa quando um equipamento único está filtrado (não variam, e repetir o que o usuário acabou de escolher é ruído) — o export passa a fazer o mesmo, com o subtítulo dizendo de quem é o recorte. Cabeçalho, larguras e células saem do **mesmo array de flags**, para que não exista o estado em que um deles mudou e o outro não.
+  - Duas diferenças permanecem, **por construção**: "Download" é um botão e não existe em planilha; e **"Hora do alarme"** é a segunda linha da célula de Alarme na tela — numa planilha não há segunda linha útil, então vira coluna, colada na de Alarme.
+- ⚠️ **Saíram do export "Tamanho (MB)" e "Baixado em"**, que não têm coluna correspondente na tela. É consequência direta de "mesma disposição" — se fizerem falta, voltam como colunas finais.
+
 ## [Unreleased] — 4.17.18
 
 **Downloads: o arquivo que o operador pediu passa a se identificar como "On demand".**

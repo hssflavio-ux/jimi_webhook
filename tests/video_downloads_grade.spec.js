@@ -86,6 +86,68 @@ test.describe('Downloads — largura das colunas', () => {
         expect(r.cortadas, 'apertado, o texto quebra — não some').toBe(0);
     });
 
+    test('🔴 IMEI e Modelo saíram da grade — e do export junto', async ({ authedPage }) => {
+        // Decisão do dono do produto: não são relevantes para quem opera. O
+        // `imei` continua no SELECT (é a chave que casa arquivo com alarme),
+        // então some da TELA sem sumir da consulta — e é justamente esse tipo
+        // de meia-remoção que volta pelo export se ninguém travar.
+        const naTela = await authedPage.locator('thead th').allTextContents();
+        expect(naTela.map((t) => t.trim())).not.toContain('IMEI');
+        expect(naTela.map((t) => t.trim())).not.toContain('Modelo');
+
+        const csv = await authedPage.evaluate(() =>
+            fetch('/video/downloads?export=csv').then((r) => r.text()));
+        const cabecalho = csv.split(/\r?\n/)[0] || '';
+        expect(cabecalho, 'IMEI não pode reaparecer no export').not.toMatch(/(^|;)"?IMEI"?(;|$)/);
+        expect(cabecalho, 'Modelo não pode reaparecer no export').not.toMatch(/(^|;)"?Modelo"?(;|$)/);
+    });
+
+    test('🔴 o export sai na MESMA disposição da tela', async ({ authedPage }) => {
+        // Pedido do dono do produto. Antes as duas listas divergiam em ordem E
+        // em conteúdo — o export abria por "Requisitado em" e a tela por
+        // Cliente. Quem conferisse um contra o outro reconciliava coluna a
+        // coluna.
+        //
+        // ⚠️ Duas diferenças são POR CONSTRUÇÃO e ficam declaradas aqui, senão
+        // o teste vira "o export é igual à tela" e alguém o quebra sem saber
+        // por quê:
+        //   - "Download" é um botão; não existe em planilha.
+        //   - "Hora do alarme" é a SEGUNDA LINHA da célula de Alarme na tela;
+        //     numa planilha não há segunda linha útil, então vira coluna —
+        //     colada na de Alarme, preservando o agrupamento.
+        const naTela = (await authedPage.locator('thead th').allTextContents())
+            .map((t) => t.trim())
+            .filter((t) => t !== 'Download');
+        const esperado = naTela.flatMap((c) => (c === 'Alarme' ? [c, 'Hora do alarme'] : [c]));
+
+        const csv = await authedPage.evaluate(() =>
+            fetch('/video/downloads?export=csv').then((r) => r.text()));
+        const noExport = (csv.split(/\r?\n/)[0] || '')
+            .split(';')
+            .map((c) => c.replace(/^"|"$/g, '').trim());
+
+        expect(noExport, 'mesmas colunas, na mesma ordem').toEqual(esperado);
+    });
+
+    test('filtrado por um equipamento, as colunas somem nos DOIS', async ({ authedPage }) => {
+        // A tela esconde Cliente/Placa quando não variam; o export tem de
+        // esconder também, senão a planilha repete em 5.000 linhas o que o
+        // usuário acabou de escolher no filtro.
+        const imei = await authedPage.locator('#dl-imei option[value!=""]').first()
+            .getAttribute('value').catch(() => null);
+        test.skip(!imei, 'nenhum equipamento no filtro');
+
+        await authedPage.goto('/video/downloads?imei=' + imei);
+        const naTela = (await authedPage.locator('thead th').allTextContents()).map((t) => t.trim());
+        expect(naTela, 'a tela deixa de repetir a placa escolhida').not.toContain('Placa');
+
+        const csv = await authedPage.evaluate((i) =>
+            fetch('/video/downloads?imei=' + i + '&export=csv').then((r) => r.text()), imei);
+        const cab = (csv.split(/\r?\n/)[0] || '');
+        expect(cab, 'o export acompanha').not.toMatch(/(^|;)"?Placa"?(;|$)/);
+        expect(cab, 'e continua trazendo o que varia').toMatch(/Alarme/);
+    });
+
     test('o botão de rebaixar diz "Baixar novamente"', async ({ authedPage }) => {
         await authedPage.goto('/video/downloads?status=baixado');
         const n = await authedPage.locator('a.btn', { hasText: /Baixar/i }).count();

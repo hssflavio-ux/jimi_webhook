@@ -6,7 +6,10 @@
  * Fila de extração device→servidor. Mostra arquivos com status de download:
  * solicitado → disponivel (pushfileupload fecha) → download funcionando.
  *
- * Grade: Nome, Identificador, Equipamento, Modelo, Canal, Requisitado em, Status.
+ * Grade: Cliente, Placa, Canal, Alarme, Início do vídeo, Requisitado em,
+ * Arquivo, Status, Download. O export (XLSX/PDF/CSV) usa a MESMA disposição —
+ * ver o bloco de exportação, onde cabeçalho, larguras e células saem do mesmo
+ * array.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -49,12 +52,12 @@ $devicesFiltro = $devStmt->fetchAll(PDO::FETCH_ASSOC);
 $selStatus = $_GET['status'] ?? '';
 
 /**
- * Um equipamento escolhido faz placa, IMEI, modelo e cliente pararem de variar.
+ * Um equipamento escolhido faz placa e cliente pararem de variar.
  *
  * ⚠️ Repetir em toda linha o que o usuário ACABOU de escolher no filtro não é
  * informação: é ruído que empurra as colunas úteis — status e download — para
- * fora da tela. Com um equipamento selecionado, essas quatro colunas viram um
- * subtítulo, dito uma vez.
+ * fora da tela. Com um equipamento selecionado, essas duas colunas viram um
+ * subtítulo, dito uma vez — na tela E no export.
  */
 $umEquipamento = null;
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -116,11 +119,9 @@ $filesStmt = $db->prepare("
            mf.event_time, mf.created_at, mf.channel, mf.download_status,
            mf.downloaded_at, mf.download_count, mf.source_type,
            COALESCE(NULLIF(d.device_name, ''), mf.imei) AS device_name,
-           COALESCE(dm.model_name, '—') as model_name,
            COALESCE(cu.name, '—') AS customer_name
     FROM media_files mf
     LEFT JOIN devices d ON d.imei = mf.imei
-    LEFT JOIN device_models dm ON d.device_model_id = dm.id
     LEFT JOIN customers cu ON cu.id = d.customer_id
     $where
     ORDER BY mf.created_at DESC
@@ -158,11 +159,9 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                mf.created_at, mf.event_time, mf.download_status, mf.downloaded_at,
                mf.source_type,
                COALESCE(NULLIF(d.device_name, ''), mf.imei) AS device_name,
-               COALESCE(dm.model_name, '—') AS model_name,
                COALESCE(cu.name, '—') AS customer_name
         FROM media_files mf
         LEFT JOIN devices d ON d.imei = mf.imei
-        LEFT JOIN device_models dm ON d.device_model_id = dm.id
         LEFT JOIN customers cu ON cu.id = d.customer_id
         $where
         ORDER BY mf.created_at DESC
@@ -189,27 +188,57 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $expLinhas = $expStmt->fetchAll(PDO::FETCH_ASSOC);
     $expAlarmes = media_alarmes_dos_arquivos($db, $expLinhas);
 
+    // ── O export segue a MESMA DISPOSIÇÃO da tela (v4.17.19) ────────────────
+    //
+    // Pedido do dono do produto: *"padronize a impressão do xls e pdf na mesma
+    // disposição da exibição na tela"*. Antes as duas listas divergiam em
+    // ordem E em conteúdo — o export abria por "Requisitado em" e a tela por
+    // Cliente; o export tinha Tamanho e Baixado em, que a tela não mostra.
+    // Quem conferisse um contra o outro teria de reconciliar coluna a coluna.
+    //
+    // 🔴 As colunas também SOMEM juntas. A tela esconde Cliente/Placa quando um
+    // equipamento único está filtrado (não variam, e repetir o que o usuário
+    // acabou de escolher é ruído) — o export passa a fazer o mesmo, e o
+    // subtítulo já diz de quem é o recorte. Cabeçalho, larguras e células são
+    // montados do MESMO array de flags, para que não exista o estado em que um
+    // deles mudou e o outro não.
+    //
+    // ⚠️ "Hora do alarme" é a única coluna que a tela não tem separada: lá ela
+    // é a segunda linha da célula de Alarme. Numa planilha não há segunda
+    // linha útil, então vira coluna — colada na de Alarme, preservando o
+    // agrupamento da tela.
+    $comCliente = !$umEquipamento && $mostrarCliente;
+    $comPlaca   = !$umEquipamento;
+
+    $expCols = [];
+    if ($comCliente) $expCols[] = ['Cliente',         1.2];
+    if ($comPlaca)   $expCols[] = ['Placa',           1.0];
+    $expCols[] = ['Canal',           0.5];
+    $expCols[] = ['Alarme',          1.8];
+    $expCols[] = ['Hora do alarme',  1.3];
+    $expCols[] = ['Início do vídeo', 1.3];
+    $expCols[] = ['Requisitado em',  1.3];
+    // Nome do arquivo é a coluna longa (`EVENT_<imei>_..._I_15.mp4`).
+    $expCols[] = ['Arquivo',         3.4];
+    $expCols[] = ['Status',          1.1];
+
     $expRows = [];
     foreach ($expLinhas as $r) {
         $al = $expAlarmes[$r['imei'] . '|' . $r['file_name']] ?? null;
-        $expRows[] = [
-            fmt_brt($r['created_at'] ?? $r['event_time'], 'd/m/Y H:i:s'),
-            $r['customer_name'],
-            $r['device_name'],
-            $r['imei'],
-            $r['model_name'],
-            ($cx = $r['channel'] ?: media_canal_do_nome((string)$r['file_name'])) ? 'CH' . (int)$cx : '—',
-            // Mesma regra da tela, no mesmo vocabulário: o alarme quando há um,
-            // "On demand" quando o arquivo foi pedido pelo operador.
-            $al['nome'] ?? (media_pedido_pelo_operador($r['source_type'] ?? null) ? 'On demand' : '—'),
-            $al && !empty($al['alarm_time']) ? fmt_brt($al['alarm_time'], 'd/m/Y H:i:s') : '—',
-            $r['file_name'] ?: '—',
-            ($ini = filelist_ts_do_nome_utc((string)$r['file_name']) ?: $r['event_time'])
-                ? fmt_brt($ini, 'd/m/Y H:i:s') : '—',
-            $r['file_size'] ? number_format($r['file_size'] / 1024 / 1024, 1, ',', '.') : '—',
-            $rotuloDoArquivo($r),
-            !empty($r['downloaded_at']) ? fmt_brt($r['downloaded_at'], 'd/m/Y H:i:s') : '—',
-        ];
+        $linha = [];
+        if ($comCliente) $linha[] = $r['customer_name'];
+        if ($comPlaca)   $linha[] = $r['device_name'];
+        $linha[] = ($cx = $r['channel'] ?: media_canal_do_nome((string)$r['file_name'])) ? 'CH' . (int)$cx : '—';
+        // Mesma regra da tela, no mesmo vocabulário: o alarme quando há um,
+        // "On demand" quando o arquivo foi pedido pelo operador.
+        $linha[] = $al['nome'] ?? (media_pedido_pelo_operador($r['source_type'] ?? null) ? 'On demand' : '—');
+        $linha[] = $al && !empty($al['alarm_time']) ? fmt_brt($al['alarm_time'], 'd/m/Y H:i:s') : '—';
+        $linha[] = ($ini = filelist_ts_do_nome_utc((string)$r['file_name']) ?: $r['event_time'])
+            ? fmt_brt($ini, 'd/m/Y H:i:s') : '—';
+        $linha[] = fmt_brt($r['created_at'] ?? $r['event_time'], 'd/m/Y H:i:s');
+        $linha[] = $r['file_name'] ?: '—';
+        $linha[] = $rotuloDoArquivo($r);
+        $expRows[] = $linha;
     }
 
     $rotCliente = 'Todos os clientes';
@@ -224,14 +253,8 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         . (count($expRows) >= DOWNLOADS_EXPORT_TETO ? '  |  ATENÇÃO: cortado nos ' . DOWNLOADS_EXPORT_TETO . ' mais recentes' : '');
 
     stream_export($export, 'downloads_video',
-        ['Requisitado em', 'Cliente', 'Placa', 'IMEI', 'Modelo', 'Canal',
-         'Alarme', 'Hora do alarme', 'Arquivo', 'Início do vídeo',
-         'Tamanho (MB)', 'Status', 'Baixado em'],
-        $expRows, 'Downloads de Vídeo', $subtitulo,
-        // Nome do arquivo é a coluna longa (`EVENT_<imei>_..._I_15.mp4`); o
-        // nome do alarme é a segunda mais larga (`ADAS: Distância Insegura`);
-        // as demais são curtas e de largura previsível.
-        [1.3, 1.2, 1.0, 1.4, 0.9, 0.5, 1.8, 1.3, 3.4, 0.6, 0.8, 1.1, 1.2]);
+        array_column($expCols, 0), $expRows, 'Downloads de Vídeo', $subtitulo,
+        array_column($expCols, 1));
 }
 
 $page_title = 'Vídeo Downloads';
@@ -331,13 +354,18 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                      exatamente o que distingue uma linha da outra.
                      Agora ela é a ÚLTIMA das colunas de dados — depois das
                      curtas, que empacotam à esquerda —, quebra em vez de cortar,
-                     e fica colada na ação que a usa. */ ?>
+                     e fica colada na ação que a usa.
+
+                     ⚠️ IMEI e MODELO saíram na v4.17.19 (decisão do dono do
+                     produto: *"essas informações não [são] relevantes para o
+                     usuário final"*). Quem opera procura pela PLACA; o IMEI é
+                     identificador de equipamento e o modelo é dado de cadastro.
+                     Os dois continuam no SELECT — o `imei` é a chave que casa
+                     o arquivo com o alarme — só não são desenhados. */ ?>
             <tr>
                 <?php if (!$umEquipamento): ?>
                 <?php if ($mostrarCliente): ?><th class="dl-curta">Cliente</th><?php endif; ?>
                 <th class="dl-curta">Placa</th>
-                <th class="dl-curta">IMEI</th>
-                <th class="dl-curta">Modelo</th>
                 <?php endif; ?>
                 <th class="dl-canal">Canal</th>
                 <?php /* A fila diz o QUE existe e, agora, POR QUE existe. */ ?>
@@ -358,10 +386,10 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
             <?php if (empty($files)): ?>
             <?php /* ⚠️ A conta acompanha o cabeçalho: Canal, Alarme, Início,
                      Requisitado, Arquivo, Status, Download = 7 fixas; sem
-                     equipamento escolhido somam-se Placa, IMEI e Modelo, e
-                     Cliente só quando o escopo é "todos". Errar aqui não dá
-                     erro — só desalinha a linha de "nenhum arquivo". */ ?>
-            <tr><td colspan="<?= $umEquipamento ? 7 : ($mostrarCliente ? 11 : 10) ?>" style="text-align:center;padding:32px;color:var(--muted);">
+                     equipamento escolhido soma-se Placa, e Cliente só quando o
+                     escopo é "todos". Errar aqui não dá erro — só desalinha a
+                     linha de "nenhum arquivo". */ ?>
+            <tr><td colspan="<?= $umEquipamento ? 7 : ($mostrarCliente ? 9 : 8) ?>" style="text-align:center;padding:32px;color:var(--muted);">
                 <?= $umEquipamento ? 'Nenhum vídeo deste equipamento no storage ainda.' : 'Nenhum arquivo encontrado' ?>
                 <?php if ($umEquipamento): ?>
                 <div style="font-size:11px;margin-top:6px;">Peça um trecho em <a href="/video/playback?imei=<?= htmlspecialchars($umEquipamento['imei']) ?>">Playback</a> — ele aparece aqui quando a câmera terminar de enviar.</div>
@@ -381,8 +409,6 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 <td class="dl-curta" style="font-size:11px;"><?= htmlspecialchars($f['customer_name']) ?></td>
                 <?php endif; ?>
                 <td class="dl-curta"><span class="text-mono"><?= htmlspecialchars($f['device_name']) ?></span></td>
-                <td class="dl-curta"><span class="text-mono" style="font-size:11px;color:var(--muted);"><?= htmlspecialchars($f['imei']) ?></span></td>
-                <td class="dl-curta"><?= htmlspecialchars($f['model_name']) ?></td>
                 <?php endif; ?>
                 <?php
                     // Canal derivado do nome quando a linha é antiga: até a
