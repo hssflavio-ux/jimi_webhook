@@ -5,6 +5,42 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.23
+
+**`webhook_payloads`: filtrar por equipamento não achava os SMS.**
+
+Pedido do dono do produto: *"precisamos ter a possibilidade do filtro, não é cosmético"*.
+
+### Fixed
+
+- 🔴 **Toda linha de `pushsms` ficava com `imei` NULL, `item_count` 0 e `payload_hash` NULL** — medido: **8 de 8** chamadas. A causa é que **o payload da Allcance não tem IMEI**: `webhook_capture_raw()` preenche a coluna com `webhook_raw_sniff_imei()`, que procura `deviceImei`/`imei` no corpo, e o provedor de SMS nunca manda nenhum dos dois. O corpo cru estava lá o tempo todo; o que faltava era a chave para achá-lo.
+  - O vínculo existe e é indexado: `messages[].referencia_numero` → `sms_commands.referencia` (UNIQUE `uk_sms_referencia`) → `imei`. **`sms_imei_do_lote()`** (`includes/sms_inbound.php`) resolve numa consulta **por lote**, não por item.
+  - `pushsms.php` passou a decodificar **antes** de capturar, para preencher os três campos no INSERT. ⚠️ A ordem que importa não mudou: a captura continua acontecendo mesmo com corpo ilegível (`$itens = []`), que é justamente quando o corpo cru vale mais.
+- **`migration_v4.17.23.sql` conserta o histórico.** Sem ela o filtro continuaria cego para o que já estava gravado.
+  - ⚠️ O extrator é `IF(JSON_VALID(body), JSON_EXTRACT(…), NULL)` e não `JSON_EXTRACT` direto: corpo truncado ou vazio faria o `JSON_EXTRACT` **abortar o script inteiro**, e a captura grava corpo vazio de propósito (o `/filelist` passou cinco dias assim). Verificado no servidor — com o `IF`, corpo inválido, corpo vazio e JSON sem a chave devolvem NULL em vez de erro.
+
+### `payload_hash` deixou de ser decoração
+
+Nos endpoints do IoT Hub ele é o anti-replay. Aqui não há idempotência a aplicar (o `UPDATE` por referência já é idempotente) — ele **identifica o reenvio do provedor**, e isso não é hipótese: medido em 07/09/2026, a Allcance mandou o **mesmo evento duas vezes, a 1 segundo de distância, byte a byte igual** (payloads #11260 e #11261, hash `13574cc7…`). Sem o hash, as duas linhas parecem eventos distintos.
+
+O comportamento já era previsto no código (`gravaEvento()` diz "*o provedor reenvia*", e o teto de 50 eventos existe por isso) — esta é a primeira vez que ficou capturado como prova.
+
+### Verificação em produção
+
+| | antes | depois |
+|---|---|---|
+| Linhas de `pushsms` com IMEI | **0 de 8** | **8 de 8** |
+| `WHERE imei = '868120246598152'` | nada | **6 chamadas** |
+| Duplicata identificável | não | `13574cc7…` ×2, ids 11260/11261 |
+
+### O 2º teste de SMS (comando #15)
+
+`STATUS#` ao E2E, saldo 2 → 1. Todos os campos do provedor conferidos um a um — **nenhum campo inesperado**, o parser cobre tudo que chega. `eventos_raw` gravou 2 eventos.
+
+⚠️ **A confirmação de entrega NÃO chegou** — 40 ciclos de monitoramento (10 min) e só os dois `enviado`; `entregue_em` segue NULL. No teste anterior (#14), o mesmo equipamento confirmou em **9 segundos**. É intermitência da operadora/aparelho (o E2E está offline há 25 dias), não do nosso lado: o webhook processou tudo que recebeu, `casados: 1` nas duas chamadas, sem WARNING.
+
+⚠️ `resposta_texto` continua NULL, pelo mesmo motivo de sempre: a Allcance não manda o evento `"status":"recebido"`.
+
 ## [Unreleased] — 4.17.22
 
 **Duas migrações nunca entraram na lista do `deploy.sh` — e uma delas deixou um recurso morto em silêncio por dois dias.**

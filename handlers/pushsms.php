@@ -103,10 +103,32 @@ if ($segredo === '' || $k === '' || !hash_equals($segredo, $k)) {
 // gravar corpo de requisição não autenticada é convite a encher disco por
 // quem descobrir a URL. Ver includes/webhook_raw.php.
 require_once __DIR__ . '/../includes/webhook_raw.php';
-webhook_capture_raw('pushsms', (string)$raw);
 
+// 🔴 DECODIFICA ANTES DE CAPTURAR, e isso não inverte a ordem que importa: a
+// captura continua acontecendo aconteça o que acontecer com o parse (corpo
+// ilegível vira `$itens = []` e é gravado igual, que é justamente o caso em que
+// o corpo cru vale mais). O que se ganha é preencher os METADADOS da linha.
+//
+// ⚠️ O payload da Allcance NÃO TEM IMEI — `webhook_raw_sniff_imei()`, que é o
+// que preenche a coluna nos demais endpoints, procura `deviceImei`/`imei` e não
+// acha nada aqui. Até a v4.17.23 toda linha de `pushsms` ficava com `imei`
+// NULL, e filtrar `webhook_payloads` por equipamento não trazia os SMS (medido:
+// 6 de 6 chamadas). O vínculo sai de `referencia_numero` →
+// `sms_commands.referencia` (UNIQUE) → `imei`, numa consulta por LOTE.
+//
+// ⚠️ `payload_hash` é o MD5 do corpo. Nos endpoints do IoT Hub ele é o hash do
+// `data_list` usado como anti-replay; aqui não há idempotência a aplicar (o
+// UPDATE por referência já é idempotente), mas o hash **identifica o reenvio do
+// provedor** — que acontece: medido em 07/09/2026, a Allcance mandou o MESMO
+// evento duas vezes, a 1 segundo de distância, byte a byte igual.
 $payload = json_decode($raw ?: '', true);
 $itens   = sms_webhook_itens(is_array($payload) ? $payload : null);
+
+webhook_capture_raw('pushsms', (string)$raw, [
+    'imei'         => sms_imei_do_lote($db, $itens),
+    'item_count'   => count($itens),
+    'payload_hash' => $raw !== '' && $raw !== false ? md5((string)$raw) : null,
+]);
 
 if (!$itens) {
     // Corpo vazio/ilegível não é erro do provedor a ponto de merecer 4xx — mas

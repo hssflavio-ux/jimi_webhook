@@ -136,3 +136,51 @@ function sms_data_utc_ou_null($v): ?string
         return null;
     }
 }
+
+/**
+ * O IMEI a que um lote do webhook se refere — para a coluna indexada de
+ * `webhook_payloads`.
+ *
+ * 🔴 O PAYLOAD DA ALLCANCE NÃO TEM IMEI, e é por isso que esta função existe.
+ * `webhook_capture_raw()` preenche a coluna com `webhook_raw_sniff_imei()`, que
+ * procura `deviceImei`/`imei` no corpo — chaves que o provedor de SMS nunca
+ * manda. Resultado até a v4.17.23: toda linha de `pushsms` ficava com `imei`
+ * NULL, e **filtrar `webhook_payloads` por equipamento não trazia os SMS**.
+ * Medido em produção: 6 de 6 chamadas com a coluna vazia.
+ *
+ * O vínculo existe e é indexado: `referencia_numero` → `sms_commands.referencia`
+ * (UNIQUE `uk_sms_referencia`) → `imei`. Uma consulta por LOTE, não por item.
+ *
+ * ⚠️ Mesma natureza do `webhook_raw_sniff_imei()`: é **conveniência de
+ * consulta**, não fonte de verdade — o corpo cru continua sendo o fato. Um lote
+ * que misture equipamentos (o provedor manda `total: N`) grava o primeiro que
+ * resolver; a linha continua achável por endpoint e data, e o corpo tem todos.
+ *
+ * ⚠️ Nunca propaga exceção: entre o deploy do código e a migração a tabela pode
+ * não existir (CLAUDE.md), e a captura crua não pode derrubar o webhook.
+ *
+ * @param PDO   $db
+ * @param array $itens Itens já extraídos por `sms_webhook_itens()`
+ * @returns string|null IMEI do primeiro item cuja referência é nossa
+ */
+function sms_imei_do_lote(PDO $db, array $itens): ?string
+{
+    $refs = [];
+    foreach ($itens as $item) {
+        if (!is_array($item)) continue;
+        $r = trim((string)($item['referencia_numero'] ?? ''));
+        if ($r !== '') $refs[$r] = true;
+    }
+    if (!$refs) return null;
+
+    try {
+        $refs = array_slice(array_keys($refs), 0, 50);   // teto: o lote é pequeno por natureza
+        $ph = implode(',', array_fill(0, count($refs), '?'));
+        $st = $db->prepare("SELECT imei FROM sms_commands WHERE referencia IN ($ph) AND imei IS NOT NULL LIMIT 1");
+        $st->execute($refs);
+        $imei = $st->fetchColumn();
+        return $imei !== false && $imei !== null ? (string)$imei : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}

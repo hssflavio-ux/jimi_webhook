@@ -471,6 +471,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     # Guarda contra a repeticao: tests/helpers/migracoes_no_deploy.test.php.
     run_migration "4.17.12" "mysql/migration_v4.17.12.sql" "webhook_payloads — corpo CRU de tudo que os equipamentos enviam"
     run_migration "4.17.13" "mysql/migration_v4.17.13.sql" "SMS: carimbos do provedor em BRT + eventos crus por comando (sms_commands.eventos_raw)"
+    run_migration "4.17.23" "mysql/migration_v4.17.23.sql" "webhook_payloads: imei/item_count/hash das linhas de pushsms (filtro por equipamento nao achava SMS)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
