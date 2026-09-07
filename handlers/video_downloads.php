@@ -129,6 +129,19 @@ $filesStmt = $db->prepare("
 $filesStmt->execute($params);
 $files = $filesStmt->fetchAll();
 
+// ── O alarme de cada arquivo (v4.17.17) ────────────────────────────────────
+//
+// Pedido do dono do produto depois de olhar a fila: *"percebi que todos os
+// arquivos listados nesse momento da câmera TELECOM são arquivos relativos aos
+// alarmes, é possível adicionarmos uma coluna para identificar o alarme
+// referente ao arquivo?"* — e a observação bate com a medição: **2.999 de
+// 3.000** arquivos dos últimos 30 dias têm alarme identificável.
+//
+// A resolução é EM LOTE, para as 25 linhas da página — ver
+// `media_alarmes_dos_arquivos()` para os dois caminhos e para por que o `LIKE`
+// por linha foi evitado. Medido: 25 de 25 em 37 ms.
+$alarmesDoArquivo = media_alarmes_dos_arquivos($db, $files);
+
 // ── Exportação (XLSX / PDF / CSV), sensível aos MESMOS filtros ─────────────
 //
 // Consulta própria, SEM o LIMIT da paginação: quem pede relatório quer o
@@ -169,8 +182,15 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         if ($st === 'erro')       return 'Erro';
         return 'Pendente na câmera';
     };
+    // O alarme entra no export pelo MESMO caminho da tela: uma divergência
+    // entre os dois só aparece quando alguém compara, e aí já é tarde. A
+    // resolução é em lote e limitada ao teto — medido, 4.198 de 4.208 em 160 ms.
+    $expLinhas = $expStmt->fetchAll(PDO::FETCH_ASSOC);
+    $expAlarmes = media_alarmes_dos_arquivos($db, $expLinhas);
+
     $expRows = [];
-    foreach ($expStmt as $r) {
+    foreach ($expLinhas as $r) {
+        $al = $expAlarmes[$r['imei'] . '|' . $r['file_name']] ?? null;
         $expRows[] = [
             fmt_brt($r['created_at'] ?? $r['event_time'], 'd/m/Y H:i:s'),
             $r['customer_name'],
@@ -178,6 +198,8 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['imei'],
             $r['model_name'],
             ($cx = $r['channel'] ?: media_canal_do_nome((string)$r['file_name'])) ? 'CH' . (int)$cx : '—',
+            $al['nome'] ?? '—',
+            $al && !empty($al['alarm_time']) ? fmt_brt($al['alarm_time'], 'd/m/Y H:i:s') : '—',
             $r['file_name'] ?: '—',
             ($ini = filelist_ts_do_nome_utc((string)$r['file_name']) ?: $r['event_time'])
                 ? fmt_brt($ini, 'd/m/Y H:i:s') : '—',
@@ -200,11 +222,13 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 
     stream_export($export, 'downloads_video',
         ['Requisitado em', 'Cliente', 'Placa', 'IMEI', 'Modelo', 'Canal',
-         'Arquivo', 'Início do vídeo', 'Tamanho (MB)', 'Status', 'Baixado em'],
+         'Alarme', 'Hora do alarme', 'Arquivo', 'Início do vídeo',
+         'Tamanho (MB)', 'Status', 'Baixado em'],
         $expRows, 'Downloads de Vídeo', $subtitulo,
-        // Nome do arquivo é a coluna longa (`EVENT_<imei>_..._I_15.mp4`); as
-        // demais são curtas e de largura previsível.
-        [1.3, 1.2, 1.0, 1.4, 0.9, 0.5, 3.4, 0.6, 0.8, 1.1, 1.2]);
+        // Nome do arquivo é a coluna longa (`EVENT_<imei>_..._I_15.mp4`); o
+        // nome do alarme é a segunda mais larga (`ADAS: Distância Insegura`);
+        // as demais são curtas e de largura previsível.
+        [1.3, 1.2, 1.0, 1.4, 0.9, 0.5, 1.8, 1.3, 3.4, 0.6, 0.8, 1.1, 1.2]);
 }
 
 $page_title = 'Vídeo Downloads';
@@ -313,6 +337,8 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 <th class="dl-curta">Modelo</th>
                 <?php endif; ?>
                 <th class="dl-canal">Canal</th>
+                <?php /* A fila diz o QUE existe e, agora, POR QUE existe. */ ?>
+                <th class="dl-alarme">Alarme</th>
                 <?php /* 🔴 A tela dizia QUANDO foi pedido e nunca QUANDO é o
                          vídeo — que é a informação com que se procura uma
                          gravação. Sai do carimbo do NOME, que é o instante da
@@ -327,7 +353,12 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
         </thead>
         <tbody>
             <?php if (empty($files)): ?>
-            <tr><td colspan="<?= $umEquipamento ? 6 : ($mostrarCliente ? 10 : 9) ?>" style="text-align:center;padding:32px;color:var(--muted);">
+            <?php /* ⚠️ A conta acompanha o cabeçalho: Canal, Alarme, Início,
+                     Requisitado, Arquivo, Status, Download = 7 fixas; sem
+                     equipamento escolhido somam-se Placa, IMEI e Modelo, e
+                     Cliente só quando o escopo é "todos". Errar aqui não dá
+                     erro — só desalinha a linha de "nenhum arquivo". */ ?>
+            <tr><td colspan="<?= $umEquipamento ? 7 : ($mostrarCliente ? 11 : 10) ?>" style="text-align:center;padding:32px;color:var(--muted);">
                 <?= $umEquipamento ? 'Nenhum vídeo deste equipamento no storage ainda.' : 'Nenhum arquivo encontrado' ?>
                 <?php if ($umEquipamento): ?>
                 <div style="font-size:11px;margin-top:6px;">Peça um trecho em <a href="/video/playback?imei=<?= htmlspecialchars($umEquipamento['imei']) ?>">Playback</a> — ele aparece aqui quando a câmera terminar de enviar.</div>
@@ -358,6 +389,23 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     $inicio = filelist_ts_do_nome_utc((string)$f['file_name']) ?: $f['event_time'];
                 ?>
                 <td class="dl-canal"><?= $canalF ? 'CH' . (int)$canalF : '—' ?></td>
+                <?php
+                    // ⚠️ Arquivo SEM alarme não é erro: é extração manual, pedida
+                    // em /video/playback ("Subir para o storage"). Era 1 em 3.000
+                    // na medição — raro, mas legítimo, e dizer "—" seco faria o
+                    // operador procurar um defeito que não existe.
+                    $al = $alarmesDoArquivo[$f['imei'] . '|' . $f['file_name']] ?? null;
+                ?>
+                <td class="dl-alarme">
+                    <?php if ($al): ?>
+                    <div class="dl-alm-nome"><?= htmlspecialchars((string)$al['nome']) ?></div>
+                    <?php if (!empty($al['alarm_time'])): ?>
+                    <div class="dl-alm-hora text-mono"><?= fmt_brt($al['alarm_time']) ?></div>
+                    <?php endif; ?>
+                    <?php else: ?>
+                    <span class="dl-alm-sem" title="Arquivo extraído a pedido em Playback, sem alarme associado.">Extração manual</span>
+                    <?php endif; ?>
+                </td>
                 <td class="dl-data text-mono"><?= $inicio ? fmt_brt($inicio) : '—' ?></td>
                 <td class="dl-data text-mono"><?= fmt_brt($f['created_at'] ?? $f['event_time']) ?></td>
                 <?php
@@ -425,7 +473,7 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     ?>
                     <?php if ($arquivosReais): foreach ($arquivosReais as $i => $nomeArq):
                         $canalArq = media_canal_do_nome($nomeArq);
-                        $rotuloArq = ($jaBaixado ? 'Baixar de novo' : 'Baixar')
+                        $rotuloArq = ($jaBaixado ? 'Baixar novamente' : 'Baixar')
                             . ($canalArq ? ' CH' . $canalArq : (count($arquivosReais) > 1 ? ' ' . ($i + 1) : ''));
                     ?>
                     <?php /* ⚠️ `&dl=1` é o que carimba `downloaded_at`. O player
@@ -471,6 +519,12 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
    nunca texto cortado. */
 .dl-nome{min-width:280px;max-width:400px;white-space:normal;word-break:break-all;line-height:1.4;}
 .dl-curta{white-space:nowrap;}
+/* O alarme quebra por PALAVRA (`ADAS: Distância Insegura` tem espaços onde
+   quebrar, ao contrário do nome do arquivo) e cabe em duas linhas. */
+.dl-alarme{min-width:150px;max-width:210px;white-space:normal;line-height:1.35;}
+.dl-alm-nome{font-size:12.5px;color:var(--ink);}
+.dl-alm-hora{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.dl-alm-sem{font-size:11px;color:var(--muted-soft);font-style:italic;}
 .dl-canal{white-space:nowrap;width:1%;}
 .dl-data{white-space:nowrap;width:1%;font-size:12px;}
 .dl-acao{white-space:nowrap;}

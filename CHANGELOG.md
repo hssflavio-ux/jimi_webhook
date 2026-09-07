@@ -5,6 +5,37 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.17
+
+**Downloads: a fila passa a dizer POR QUE cada arquivo existe.**
+
+Observação do dono do produto: *"percebi que todos os arquivos listados nesse momento da câmera TELECOM são arquivos relativos aos alarmes, é possível adicionarmos uma coluna para identificar o alarme referente ao arquivo?"*. A observação bate com a medição — **2.999 de 3.000** arquivos dos últimos 30 dias têm alarme identificável, e o único que não tinha era uma extração manual do playback.
+
+### Added
+
+- 🔴 **Coluna "Alarme"**, com o nome do alarme e a hora dele. Arquivo sem alarme não vira `—` seco: diz **"Extração manual"**, porque é isso que ele é (pedido em Playback → "Subir para o storage"), e um traço faria o operador procurar um defeito que não existe.
+- **`media_alarmes_dos_arquivos()`** (`includes/media.php`) resolve o vínculo por **dois caminhos**, nenhum deles "nome parecido com":
+  1. **O nome CARREGA o `alarm_label`** quando a câmera é JT/T (`<imei>_<alarmLabel>_<canal>_NN.mp4`) — o mesmo rótulo que `link_upload_by_alarm_label()` usa, e `alarms.alarm_label` é indexado: um `IN()` resolve a página inteira.
+  2. **A JIMI não põe rótulo no nome** (`EVENT_<imei>_…_I_40.mp4`); lá quem guarda o vínculo é `alarms.file_url`, escrito pelo `pushalarm`. Uma consulta por **janela de tempo** traz esses alarmes e o casamento é feito em PHP, **exato**, contra os pedaços do campo.
+  - ⚠️ **O `LIKE` foi deliberadamente evitado no caminho 2**, e não por gosto: `_` é curinga do LIKE e o nome do arquivo é cheio deles (casaria um arquivo diferente do mesmo comprimento), e um LIKE por linha viraria 5.000 consultas no teto do export.
+  - O rótulo sai de `alarm_label_sql()`, o ponto único do projeto — `Código NNNN (JTT)` é re-resolvido contra o catálogo atual, senão a tela mostraria o código cru de um alarme catalogado depois.
+- **O export leva as duas colunas novas** ("Alarme" e "Hora do alarme"), pelo mesmo caminho da tela: divergência entre os dois só aparece quando alguém compara, e aí já é tarde.
+
+### Changed
+
+- **"Baixar de novo" → "Baixar novamente"**.
+
+### Verificação (produção)
+
+| | resolvidos | tempo |
+|---|---|---|
+| Página (25, todas as câmeras) | **25 de 25** | 3 ms |
+| Página do Telecom (25) | **25 de 25** | 1 ms |
+| Só os `EVENT_` da JIMI (30) | **30 de 30** | 5 ms |
+| Teto do export (5.000) | **4.198 de 4.208** | 119 ms |
+
+Nomes reais que aparecem: `ADAS: Distância Insegura (HMW)`, `Anomalia de Calibração da Câmera DMS`, `DMS: Piscadas Frequentes`, `Corte de Alimentação Externa (Periférico)`.
+
 ## [Unreleased] — 4.17.16
 
 **Downloads: o nome do arquivo aparecia pela metade — e a metade que aparecia era a que se repete.**

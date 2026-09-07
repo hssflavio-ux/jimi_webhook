@@ -1,4 +1,34 @@
-# STATUS.md — Jimi Webhook System v4.17.16 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.17 (YUV Parity)
+
+> ### 📍 v4.17.17 — Downloads: a fila diz POR QUE cada arquivo existe
+>
+> Observação do dono do produto: *"percebi que todos os arquivos listados nesse
+> momento da câmera TELECOM são arquivos relativos aos alarmes, é possível
+> adicionarmos uma coluna para identificar o alarme referente ao arquivo?"* —
+> e ela bate com a medição: **2.999 de 3.000** arquivos dos últimos 30 dias
+> têm alarme identificável.
+>
+> **🔴 São DOIS caminhos de vínculo, nenhum deles "nome parecido com".**
+> `media_alarmes_dos_arquivos()` (`includes/media.php`):
+> 1. **O nome CARREGA o `alarm_label`** na JT/T
+>    (`<imei>_<alarmLabel>_<canal>_NN.mp4`) — o mesmo rótulo de
+>    `link_upload_by_alarm_label()`, e a coluna é indexada: um `IN()` resolve a
+>    página inteira.
+> 2. **A JIMI não põe rótulo no nome** (`EVENT_…`); lá o vínculo vive em
+>    `alarms.file_url`. Uma consulta por **janela de tempo** traz os alarmes e o
+>    casamento é em PHP, **exato**, contra os pedaços do campo.
+>
+> ⚠️ **O `LIKE` foi evitado de propósito no caminho 2.** `%<nome>%` é a saída
+> óbvia e tem dois defeitos: `_` é curinga do LIKE e o nome do arquivo é cheio
+> deles (casaria arquivo diferente do mesmo comprimento), e um LIKE por linha
+> viraria 5.000 consultas no teto do export.
+>
+> ⚠️ Arquivo **sem** alarme não vira `—` seco: diz **"Extração manual"**, que é
+> o que ele é (Playback → "Subir para o storage"). Um traço faria o operador
+> procurar defeito onde não há.
+>
+> Medido em produção: página **25 de 25** em 1–3 ms, `EVENT_` da JIMI **30 de
+> 30** em 5 ms, teto do export **4.198 de 4.208** em 119 ms.
 
 > ### 📍 v4.17.16 — Downloads: o nome do arquivo aparecia pela metade
 >

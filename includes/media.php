@@ -490,3 +490,138 @@ function media_pb_reproduzivel(?string $fileUrl, ?string $fileType): bool
     }
     return (bool)preg_match('/\.(ts|mp4|flv|m4v)(\?|$)/i', (string)$fileUrl);
 }
+
+/**
+ * O ALARME a que cada arquivo se refere.
+ *
+ * A fila de downloads é, na prática, uma fila de anexos de alarme — medido em
+ * produção: **2.999 de 3.000** arquivos dos últimos 30 dias têm alarme
+ * identificável, e o único que não tinha era uma extração manual do playback
+ * (`ext20260831122209f7c617`, origem `pushftpfileupload`). Sem esta resolução a
+ * tela lista o arquivo sem dizer POR QUE ele existe.
+ *
+ * 🔴 SÃO DOIS CAMINHOS, e nenhum deles é "o nome parecido com".
+ *
+ *   1. **O nome CARREGA o `alarm_label`** quando a câmera é JT/T:
+ *      `<imei>_<alarmLabel>_<canal>_NN.mp4`. É o mesmo rótulo que
+ *      `link_upload_by_alarm_label()` usa para casar o upload com o alarme, e
+ *      `alarms.alarm_label` é indexado (`idx_alarm_label`) — um `IN()` resolve
+ *      a página inteira. Medido: 75 de 75 rótulos casaram, em 6 ms.
+ *   2. **A JIMI não põe rótulo no nome** (`EVENT_<imei>_..._I_40.mp4`) — lá
+ *      quem guarda o vínculo é `alarms.file_url`, escrito pelo próprio
+ *      `pushalarm`. Uma consulta por JANELA de tempo traz esses alarmes e o
+ *      casamento é feito em PHP, EXATO, contra os pedaços do campo.
+ *
+ * ⚠️ **O `LIKE` foi deliberadamente evitado no caminho 2.** `%<nome>%` parece
+ * a saída óbvia e tem dois defeitos: `_` é curinga do LIKE e o nome do arquivo
+ * é cheio deles (casaria um arquivo diferente do mesmo tamanho), e um LIKE por
+ * linha vira 5.000 consultas no teto do export. A janela lê os alarmes de uma
+ * vez: medido, **4.198 de 4.208 em 160 ms** no pior caso, e 25 de 25 em 37 ms
+ * numa página.
+ *
+ * ⚠️ `media_files.file_name` pode guardar os DOIS arquivos da JIMI numa string
+ * só (`a.mp4,b.mp4`) — exatamente como `alarms.file_url` os guarda. Por isso o
+ * índice recebe os pedaços **e** o campo inteiro como chave.
+ *
+ * O rótulo sai de `alarm_label_sql()`, o ponto único do projeto: nome gravado
+ * no webhook vence, mas `Código NNNN (JTT)` é re-resolvido contra o catálogo
+ * atual — senão a tela mostraria o código cru de um alarme catalogado depois.
+ *
+ * @param PDO   $db
+ * @param array $arquivos Linhas com `imei`, `file_name` e (opcional) `event_time`/`created_at`
+ * @returns array Mapa `"<imei>|<file_name>" => ['nome','alarm_time','id']`
+ */
+function media_alarmes_dos_arquivos(PDO $db, array $arquivos): array
+{
+    $achados = [];
+    if (!$arquivos) {
+        return $achados;
+    }
+    ['joins' => $joins, 'expr' => $expr] = alarm_label_sql();
+
+    // ── 1) O rótulo que o próprio nome carrega (JT/T) ───────────────────────
+    $labels = [];
+    $labelDoArquivo = [];
+    foreach ($arquivos as $r) {
+        $imei = (string)($r['imei'] ?? '');
+        $nome = (string)($r['file_name'] ?? '');
+        if ($imei === '' || $nome === '') continue;
+        $p = explode('_', $nome);
+        if (count($p) >= 3 && $p[0] === $imei && $p[1] !== '') {
+            $labels[$p[1]] = true;
+            $labelDoArquivo[$imei . '|' . $nome] = $p[1];
+        }
+    }
+    $porLabel = [];
+    // Lotes de 800: um `IN()` sem teto vira consulta de megabytes no export.
+    foreach (array_chunk(array_keys($labels), 800) as $lote) {
+        $ph = implode(',', array_fill(0, count($lote), '?'));
+        $st = $db->prepare("
+            SELECT a.id, a.imei, a.alarm_label, a.alarm_time, {$expr} AS nome
+              FROM alarms a {$joins}
+             WHERE a.alarm_label IN ($ph)");
+        $st->execute($lote);
+        foreach ($st as $a) {
+            $porLabel[$a['imei'] . '|' . $a['alarm_label']] = $a;
+        }
+    }
+
+    // ── 2) O que sobrou: vínculo por `alarms.file_url`, em UMA consulta ─────
+    $faltam = [];
+    $imeis = [];
+    $tmin = null;
+    $tmax = null;
+    foreach ($arquivos as $r) {
+        $imei = (string)($r['imei'] ?? '');
+        $nome = (string)($r['file_name'] ?? '');
+        if ($imei === '' || $nome === '') continue;
+        $chave = $imei . '|' . $nome;
+        $lb = $labelDoArquivo[$chave] ?? null;
+        if ($lb !== null && isset($porLabel[$imei . '|' . $lb])) {
+            $achados[$chave] = $porLabel[$imei . '|' . $lb];
+            continue;
+        }
+        $faltam[] = $r;
+        $imeis[$imei] = true;
+        $t = strtotime(((string)($r['event_time'] ?? $r['created_at'] ?? '')) . ' UTC');
+        if ($t) {
+            $tmin = $tmin === null ? $t : min($tmin, $t);
+            $tmax = $tmax === null ? $t : max($tmax, $t);
+        }
+    }
+    if (!$faltam || !$imeis || $tmin === null) {
+        return $achados;
+    }
+
+    // Folga de 2 dias porque `event_time` de um bloco extraído é a hora em que
+    // o UPLOAD terminou, não a do alarme — a mesma folga que a tela de playback
+    // usa pela mesma razão.
+    $ip = implode(',', array_fill(0, count($imeis), '?'));
+    $st = $db->prepare("
+        SELECT a.id, a.imei, a.file_url, a.alarm_time, {$expr} AS nome
+          FROM alarms a {$joins}
+         WHERE a.imei IN ($ip)
+           AND a.file_url IS NOT NULL AND a.file_url <> ''
+           AND a.alarm_time BETWEEN ? AND ?");
+    $st->execute(array_merge(array_keys($imeis), [
+        gmdate('Y-m-d H:i:s', $tmin - 2 * 86400),
+        gmdate('Y-m-d H:i:s', $tmax + 2 * 86400),
+    ]));
+    $porNome = [];
+    foreach ($st as $a) {
+        $inteiro = trim((string)$a['file_url']);
+        if ($inteiro !== '') {
+            $porNome[$a['imei'] . '|' . $inteiro] = $a;   // o par junto, como a JIMI o anuncia
+        }
+        foreach (media_file_list($a['file_url']) as $pedaco) {
+            $porNome[$a['imei'] . '|' . $pedaco] = $a;
+        }
+    }
+    foreach ($faltam as $r) {
+        $chave = (string)$r['imei'] . '|' . (string)$r['file_name'];
+        if (isset($porNome[$chave])) {
+            $achados[$chave] = $porNome[$chave];
+        }
+    }
+    return $achados;
+}
