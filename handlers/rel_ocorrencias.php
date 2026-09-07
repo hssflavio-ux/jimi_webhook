@@ -138,13 +138,23 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $statusLabels = ['aguardando'=>'Aguardando','em_tratativa'=>'Em Tratativa','resolvida'=>'Resolvida','descartada'=>'Descartada'];
     $expRows = [];
     try {
+        // ⚠️ A coluna FILIAL saiu do export na v4.17.20 (decisão do dono do
+        // produto: *"não estamos usando esse cadastro no sistema no momento"*).
+        // O `LEFT JOIN branches` saiu junto — era o único motivo dele existir
+        // aqui. O FILTRO por filial continua no formulário e continua
+        // funcionando: ele lê `o.branch_id` direto, sem depender deste JOIN.
+        //
+        // 🔴 A coluna nunca existiu na TELA — só no arquivo. Era a mesma
+        // divergência tela↔export que a v4.17.19 acabou de fechar em
+        // /video/downloads: quem conferia um contra o outro achava uma coluna
+        // a mais no PDF. Agora as duas listas têm a mesma sequência (o export
+        // não tem só a coluna "Ação", que é botão).
         $expStmt = $db->prepare("
-            SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name,
+            SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name,
                    COALESCE(dv.device_name, o.imei) AS device_label
             FROM occurrences o
             LEFT JOIN customers c ON c.id = o.customer_id
             LEFT JOIN drivers dr ON dr.id = o.driver_id
-            LEFT JOIN branches b ON b.id = o.branch_id
             LEFT JOIN devices dv ON dv.imei = o.imei
             $where
             ORDER BY $orderBy
@@ -153,7 +163,6 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         while ($r = $expStmt->fetch()) {
             $expRows[] = [
                 $r['customer_name'],
-                $r['branch_name'] ?? '—',
                 $r['device_label'],
                 $r['driver_name'],
                 $r['alarm_type'],
@@ -166,7 +175,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         }
     } catch (Exception $e) { /* tabela v4 ausente → export vazio */ }
     stream_export($export, 'relatorio_ocorrencias',
-        ['Cliente', 'Filial', 'Placa', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
+        ['Cliente', 'Placa', 'Motorista', 'Alarme', 'Último Alarme em', 'Qtd. Alarmes', 'Risco', 'Falso Positivo', 'Situação'],
         $expRows, 'Relatório de Ocorrências', report_period_label($dateFrom, $dateTo));
 }
 
@@ -179,13 +188,16 @@ try {
     $offset = ($page - 1) * $perPage;
 
     // Data
+    // ⚠️ `branch_name` era selecionado aqui e NUNCA desenhado — a grade não tem
+    // coluna Filial desde sempre. Saiu na v4.17.20 junto com o JOIN, para que a
+    // consulta da tela e a do export continuem simétricas: elas divergirem em
+    // silêncio é como a coluna a mais no PDF sobreviveu.
     $dataStmt = $db->prepare("
-        SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name, b.name as branch_name,
+        SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name,
                COALESCE(dv.device_name, o.imei) AS device_label
         FROM occurrences o
         LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN drivers dr ON dr.id = o.driver_id
-        LEFT JOIN branches b ON b.id = o.branch_id
         LEFT JOIN devices dv ON dv.imei = o.imei
         $where
         ORDER BY $orderBy

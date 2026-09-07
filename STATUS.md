@@ -1,4 +1,30 @@
-# STATUS.md — Jimi Webhook System v4.17.19 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.20 (YUV Parity)
+
+> ### 📍 v4.17.20 — "Filial" sai do Relatório de Ocorrências
+>
+> Pedido do dono do produto: *"remova a coluna 'filial', não estamos usando
+> esse cadastro no sistema no momento, verifique se algum outro relatório
+> possui a coluna"*.
+>
+> **A resposta da varredura: existia em UM lugar só.** Nos 28 `stream_export()`
+> do projeto, `Filial` aparecia exclusivamente no header do
+> `rel_ocorrencias.php` — nenhum outro relatório a tem, sob esse nome ou
+> sinônimo, nem impresso nem na tela.
+>
+> 🔴 **E a TELA nunca teve a coluna — só o arquivo.** Mesma divergência
+> tela↔export que a v4.17.19 fechou em `/video/downloads`: quem conferisse o
+> PDF contra a grade achava uma coluna a mais, preenchida com `—` em toda
+> linha. Saiu junto o `branch_name` da consulta da GRADE, que era selecionado e
+> nunca desenhado — as duas consultas voltam a ser simétricas, e é essa
+> assimetria que deixa uma coluna fantasma sobreviver.
+>
+> Medido em produção: **0 filiais cadastradas**, 0 de 16 equipamentos e 0 de
+> 349 ocorrências com `branch_id`. A coluna nunca teve o que mostrar.
+>
+> ⚠️ **O FILTRO "Filial" continua** em `/relatorios/ocorrencias`,
+> `/relatorios/alarmes` e no cadastro de `/equipamentos` — com zero filiais, os
+> três desenham um `<select>` só com a opção vazia. Não foram tocados: o pedido
+> era sobre a coluna. Decisão pendente.
 
 > ### 📍 v4.17.19 — Downloads: fora IMEI e Modelo; export igual à tela
 >

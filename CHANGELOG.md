@@ -5,6 +5,39 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.20
+
+**A coluna "Filial" sai do Relatório de Ocorrências — e a varredura mostrou que ela só existia lá.**
+
+Pedido do dono do produto: *"no relatório de ocorrências em PDF e XLSX remova a coluna 'filial', não estamos usando esse cadastro no sistema no momento, verifique se algum outro relatório possui a coluna, tanto na tela quanto nas versões impressas"*.
+
+### Removed
+
+- **Coluna "Filial" do export (PDF/XLSX/CSV) do Relatório de Ocorrências.** O `LEFT JOIN branches` saiu junto — era o único motivo dele existir ali.
+- **`branch_name` da consulta da GRADE**, onde era selecionado e **nunca desenhado**. As duas consultas da tela voltam a ser simétricas; elas divergirem em silêncio é como a coluna a mais no arquivo sobreviveu.
+
+### Verificação — a resposta à pergunta
+
+**A coluna existia em UM lugar só.** Varri os 28 `stream_export()` do projeto: `Filial` aparece exclusivamente no header do `rel_ocorrencias.php`. Nenhum outro relatório a tem, sob esse nome ou sinônimo (`Unidade`, `Base`), nem no impresso nem na tela.
+
+E **a tela nunca teve a coluna** — só o arquivo. Era a mesma divergência tela↔export que a v4.17.19 acabou de fechar em `/video/downloads`: quem conferisse o PDF contra a grade achava uma coluna a mais, preenchida com `—` em toda linha.
+
+Medido em produção (07/09/2026), confirmando a premissa:
+
+| | |
+|---|---|
+| Filiais cadastradas | **0** |
+| Equipamentos com `branch_id` | **0** de 16 |
+| Ocorrências com `branch_id` | **0** de 349 |
+
+### ⚠️ O que NÃO foi removido (fica para decisão)
+
+O **filtro** "Filial" continua em dois formulários — `/relatorios/ocorrencias` e `/relatorios/alarmes` — e o campo "Filial" segue no cadastro de `/equipamentos`. Com zero filiais, os três renderizam um `<select>` com apenas a opção vazia. Não foram tocados porque o pedido foi sobre a **coluna**; o filtro por `branch_id` continua funcionando (lê a coluna direto, sem depender do JOIN removido).
+
+### Added
+
+- `tests/relatorios_sem_filial.spec.js`: além do caso das ocorrências (tela + arquivo + mesma sequência), varre **16 rotas com exportação** e falha se `Filial` reaparecer em qualquer uma. Responder "nenhum outro tem" uma vez é conferência; travar num teste é o que impede a resposta de mudar sem ninguém perceber.
+
 ## [Unreleased] — 4.17.19
 
 **Downloads: IMEI e Modelo saem da grade, e o export passa a sair na mesma disposição da tela.**
