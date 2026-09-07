@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.15
+
+**Foto sai da tela de playback.** Decisão do dono do produto, logo após a v4.17.14 subir: *"não vamos exibir fotos no sistema nesse momento, não trate nenhuma ação para esses arquivos"*.
+
+### Changed
+
+- 🔴 **A tela de playback passa a tratar só VÍDEO, e o corte é na ORIGEM.** `media_pb_reproduzivel()` (`includes/media.php`) filtra a montagem de `$pbArquivos` em `handlers/video_playback.php` — não em cada ponto de uso. Aquela lista alimenta **cinco** consumidores (o verde da barra, o selo da lista, a dica do mouse, o popover de ações e o player), e barrar a foto em cada um deixaria a ação existindo no que fosse esquecido. Com o corte na origem, a foto não pinta bloco de verde, não ganha selo, não é clicável e não abre no player.
+  - A regra olha o **tipo e a extensão**, nessa ordem: `file_type` é preenchido por `detect_media_type()` na chegada do webhook e nem toda origem histórica o gravou, então o nome é a segunda opinião. A recíproca **não** vale — extensão desconhecida com tipo vazio não vira vídeo por omissão, senão o corte teria o defeito ao contrário (vídeo antigo com a coluna vazia sumindo da tela).
+  - Sai junto o ramo de exibição de imagem que a v4.17.14 tinha adicionado em `selectRecording()`, e os rótulos "Foto do evento" da fonte, da dica e do popover.
+- **O desempate entre arquivos do mesmo bloco deixa de ser por tipo e passa a ser só por instante — ganha o MAIS ANTIGO**, o começo do trecho. Com a foto fora, o critério de "tocável primeiro" perdeu o objeto; o que permanece é a razão original, que 34 dos 38 blocos verdes tinham mais de um arquivo dentro (até 16) e "o primeiro da lista" fazia o resultado depender da ordem em que o banco devolveu.
+
+### Added
+
+- `tests/helpers/media.test.php` ganhou 10 checagens de `media_pb_reproduzivel()`, incluindo os dois lados do caso `file_type` vazio. `tests/video_playback_reproducao.spec.js` troca os testes de foto por um que verifica o **outro lado** do corte: que a lista entregue ao navegador não traz imagem — com `test.skip` explícito quando não há arquivo no período, para que vazio não conte como cobertura.
+
 ## [Unreleased] — 4.17.14
 
 **Vídeo: um player por canal no Ao Vivo, e o Playback que pintava de verde e recusava tocar.**

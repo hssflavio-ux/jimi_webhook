@@ -1,4 +1,24 @@
-# STATUS.md — Jimi Webhook System v4.17.14 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.15 (YUV Parity)
+
+> ### 📍 v4.17.15 — foto sai da tela de playback
+>
+> Decisão do dono do produto, logo depois de a v4.17.14 subir: *"não vamos
+> exibir fotos no sistema nesse momento, não trate nenhuma ação para esses
+> arquivos"*.
+>
+> **O corte é na ORIGEM, não em cada tela.** `media_pb_reproduzivel()`
+> (`includes/media.php`) filtra a montagem de `$pbArquivos`; aquela lista
+> alimenta **cinco** consumidores — verde da barra, selo da lista, dica do
+> mouse, popover de ações e player — e barrar a foto em cada um deixaria a
+> ação viva no que fosse esquecido. A regra olha **tipo e extensão**, nessa
+> ordem, e a recíproca não vale: extensão desconhecida com `file_type` vazio
+> não vira vídeo por omissão, senão o corte teria o defeito ao contrário
+> (vídeo antigo de coluna vazia sumindo da tela).
+>
+> Com a foto fora, o desempate entre arquivos do mesmo bloco deixa de olhar o
+> tipo e passa a ser só por instante — ganha o **mais antigo**, o começo do
+> trecho. A razão original permanece: 34 dos 38 blocos verdes tinham mais de um
+> arquivo dentro (até 16).
 
 > ### 📍 v4.17.14 — Ao Vivo com um player por canal; o Playback que pintava de verde e recusava tocar
 >
@@ -21,9 +41,9 @@
 > `event_time DESC`, e **34 dos 38 blocos tinham mais de um arquivo dentro
 > (até 16)** — cada alarme sobe `.mp4` **e** `.jpg` com segundos de diferença.
 > Em **4 dos 38** quem ganhava era o `.jpg`, e o player exibia o NOME do
-> arquivo como texto. O desempate virou explícito (tocável primeiro, depois o
-> mais antigo) e a foto, quando é só o que existe, passa a ser exibida como
-> foto.
+> arquivo como texto. ⚠️ A correção desta versão foi um desempate por tipo
+> (tocável primeiro) mais a exibição da foto — **substituídos na v4.17.15**,
+> que tira a foto da tela inteira, na origem.
 >
 > **Ao Vivo: um player POR CANAL, simultâneos.** A regra do mosaico sai da
 > medição de 18/08/2026: como `RTMP,ON,INOUT` registra `live/0` e `live/1` de

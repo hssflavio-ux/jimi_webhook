@@ -146,6 +146,40 @@ checa('canal do nome: _F_ e frontal', 1, media_canal_do_nome('EVENT_x_2026_08_19
 checa('canal do nome: _I_ e interna', 2, media_canal_do_nome('EVENT_x_2026_08_19_12_43_45_I_02.ts'));
 checa('nome sem canal declarado', null, media_canal_do_nome('2026_08_19_12_43_45_01.ts'));
 
+// ── media_pb_reproduzivel(): a tela de playback só trata VÍDEO ──────────────
+//
+// 🔴 Decisão do dono do produto (07/09/2026): *"não vamos exibir fotos no
+// sistema nesse momento, não trate nenhuma ação para esses arquivos"*. O corte
+// é feito na MONTAGEM de `$pbArquivos` (handlers/video_playback.php), e não em
+// cada ponto de uso: aquela lista alimenta o verde da barra, o selo da lista,
+// a dica do mouse, o popover de ações e o player — cinco lugares onde a foto
+// teria de ser barrada de novo, e um esquecido devolve a ação que não deve
+// existir. Medido na JC371 865478070654829: cada alarme sobe .mp4 E .jpg com
+// instantes a segundos de distância, e em 4 dos 38 blocos verdes a foto
+// ganhava a disputa pelo bloco.
+echo "\n── só vídeo entra na tela de playback\n";
+checa('mp4 do alarme é vídeo', true,
+      media_pb_reproduzivel('865478070654829_3036353438323926_1_00.mp4', 'video'));
+checa('ts do cartão é vídeo', true,
+      media_pb_reproduzivel('2026_09_06_11_25_52_01.ts', 'video'));
+checa('🔴 jpg do alarme NÃO entra', false,
+      media_pb_reproduzivel('865478070654829_3036353438323926_2_00.jpg', 'image'));
+checa('png não entra', false, media_pb_reproduzivel('foto.png', 'image'));
+// ⚠️ `file_type` é preenchido por detect_media_type() na chegada do webhook e
+// nem toda origem histórica o gravou — sem a segunda opinião do NOME, vídeo
+// antigo com a coluna vazia sumiria da tela, que é o defeito ao contrário.
+checa('mp4 com file_type vazio ainda é vídeo (coluna histórica)', true,
+      media_pb_reproduzivel('anexo.mp4', ''));
+checa('ts com file_type NULL ainda é vídeo', true,
+      media_pb_reproduzivel('anexo.ts', null));
+// ...e a recíproca NÃO vale: extensão desconhecida não vira vídeo por omissão.
+checa('extensão desconhecida com tipo vazio não passa', false,
+      media_pb_reproduzivel('anexo.bin', ''));
+checa('jpg com file_type vazio continua fora', false,
+      media_pb_reproduzivel('anexo.jpg', ''));
+checa('arquivo ausente não passa', false, media_pb_reproduzivel('', ''));
+checa('null não passa', false, media_pb_reproduzivel(null, null));
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

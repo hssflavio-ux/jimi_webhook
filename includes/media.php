@@ -463,3 +463,30 @@ function media_register_file(PDO $db, string $imei, string $fileUrl, ?string $ev
         return null;
     }
 }
+
+/**
+ * O arquivo é REPRODUZÍVEL no player da tela de playback?
+ *
+ * 🔴 Foto NÃO entra na tela de playback (decisão do dono do produto,
+ * 07/09/2026: *"não vamos exibir fotos no sistema nesse momento, não trate
+ * nenhuma ação para esses arquivos"*). Cada alarme sobe `.mp4` **e** `.jpg`
+ * com instantes a segundos de distância — sem este corte a foto disputa o
+ * bloco com o vídeo, pinta o trecho de verde e ganha uma ação que não deve
+ * existir.
+ *
+ * A regra olha o TIPO e a EXTENSÃO: `file_type` é preenchido por
+ * `detect_media_type()` na chegada do webhook e nem toda origem histórica o
+ * gravou, então o nome é a segunda opinião — nunca a única, porque um
+ * firmware que mande extensão desconhecida não pode virar "vídeo" por omissão.
+ *
+ * @param string|null $fileUrl  Nome do arquivo (já escolhido por media_pick())
+ * @param string|null $fileType Valor de `media_files.file_type`
+ * @returns bool true quando o arquivo é vídeo tocável na página
+ */
+function media_pb_reproduzivel(?string $fileUrl, ?string $fileType): bool
+{
+    if ((string)$fileType === 'video') {
+        return true;
+    }
+    return (bool)preg_match('/\.(ts|mp4|flv|m4v)(\?|$)/i', (string)$fileUrl);
+}

@@ -236,6 +236,15 @@ if ($requested && $selImei) {
         // fato está no disco, convenção já usada em ativo_detalhe.php e
         // rel_alarmes.php.
         $arquivoReal = media_pick($m['file_url']);
+        // 🔴 SÓ VÍDEO ENTRA NESTA TELA (decisão do dono do produto, 07/09/2026:
+        // *"não vamos exibir fotos no sistema nesse momento, não trate nenhuma
+        // ação para esses arquivos"*). O filtro fica AQUI, na origem, e não em
+        // cada ponto de uso: `$pbArquivos` alimenta o verde da barra, o selo da
+        // lista, a dica do mouse, o popover de ações e o player — cinco lugares
+        // onde a foto teria de ser barrada de novo, e um esquecido devolve a
+        // ação que não deve existir. Cada alarme sobe `.mp4` E `.jpg`; sem este
+        // filtro a foto disputava o bloco com o vídeo.
+        if (!media_pb_reproduzivel($arquivoReal, (string)$m['file_type'])) continue;
         $pbArquivos[] = [
             't'   => $t,
             'c'   => (int)($m['channel'] ?: 0),
@@ -594,11 +603,6 @@ function pbSessoes(blocos, gap) {
     return saida;
 }
 
-/** O arquivo dá para TOCAR no player, ou é foto/miniatura do evento? */
-function pbTocavel(a) {
-    return a && (a.tp === 'video' || /\.(ts|mp4|flv|m4v)(\?|$)/i.test(a.n || ''));
-}
-
 /**
  * Arquivo já no servidor cujo instante cai DENTRO deste bloco.
  *
@@ -612,26 +616,25 @@ function pbTocavel(a) {
  * câmera. Por isso `dur` é parâmetro obrigatório na prática, e todo chamador
  * passa o `b[1]` que usou para desenhar.
  *
- * 🔴 VÍDEO GANHA DE FOTO. Um alarme sobe .mp4 E .jpg com instantes a segundos
- * de distância, e 34 dos 38 blocos tinham MAIS DE UM arquivo dentro (até 16).
- * Devolver "o primeiro da lista" entregava a miniatura em 4 dos 38 — bloco
- * verde, clique, e o player exibindo o NOME de um jpg. O desempate é
- * explícito: tocável primeiro, e entre iguais o mais antigo (o começo do
- * trecho), para que o resultado não dependa da ordem em que o banco devolveu.
+ * ⚠️ `PB.arquivos` só traz VÍDEO — a foto do alarme é filtrada no PHP, na
+ * montagem (`media_pb_reproduzivel()`). Não repor aqui um desempate por tipo:
+ * se uma foto voltar a aparecer nesta lista, o lugar de barrá-la é lá, senão
+ * ela reaparece nos outros quatro consumidores (verde da barra, selo da lista,
+ * dica do mouse, popover de ações).
+ *
+ * 🔴 Entre candidatos, ganha o MAIS ANTIGO — o começo do trecho. 34 dos 38
+ * blocos verdes tinham mais de um arquivo dentro (até 16), e "o primeiro da
+ * lista" fazia o resultado depender da ordem em que o banco devolveu.
  */
 function pbArquivoDoBloco(t, dur, canal) {
-    var cand = [];
+    var achado = null;
     for (var i = 0; i < PB.arquivos.length; i++) {
         var a = PB.arquivos[i];
         if (a.c && canal && a.c !== canal) continue;
-        if (a.t >= t && a.t < t + dur) cand.push(a);
+        if (a.t < t || a.t >= t + dur) continue;
+        if (!achado || a.t < achado.t) achado = a;
     }
-    if (!cand.length) return null;
-    cand.sort(function (x, y) {
-        var vx = pbTocavel(x) ? 0 : 1, vy = pbTocavel(y) ? 0 : 1;
-        return vx !== vy ? vx - vy : x.t - y.t;
-    });
-    return cand[0];
+    return achado;
 }
 
 // ── Desenho ─────────────────────────────────────────────────────────────────
@@ -817,7 +820,7 @@ function pbListar() {
         // maioria dos blocos verdes da JT/T recusava tocar.
         html.push('<div class="timeline-item' + (arq ? ' clicavel' : '')
             + '" data-ts="' + b[0] + '" data-c="' + b[2] + '"'
-            + ' title="' + (arq ? (pbTocavel(arq) ? 'Clique para reproduzir · ' : 'Foto do evento · ') + arq.n
+            + ' title="' + (arq ? 'Clique para reproduzir · ' + arq.n
                                 : 'Gravação na câmera · CH' + b[2]) + '"'
             + (arq ? ' onclick="pbTocar(' + b[0] + ',' + b[2] + ',' + b[1] + ')"' : '') + '>'
             + '<span class="timeline-dot' + (arq ? '' : ' on-device') + '"></span>'
@@ -847,8 +850,7 @@ function pbDica(ev, alvo) {
     d.innerHTML = '<b>' + pbHora(t) + ' — ' + pbHora(t + dur) + '</b> · ' + pbDur(dur)
         + '<i>' + pbDataCurta(t) + ' · CH' + c
         + (n ? ' · ' + n + ' bloco' + (n === '1' ? '' : 's') + ' — clique para aproximar'
-             : (arq ? (pbTocavel(arq) ? ' · upload efetuado — clique para reproduzir'
-                                      : ' · foto do evento — clique para ver')
+             : (arq ? ' · upload efetuado — clique para reproduzir'
                     : ' — clique para escolher a ação')) + '</i>';
     var r = barra.getBoundingClientRect();
     d.style.left = Math.min(r.width - 230, Math.max(4, ev.clientX - r.left + 12)) + 'px';
@@ -872,7 +874,7 @@ function pbAbrirAcoes(t, dur, canal, ancoraEl) {
         + '<div class="q">' + pbHora(t) + ' — ' + pbHora(t + dur) + ' · ' + pbDur(dur) + '</div>'
         + (arq
             ? '<button class="btn btn-primary btn-sm" onclick="pbTocar(' + t + ',' + canal + ',' + dur + ');pbFecharAcoes()">'
-              + (pbTocavel(arq) ? '&#9654; Reproduzir (upload efetuado)' : '&#128247; Ver a foto do evento') + '</button>'
+              + '&#9654; Reproduzir (upload efetuado)</button>'
             : '<button class="btn btn-primary btn-sm" onclick="pbVerNaCamera(' + t + ',' + dur + ',' + canal + ')">&#9654; Ver na câmera <small style="opacity:.75">(não baixa)</small></button>'
               + '<button class="btn btn-outline btn-sm" onclick="pbSubirStorage(' + t + ',' + dur + ',' + canal + ',this)">&#8681; Subir para o storage</button>')
         + '<div style="font-size:10px;color:var(--muted);margin-top:7px;line-height:1.45;">'
@@ -905,8 +907,7 @@ function pbTocar(t, canal, dur) {
     if (!arq) { alert('Este trecho ainda não está no servidor.'); return; }
     selectRecording(null, { file_url: arq.u, file_name: arq.n, file_type: arq.tp });
     var f = document.getElementById('pb-fonte');
-    if (f) f.textContent = (pbTocavel(arq) ? 'Arquivo do servidor · ' : 'Foto do evento · ')
-                         + pbDataCurta(t) + ' ' + pbHora(t) + ' · CH' + canal;
+    if (f) f.textContent = 'Arquivo do servidor · ' + pbDataCurta(t) + ' ' + pbHora(t) + ' · CH' + canal;
 }
 
 // ── Despacho ao equipamento ─────────────────────────────────────────────────
@@ -1188,20 +1189,10 @@ function selectRecording(el, rec) {
         v.style.display = 'block';
         v.src = url;
         v.play().catch(function () {});
-    } else if (rec.file_type === 'image' || /\.(jpe?g|png|webp)(\?|$)/i.test(rec.file_url || '')) {
-        // 🔴 FOTO É CONTEÚDO, não erro. O alarme sobe .mp4 E .jpg, e um bloco em
-        // que só a foto chegou caía aqui mostrando o NOME do arquivo — o
-        // operador clicava num item verde e via texto. Ver a foto responde a
-        // mesma pergunta ("o que aconteceu neste minuto?"), então ela é exibida.
-        ph.innerHTML = '';
-        var img = document.createElement('img');
-        img.src = url;
-        img.alt = rec.file_name || 'Foto do evento';
-        img.style.cssText = 'max-width:100%;max-height:460px;display:block;margin:0 auto;object-fit:contain;';
-        ph.appendChild(img);
-        ph.style.display = '';
-        v.style.display = 'none';
     } else {
+        // ⚠️ NÃO exibir foto aqui (decisão do dono do produto, 07/09/2026). A
+        // tela só trata vídeo, e `media_pb_reproduzivel()` já barra o resto na
+        // montagem — este ramo é o resto do resto, e só diz o nome.
         ph.textContent = rec.file_name || 'Arquivo';
         ph.style.cssText = 'text-align:center;color:var(--muted-soft);';
         ph.style.display = '';

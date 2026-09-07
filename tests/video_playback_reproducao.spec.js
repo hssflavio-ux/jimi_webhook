@@ -15,14 +15,20 @@
  *
  * 🔴 O SEGUNDO DEFEITO, da mesma família: `pbArquivoDoBloco()` devolvia o
  * primeiro casamento de uma lista ordenada por `event_time DESC`, e 34 dos 38
- * blocos verdes tinham MAIS DE UM arquivo dentro (até 16) — cada alarme sobe
- * `.mp4` **e** `.jpg` com segundos de diferença. Em 4 dos 38 quem ganhava era
- * o `.jpg`, e o player exibia o NOME do arquivo como texto.
+ * blocos verdes tinham MAIS DE UM arquivo dentro (até 16) — o resultado
+ * dependia da ordem em que o banco devolveu. Agora ganha o mais ANTIGO, que é
+ * o começo do trecho.
+ *
+ * ⚠️ FOTO NÃO ENTRA nesta tela (decisão do dono do produto, 07/09/2026), e o
+ * corte é no PHP — `media_pb_reproduzivel()`, travada em
+ * `tests/helpers/media.test.php`. Aqui se verifica o outro lado: que a lista
+ * entregue ao navegador NÃO traz imagem, o que é a asserção que pega o corte
+ * tendo sido desfeito na origem.
  *
  * A verificação é sobre a FUNÇÃO, com dado injetado, e não sobre uma câmera:
  * o que quebrou foi a regra de casamento, e ela é determinística. O dado
  * injetado reproduz a forma medida em produção — bloco de 300 s, arquivo aos
- * +250 s, `.mp4` e `.jpg` a segundos de distância.
+ * +250 s.
  */
 const { test, expect, hasCreds } = require('./fixtures/auth');
 
@@ -47,7 +53,7 @@ async function semear(page, arquivos) {
 }
 
 const VIDEO = { t: T + DENTRO, c: 1, u: 'bloco.mp4', n: 'bloco.mp4', mb: 8.2, st: '', dl: 0, tp: 'video' };
-const FOTO  = { t: T + DENTRO + 2, c: 1, u: 'bloco.jpg', n: 'bloco.jpg', mb: 0.2, st: '', dl: 0, tp: 'image' };
+const OUTRO = { t: T + DENTRO + 30, c: 1, u: 'tarde.mp4', n: 'tarde.mp4', mb: 6.0, st: '', dl: 0, tp: 'video' };
 
 test.describe('Playback — bloco verde tem de reproduzir', () => {
     test.beforeEach(async ({ authedPage }) => {
@@ -90,42 +96,39 @@ test.describe('Playback — bloco verde tem de reproduzir', () => {
         await expect(authedPage.locator('#pb-fonte')).toContainText(/Arquivo do servidor/i);
     });
 
-    test('🔴 vídeo ganha de foto quando os dois caem no mesmo bloco', async ({ authedPage }) => {
-        // O alarme sobe .mp4 E .jpg com segundos de diferença, e a lista chega
-        // em `event_time DESC` — devolver "o primeiro" entregava a miniatura.
-        await semear(authedPage, [FOTO, VIDEO]);
-        const escolhido = await authedPage.evaluate(([t, dur]) =>
+    test('🔴 com vários arquivos no bloco, ganha o MAIS ANTIGO — nas duas ordens de entrada', async ({ authedPage }) => {
+        // 34 dos 38 blocos verdes tinham mais de um arquivo dentro (até 16).
+        // "O primeiro da lista" fazia o resultado depender da ordem em que o
+        // banco devolveu, então a mesma tela mostrava coisas diferentes.
+        await semear(authedPage, [OUTRO, VIDEO]);
+        const a = await authedPage.evaluate(([t, dur]) =>
             // @ts-ignore
             pbArquivoDoBloco(t, dur, 1).n, [T, DUR_JTT]);
-        expect(escolhido, 'o player recebe o vídeo, não a miniatura').toBe('bloco.mp4');
-
-        // E a ordem inversa na entrada não muda o resultado: o desempate é
-        // explícito, não um efeito da ordem em que o banco devolveu.
-        await semear(authedPage, [VIDEO, FOTO]);
-        const denovo = await authedPage.evaluate(([t, dur]) =>
+        await semear(authedPage, [VIDEO, OUTRO]);
+        const b = await authedPage.evaluate(([t, dur]) =>
             // @ts-ignore
             pbArquivoDoBloco(t, dur, 1).n, [T, DUR_JTT]);
-        expect(denovo).toBe('bloco.mp4');
+        expect(a, 'o começo do trecho é o que o operador pediu').toBe('bloco.mp4');
+        expect(b, 'a ordem de entrada não pode mudar o resultado').toBe('bloco.mp4');
     });
 
-    test('bloco em que só a FOTO chegou exibe a foto, não o nome do arquivo', async ({ authedPage }) => {
-        await semear(authedPage, [FOTO]);
-        /** @type {string[]} */
-        const alertas = [];
-        authedPage.on('dialog', async (d) => { alertas.push(d.message()); await d.dismiss(); });
-
-        await authedPage.evaluate(([t, dur]) => {
+    test('🔴 a tela NÃO recebe foto do servidor — o corte é na origem', async ({ authedPage }) => {
+        // Foto não é exibida e não tem ação (decisão do dono do produto,
+        // 07/09/2026). O filtro vive em `media_pb_reproduzivel()`, no PHP, e é
+        // lá que ele é verificado em detalhe (tests/helpers/media.test.php).
+        // Esta asserção é o outro lado: se o corte for desfeito na montagem de
+        // `$pbArquivos`, a imagem reaparece aqui — e nos cinco consumidores.
+        //
+        // ⚠️ Vazio NÃO é aprovação: sem arquivo nenhum a asserção passaria por
+        // vacuidade, então o caso é anunciado em vez de contado como cobertura.
+        await authedPage.goto('/video/playback?imei=' + (process.env.TEST_IMEI || '')
+            + '&date_from=2020-03-01&date_to=2020-03-01&request=1');
+        const arquivos = await authedPage.evaluate(() =>
             // @ts-ignore
-            pbTocar(t, 1, dur);
-        }, [T, DUR_JTT]);
-
-        expect(alertas).toEqual([]);
-        // A foto responde a mesma pergunta ("o que aconteceu neste minuto?").
-        // Antes, o operador clicava num item verde e via texto.
-        await expect(authedPage.locator('#vid-placeholder img')).toHaveCount(1);
-        expect(await authedPage.locator('#vid-placeholder img').getAttribute('src'))
-            .toContain('bloco.jpg');
-        await expect(authedPage.locator('#pb-fonte')).toContainText(/Foto do evento/i);
+            (typeof PB === 'undefined' ? [] : PB.arquivos).map((a) => ({ n: a.n, tp: a.tp })));
+        test.skip(!arquivos.length, 'nenhum arquivo no período — nada a verificar');
+        const imagens = arquivos.filter((a) => a.tp === 'image' || /\.(jpe?g|png|webp)$/i.test(a.n || ''));
+        expect(imagens, 'nenhuma imagem pode chegar à tela de playback').toEqual([]);
     });
 
     test('canal errado continua não casando', async ({ authedPage }) => {
