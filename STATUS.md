@@ -19,6 +19,16 @@
 > tipo e passa a ser só por instante — ganha o **mais antigo**, o começo do
 > trecho. A razão original permanece: 34 dos 38 blocos verdes tinham mais de um
 > arquivo dentro (até 16).
+>
+> 🔴 **O filtro virou LOAD-BEARING, e é por isso que ele tem teste.** Medido:
+> a foto do alarme é carimbada **antes** do vídeo (ela é tirada no evento; o
+> vídeo sobe depois), então "ganha o mais antigo" **entregaria o `.jpg` em 34
+> dos 38 blocos** se o filtro fosse desfeito. Regressão nele reintroduz o
+> defeito da v4.17.14 pela porta dos fundos, em pior escala.
+>
+> Verificado em produção (JC371 `865478070654829`): arquivos na janela
+> **288 → 144** (metade eram fotos, uma `.jpg` por `.mp4`); blocos verdes
+> **38 → 38**, nenhum perdido — todo bloco com foto também tinha o vídeo.
 
 > ### 📍 v4.17.14 — Ao Vivo com um player por canal; o Playback que pintava de verde e recusava tocar
 >

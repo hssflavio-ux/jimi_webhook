@@ -15,6 +15,11 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - A regra olha o **tipo e a extensão**, nessa ordem: `file_type` é preenchido por `detect_media_type()` na chegada do webhook e nem toda origem histórica o gravou, então o nome é a segunda opinião. A recíproca **não** vale — extensão desconhecida com tipo vazio não vira vídeo por omissão, senão o corte teria o defeito ao contrário (vídeo antigo com a coluna vazia sumindo da tela).
   - Sai junto o ramo de exibição de imagem que a v4.17.14 tinha adicionado em `selectRecording()`, e os rótulos "Foto do evento" da fonte, da dica e do popover.
 - **O desempate entre arquivos do mesmo bloco deixa de ser por tipo e passa a ser só por instante — ganha o MAIS ANTIGO**, o começo do trecho. Com a foto fora, o critério de "tocável primeiro" perdeu o objeto; o que permanece é a razão original, que 34 dos 38 blocos verdes tinham mais de um arquivo dentro (até 16) e "o primeiro da lista" fazia o resultado depender da ordem em que o banco devolveu.
+  - 🔴 **Esses dois pontos são um só, e o filtro virou LOAD-BEARING.** Medido na mesma câmera: a foto do alarme é carimbada **antes** do vídeo (ela é tirada no evento; o vídeo sobe depois), então "ganha o mais antigo" **entregaria o `.jpg` em 34 dos 38 blocos** se o filtro fosse desfeito. Não é mais só política de produto — é a premissa de que a lista já vem sem foto. Daí as 10 checagens em `media.test.php`: sem elas, uma regressão no filtro reintroduz o defeito da v4.17.14 pela porta dos fundos, e em pior escala.
+
+### Verificação (produção, JC371 `865478070654829`)
+
+Arquivos na janela: **288 → 144** (exatamente metade eram fotos — uma `.jpg` por `.mp4`). Blocos verdes: **38 → 38**, nenhum perdido — todo bloco que tinha foto também tinha o vídeo.
 
 ### Added
 
