@@ -45,6 +45,32 @@
  *   - `startTime`/`endTime` são interpretados em UTC (mesma conclusão: pedir
  *     até "agora" (23:59:59 do dia UTC corrente) devolveu resultados até o
  *     instante exato da chamada, não até a meia-noite BRT).
+ *
+ * ── 🔴 ESTE CLIENTE COBRE SÓ METADE DA API, E O NOME DA OUTRA ENGANA ────────
+ *
+ * A doc separa as Query APIs por **PROTOCOLO**, não por versão:
+ *   §3.1  `/api/v2/alarm/getAlarm`  → dispositivos **JT/T**   (este arquivo)
+ *   §3.2  `/api/alarm/getAlarm`     → dispositivos **JIMI**   (NÃO implementado)
+ *
+ * O título da §3.2 é "General Query API" e faz pensar em fallback genérico; a
+ * tabela "API Description" logo acima dela diz "Query alarm data of **JIMI**
+ * devices". A tabela é que está certa. Mandar câmera JIMI para o `/api/v2/`
+ * devolve `code:0` com lista **vazia** — sucesso silencioso, o mesmo modo de
+ * falha do `37121` enviado a câmera JIMI (v4.9.28).
+ *
+ * ⚠️ Medido em 07/09/2026: o endpoint JIMI (§3.2.1) responde `code:0` com
+ * `data:[]` para TODAS as câmeras JIMI testadas, inclusive uma JC400AD com 46
+ * alarmes nossos na mesma janela. Não é rota errada (a família `/api/` está
+ * publicada e valida entrada) — parece store não populado neste hub
+ * on-premise. **Implementá-lo hoje entrega uma função que retorna vazio.**
+ *
+ * ⚠️ E o lado que funciona NÃO é espelho do webhook: 36 contra 91 no mesmo
+ * período, com vocabulário próprio (`removeAlarmType` no lugar dos códigos de
+ * fim de alarme) e `alarmLabel` só nos alarmes COM anexo.
+ *
+ * A medição completa, com a matriz das quatro combinações e as duas
+ * divergências da doc nos endpoints irmãos, está em
+ * **`docs/QUERY_APIS_IOTHUB.md`**. Leia-o antes de escrever o cliente da §3.2.
  */
 
 require_once __DIR__ . '/../core/Logger.php';
