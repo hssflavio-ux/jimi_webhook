@@ -114,7 +114,7 @@ $offset = ($page - 1) * $perPage;
 $filesStmt = $db->prepare("
     SELECT mf.id, mf.imei, mf.file_name, mf.file_url, mf.file_type, mf.file_size,
            mf.event_time, mf.created_at, mf.channel, mf.download_status,
-           mf.downloaded_at, mf.download_count,
+           mf.downloaded_at, mf.download_count, mf.source_type,
            COALESCE(NULLIF(d.device_name, ''), mf.imei) AS device_name,
            COALESCE(dm.model_name, '—') as model_name,
            COALESCE(cu.name, '—') AS customer_name
@@ -156,6 +156,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $expStmt = $db->prepare("
         SELECT mf.file_name, mf.imei, mf.file_type, mf.file_size, mf.channel,
                mf.created_at, mf.event_time, mf.download_status, mf.downloaded_at,
+               mf.source_type,
                COALESCE(NULLIF(d.device_name, ''), mf.imei) AS device_name,
                COALESCE(dm.model_name, '—') AS model_name,
                COALESCE(cu.name, '—') AS customer_name
@@ -198,7 +199,9 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['imei'],
             $r['model_name'],
             ($cx = $r['channel'] ?: media_canal_do_nome((string)$r['file_name'])) ? 'CH' . (int)$cx : '—',
-            $al['nome'] ?? '—',
+            // Mesma regra da tela, no mesmo vocabulário: o alarme quando há um,
+            // "On demand" quando o arquivo foi pedido pelo operador.
+            $al['nome'] ?? (media_pedido_pelo_operador($r['source_type'] ?? null) ? 'On demand' : '—'),
             $al && !empty($al['alarm_time']) ? fmt_brt($al['alarm_time'], 'd/m/Y H:i:s') : '—',
             $r['file_name'] ?: '—',
             ($ini = filelist_ts_do_nome_utc((string)$r['file_name']) ?: $r['event_time'])
@@ -390,11 +393,17 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 ?>
                 <td class="dl-canal"><?= $canalF ? 'CH' . (int)$canalF : '—' ?></td>
                 <?php
-                    // ⚠️ Arquivo SEM alarme não é erro: é extração manual, pedida
-                    // em /video/playback ("Subir para o storage"). Era 1 em 3.000
-                    // na medição — raro, mas legítimo, e dizer "—" seco faria o
-                    // operador procurar um defeito que não existe.
-                    $al = $alarmesDoArquivo[$f['imei'] . '|' . $f['file_name']] ?? null;
+                    // ⚠️ Arquivo SEM alarme não é erro: é um trecho que o
+                    // OPERADOR pediu — em /video/playback ("Subir para o
+                    // storage") ou pela extração do JT/T. Dizer "—" seco faria
+                    // procurar um defeito que não existe.
+                    //
+                    // 🔴 "On demand" sai de `source_type`, NÃO de "não achei
+                    // alarme": ver media_pedido_pelo_operador(). Inferir pelo
+                    // buraco transformaria uma falha de vínculo numa afirmação
+                    // sobre a intenção de uma pessoa.
+                    $al       = $alarmesDoArquivo[$f['imei'] . '|' . $f['file_name']] ?? null;
+                    $onDemand = media_pedido_pelo_operador($f['source_type'] ?? null);
                 ?>
                 <td class="dl-alarme">
                     <?php if ($al): ?>
@@ -402,8 +411,16 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     <?php if (!empty($al['alarm_time'])): ?>
                     <div class="dl-alm-hora text-mono"><?= fmt_brt($al['alarm_time']) ?></div>
                     <?php endif; ?>
+                    <?php /* Pedido pelo operador E com alarme: os dois fatos são
+                             verdadeiros e respondem perguntas diferentes — "o que
+                             aconteceu" e "quem pediu este arquivo". */ ?>
+                    <?php if ($onDemand): ?>
+                    <span class="dl-alm-tag" title="Trecho solicitado pelo operador">On demand</span>
+                    <?php endif; ?>
+                    <?php elseif ($onDemand): ?>
+                    <span class="dl-alm-tag" title="Trecho solicitado pelo operador em Playback — não veio de alarme">On demand</span>
                     <?php else: ?>
-                    <span class="dl-alm-sem" title="Arquivo extraído a pedido em Playback, sem alarme associado.">Extração manual</span>
+                    <span class="dl-alm-sem" title="Sem alarme vinculado e sem origem de extração — o vínculo pode não ter sido registrado.">—</span>
                     <?php endif; ?>
                 </td>
                 <td class="dl-data text-mono"><?= $inicio ? fmt_brt($inicio) : '—' ?></td>
@@ -524,7 +541,11 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
 .dl-alarme{min-width:150px;max-width:210px;white-space:normal;line-height:1.35;}
 .dl-alm-nome{font-size:12.5px;color:var(--ink);}
 .dl-alm-hora{font-size:10.5px;color:var(--muted);margin-top:2px;}
-.dl-alm-sem{font-size:11px;color:var(--muted-soft);font-style:italic;}
+.dl-alm-sem{font-size:11px;color:var(--muted-soft);}
+/* "On demand" é uma ORIGEM, não um alarme — pílula, para não se confundir com
+   o nome de um evento que a câmera detectou. */
+.dl-alm-tag{display:inline-block;margin-top:3px;font-size:9.5px;font-weight:600;letter-spacing:.3px;
+            padding:1px 7px;border-radius:100px;background:var(--primary-soft);color:var(--primary);}
 .dl-canal{white-space:nowrap;width:1%;}
 .dl-data{white-space:nowrap;width:1%;font-size:12px;}
 .dl-acao{white-space:nowrap;}

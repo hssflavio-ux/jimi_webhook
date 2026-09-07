@@ -180,6 +180,32 @@ checa('jpg com file_type vazio continua fora', false,
 checa('arquivo ausente não passa', false, media_pb_reproduzivel('', ''));
 checa('null não passa', false, media_pb_reproduzivel(null, null));
 
+// ── media_pedido_pelo_operador(): "On demand" sai da ORIGEM, não do buraco ──
+//
+// 🔴 A tentação é rotular "On demand" tudo que não casou com alarme. Isso
+// transforma uma FALHA DE VÍNCULO numa afirmação sobre a intenção de uma
+// pessoa: um anexo de alarme cujo casamento falhasse apareceria na tela como
+// pedido do operador. A origem é o fato; a ausência de alarme é só ausência.
+//
+// ⚠️ `pushftpfileupload` conta porque a extração do JT/T (37382) sobe por FTP
+// e o nome que a câmera dá (`ext20260831122209f7c617`) não tem carimbo
+// parseável — `media_register_file()` não promove o pedido pendente, e o
+// arquivo entra como linha nova com essa origem. Em produção é exatamente o
+// caso do único arquivo sem alarme em 2.000 linhas.
+echo "\n── \"On demand\" sai da origem do arquivo\n";
+checa('extracao_hvideo é pedido do operador', true, media_pedido_pelo_operador('extracao_hvideo'));
+checa('extracao_evideo é pedido do operador', true, media_pedido_pelo_operador('extracao_evideo'));
+checa('extracao_37382 é pedido do operador', true, media_pedido_pelo_operador('extracao_37382'));
+checa('pushftpfileupload (FTP do 37382) conta', true, media_pedido_pelo_operador('pushftpfileupload'));
+checa('🔴 pushalarm NÃO é pedido do operador', false, media_pedido_pelo_operador('pushalarm'));
+checa('🔴 pushfileupload NÃO é pedido do operador', false, media_pedido_pelo_operador('pushfileupload'));
+checa('origem vazia não afirma nada', false, media_pedido_pelo_operador(''));
+checa('origem NULL não afirma nada', false, media_pedido_pelo_operador(null));
+// Maiúsculas/minúsculas não podem decidir a regra: a coluna é varchar livre.
+checa('EXTRACAO_HVIDEO também conta', true, media_pedido_pelo_operador('EXTRACAO_HVIDEO'));
+// E o prefixo tem de ser PREFIXO — não pode casar no meio.
+checa('nome que só CONTÉM extracao_ não conta', false, media_pedido_pelo_operador('push_extracao_hvideo'));
+
 printf("\n%s — %d de %d checagens passaram\n",
     $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

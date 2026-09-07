@@ -1,4 +1,32 @@
-# STATUS.md — Jimi Webhook System v4.17.17 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.18 (YUV Parity)
+
+> ### 📍 v4.17.18 — Downloads: o arquivo pedido pelo operador diz "On demand"
+>
+> Pedido do dono do produto: *"nessa lista temos também os arquivos
+> solicitados pelo operador, identifique esses arquivos na coluna que exibe o
+> alarme para 'On demand'"*.
+>
+> **🔴 O selo sai de `media_files.source_type`, NÃO de "não achei alarme".**
+> `media_pedido_pelo_operador()` reconhece `extracao_hvideo`,
+> `extracao_evideo`, `extracao_37382` e `pushftpfileupload`. Inferir pelo
+> buraco transformaria uma falha de vínculo numa afirmação sobre a **intenção
+> de uma pessoa**: um anexo de alarme com vínculo quebrado apareceria como
+> pedido do operador. Quem não tem alarme **nem** origem de extração mostra um
+> traço — honesto, e em produção não acontece com ninguém.
+>
+> ⚠️ **A marca sobrevive ao ciclo de vida da linha**, e é isso que faz a coluna
+> continuar certa depois que o arquivo fica pronto: o despacho grava a linha
+> com `download_status='solicitado'` e sem nome; quando o arquivo chega,
+> `media_register_file()` **promove** a linha (nome, url, tipo, status) e **não
+> toca em `source_type`**.
+>
+> ⚠️ **`pushftpfileupload` conta**: a extração do JT/T (`37382`) sobe por FTP e
+> o nome que a câmera dá (`ext20260831122209f7c617`) não tem carimbo parseável
+> — a promoção do pendente nem é tentada, e o arquivo entra como linha nova com
+> essa origem.
+>
+> Medido em 2.000 linhas: **1.999 alarme, 1 On demand, 0 traço**. Na câmera
+> Telecom, 2.000 de 2.000 são alarme.
 
 > ### 📍 v4.17.17 — Downloads: a fila diz POR QUE cada arquivo existe
 >

@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.18
+
+**Downloads: o arquivo que o operador pediu passa a se identificar como "On demand".**
+
+Pedido do dono do produto: *"nessa lista temos também os arquivos solicitados pelo operador, identifique esses arquivos na coluna que exibe o alarme para 'On demand'"*.
+
+### Added
+
+- **Selo "On demand"** na coluna Alarme, e ele sai de **`media_files.source_type`** — não de "não achei alarme". `media_pedido_pelo_operador()` (`includes/media.php`) reconhece `extracao_hvideo`, `extracao_evideo`, `extracao_37382` e `pushftpfileupload`.
+  - 🔴 **A marca sobrevive ao ciclo de vida da linha**, e isso é o que faz a coluna funcionar depois que o arquivo fica pronto: o despacho grava a linha com `download_status='solicitado'` e sem nome; quando o arquivo chega, `media_register_file()` **promove** a linha (nome, url, tipo, status) e **não toca em `source_type``**. Conferido no `UPDATE` daquela função.
+  - ⚠️ **`pushftpfileupload` conta** porque a extração do JT/T (`37382`) sobe por FTP e o nome que a câmera dá (`ext20260831122209f7c617`) **não tem carimbo parseável** — `media_register_file()` nem tenta promover o pedido pendente, e o arquivo entra como linha nova com essa origem. Em produção é exatamente o caso do único arquivo sem alarme em 2.000 linhas.
+  - 🔴 **A ausência de alarme sozinha NÃO rotula.** Inferir "On demand" do buraco transformaria uma falha de vínculo numa afirmação sobre a intenção de uma pessoa: um anexo de alarme cujo casamento falhasse apareceria como pedido do operador. Quem não tem alarme **nem** origem de extração mostra um traço — que é honesto, e em produção não acontece com ninguém.
+  - Arquivo que é as **duas coisas** (o operador pediu o vídeo de um alarme) mostra o nome do alarme **e** o selo: são fatos diferentes, respondendo "o que aconteceu" e "quem pediu este arquivo".
+- O export usa a mesma regra e o mesmo vocabulário.
+
+### Verificação (produção, 2.000 linhas mais recentes)
+
+| rótulo | linhas |
+|---|---|
+| Alarme | **1.999** |
+| On demand | **1** (`ext20260831122209f7c617`, origem `pushftpfileupload`) |
+| Traço (sem alarme e sem origem de extração) | **0** |
+
+Na câmera Telecom, **2.000 de 2.000** são alarme — que é a observação que originou o pedido.
+
 ## [Unreleased] — 4.17.17
 
 **Downloads: a fila passa a dizer POR QUE cada arquivo existe.**

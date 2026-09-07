@@ -625,3 +625,39 @@ function media_alarmes_dos_arquivos(PDO $db, array $arquivos): array
     }
     return $achados;
 }
+
+/**
+ * O arquivo foi PEDIDO pelo operador ("on demand"), e não empurrado por um alarme?
+ *
+ * Pedido do dono do produto (07/09/2026): *"nessa lista temos também os
+ * arquivos solicitados pelo operador, identifique esses arquivos na coluna que
+ * exibe o alarme para 'On demand'"*.
+ *
+ * 🔴 `source_type` É O MARCADOR, e ele sobrevive ao ciclo de vida da linha.
+ * O despacho grava `extracao_hvideo` / `extracao_evideo` / `extracao_37382`
+ * com `download_status='solicitado'` e sem nome — o nome só existe quando a
+ * câmera termina de subir. Quando o arquivo chega, `media_register_file()`
+ * **promove** a linha (file_name, file_url, file_type, download_status) e
+ * **não toca em `source_type`**: por isso a marca de "quem pediu" continua lá
+ * depois de o arquivo ficar pronto. Conferido no `UPDATE` daquela função.
+ *
+ * ⚠️ **`pushftpfileupload` também conta.** A extração do JT/T (`37382`) sobe por
+ * FTP, e o nome que a câmera dá (`ext20260831122209f7c617`) **não tem carimbo
+ * parseável** — então `media_register_file()` nem tenta promover o pedido
+ * pendente, e o arquivo entra como linha nova com essa origem. Em produção é
+ * exatamente o caso do único arquivo sem alarme em 2.000 linhas.
+ *
+ * ⚠️ **A ausência de alarme sozinha NÃO basta** e não é usada aqui. Um anexo de
+ * alarme cujo vínculo falhasse cairia no mesmo balde e seria rotulado como
+ * pedido do operador — afirmação sobre a intenção de uma pessoa, feita a partir
+ * de um dado que faltou. Quem não casa nem com alarme nem com origem de
+ * extração fica sem rótulo, que é honesto.
+ *
+ * @param string|null $sourceType Valor de `media_files.source_type`
+ * @returns bool
+ */
+function media_pedido_pelo_operador(?string $sourceType): bool
+{
+    $s = strtolower(trim((string)$sourceType));
+    return $s !== '' && (strpos($s, 'extracao_') === 0 || $s === 'pushftpfileupload');
+}

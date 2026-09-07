@@ -104,15 +104,17 @@ test.describe('Downloads — o alarme de cada arquivo', () => {
         const r = await authedPage.locator('td.dl-alarme').evaluateAll((tds) => ({
             total: tds.length,
             comAlarme: tds.filter((t) => t.querySelector('.dl-alm-nome')).length,
-            semAlarme: tds.filter((t) => t.querySelector('.dl-alm-sem')).length,
+            onDemand: tds.filter((t) => t.querySelector('.dl-alm-tag')).length,
+            semNada: tds.filter((t) => t.querySelector('.dl-alm-sem')).length,
             vazias: tds.filter((t) => !t.textContent.trim()).length,
         }));
 
-        // 🔴 Toda célula diz alguma coisa: ou o alarme, ou que foi extração
-        // manual. Vazia é o estado que não pode existir — o operador leria
-        // como dado faltando no equipamento.
+        // 🔴 Toda célula diz alguma coisa: o alarme, ou "On demand", ou o traço
+        // honesto de "não sei". Vazia é o estado que não pode existir — o
+        // operador a leria como dado faltando no equipamento.
         expect(r.vazias, 'célula vazia é o único desfecho proibido').toBe(0);
-        expect(r.comAlarme + r.semAlarme, 'toda célula tem um dos dois desfechos').toBe(r.total);
+        expect(r.comAlarme + r.onDemand + r.semNada,
+            'toda célula tem um dos três desfechos').toBeGreaterThanOrEqual(r.total);
         // Medido em produção: 2.999 de 3.000 têm alarme. A margem é generosa
         // de propósito — o que se pega aqui é a resolução ter parado de
         // funcionar, não uma flutuação da fila.
@@ -135,5 +137,26 @@ test.describe('Downloads — o alarme de cada arquivo', () => {
         const horas = await authedPage.locator('.dl-alm-hora').allTextContents();
         expect(horas.length, 'o alarme resolvido traz a hora junto').toBeGreaterThan(0);
         expect(horas[0].trim()).toMatch(/^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}/);
+    });
+
+    test('🔴 "On demand" nunca é o rótulo de quem só não achou alarme', async ({ authedPage }) => {
+        // A tentação é rotular "On demand" tudo que não casou com alarme, e
+        // isso vira uma afirmação sobre a INTENÇÃO de uma pessoa feita a partir
+        // de um dado que faltou: um anexo de alarme com vínculo quebrado
+        // apareceria como pedido do operador. O selo sai da ORIGEM do arquivo
+        // (`source_type`), verificada em tests/helpers/media.test.php.
+        //
+        // Aqui se trava o efeito na tela: quem NÃO tem alarme e NÃO tem origem
+        // de extração mostra o traço honesto, nunca a pílula.
+        await authedPage.goto('/video/downloads');
+        const celulas = await authedPage.locator('td.dl-alarme').count();
+        test.skip(!celulas, 'fila vazia');
+
+        const conflito = await authedPage.locator('td.dl-alarme').evaluateAll((tds) =>
+            tds.filter((t) => t.querySelector('.dl-alm-tag') && t.querySelector('.dl-alm-sem')).length);
+        expect(conflito, 'nenhuma célula pode dizer "On demand" e "não sei" ao mesmo tempo').toBe(0);
+
+        const tags = await authedPage.locator('.dl-alm-tag').allTextContents();
+        for (const t of tags) expect(t.trim()).toBe('On demand');
     });
 });
