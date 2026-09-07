@@ -1145,7 +1145,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </div>
 
 <h3 id="rel-alarmes">Alarmes</h3>
-<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, filial, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
+<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
@@ -1180,7 +1180,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </div>
 
 <h3 id="rel-ocorrencias">Ocorrências</h3>
-<p><strong>Objetivo:</strong> Histórico de ocorrências com filtros por cliente, placa, tipo de alarme, situação, risco, falso positivo, filial e motorista. Visão complementar ao Dashboard de Ocorrências, voltada a auditoria e análise histórica.</p>
+<p><strong>Objetivo:</strong> Histórico de ocorrências com filtros por cliente, placa, tipo de alarme, situação, risco, falso positivo e motorista. Visão complementar ao Dashboard de Ocorrências, voltada a auditoria e análise histórica.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>

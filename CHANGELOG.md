@@ -5,6 +5,29 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.21
+
+**O filtro de Filial sai junto com a coluna.** Continuação do pedido da v4.17.20: *"remova dos filtros também"*.
+
+### Removed
+
+- **Filtro "Filial" de `/relatorios/ocorrencias` e `/relatorios/alarmes`** — o `<select>`, a variável, a cláusula `WHERE` e a consulta que carregava a lista de filiais.
+- Texto da **wiki** que anunciava o filtro nos dois relatórios.
+
+### ⚠️ Isso não tirou nada da vista de ninguém
+
+Os dois `<select>` já viviam dentro de um `<?php if ($branchList): ?>` — com **zero filiais cadastradas, eles não eram desenhados**. O que saiu foi código morto, que voltaria a aparecer no dia em que alguém cadastrasse uma filial "só para testar". É por isso que o spec verifica o **nome do campo** e não a aparência: o defeito estava latente, não visível.
+
+### O que fica (e por quê)
+
+- **O campo "Filial" do cadastro em `/equipamentos`** — é entrada de dados, não filtro. Removê-lo impede que `devices.branch_id` seja preenchido algum dia; é decisão de outra natureza e não foi pedida.
+- **`occurrence_engine.php` continua copiando `branch_id`** de `devices` para `occurrences` na criação da ocorrência. Sem custo (hoje é sempre NULL) e é o que permite religar o recurso sem migração.
+- **A coluna `branch_id` continua nas tabelas.** Nada foi apagado do banco.
+
+### Added
+
+- `tests/relatorios_sem_filial.spec.js` ganhou o caso do filtro: nenhum campo `branch_id` nem rótulo "Filial" nos dois formulários, e — importante — **`?branch_id=42` na URL é ignorado sem quebrar a tela**. Link antigo, favorito ou modelo de relatório salvo ainda pode carregar o parâmetro órfão.
+
 ## [Unreleased] — 4.17.20
 
 **A coluna "Filial" sai do Relatório de Ocorrências — e a varredura mostrou que ela só existia lá.**

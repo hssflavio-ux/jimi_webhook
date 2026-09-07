@@ -68,6 +68,37 @@ test.describe('Relatório de Ocorrências — Filial fora', () => {
     });
 });
 
+test.describe('O FILTRO de Filial também saiu', () => {
+    // v4.17.21. ⚠️ Os dois `<select>` já viviam dentro de um
+    // `<?php if ($branchList): ?>` — com zero filiais eles NÃO eram
+    // desenhados. Ou seja, a remoção não tirou nada da vista de ninguém: tirou
+    // código morto que voltaria a aparecer no dia em que alguém cadastrasse
+    // uma filial "só para testar". É por isso que o teste olha o NOME do
+    // campo, e não a aparência — o defeito estava latente, não visível.
+    for (const rota of ['/relatorios/ocorrencias', '/relatorios/alarmes']) {
+        test(`${rota} não tem campo branch_id no formulário`, async ({ authedPage }) => {
+            await authedPage.goto(rota);
+            await expect(authedPage.locator('form').first()).toBeVisible();
+            await expect(authedPage.locator('[name="branch_id"]'),
+                'o filtro de filial não pode voltar').toHaveCount(0);
+            const rotulos = await authedPage.locator('form label').allTextContents();
+            expect(rotulos.map((t) => t.trim().toLowerCase()),
+                'nem o rótulo').not.toContain('filial');
+        });
+
+        test(`${rota} ignora ?branch_id= na URL sem quebrar`, async ({ authedPage }) => {
+            // Link antigo, modelo de relatório salvo ou favorito ainda pode
+            // carregar o parâmetro. Ele tem de ser ignorado — não virar erro.
+            const erros = [];
+            authedPage.on('pageerror', (e) => erros.push(e.message));
+            const resp = await authedPage.goto(rota + '?branch_id=42');
+            expect(resp.status(), 'parâmetro órfão não pode derrubar a tela').toBeLessThan(400);
+            await expect(authedPage.locator('table')).toBeVisible();
+            expect(erros).toEqual([]);
+        });
+    }
+});
+
 test.describe('Nenhum outro relatório traz Filial', () => {
     // Toda rota de relatório com exportação. Cadastros entram junto porque a
     // pergunta é sobre a COLUNA, e ela poderia ter sido copiada para qualquer

@@ -4,7 +4,7 @@
  * Rota: /relatorios/ocorrencias
  *
  * Versão histórica/auditável do dashboard DMS.
- * Filtros: Clientes, Filiais, Placa, Tipo de Alarme, Motoristas,
+ * Filtros: Clientes, Placa, Tipo de Alarme, Motoristas,
  *          Falso positivo, Risco, Status, Período.
  * Grade: Cliente, Placa, Motorista, Tipo de Alarme, Último alarme em,
  *        Qtd, Risco, Falso positivo, Situação.
@@ -37,7 +37,6 @@ $filterType  = $_GET['alarm_type'] ?? null;
 $filterStatus = $_GET['status'] ?? null;
 $filterFP    = $_GET['false_positive'] ?? null;
 $filterRisk  = $_GET['risk'] ?? null;
-$filterBranch = $_GET['branch_id'] ?? null;   // B4: filtro de Filial (YUV)
 $filterDriver = $_GET['driver_id'] ?? null;   // B4: filtro de Motorista (YUV)
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 20;
@@ -85,10 +84,6 @@ if ($filterFP !== null && $filterFP !== '') {
 if ($filterRisk) {
     $where .= ' AND o.risk = :risk';
     $params[':risk'] = $filterRisk;
-}
-if ($filterBranch) {
-    $where .= ' AND o.branch_id = :bid';
-    $params[':bid'] = (int)$filterBranch;
 }
 if ($filterDriver) {
     $where .= ' AND o.driver_id = :did';
@@ -138,17 +133,17 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $statusLabels = ['aguardando'=>'Aguardando','em_tratativa'=>'Em Tratativa','resolvida'=>'Resolvida','descartada'=>'Descartada'];
     $expRows = [];
     try {
-        // ⚠️ A coluna FILIAL saiu do export na v4.17.20 (decisão do dono do
-        // produto: *"não estamos usando esse cadastro no sistema no momento"*).
-        // O `LEFT JOIN branches` saiu junto — era o único motivo dele existir
-        // aqui. O FILTRO por filial continua no formulário e continua
-        // funcionando: ele lê `o.branch_id` direto, sem depender deste JOIN.
+        // ⚠️ FILIAL saiu inteira na v4.17.20 — a coluna do export, o filtro do
+        // formulário e o `LEFT JOIN branches` (que só existia para a coluna).
+        // Decisão do dono do produto: *"não estamos usando esse cadastro no
+        // sistema no momento"*, e a medição concorda — 0 filiais cadastradas,
+        // 0 de 349 ocorrências com `branch_id`.
         //
         // 🔴 A coluna nunca existiu na TELA — só no arquivo. Era a mesma
-        // divergência tela↔export que a v4.17.19 acabou de fechar em
-        // /video/downloads: quem conferia um contra o outro achava uma coluna
-        // a mais no PDF. Agora as duas listas têm a mesma sequência (o export
-        // não tem só a coluna "Ação", que é botão).
+        // divergência tela↔export que a v4.17.19 fechou em /video/downloads:
+        // quem conferia um contra o outro achava uma coluna a mais no PDF.
+        // Agora as duas listas têm a mesma sequência (o export não tem só a
+        // coluna "Ação", que é botão).
         $expStmt = $db->prepare("
             SELECT o.*, c.name as customer_name, COALESCE(dr.name, '—') as driver_name,
                    COALESCE(dv.device_name, o.imei) AS device_label
@@ -219,12 +214,9 @@ try {
     $alarmTypes = [];
 }
 
-// B4 (YUV): opções dos filtros de Filial e Motorista
-$branchList = [];
+// B4 (YUV): opções do filtro de Motorista.
+// ⚠️ O de Filial saiu na v4.17.20 — ver a nota no bloco de exportação.
 $driverList = [];
-try {
-    $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
-} catch (Exception $e) {}
 try {
     $drvStmt = $db->prepare("SELECT id, name FROM drivers WHERE is_active=1" . ($isAdmin ? '' : ' AND customer_id = :cid') . " ORDER BY name");
     $drvStmt->execute($isAdmin ? [] : [':cid' => $customerId]);
@@ -314,17 +306,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <option value="0" <?= $filterFP === '0' ? 'selected' : '' ?>>Não</option>
             </select>
         </div>
-        <?php if ($branchList): ?>
-        <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Filial</label>
-            <select name="branch_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
-                <option value="">Todas</option>
-                <?php foreach ($branchList as $b): ?>
-                <option value="<?= $b['id'] ?>" <?= $filterBranch == $b['id'] ? 'selected' : '' ?>><?= htmlspecialchars($b['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
         <?php if ($driverList): ?>
         <div>
             <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Motorista</label>

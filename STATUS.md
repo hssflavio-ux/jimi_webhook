@@ -1,4 +1,26 @@
-# STATUS.md — Jimi Webhook System v4.17.20 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.21 (YUV Parity)
+
+> ### 📍 v4.17.21 — o filtro de Filial sai junto
+>
+> Continuação do pedido da v4.17.20: *"remova dos filtros também"*. Saiu o
+> `<select>`, a variável, a cláusula `WHERE` e a consulta da lista, em
+> `/relatorios/ocorrencias` e `/relatorios/alarmes` — mais o texto da wiki que
+> anunciava o filtro.
+>
+> ⚠️ **Isso não tirou nada da vista de ninguém.** Os dois `<select>` já viviam
+> dentro de um `<?php if ($branchList): ?>` e, com zero filiais, **não eram
+> desenhados**. O que saiu foi código morto — que voltaria a aparecer no dia
+> em que alguém cadastrasse uma filial "só para testar". Por isso o spec
+> verifica o NOME do campo, não a aparência: o defeito estava latente.
+>
+> **O que fica:** o campo "Filial" do cadastro de `/equipamentos` (é entrada de
+> dados, não filtro — removê-lo impede preencher `devices.branch_id` algum
+> dia); o `occurrence_engine.php`, que continua copiando `branch_id` para a
+> ocorrência (sem custo, e é o que permite religar sem migração); e a coluna
+> `branch_id` nas tabelas. **Nada foi apagado do banco.**
+>
+> ⚠️ O spec cobre o parâmetro ÓRFÃO: `?branch_id=42` na URL — link antigo,
+> favorito ou modelo de relatório salvo — tem de ser ignorado, nunca virar erro.
 
 > ### 📍 v4.17.20 — "Filial" sai do Relatório de Ocorrências
 >

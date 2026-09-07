@@ -3,7 +3,8 @@
  * JIMI Webhook System — Relatório de Alarmes v4.0.0
  * Rota: /relatorios/alarmes
  *
- * Filtros: Cliente, Placa, Filial, Tipo de Alarme, Status, Período.
+ * Filtros: Cliente, Placa, Tipo de Alarme, Status, Período.
+ * ⚠️ O filtro de Filial saiu na v4.17.20 — cadastro sem uso (0 filiais).
  * Grade: Placa, Data/Hora, Nome do Alarme, Status, Velocidade, Endereço, Mapa
  * — com mapa embutido opcional (marcador por linha da página).
  * Paginação server-side, volume alto (~448 alarmes/dia).
@@ -33,7 +34,6 @@ $filterImei  = $_GET['imei'] ?? null;
 // Multiselect de tipos (chips, CSV) + retrocompat com o antigo campo texto alarm_type
 $filterTypes = array_values(array_filter(array_map('trim', explode(',', $_GET['alarm_types'] ?? ''))));
 $filterType  = $_GET['alarm_type'] ?? null;
-$filterBranch = $_GET['branch_id'] ?? null;
 $filterStatus = $_GET['alarm_status'] ?? null;
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 25;
@@ -113,10 +113,6 @@ if ($filterTypes) {
     $where .= " AND (a.alarm_type = :atype OR ($alarmNameExpr) LIKE :aname)";
     $params[':atype'] = $filterType;
     $params[':aname'] = "%$filterType%";
-}
-if ($filterBranch) {
-    $where .= ' AND d.branch_id = :bid';
-    $params[':bid'] = (int)$filterBranch;
 }
 if ($filterStatus) {
     $where .= ' AND a.status = :st';
@@ -249,11 +245,6 @@ $types = $db->query(
       ORDER BY alarm_name_pt"
 )->fetchAll();
 
-$branchList = [];
-try {
-    $branchList = $db->query("SELECT id, name FROM branches WHERE is_active=1 ORDER BY name")->fetchAll();
-} catch (Exception $e) {}
-
 // Coluna Vídeo (v4.9.8): o anexo do evento que o device declarou no próprio
 // push do alarme. Resolvido pela EXTENSÃO — `alarms.file_type` está NULL em
 // todo anexo `.ts` gravado antes desta versão (ver includes/media.php).
@@ -311,17 +302,6 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <?php if ($branchList): ?>
-        <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Filial</label>
-            <select name="branch_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
-                <option value="">Todas</option>
-                <?php foreach ($branchList as $b): ?>
-                <option value="<?= $b['id'] ?>" <?= $filterBranch == $b['id'] ? 'selected' : '' ?>><?= htmlspecialchars($b['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
         <div>
             <?php
             $msel_id = 'alarmtypes';
