@@ -461,6 +461,16 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.17.0" "mysql/migration_v4.17.0.sql" "cadastro COMPLETO dos alarmes JIMI: 95 -> 197 codigos (Alarm Reference oficial)"
     run_migration "4.17.5" "mysql/migration_v4.17.5.sql" "update_device_stats_after_gps comparava com NULL e descartava a posicao (JM-VL02 nao selecionavel)"
     run_migration "4.17.8" "mysql/migration_v4.17.8.sql" "ignicao passa a vir tambem do heartbeat (last_acc_status atrasava ate 6h atras do GPS)"
+    # 🔴 As duas abaixo ficaram FORA desta lista quando subiram, e o modo de
+    # falhar foi o que o CLAUDE.md ja avisava: deploy verde, coluna inexistente.
+    # Medido em 07/09/2026 — `sms_commands.eventos_raw` nao existia em producao
+    # e cada chamada do /pushsms logava
+    # "SMS: evento cru nao gravado {erro: Unknown column 'eventos_raw'}",
+    # engolido por um try/catch, com o webhook respondendo 200. A 4.17.12 tinha
+    # sido aplicada A MAO (a tabela existia); a 4.17.13, nao.
+    # Guarda contra a repeticao: tests/helpers/migracoes_no_deploy.test.php.
+    run_migration "4.17.12" "mysql/migration_v4.17.12.sql" "webhook_payloads — corpo CRU de tudo que os equipamentos enviam"
+    run_migration "4.17.13" "mysql/migration_v4.17.13.sql" "SMS: carimbos do provedor em BRT + eventos crus por comando (sms_commands.eventos_raw)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

@@ -1,4 +1,37 @@
-# STATUS.md — Jimi Webhook System v4.17.21 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.22 (YUV Parity)
+
+> ### 📍 v4.17.22 — duas migrações fora da lista do deploy
+>
+> Achado ao responder a uma pergunta sobre o log do webhook de SMS.
+>
+> **🔴 `migration_v4.17.12.sql` e `v4.17.13.sql` não estavam na lista de
+> `run_migration` do `deploy.sh`.** O script chama as migrações uma a uma,
+> explicitamente; o que não está na lista não roda. É a armadilha que o
+> `CLAUDE.md` já documentava — **deploy verde, coluna inexistente**.
+>
+> A prova estava no log, e só apareceu porque alguém foi olhar:
+> `[WARNING] SMS: evento cru não gravado {erro: Unknown column 'eventos_raw'}`.
+> O `try/catch` engolia o erro e o webhook respondia 200 — o recurso da
+> v4.17.13 estava **morto desde que subiu**. `system_info.version` marcava
+> **4.17.12** enquanto o `/ping` anunciava 4.17.18: a 4.17.12 fora aplicada à
+> mão, a 4.17.13 não.
+>
+> Migração aplicada pelo mesmo caminho do `run_migration`. O conserto de fuso
+> dela corrigiu 1 linha: o comando #13 tinha `entregue_em` **3 h antes** do
+> próprio envio.
+>
+> **Guarda:** `tests/helpers/migracoes_no_deploy.test.php`, nos DOIS sentidos —
+> arquivo fora da lista (nunca roda) e entrada sem arquivo (deploy aborta em
+> produção, depois do `git pull`). Provado contra o defeito real.
+>
+> **Verificado com 1 SMS real ao E2E** (`STATUS#`, 1 crédito): `eventos_raw`
+> gravou 2 eventos / 578 bytes, os 2 corpos crus entraram em
+> `webhook_payloads`, e o WARNING sumiu do log. O fuso ficou provado no dado
+> novo: provedor mandou `20:26:03` (BRT), gravamos `23:26:03` (UTC), entrega
+> 9 s depois do envio.
+>
+> ⚠️ `resposta_texto` continua NULL — a Allcance segue sem mandar o evento de
+> resposta. Pendência com o provedor, não defeito nosso.
 
 > ### 📍 v4.17.21 — o filtro de Filial sai junto
 >

@@ -5,6 +5,44 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.22
+
+**Duas migrações nunca entraram na lista do `deploy.sh` — e uma delas deixou um recurso morto em silêncio por dois dias.**
+
+Achado ao responder a uma pergunta sobre o log do webhook de SMS.
+
+### Fixed
+
+- 🔴 **`migration_v4.17.12.sql` e `migration_v4.17.13.sql` não estavam na lista de `run_migration` do `deploy.sh`.** O script chama as migrações **uma a uma, explicitamente**; o que não está na lista não roda. É a armadilha que o `CLAUDE.md` já documentava — **deploy verde, coluna inexistente**.
+  - **A prova estava no log de produção**, e só apareceu porque alguém foi olhar:
+    ```
+    [2026-09-06 20:07:01] [WARNING] SMS: evento cru não gravado
+      {"id":12,"erro":"SQLSTATE[42S22]: Column not found: 1054 Unknown column 'eventos_raw'"}
+    ```
+    O `try/catch` engolia o erro e o webhook respondia 200. O recurso "eventos crus por comando" da v4.17.13 estava **morto desde que subiu**.
+  - `system_info.version` marcava **4.17.12** enquanto o `/ping` anunciava 4.17.18: a 4.17.12 tinha sido aplicada **à mão** (a tabela `webhook_payloads` existia, com 11 mil linhas); a 4.17.13, não.
+  - A migração foi aplicada em produção pelo mesmo caminho do `run_migration` (cliente `mysql`, senha em `MYSQL_PWD`). Resultado: `eventos_raw` criada, `system_info` em 4.17.13 e **o conserto de fuso da própria migração corrigiu 1 linha** — o comando #13 tinha `entregue_em` **3 h antes** do próprio envio e passou a bater ao minuto com `created_at`.
+
+### Added
+
+- **`tests/helpers/migracoes_no_deploy.test.php`** — guarda contra a repetição, nos **dois sentidos**: migração no diretório e fora da lista (nunca roda) **e** entrada na lista sem arquivo (deploy aborta em produção, depois do `git pull`). Verifica também que o rótulo de versão bate com o nome do arquivo e que a lista está em ordem crescente. Provado contra o defeito real: removendo a linha da 4.17.13, o teste falha apontando exatamente `migration_v4.17.13.sql`.
+  - ⚠️ Recusa-se a passar com diretório vazio ou sem nenhum `run_migration` encontrado — vazio não é aprovação.
+
+### Verificação em produção — 1 SMS real ao equipamento E2E
+
+`STATUS#` para o `868120246598152` (chip 31971363670), 1 crédito consumido (saldo 3 → 2):
+
+| | |
+|---|---|
+| `sms_commands` #14 | `enviado`, HTTP 201 |
+| **`eventos_raw`** | **2 eventos, 578 bytes** — `enviado` e `entregue celular` |
+| `webhook_payloads` | 2 corpos crus capturados (#11198, #11199) |
+| WARNING no log | **sumiu** — duas linhas `SMS webhook processado`, `casados: 1` |
+
+**O conserto de fuso também ficou provado no dado novo:** a Allcance mandou `data_entrega: "2026-09-07 20:26:03"` (BRT) e gravamos `entregue_em = 2026-09-07 23:26:03` (UTC) — exatamente +3 h, com a entrega caindo **9 segundos depois** do `created_at`. Antes da correção, a mesma linha mostraria a entrega 3 h **antes** do envio.
+
+⚠️ `resposta_texto` continua NULL: a Allcance segue mandando só `enviado` e `entregue celular`, nunca o evento `"status":"recebido"` com `"mensagem"`. É a pendência com o provedor já registrada na v4.17.13, não um defeito nosso.
+
 ## [Unreleased] — 4.17.21
 
 **O filtro de Filial sai junto com a coluna.** Continuação do pedido da v4.17.20: *"remova dos filtros também"*.
