@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.14
+
+**Vídeo: um player por canal no Ao Vivo, e o Playback que pintava de verde e recusava tocar.**
+
+### Fixed
+
+- 🔴 **Playback: 34 dos 38 blocos "já no servidor" não reproduziam.** `pbTocar()` resolvia o arquivo numa janela FIXA de `PB.bloco` = 60 s, enquanto o desenho da barra e a lista o resolviam pela duração REAL do bloco. Os 60 s são uma constante da JIMI (a câmera pica o cartão em blocos de um minuto); a JT/T entrega blocos de até 5 min — medido na JC371 `865478070654829`, **162 dos 183 blocos vivos duravam 300–301 s**. Todo arquivo que caísse depois do primeiro minuto do bloco pintava de verde na barra, ganhava o selo na lista, e respondia `Este trecho ainda não está no servidor` ao clique. A duração agora viaja com o clique nos três caminhos (barra, lista, popover). Medido depois do conserto: **38 de 38**.
+- 🔴 **Playback: o clique podia entregar a FOTO do alarme em vez do vídeo.** `pbArquivoDoBloco()` devolvia o primeiro casamento de uma lista ordenada por `event_time DESC` — e 34 dos 38 blocos verdes tinham **mais de um arquivo dentro (até 16)**, porque cada alarme sobe `.mp4` **e** `.jpg` com instantes a segundos de distância. Em 4 dos 38 o vencedor era o `.jpg`, e o player exibia o NOME do arquivo como texto. O desempate agora é explícito — tocável primeiro, e entre iguais o mais antigo — e não depende mais da ordem em que o banco devolveu. Depois do conserto, **38 de 38 resolvem para vídeo**.
+- **Playback: foto de evento é exibida como foto.** Quando o bloco só tem o `.jpg` (não há vídeo para aquele minuto), `selectRecording()` mostra a imagem em vez do nome do arquivo — responde a mesma pergunta que o operador foi fazer.
+
+### Changed
+
+- 🔴 **Ao Vivo: um player POR CANAL, todos simultâneos.** A JC400AD e as JT/T de mais de um canal publicam os canais ao mesmo tempo, e a tela abria um player só, obrigando a alternar entre canais para ver o que já estava no ar junto. O mosaico monta `N` quadros a partir dos canais marcados, com etiqueta, estado e botão de foco por quadro. **A JIMI leva UM comando** (`RTMP,ON,INOUT` registra `live/0` e `live/1` de uma vez — medido em 18/08/2026; mandar `OUT` e depois `IN` reconfiguraria o push e derrubaria o primeiro canal, sem erro nenhum); a **JT/T leva um `37121` por canal, SERIALIZADO** — a mesma lição do `37381` da tela de playback, em que a câmera não responde ao segundo pedido enquanto processa o primeiro.
+  - Os chips de canal deixaram de ser "qual canal ver" para ser **"quais canais abrir"** (seleção múltipla, todos ligados por padrão) — desligar um deixa de gastar franquia do SIM com um quadro que ninguém olha. O último marcado não se desmarca: a saída para "nenhum" é o botão Parar.
+  - **Câmera JIMI é limitada a 2 quadros** mesmo com `camera_count` maior: `RTMP,ON,<B>` só aceita `IN`/`OUT`/`INOUT`/`PIP`, e não há como pedir um terceiro canal — um quadro que nunca receberia vídeo é pior que quadro nenhum.
+  - Com mais de um quadro os players nascem **mudos**: quatro trilhas sobrepostas não são informação, e o navegador bloquearia o autoplay de qualquer forma.
+- **Playback — vocabulário e ordem da lista.** "Gravações no cartão" → **"Gravações na câmera"**; legendas "no cartão"/"já no servidor" → **"Na câmera"/"Upload efetuado"**; o aviso de listagem vencida virou **"Listagem expirada, faça nova requisição."**; o de listagem válida passou a dar a **hora e a data** da captura (em BRT, via `fmt_brt()`) em vez de "há N min"; o título da lista é **"N gravações disponíveis."**; e a lista passou a correr em **ordem ascendente**, acompanhando a leitura da barra em vez de contrariá-la.
+- **Ao Vivo — "Como usar"**: o passo 1 pergunta pelo estado da câmera, o 2 perdeu o parêntese e o 5 deixou de citar o transporte (HTTP-FLV), que não é escolha de quem opera.
+
 ## [Unreleased] — 4.17.13
 
 **Teste de ponta a ponta do canal de SMS, a pedido do dono do produto ("não recebemos resposta legível na aplicação").** O webhook foi INOCENTADO — e dois defeitos nossos apareceram no caminho.

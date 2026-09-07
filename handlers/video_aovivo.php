@@ -107,33 +107,82 @@ $current_route = 'video_aovivo';
 
 $extra_head = '<script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.min.js"></script>
 <style>
-.vid-bg{background:#0a0b0d;border-radius:var(--radius-lg);overflow:hidden;min-height:400px;display:flex;align-items:center;justify-content:center;position:relative;}
-.vid-bg video{width:100%;display:block;max-height:520px;object-fit:contain;}
-.vid-placeholder{text-align:center;color:var(--muted-soft);}
-.vid-placeholder i{font-size:56px;display:block;margin-bottom:12px;opacity:.25;}
+/* ── Mosaico de canais ────────────────────────────────────────────────────
+   Um player por canal, todos ao vivo ao mesmo tempo (v4.17.14). O número de
+   colunas vem da quantidade de canais; abaixo de 1100px o mosaico vira coluna
+   única, porque dois vídeos lado a lado num laptop ficam pequenos demais para
+   se enxergar o que a câmera está mostrando — que é o único motivo da tela. */
+.vid-grid{display:grid;gap:10px;align-items:start;}
+.vid-grid.cols-1{grid-template-columns:minmax(0,1fr);}
+.vid-grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}
+.vid-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+@media (max-width:1100px){.vid-grid.cols-2,.vid-grid.cols-3{grid-template-columns:minmax(0,1fr);}}
+/* Foco: um canal ocupa a largura toda e os demais saem da vista — sem
+   desmontar o player, para que voltar seja instantâneo e não repita o comando. */
+.vid-grid.foco .vid-tile{display:none;}
+.vid-grid.foco .vid-tile.em-foco{display:block;grid-column:1/-1;}
+.vid-tile{min-width:0;}
+
+.vid-bg{background:#0a0b0d;border-radius:var(--radius-lg);overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative;}
+/* `aspect-ratio` mantém os quadros do mosaico do mesmo tamanho antes de o
+   vídeo chegar — sem ele as células pulam de altura quando o primeiro canal
+   conecta. Com um canal só, a tela volta ao formato alto de antes. */
+.vid-grid.cols-1 .vid-bg{min-height:400px;}
+.vid-grid.cols-2 .vid-bg,.vid-grid.cols-3 .vid-bg{aspect-ratio:16/9;}
+.vid-grid.foco .vid-tile.em-foco .vid-bg{aspect-ratio:auto;min-height:400px;}
+.vid-bg video{width:100%;height:100%;display:block;object-fit:contain;background:#0a0b0d;}
+.vid-grid.cols-1 .vid-bg video{max-height:520px;}
+.vid-placeholder{text-align:center;color:var(--muted-soft);padding:16px;}
+.vid-placeholder i{font-size:40px;display:block;margin-bottom:10px;opacity:.25;font-style:normal;}
+.vid-grid.cols-1 .vid-placeholder i{font-size:56px;}
+
+/* Etiqueta do canal sobre o vídeo: identifica o quadro sem roubar altura
+   dele — num mosaico, saber QUAL câmera é cada quadro é a informação que
+   não pode faltar. */
+.vid-chip{position:absolute;top:8px;left:8px;z-index:6;display:flex;align-items:center;gap:6px;
+          padding:3px 9px;border-radius:100px;background:rgba(10,11,13,.72);color:#fff;
+          font-size:10.5px;font-weight:600;letter-spacing:.3px;pointer-events:none;}
+.vid-chip .pt{width:6px;height:6px;border-radius:50%;background:var(--muted-soft);flex:0 0 auto;}
+.vid-chip.no-ar .pt{background:#0f9d58;box-shadow:0 0 0 3px rgba(15,157,88,.25);}
+.vid-chip.erro .pt{background:#e02d3c;}
+.vid-foco-btn{position:absolute;top:8px;right:8px;z-index:6;border:0;cursor:pointer;
+              padding:4px 9px;border-radius:100px;background:rgba(10,11,13,.72);color:#fff;
+              font-size:10.5px;font-weight:600;letter-spacing:.3px;}
+.vid-foco-btn:hover{background:rgba(10,11,13,.92);}
+
 .stream-bar{display:none;margin-top:8px;padding:10px 14px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;}
 .stream-bar.sending{display:flex;align-items:center;gap:8px;background:var(--primary-soft);color:var(--primary);}
 .stream-bar.playing{display:flex;align-items:center;gap:8px;background:#e4f7ee;color:var(--success);}
 .stream-bar.error{display:flex;align-items:center;gap:8px;background:#fdeaec;color:var(--error);}
+/* Linha de estado POR CANAL. No mosaico a barra única não serve: um canal pode
+   estar no ar enquanto o outro ainda tenta, e uma frase só teria de mentir
+   sobre um dos dois. */
+.tile-bar{font-size:11px;line-height:1.5;margin-top:5px;min-height:16px;color:var(--muted);
+          display:flex;align-items:center;gap:6px;}
+.tile-bar.ok{color:var(--success);}
+.tile-bar.err{color:var(--error);}
 @keyframes spin{to{transform:rotate(360deg);}}
-.spinner{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;}
+.spinner{width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;flex:0 0 auto;}
+.tile-bar .spinner{width:11px;height:11px;border-width:1.6px;}
 .watermark-overlay{position:absolute;top:10px;right:10px;padding:3px 8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:4px;font-family:\'JetBrains Mono\',monospace;display:none;pointer-events:none;z-index:5;}
+.vid-grid.cols-2 .watermark-overlay,.vid-grid.cols-3 .watermark-overlay{top:38px;}
+/* Chips de canal do rodapé: seleção MÚLTIPLA — cada um ligado abre um player. */
+.ch-chip{cursor:pointer;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div style="display:grid;grid-template-columns:1fr 300px;gap:16px;">
-    <!-- Player -->
+    <!-- Player(es) -->
     <div>
-        <div class="vid-bg" id="vid-container">
-            <div id="vid-placeholder" class="vid-placeholder">
-                <i>&#9654;</i>
-                <div style="font-size:14px;">Selecione um dispositivo e canal</div>
-                <div style="font-size:12px;margin-top:4px;opacity:.7;">Clique em "Iniciar Transmissão" para começar</div>
-            </div>
-            <div class="watermark-overlay" id="watermark">bycamera</div>
-            <video id="vid-player" controls playsinline style="display:none;width:100%;max-height:520px;"></video>
-        </div>
+        <?php /* 🔴 UM PLAYER POR CANAL (v4.17.14). A JC400AD e as JT/T de mais
+                 de um canal publicam os canais SIMULTANEAMENTE — a JIMI com um
+                 único `RTMP,ON,INOUT` (que registra `live/0` e `live/1` de uma
+                 vez, medido em 18/08/2026), a JT/T com um `37121` por canal.
+                 A tela abria um player só e obrigava a alternar entre canais
+                 para ver o que já estava no ar ao mesmo tempo. O mosaico é
+                 montado por montarMosaico(), a partir dos canais marcados. */ ?>
+        <div class="vid-grid cols-1" id="vid-grid"></div>
 
         <div class="stream-bar" id="stream-bar"><span id="stream-bar-text"></span></div>
 
@@ -177,7 +226,11 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endforeach; ?>
             </select>
 
-            <span style="font-size:12px;color:var(--muted);">Canal:</span>
+            <?php /* Os chips deixaram de ser "qual canal ver" para ser "quais
+                     canais abrir": seleção múltipla, todos ligados por padrão.
+                     Desligar um deixa de gastar franquia do SIM com um canal
+                     que ninguém está olhando. */ ?>
+            <span style="font-size:12px;color:var(--muted);">Canais:</span>
             <div id="chan-sel" style="display:flex;gap:4px;"></div>
 
             <button class="btn btn-primary btn-sm" id="btn-start" onclick="startLive()">&#9654; Iniciar Transmissão</button>
@@ -199,11 +252,11 @@ require_once __DIR__ . '/../web/layout_base.php';
         <div class="card">
             <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:6px;">Como usar</h4>
             <ol style="font-size:12px;color:var(--muted);padding-left:16px;line-height:1.8;">
-                <li>Selecione o dispositivo online</li>
-                <li>Escolha o canal (a quantidade vem do cadastro do equipamento)</li>
+                <li>Verifique se a câmera está online</li>
+                <li>Escolha o canal</li>
                 <li>Clique em "Iniciar Transmissão"</li>
                 <li>O sistema envia o comando ao dispositivo</li>
-                <li>O stream HTTP-FLV abre automaticamente</li>
+                <li>O stream abre automaticamente</li>
             </ol>
         </div>
     </div>
@@ -214,23 +267,62 @@ var streamUrl = <?= json_encode($streamUrl) ?>;
 var ingestIp = <?= json_encode($vsc['ingest_ip']) ?>;
 var ingestPort = <?= json_encode($vsc['ingest_port']) ?>;
 var selImei = <?= json_encode($selectedImei) ?>;
-var selCh = 1;
 // 🔴 JIMI e JT/T pedem vídeo ao vivo de formas DIFERENTES, e a tela mandava só
 // a do JT/T em todo equipamento. Ver startLive()/urlDoStream().
 var selProto = <?= json_encode(strtoupper((string)($devices[0]['protocol'] ?? ''))) ?>;
-var curPlayer = null;
 var maxCams = 1;
 var rotation = 0;
 var watermark = 0;
 
+// ── Estado do mosaico ───────────────────────────────────────────────────────
+//
+// `canais[ch]` diz se o canal está MARCADO (abre player); `players[ch]` guarda
+// a instância flv.js e os timers daquele canal. Antes havia uma variável só
+// (`selCh`/`curPlayer`), o que é a razão de a tela só conseguir um player de
+// cada vez: não havia onde pôr o segundo.
+var canais  = {};
+var players = {};
+var focoCh  = 0;            // 0 = mosaico inteiro; N = só o canal N à vista
+var mudoPorPadrao = false;  // com mais de um quadro, o áudio de todos juntos é ruído
+
 // Controle das tentativas de conexão ao FLV (o device leva alguns
-// segundos entre aceitar o 37121 e publicar o stream no media server)
+// segundos entre aceitar o comando e publicar o stream no media server)
 var MAX_ATTEMPTS = 8;
 var RETRY_MS = 3000;
 var WATCHDOG_MS = 8000;
-var attemptTimer = null;
-var watchdogTimer = null;
 var playSession = 0; // invalida callbacks de sessões de play antigas
+
+function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+}
+
+/** Rótulo do canal — mesma convenção da tela de playback. */
+function rotuloCanal(ch) {
+    return ch === 1 ? 'CH1 · frontal' : (ch === 2 ? 'CH2 · interna' : 'CH' + ch);
+}
+
+/**
+ * Teto de canais que o protocolo consegue publicar.
+ *
+ * 🔴 O JIMI SÓ TEM DOIS. `RTMP,ON,<B>` aceita `IN`, `OUT`, `INOUT` e `PIP` — o
+ * device recusa qualquer outra coisa ("parameter B error"), e não existe forma
+ * de pedir um terceiro canal. Um cadastro com `camera_count = 3` numa câmera
+ * JIMI desenharia um quadro que nunca receberia vídeo; melhor não desenhá-lo.
+ * No JT/T o 37121 leva o número do canal e não tem esse teto.
+ */
+function tetoDeCanais() {
+    var n = Math.max(1, maxCams);
+    return selProto === 'JIMI' ? Math.min(2, n) : n;
+}
+
+/** Canais marcados agora, em ordem. */
+function canaisAtivos() {
+    var out = [];
+    for (var c = 1; c <= tetoDeCanais(); c++) if (canais[c]) out.push(c);
+    return out;
+}
 
 function onDeviceChange() {
     var sel = document.getElementById('dev-sel');
@@ -240,9 +332,11 @@ function onDeviceChange() {
     selProto = (opt.dataset.proto || '').toUpperCase();
     rotation = parseInt(opt.dataset.rotation) || 0;
     watermark = parseInt(opt.dataset.watermark) || 0;
-    renderChannels();
-    atualizarInfoDispositivo();
     stopPlayer();
+    marcarTodosOsCanais();
+    renderChannels();
+    montarMosaico();
+    atualizarInfoDispositivo();
 }
 
 /** Escreve o painel lateral com os dados do equipamento ESCOLHIDO agora. */
@@ -254,38 +348,133 @@ function atualizarInfoDispositivo() {
 
     var o = sel.options[sel.selectedIndex];
     var online = o.dataset.online === '1';
-    var esc = function (s) {
-        return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
-        });
-    };
+    var cams = parseInt(o.dataset.cam) || 1;
+    var teto = tetoDeCanais();
     box.innerHTML =
         '<div>Placa: <span class="text-mono">' + esc(o.dataset.placa) + '</span></div>' +
-        '<div>Canais: ' + (parseInt(o.dataset.cam) || 1) + '</div>' +
+        '<div>Canais: ' + cams +
+            (teto < cams ? ' <span style="color:var(--muted);font-size:11px;">(o protocolo JIMI transmite 2)</span>' : '') +
+            (teto > 1 ? ' <span style="color:var(--muted);font-size:11px;">— simultâneos</span>' : '') + '</div>' +
         '<div>Última comunicação: <span class="text-mono">' + esc(o.dataset.last) + '</span></div>' +
         '<div>Status: <span class="badge ' + (online ? 'badge-success">Online' : 'badge-error">Offline') +
         '</span></div>';
 }
 
+function marcarTodosOsCanais() {
+    canais = {};
+    for (var c = 1; c <= tetoDeCanais(); c++) canais[c] = true;
+    focoCh = 0;
+}
+
+// ── Chips de canal: seleção MÚLTIPLA ────────────────────────────────────────
 function renderChannels() {
-    // Um botão por canal cadastrado no equipamento (devices.camera_count,
-    // fallback máximo do modelo) — sem teto fixo de 4 (JC450 chega a 5)
-    if (selCh > maxCams) selCh = 1;
     var container = document.getElementById('chan-sel');
+    if (!container) return;
+    var teto = tetoDeCanais();
     var html = '';
-    for (var c = 1; c <= maxCams; c++) {
-        var active = c === selCh ? ' btn-primary' : ' btn-outline';
-        html += '<button class="btn btn-sm' + active + '" data-ch="' + c + '" onclick="selChannel(' + c + ')">CH' + c + '</button>';
+    for (var c = 1; c <= teto; c++) {
+        var on = !!canais[c];
+        html += '<button type="button" class="btn btn-sm ch-chip ' + (on ? 'btn-primary' : 'btn-outline') + '"'
+              + ' data-ch="' + c + '" aria-pressed="' + (on ? 'true' : 'false') + '"'
+              + ' title="' + (on ? 'Abrir' : 'Não abrir') + ' o canal ' + c + '"'
+              + ' onclick="toggleCanal(' + c + ')">CH' + c + '</button>';
     }
     container.innerHTML = html;
 }
 
-function selChannel(ch) {
-    selCh = ch;
-    var btns = document.querySelectorAll('#chan-sel button');
-    btns.forEach(function(b) {
-        b.className = 'btn btn-sm ' + (parseInt(b.dataset.ch) === ch ? 'btn-primary' : 'btn-outline');
+/**
+ * Liga/desliga um canal. O último marcado não se desmarca: um mosaico vazio
+ * seria uma tela sem nada e sem explicação — a saída para "não quero ver
+ * nenhum" é o botão Parar.
+ */
+function toggleCanal(ch) {
+    if (canais[ch] && canaisAtivos().length === 1) return;
+    canais[ch] = !canais[ch];
+    if (!canais[ch]) { pararCanal(ch); if (focoCh === ch) focoCh = 0; }
+    renderChannels();
+    montarMosaico();
+}
+
+// ── Mosaico ─────────────────────────────────────────────────────────────────
+function montarMosaico() {
+    var grid = document.getElementById('vid-grid');
+    if (!grid) return;
+    var chs = canaisAtivos();
+    // Quem já está tocando NÃO é remontado: recriar o <video> mataria o stream
+    // no ar só porque o usuário marcou outro canal.
+    var vivos = {};
+    chs.forEach(function (c) { if (players[c] && players[c].noAr) vivos[c] = true; });
+
+    grid.className = 'vid-grid cols-' + Math.min(3, chs.length) + (focoCh ? ' foco' : '');
+    var html = [];
+    chs.forEach(function (c) {
+        html.push(
+            '<div class="vid-tile' + (focoCh === c ? ' em-foco' : '') + '" data-ch="' + c + '" id="tile-' + c + '">'
+          +   '<div class="vid-bg">'
+          +     '<span class="vid-chip" id="chip-' + c + '"><span class="pt"></span>' + rotuloCanal(c) + '</span>'
+          +     (chs.length > 1
+                  ? '<button type="button" class="vid-foco-btn" id="foco-' + c + '" onclick="toggleFoco(' + c + ')">'
+                    + (focoCh === c ? 'Recolher' : 'Expandir') + '</button>'
+                  : '')
+          +     '<div class="vid-placeholder" id="ph-' + c + '">'
+          +       '<i>&#9654;</i>'
+          +       '<div style="font-size:13px;">' + rotuloCanal(c) + '</div>'
+          +       '<div style="font-size:11px;margin-top:4px;opacity:.7;">Clique em "Iniciar Transmissão"</div>'
+          +     '</div>'
+          +     '<div class="watermark-overlay" id="wm-' + c + '">bycamera</div>'
+          +     '<video id="v-' + c + '" controls playsinline style="display:none;"></video>'
+          +   '</div>'
+          +   '<div class="tile-bar" id="bar-' + c + '"></div>'
+          + '</div>');
     });
+    grid.innerHTML = html.join('');
+
+    // Reata os players que continuavam no ar ao <video> recém-criado.
+    Object.keys(vivos).forEach(function (c) { reatarPlayer(+c); });
+}
+
+/**
+ * Devolve um player vivo ao seu <video> depois de o mosaico ser redesenhado.
+ * Sem isto, marcar um canal novo apagaria a imagem dos que já estavam no ar
+ * (o objeto flv.js sobrevive, mas ficaria preso a um elemento fora do DOM).
+ */
+function reatarPlayer(ch) {
+    var p = players[ch];
+    var v = document.getElementById('v-' + ch);
+    if (!p || !p.flv || !v) return;
+    try {
+        p.flv.detachMediaElement();
+        p.flv.attachMediaElement(v);
+        v.muted = p.mudo;
+        v.style.display = 'block';
+        var ph = document.getElementById('ph-' + ch);
+        if (ph) ph.style.display = 'none';
+        if (rotation !== 0) v.style.transform = 'rotate(' + rotation + 'deg)';
+        if (watermark) { var wm = document.getElementById('wm-' + ch); if (wm) wm.style.display = 'block'; }
+        marcarChip(ch, 'no-ar');
+        v.play().catch(function () {});
+    } catch (e) { /* player já desmontado */ }
+}
+
+function toggleFoco(ch) {
+    focoCh = (focoCh === ch) ? 0 : ch;
+    montarMosaico();
+}
+
+// ── Estado visível de cada quadro ───────────────────────────────────────────
+function marcarChip(ch, estado) {
+    var el = document.getElementById('chip-' + ch);
+    if (el) el.className = 'vid-chip' + (estado ? ' ' + estado : '');
+}
+function barraCanal(ch, cls, html) {
+    var el = document.getElementById('bar-' + ch);
+    if (el) { el.className = 'tile-bar' + (cls ? ' ' + cls : ''); el.innerHTML = html; }
+}
+function barraGeral(cls, html) {
+    var bar = document.getElementById('stream-bar');
+    var txt = document.getElementById('stream-bar-text');
+    bar.className = 'stream-bar' + (cls ? ' ' + cls : '');
+    txt.innerHTML = html;
 }
 
 /**
@@ -297,6 +486,20 @@ function selChannel(ch) {
 function cameraJimi(ch) { return ch >= 2 ? 'IN' : 'OUT'; }
 
 /**
+ * Modo do `RTMP,ON` para o CONJUNTO de canais pedidos.
+ *
+ * 🔴 É UM COMANDO SÓ para os dois canais. `INOUT` registra `live/0` e `live/1`
+ * na mesma tacada (medido) — mandar `RTMP,ON,OUT` seguido de `RTMP,ON,IN`
+ * reconfigura o push e derruba o primeiro, que é como um mosaico ingênuo
+ * quebraria a JC400AD sem dar erro nenhum.
+ */
+function modoJimi(chs) {
+    var temFrontal = chs.indexOf(1) >= 0, temInterna = chs.indexOf(2) >= 0;
+    if (temFrontal && temInterna) return 'INOUT';
+    return temInterna ? 'IN' : 'OUT';
+}
+
+/**
  * URL HTTP-FLV do stream, que também difere por protocolo.
  *
  * JIMI publica em `live/<canal>/<imei>`, com o canal em base ZERO — o que a
@@ -304,10 +507,10 @@ function cameraJimi(ch) { return ch >= 2 ? 'IN' : 'OUT'; }
  * Medido: com a câmera publicando, `/live/0/<imei>.flv` devolveu 200 com
  * assinatura FLV e `/1/<imei>.flv` não devolveu nada.
  */
-function urlDoStream() {
+function urlDoStream(ch) {
     return selProto === 'JIMI'
-        ? streamUrl + '/live/' + (selCh - 1) + '/' + selImei + '.flv'
-        : streamUrl + '/' + selCh + '/' + selImei + '.flv';
+        ? streamUrl + '/live/' + (ch - 1) + '/' + selImei + '.flv'
+        : streamUrl + '/' + ch + '/' + selImei + '.flv';
 }
 
 /** `RTMP,OFF` encerra o push da JIMI — sem isso ele só cai pelo timeout. */
@@ -321,7 +524,7 @@ function pararStreamJimi(imei) {
 }
 
 /**
- * Parada pedida pelo usuário: além de desmontar o player, avisa a câmera JIMI.
+ * Parada pedida pelo usuário: além de desmontar os players, avisa a câmera JIMI.
  *
  * Não fica dentro de `stopPlayer()` porque ele também roda no começo do
  * `startLive()` e na troca de equipamento — ali um `RTMP,OFF` desligaria o que
@@ -332,43 +535,52 @@ function pararAoVivo() {
     stopPlayer();
 }
 
-function destroyFlv() {
-    if (curPlayer) {
-        try { curPlayer.unload(); curPlayer.detachMediaElement(); } catch(e) {}
-        try { curPlayer.destroy(); } catch(e) {}
-        curPlayer = null;
+function destroyFlv(ch) {
+    var p = players[ch];
+    if (!p || !p.flv) return;
+    try { p.flv.unload(); p.flv.detachMediaElement(); } catch (e) {}
+    try { p.flv.destroy(); } catch (e) {}
+    p.flv = null;
+}
+
+/** Desmonta UM canal, sem tocar nos outros — usado ao desmarcar um chip. */
+function pararCanal(ch) {
+    var p = players[ch];
+    if (p) {
+        if (p.attemptTimer) clearTimeout(p.attemptTimer);
+        if (p.watchdogTimer) clearTimeout(p.watchdogTimer);
+        destroyFlv(ch);
     }
+    delete players[ch];
+    var v = document.getElementById('v-' + ch);
+    if (v) { try { v.pause(); } catch (e) {} v.removeAttribute('src'); v.style.display = 'none'; v.style.transform = ''; }
+    var ph = document.getElementById('ph-' + ch); if (ph) ph.style.display = '';
+    var wm = document.getElementById('wm-' + ch); if (wm) wm.style.display = 'none';
+    marcarChip(ch, '');
+    barraCanal(ch, '', '');
 }
 
 function stopPlayer() {
     playSession++;
-    if (attemptTimer)  { clearTimeout(attemptTimer);  attemptTimer = null; }
-    if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
-    destroyFlv();
-    var v = document.getElementById('vid-player');
-    v.pause(); v.removeAttribute('src'); v.style.display = 'none';
-    v.style.transform = ''; v.muted = false;
-    document.getElementById('vid-placeholder').style.display = '';
-    document.getElementById('stream-bar').className = 'stream-bar';
+    Object.keys(players).forEach(function (c) { pararCanal(+c); });
+    players = {};
+    document.querySelectorAll('.vid-tile').forEach(function (t) { pararCanal(+t.dataset.ch); });
+    barraGeral('', '');
     document.getElementById('btn-start').style.display = '';
     document.getElementById('btn-stop').style.display = 'none';
-    document.getElementById('watermark').style.display = 'none';
 }
 
+// ── Início da transmissão ───────────────────────────────────────────────────
 function startLive() {
     stopPlayer();
     var mySession = playSession;
-    var bar = document.getElementById('stream-bar');
-    var txt = document.getElementById('stream-bar-text');
+    var chs = canaisAtivos();
+    if (!chs.length) return;
 
     if (typeof flvjs === 'undefined' || !flvjs.isSupported()) {
-        bar.className = 'stream-bar error';
-        txt.textContent = 'Navegador não suporta flv.js. Use Chrome ou Firefox.';
+        barraGeral('error', 'Navegador não suporta flv.js. Use Chrome ou Firefox.');
         return;
     }
-
-    bar.className = 'stream-bar sending';
-    txt.innerHTML = '<span class="spinner"></span> Enviando comando de streaming ao dispositivo...';
 
     // 🔴 CADA PROTOCOLO PEDE O VÍDEO DE UM JEITO. Até a v4.9.28 esta tela
     // mandava `37121` em TODO equipamento — inclusive nas JIMI, que não
@@ -376,10 +588,11 @@ function startLive() {
     // (device não respondeu), enquanto nas JC371/JC181 ficava `executed`.
     //
     //   JT/T 1078 → proNo 37121 (0x9101), serverFlagId 0: o device publica RTP
-    //               no ingest do media server (10002).
+    //               no ingest do media server (10002). UM COMANDO POR CANAL.
     //   JIMI      → comando de texto `RTMP,ON,<CÂMERA>` (proNo 128,
     //               serverFlagId 1): o device faz PUSH RTMP para o endereço já
-    //               gravado nele em `RSERVICE` (rtmp://<ip>:1936/live).
+    //               gravado nele em `RSERVICE` (rtmp://<ip>:1936/live). UM
+    //               COMANDO SÓ para os dois canais — ver modoJimi().
     //
     // Não há duração no `RTMP,ON`: o `<C>` da planilha só existe em firmware
     // V4.3+ e não é o tempo do stream — tempo é do `Video,<cam>,<seg>`, que é
@@ -390,107 +603,179 @@ function startLive() {
     // esta ramificação corrige — só que ao contrário. Melhor recusar e dizer o
     // que falta: são 1 de 11 equipamentos em produção (18/08/2026).
     if (selProto !== 'JIMI' && selProto !== 'JTT') {
-        bar.className = 'stream-bar error';
-        txt.textContent = 'Equipamento sem modelo cadastrado: não dá para saber se ele fala JIMI ou JT/T, '
-                        + 'e cada um pede o vídeo de um jeito. Defina o modelo em Equipamentos e tente de novo.';
+        barraGeral('error', 'Equipamento sem modelo cadastrado: não dá para saber se ele fala JIMI ou JT/T, '
+                          + 'e cada um pede o vídeo de um jeito. Defina o modelo em Equipamentos e tente de novo.');
         return;
     }
 
-    var reqCmd = selProto === 'JIMI'
-        ? {imei: selImei, proNo: 128, serverFlagId: 1, content: 'RTMP,ON,' + cameraJimi(selCh)}
-        : {imei: selImei, proNo: 37121, serverFlagId: 0,
-           content: JSON.stringify({
-                dataType: 0,
-                codeStreamType: 0,
-                channel: String(selCh),
-                videoIP: ingestIp,
-                videoTCPPort: ingestPort,
-                videoUDPPort: 0
-           })};
+    // Com mais de um quadro, todos começam mudos: quatro trilhas de áudio
+    // sobrepostas não são informação, e o navegador bloquearia o autoplay de
+    // qualquer forma. O controle de volume de cada player religa a que
+    // interessa.
+    mudoPorPadrao = chs.length > 1;
 
-    fetch('/sendcommand', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
-        body: JSON.stringify(reqCmd)
-    }).then(function(r) { return r.json(); }).then(function(d) {
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display = '';
+    chs.forEach(function (c) {
+        barraCanal(c, '', '<span class="spinner"></span> Pedindo o canal à câmera…');
+    });
+    barraGeral('sending', '<span class="spinner"></span> Enviando comando de streaming ao dispositivo'
+        + (chs.length > 1 ? ' — ' + chs.length + ' canais' : '') + '…');
+
+    enviarComandos(mySession, chs, function (okChs, erro) {
         if (playSession !== mySession) return;
-        if (d.offline_queued) {
-            bar.className = 'stream-bar error';
-            txt.textContent = 'Dispositivo offline: o comando foi enfileirado e será entregue na reconexão — a transmissão não vai iniciar agora.';
-        } else if (d.code === 0) {
-            connectAttempt(mySession, 1);
-        } else {
-            bar.className = 'stream-bar error';
-            txt.textContent = 'Erro: ' + (d.iothub_msg || d.msg || 'Falha ao enviar comando');
+        if (!okChs.length) {
+            barraGeral('error', esc(erro || 'Falha ao enviar comando'));
+            document.getElementById('btn-start').style.display = '';
+            document.getElementById('btn-stop').style.display = 'none';
+            return;
         }
-    }).catch(function(e) {
-        if (playSession !== mySession) return;
-        bar.className = 'stream-bar error';
-        txt.textContent = 'Erro de rede ao enviar comando.';
+        barraGeral('sending', '<span class="spinner"></span> Comando aceito — aguardando a câmera publicar '
+            + (okChs.length > 1 ? 'os ' + okChs.length + ' canais' : 'o vídeo') + '…');
+        okChs.forEach(function (c) { connectAttempt(mySession, c, 1); });
     });
 }
 
-function connectAttempt(mySession, attempt) {
-    if (playSession !== mySession) return;
-    var url = urlDoStream();
-    var bar = document.getElementById('stream-bar');
-    var txt = document.getElementById('stream-bar-text');
-    var v = document.getElementById('vid-player');
+/**
+ * Despacha os comandos de início e devolve os canais aceitos.
+ *
+ * 🔴 SERIALIZADO no JT/T, nunca em paralelo — é a mesma lição da tela de
+ * playback com o 37381: a câmera ainda está processando o primeiro pedido
+ * quando o próximo chega, não responde ao segundo, e o comando volta como
+ * falha. Com um canal só o laço tem um passo e o custo é zero.
+ */
+function enviarComandos(mySession, chs, cb) {
+    var ok = [], ultimoErro = null;
+
+    function despachar(cmd, canaisDoCmd, seguir) {
+        fetch('/sendcommand', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || ''},
+            body: JSON.stringify(cmd)
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            if (playSession !== mySession) return;
+            if (d.offline_queued) {
+                ultimoErro = 'Dispositivo offline: o comando foi enfileirado e será entregue na reconexão — '
+                           + 'a transmissão não vai iniciar agora.';
+                canaisDoCmd.forEach(function (c) { marcarChip(c, 'erro'); barraCanal(c, 'err', 'Dispositivo offline.'); });
+            } else if (d.code === 0) {
+                canaisDoCmd.forEach(function (c) { ok.push(c); });
+            } else {
+                ultimoErro = 'Erro: ' + (d.iothub_msg || d.msg || 'Falha ao enviar comando');
+                canaisDoCmd.forEach(function (c) { marcarChip(c, 'erro'); barraCanal(c, 'err', esc(ultimoErro)); });
+            }
+            seguir();
+        }).catch(function () {
+            if (playSession !== mySession) return;
+            ultimoErro = 'Erro de rede ao enviar comando.';
+            canaisDoCmd.forEach(function (c) { marcarChip(c, 'erro'); barraCanal(c, 'err', ultimoErro); });
+            seguir();
+        });
+    }
+
+    if (selProto === 'JIMI') {
+        // Um comando só cobre os dois canais (ver modoJimi()).
+        despachar({imei: selImei, proNo: 128, serverFlagId: 1, content: 'RTMP,ON,' + modoJimi(chs)},
+                  chs, function () { cb(ok, ultimoErro); });
+        return;
+    }
+
+    var fila = chs.slice();
+    (function proximo() {
+        if (!fila.length) { cb(ok, ultimoErro); return; }
+        var c = fila.shift();
+        despachar({imei: selImei, proNo: 37121, serverFlagId: 0,
+                   content: JSON.stringify({
+                        dataType: 0,
+                        codeStreamType: 0,
+                        channel: String(c),
+                        videoIP: ingestIp,
+                        videoTCPPort: ingestPort,
+                        videoUDPPort: 0
+                   })}, [c], proximo);
+    })();
+}
+
+function connectAttempt(mySession, ch, attempt) {
+    if (playSession !== mySession || !canais[ch]) return;
+    var url = urlDoStream(ch);
+    var v = document.getElementById('v-' + ch);
+    var ph = document.getElementById('ph-' + ch);
+    if (!v) return;
+    var p = players[ch] = players[ch] || {};
     var settled = false;
 
-    bar.className = 'stream-bar sending';
-    txt.innerHTML = '<span class="spinner"></span> Conectando ao stream (tentativa ' + attempt + '/' + MAX_ATTEMPTS +
-                    ')... o dispositivo leva alguns segundos para publicar o vídeo.';
+    marcarChip(ch, '');
+    barraCanal(ch, '', '<span class="spinner"></span> Conectando (tentativa ' + attempt + '/' + MAX_ATTEMPTS + ')…');
 
     function fail() {
         if (playSession !== mySession || settled) return;
         settled = true;
-        if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
-        destroyFlv();
+        if (p.watchdogTimer) { clearTimeout(p.watchdogTimer); p.watchdogTimer = null; }
+        destroyFlv(ch);
         if (attempt < MAX_ATTEMPTS) {
-            attemptTimer = setTimeout(function() { connectAttempt(mySession, attempt + 1); }, RETRY_MS);
+            p.attemptTimer = setTimeout(function () { connectAttempt(mySession, ch, attempt + 1); }, RETRY_MS);
         } else {
-            bar.className = 'stream-bar error';
-            txt.textContent = 'Stream não ficou disponível em ' + url +
-                              '. Verifique se o dispositivo está online, com sinal de dados e com a câmera do canal CH' + selCh + ' habilitada, e tente novamente.';
+            marcarChip(ch, 'erro');
+            barraCanal(ch, 'err', 'O stream do canal ' + ch + ' não ficou disponível. Verifique se a câmera '
+                + 'deste canal está habilitada no equipamento e tente novamente.');
+            resumoGeral();
         }
     }
 
     function success() {
         if (playSession !== mySession || settled) return;
         settled = true;
-        if (watchdogTimer) { clearTimeout(watchdogTimer); watchdogTimer = null; }
-        document.getElementById('vid-placeholder').style.display = 'none';
+        p.noAr = true;
+        p.mudo = v.muted;
+        if (p.watchdogTimer) { clearTimeout(p.watchdogTimer); p.watchdogTimer = null; }
+        if (ph) ph.style.display = 'none';
         v.style.display = 'block';
-        bar.className = 'stream-bar playing';
-        txt.textContent = 'Ao Vivo — CH' + selCh + ': ' + url +
-                          (v.muted ? ' (sem áudio — ative no controle de volume do player)' : '');
+        marcarChip(ch, 'no-ar');
+        barraCanal(ch, 'ok', 'Ao vivo' + (v.muted ? ' · sem áudio (ative no controle de volume)' : ''));
 
         if (rotation !== 0) v.style.transform = 'rotate(' + rotation + 'deg)';
-        if (watermark) document.getElementById('watermark').style.display = 'block';
-
-        document.getElementById('btn-start').style.display = 'none';
-        document.getElementById('btn-stop').style.display = '';
+        if (watermark) { var wm = document.getElementById('wm-' + ch); if (wm) wm.style.display = 'block'; }
+        resumoGeral();
     }
 
-    destroyFlv();
-    curPlayer = flvjs.createPlayer({type: 'flv', url: url, isLive: true}, {enableStashBuffer: false});
-    curPlayer.on(flvjs.Events.ERROR, fail); // 404/conexão recusada enquanto o device não publica
-    curPlayer.attachMediaElement(v);
-    curPlayer.load();
-    watchdogTimer = setTimeout(fail, WATCHDOG_MS); // sem dados nem erro → tenta de novo
+    destroyFlv(ch);
+    v.muted = mudoPorPadrao;
+    p.mudo = v.muted;
+    p.flv = flvjs.createPlayer({type: 'flv', url: url, isLive: true}, {enableStashBuffer: false});
+    p.flv.on(flvjs.Events.ERROR, fail); // 404/conexão recusada enquanto o device não publica
+    p.flv.attachMediaElement(v);
+    p.flv.load();
+    p.watchdogTimer = setTimeout(fail, WATCHDOG_MS); // sem dados nem erro → tenta de novo
 
-    var p = curPlayer.play();
-    if (p && p.then) {
-        p.then(success).catch(function(err) {
+    var pr = p.flv.play();
+    if (pr && pr.then) {
+        pr.then(success).catch(function (err) {
             // Autoplay bloqueado pelo navegador: repete sem áudio
-            if (err && err.name === 'NotAllowedError' && curPlayer) {
+            if (err && err.name === 'NotAllowedError' && p.flv) {
                 v.muted = true;
-                var p2 = curPlayer.play();
-                if (p2 && p2.then) p2.then(success).catch(function() { fail(); });
+                p.mudo = true;
+                var p2 = p.flv.play();
+                if (p2 && p2.then) p2.then(success).catch(function () { fail(); });
             }
             // Demais erros: Events.ERROR ou o watchdog decidem o retry
         });
+    }
+}
+
+/** Uma frase para o conjunto — o detalhe de cada canal fica na barra do quadro. */
+function resumoGeral() {
+    var chs = canaisAtivos();
+    var noAr = chs.filter(function (c) { return players[c] && players[c].noAr; });
+    if (!noAr.length) {
+        barraGeral('error', 'Nenhum canal entrou no ar. Veja o aviso em cada quadro.');
+    } else if (noAr.length === chs.length) {
+        barraGeral('playing', chs.length > 1
+            ? 'Ao vivo — ' + noAr.length + ' canais simultâneos (' + noAr.map(function (c) { return 'CH' + c; }).join(', ') + ')'
+            : 'Ao vivo — CH' + noAr[0]);
+    } else {
+        barraGeral('sending', 'Ao vivo em ' + noAr.length + ' de ' + chs.length + ' canais — '
+            + 'os demais ainda tentam ou falharam (veja cada quadro).');
     }
 }
 
@@ -507,7 +792,9 @@ function connectAttempt(mySession, attempt) {
         // selecionado quando a tela abre com `?imei=`.
         selProto = (sel.options[sel.selectedIndex].dataset.proto || '').toUpperCase();
     }
+    marcarTodosOsCanais();
     renderChannels();
+    montarMosaico();
     atualizarInfoDispositivo();
 })();
 </script>

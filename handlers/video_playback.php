@@ -375,7 +375,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <div class="card pb-barra" id="pb-barra" style="margin-top:12px;padding:12px 14px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
                 <div style="font-size:12px;font-weight:600;color:var(--ink);">
-                    Gravações no cartão
+                    Gravações na câmera
                     <span id="pb-resumo" style="font-weight:400;color:var(--muted);margin-left:6px;"></span>
                 </div>
                 <div class="pb-zoom">
@@ -385,12 +385,12 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <button type="button" class="btn btn-outline btn-sm" onclick="pbTudo()">Tudo</button>
                 </div>
             </div>
-            <svg id="pb-svg" role="img" aria-label="Linha do tempo das gravações do cartão, por canal"></svg>
+            <svg id="pb-svg" role="img" aria-label="Linha do tempo das gravações na câmera, por canal"></svg>
             <div class="pb-dica" id="pb-dica"></div>
             <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;color:var(--muted);margin-top:6px;">
-                <span><span class="pb-leg" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--primary);opacity:.68;vertical-align:-1px;margin-right:3px;"></span> no cartão</span>
-                <span><span class="pb-leg" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f9d58;vertical-align:-1px;margin-right:3px;"></span> já no servidor</span>
-                <span>roda do mouse aproxima · arraste para deslocar · clique para agir</span>
+                <span><span class="pb-leg" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--primary);opacity:.68;vertical-align:-1px;margin-right:3px;"></span> Na câmera</span>
+                <span><span class="pb-leg" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#0f9d58;vertical-align:-1px;margin-right:3px;"></span> Upload efetuado</span>
+                <span>Use a roda do mouse para zoom + e para zoom &minus;, arraste para deslocar até o horário desejado e clique para escolher a ação</span>
             </div>
         </div>
         <?php endif; ?>
@@ -476,7 +476,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             ?>
             <?php if ($capturaInfo['ultima'] === null): ?>
                 <div class="callout info" style="font-size:11px;margin-bottom:8px">
-                    Este equipamento <strong>nunca teve o cartão listado</strong>.
+                    Este equipamento <strong>nunca teve as gravações da câmera listadas</strong>.
                     Clique em <strong>Requisitar Gravações</strong> — a câmera responde em alguns segundos.
                 </div>
             <?php elseif ($capVencida): ?>
@@ -487,17 +487,17 @@ require_once __DIR__ . '/../web/layout_base.php';
                          falava de "download de arquivo sobrescrito", que é
                          verdade mas não explica o buraco na tela. */ ?>
                 <div class="callout" style="font-size:11px;margin-bottom:8px;background:#fdf6e3;border-left:3px solid #b45309;color:#7c4a03">
-                    A listagem do cartão foi feita
-                    <strong>há <?= $capMin >= 1440 ? intdiv($capMin,1440).' dia(s)' : ($capMin >= 60 ? intdiv($capMin,60).' h' : $capMin.' min') ?></strong>
-                    e <strong>venceu</strong> (validade: <?= (int)$ttl ?> min).
-                    Sem ela a <strong>gravação contínua não aparece</strong> — o que sobra na tela
-                    são só os vídeos de evento, que ficam no servidor.
-                    <strong>Requisite novamente</strong> para ver o cartão inteiro.
+                    Listagem expirada, faça nova requisição.
                 </div>
             <?php else: ?>
+                <?php /* ⚠️ `captured_at` é UTC como toda coluna do banco; a tela é
+                         BRT. `fmt_brt()` é o ponto único de conversão do projeto —
+                         imprimir a coluna crua mostraria a listagem 3 h no futuro
+                         (CLAUDE.md, "UTC no miolo, BRT só nas duas bordas"). */ ?>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-                    Listagem de <strong><?= $capMin < 1 ? 'agora' : 'há ' . (int)$capMin . ' min' ?></strong>
-                    · vence em <?= max(0, $ttl - (int)$capMin) ?> min
+                    Listagem efetuada às <strong><?= fmt_brt($capturaInfo['ultima'], 'H:i') ?></strong>
+                    de <strong><?= fmt_brt($capturaInfo['ultima'], 'd/m/y') ?></strong>
+                    — validade de <?= (int)$ttl ?> min, após esse período, efetue nova requisição.
                 </div>
             <?php endif; ?>
 
@@ -594,14 +594,44 @@ function pbSessoes(blocos, gap) {
     return saida;
 }
 
-/** Arquivo já no servidor cujo instante cai DENTRO deste bloco. */
+/** O arquivo dá para TOCAR no player, ou é foto/miniatura do evento? */
+function pbTocavel(a) {
+    return a && (a.tp === 'video' || /\.(ts|mp4|flv|m4v)(\?|$)/i.test(a.n || ''));
+}
+
+/**
+ * Arquivo já no servidor cujo instante cai DENTRO deste bloco.
+ *
+ * 🔴 A DURAÇÃO TEM DE SER A DO BLOCO — nunca `PB.bloco`. Aquela constante é
+ * **60 s porque a JIMI pica o cartão em blocos de um minuto**; a JT/T entrega
+ * blocos de até 5 min (medido na JC371 865478070654829: 162 dos 183 blocos
+ * vivos duravam 300–301 s). Enquanto o DESENHO da barra e a LISTA resolviam o
+ * arquivo pela duração real e o CLIQUE resolvia por 60 s fixos, todo arquivo
+ * que caísse depois do primeiro minuto do bloco pintava de verde e respondia
+ * "Este trecho ainda não está no servidor" — 34 dos 38 blocos verdes daquela
+ * câmera. Por isso `dur` é parâmetro obrigatório na prática, e todo chamador
+ * passa o `b[1]` que usou para desenhar.
+ *
+ * 🔴 VÍDEO GANHA DE FOTO. Um alarme sobe .mp4 E .jpg com instantes a segundos
+ * de distância, e 34 dos 38 blocos tinham MAIS DE UM arquivo dentro (até 16).
+ * Devolver "o primeiro da lista" entregava a miniatura em 4 dos 38 — bloco
+ * verde, clique, e o player exibindo o NOME de um jpg. O desempate é
+ * explícito: tocável primeiro, e entre iguais o mais antigo (o começo do
+ * trecho), para que o resultado não dependa da ordem em que o banco devolveu.
+ */
 function pbArquivoDoBloco(t, dur, canal) {
+    var cand = [];
     for (var i = 0; i < PB.arquivos.length; i++) {
         var a = PB.arquivos[i];
         if (a.c && canal && a.c !== canal) continue;
-        if (a.t >= t && a.t < t + dur) return a;
+        if (a.t >= t && a.t < t + dur) cand.push(a);
     }
-    return null;
+    if (!cand.length) return null;
+    cand.sort(function (x, y) {
+        var vx = pbTocavel(x) ? 0 : 1, vy = pbTocavel(y) ? 0 : 1;
+        return vx !== vy ? vx - vy : x.t - y.t;
+    });
+    return cand[0];
 }
 
 // ── Desenho ─────────────────────────────────────────────────────────────────
@@ -735,15 +765,18 @@ function pbListar() {
     var alvo = document.getElementById('pb-lista');
     if (!alvo) return;
     var t0 = PB.vista[0], t1 = PB.vista[1];
+    // Ordem ASCENDENTE: a lista acompanha a leitura da barra, que corre da
+    // esquerda (mais antigo) para a direita — duas ordens opostas na mesma tela
+    // obrigavam o operador a inverter a cabeça a cada troca de coluna.
     var itens = PB.blocos.filter(function (b) { return b[0] + b[1] >= t0 && b[0] <= t1; })
-                         .sort(function (a, b) { return b[0] - a[0]; });
+                         .sort(function (a, b) { return a[0] - b[0]; });
     var total = itens.length;
     var corte = itens.slice(0, PB_LISTA_MAX);
 
     var tit = document.getElementById('pb-lista-titulo');
     if (tit) {
         tit.textContent = total
-            ? total + ' gravaç' + (total === 1 ? 'ão' : 'ões') + ' na vista'
+            ? total + ' gravaç' + (total === 1 ? 'ão disponível' : 'ões disponíveis') + '.'
             : (PB.blocos.length ? 'Nada gravado neste trecho' : 'Nada listado');
     }
 
@@ -758,7 +791,7 @@ function pbListar() {
         });
         alvo.innerHTML = '<div class="empty-state" style="padding:20px 12px;">'
             + '<p>Nenhuma gravação neste trecho.</p>'
-            + '<p style="font-size:11px;margin-top:4px;">O cartão tem buracos — a câmera só grava quando o veículo roda.</p>'
+            + '<p style="font-size:11px;margin-top:4px;">A gravação da câmera tem buracos — ela só grava quando o veículo roda.</p>'
             + (perto ? '<button class="btn btn-outline btn-sm" style="margin-top:10px"'
                      + ' onclick="pbIrPara(' + perto[0] + ')">Ir para a gravação mais próxima ('
                      + pbDataCurta(perto[0]) + ' ' + pbHora(perto[0]).slice(0, 5) + ')</button>' : '')
@@ -777,12 +810,16 @@ function pbListar() {
         if (arq) {
             badge = arq.dl
                 ? '<span class="pb-badge baixado">Baixado</span>'
-                : '<span class="pb-badge available">No servidor</span>';
+                : '<span class="pb-badge available">Upload efetuado</span>';
         }
+        // ⚠️ `b[1]` — a duração REAL do bloco — viaja com o clique. Ver a nota
+        // de pbArquivoDoBloco(): sem ela o item resolvia por 60 s fixos e a
+        // maioria dos blocos verdes da JT/T recusava tocar.
         html.push('<div class="timeline-item' + (arq ? ' clicavel' : '')
             + '" data-ts="' + b[0] + '" data-c="' + b[2] + '"'
-            + ' title="' + (arq ? 'Clique para reproduzir · ' + arq.n : 'Gravação no cartão · CH' + b[2]) + '"'
-            + (arq ? ' onclick="pbTocar(' + b[0] + ',' + b[2] + ')"' : '') + '>'
+            + ' title="' + (arq ? (pbTocavel(arq) ? 'Clique para reproduzir · ' : 'Foto do evento · ') + arq.n
+                                : 'Gravação na câmera · CH' + b[2]) + '"'
+            + (arq ? ' onclick="pbTocar(' + b[0] + ',' + b[2] + ',' + b[1] + ')"' : '') + '>'
             + '<span class="timeline-dot' + (arq ? '' : ' on-device') + '"></span>'
             + '<span class="tl-hora">' + pbHora(b[0]) + '</span>'
             + '<span class="tl-canal">CH' + b[2] + '</span>'
@@ -810,7 +847,9 @@ function pbDica(ev, alvo) {
     d.innerHTML = '<b>' + pbHora(t) + ' — ' + pbHora(t + dur) + '</b> · ' + pbDur(dur)
         + '<i>' + pbDataCurta(t) + ' · CH' + c
         + (n ? ' · ' + n + ' bloco' + (n === '1' ? '' : 's') + ' — clique para aproximar'
-             : (arq ? ' · já no servidor — clique para reproduzir' : ' — clique para escolher a ação')) + '</i>';
+             : (arq ? (pbTocavel(arq) ? ' · upload efetuado — clique para reproduzir'
+                                      : ' · foto do evento — clique para ver')
+                    : ' — clique para escolher a ação')) + '</i>';
     var r = barra.getBoundingClientRect();
     d.style.left = Math.min(r.width - 230, Math.max(4, ev.clientX - r.left + 12)) + 'px';
     d.style.top  = (ev.clientY - r.top + 14) + 'px';
@@ -832,7 +871,8 @@ function pbAbrirAcoes(t, dur, canal, ancoraEl) {
         + '<h4>CH' + canal + ' · ' + pbDataCurta(t) + '</h4>'
         + '<div class="q">' + pbHora(t) + ' — ' + pbHora(t + dur) + ' · ' + pbDur(dur) + '</div>'
         + (arq
-            ? '<button class="btn btn-primary btn-sm" onclick="pbTocar(' + t + ',' + canal + ');pbFecharAcoes()">&#9654; Reproduzir (já no servidor)</button>'
+            ? '<button class="btn btn-primary btn-sm" onclick="pbTocar(' + t + ',' + canal + ',' + dur + ');pbFecharAcoes()">'
+              + (pbTocavel(arq) ? '&#9654; Reproduzir (upload efetuado)' : '&#128247; Ver a foto do evento') + '</button>'
             : '<button class="btn btn-primary btn-sm" onclick="pbVerNaCamera(' + t + ',' + dur + ',' + canal + ')">&#9654; Ver na câmera <small style="opacity:.75">(não baixa)</small></button>'
               + '<button class="btn btn-outline btn-sm" onclick="pbSubirStorage(' + t + ',' + dur + ',' + canal + ',this)">&#8681; Subir para o storage</button>')
         + '<div style="font-size:10px;color:var(--muted);margin-top:7px;line-height:1.45;">'
@@ -853,13 +893,20 @@ function pbFecharAcoes() {
     if (pop) pop.style.display = 'none';
 }
 
-/** Reproduz o arquivo que JÁ está no servidor. */
-function pbTocar(t, canal) {
-    var arq = pbArquivoDoBloco(t, PB.bloco, canal);
+/**
+ * Reproduz o arquivo que JÁ está no servidor.
+ *
+ * ⚠️ `dur` é a duração do BLOCO clicado, e todo chamador a passa — ver a nota
+ * de `pbArquivoDoBloco()`. O `|| PB.bloco` é só rede de segurança: quem cair
+ * nele numa câmera JT/T volta a ter o defeito que esta versão corrigiu.
+ */
+function pbTocar(t, canal, dur) {
+    var arq = pbArquivoDoBloco(t, dur || PB.bloco, canal);
     if (!arq) { alert('Este trecho ainda não está no servidor.'); return; }
     selectRecording(null, { file_url: arq.u, file_name: arq.n, file_type: arq.tp });
     var f = document.getElementById('pb-fonte');
-    if (f) f.textContent = 'Arquivo do servidor · ' + pbDataCurta(t) + ' ' + pbHora(t) + ' · CH' + canal;
+    if (f) f.textContent = (pbTocavel(arq) ? 'Arquivo do servidor · ' : 'Foto do evento · ')
+                         + pbDataCurta(t) + ' ' + pbHora(t) + ' · CH' + canal;
 }
 
 // ── Despacho ao equipamento ─────────────────────────────────────────────────
@@ -1141,8 +1188,22 @@ function selectRecording(el, rec) {
         v.style.display = 'block';
         v.src = url;
         v.play().catch(function () {});
+    } else if (rec.file_type === 'image' || /\.(jpe?g|png|webp)(\?|$)/i.test(rec.file_url || '')) {
+        // 🔴 FOTO É CONTEÚDO, não erro. O alarme sobe .mp4 E .jpg, e um bloco em
+        // que só a foto chegou caía aqui mostrando o NOME do arquivo — o
+        // operador clicava num item verde e via texto. Ver a foto responde a
+        // mesma pergunta ("o que aconteceu neste minuto?"), então ela é exibida.
+        ph.innerHTML = '';
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = rec.file_name || 'Foto do evento';
+        img.style.cssText = 'max-width:100%;max-height:460px;display:block;margin:0 auto;object-fit:contain;';
+        ph.appendChild(img);
+        ph.style.display = '';
+        v.style.display = 'none';
     } else {
-        ph.innerHTML = '<div style="text-align:center;color:var(--muted-soft);">' + (rec.file_name || 'Arquivo') + '</div>';
+        ph.textContent = rec.file_name || 'Arquivo';
+        ph.style.cssText = 'text-align:center;color:var(--muted-soft);';
         ph.style.display = '';
         v.style.display = 'none';
     }
@@ -1407,7 +1468,7 @@ function onSubmitRequest(e) {
             return;
         }
         var arq = pbArquivoDoBloco(t, d, c);
-        if (arq) { pbTocar(t, c); return; }
+        if (arq) { pbTocar(t, c, d); return; }
         pbAbrirAcoes(t, d, c, el);
     });
 
