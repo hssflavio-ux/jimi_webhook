@@ -43,6 +43,21 @@ require_once __DIR__ . '/../core/Logger.php';
  *     device_code: string|null, result_msg: string, endpoint: string
  * }
  *   status: 'executed' (device respondeu) | 'sent' (fila offline) | 'failed'
+ *
+ * 🔴 O PAYLOAD NÃO MANDA `offlineFlag`, E "fila offline" ACIMA É UMA SUPOSIÇÃO.
+ * A §1.16 da doc condiciona o cacheamento a esse parâmetro: *"if the response
+ * indicates the device is offline (_code:300) or timed out (_code:600) **and
+ * the offlineFlag parameter … is set to true**, then the command will be
+ * cached as an offline command"*. Medido em 07/09/2026 com a §2.21
+ * (`queryOfflineInstruct`): a fila do hub está **VAZIA** para todos os
+ * equipamentos testados, inclusive um offline há 18 dias cujo comando o hub
+ * respondeu com `_code=600` — os mesmos 97 comandos que estão em
+ * `commands.status='sent'` não aparecem em fila nenhuma.
+ *
+ * ⚠️ Mandar `offlineFlag` muda o comportamento DO HUB, não só o rótulo da
+ * tela: equipamento que volta depois de semanas passaria a receber a fila
+ * inteira de uma vez. Não é troca de uma linha — ver
+ * **`docs/FILA_OFFLINE_COMANDOS.md`** antes de mexer.
  */
 function iothub_send_instruct(string $imei, int $proNo, string $cmdContent,
                               int $serverFlagId = 0, ?string $origem = 'dash'): array

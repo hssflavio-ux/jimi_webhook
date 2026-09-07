@@ -772,6 +772,20 @@ try {
 // tempo real (ex.: vídeo ao vivo) usam isso para não esperar um stream
 // que não vai começar.
 // `device_code` vem do helper; era lido de $iothubResp['data']['_code'].
+//
+// 🔴 DUAS RESSALVAS MEDIDAS (07/09/2026), nenhuma corrigida — ver
+// `docs/FILA_OFFLINE_COMANDOS.md`:
+//
+//  1. **`300` também é o caso offline, e não entra nesta conta.** A §1.16 da
+//     doc trata `_code:300` (device offline) OU `_code:600` (timeout). Em 30
+//     dias de produção vieram 21 respostas `300` além das 19 de `600` — essas
+//     21 não recebem o rótulo, e a tela as trata como falha comum.
+//
+//  2. **"será entregue na reconexão" não é confirmado pelo hub.** Não mandamos
+//     `offlineFlag`, que é o que a doc exige para o comando ser cacheado; a
+//     consulta §2.21 (`queryOfflineInstruct`) devolveu fila VAZIA para todos os
+//     equipamentos testados, inclusive um offline há 18 dias cujo comando
+//     recebeu exatamente este `_code=600`.
 $offlineQueued = ($iothubCode === 0) && (int)($envio['device_code'] ?? 0) === 600;
 
 echo json_encode([
