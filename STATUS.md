@@ -1,4 +1,49 @@
-# STATUS.md — Jimi Webhook System v4.17.4 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.14 (YUV Parity)
+
+> ### 📍 v4.17.14 — Ao Vivo com um player por canal; o Playback que pintava de verde e recusava tocar
+>
+> Quatro pedidos do dono do produto sobre as telas de vídeo. O quarto era um
+> defeito: *"há uma falha na apresentação de arquivos já disponíveis no
+> servidor, estão marcados de verde na barra, mas não executam quando
+> clicados"*.
+>
+> **🔴 O defeito, medido na JC371 do veículo Telecom (`865478070654829`):
+> 34 dos 38 blocos verdes não reproduziam.** A barra e a lista resolviam o
+> arquivo pela duração REAL do bloco; o clique resolvia por `PB.bloco` = 60 s
+> fixos. **Os 60 s são a forma da JIMI** (um bloco por minuto no cartão), e a
+> JT/T entrega blocos de até 5 min: **162 dos 183 blocos vivos duravam
+> 300–301 s**. Tudo que caísse depois do primeiro minuto do bloco era
+> invisível para o clique. A duração passa a viajar com o clique nos três
+> caminhos (barra, lista, popover). Depois: **38 de 38**.
+>
+> **🔴 Segundo defeito, da mesma família, achado no caminho:**
+> `pbArquivoDoBloco()` devolvia o primeiro casamento de uma lista em
+> `event_time DESC`, e **34 dos 38 blocos tinham mais de um arquivo dentro
+> (até 16)** — cada alarme sobe `.mp4` **e** `.jpg` com segundos de diferença.
+> Em **4 dos 38** quem ganhava era o `.jpg`, e o player exibia o NOME do
+> arquivo como texto. O desempate virou explícito (tocável primeiro, depois o
+> mais antigo) e a foto, quando é só o que existe, passa a ser exibida como
+> foto.
+>
+> **Ao Vivo: um player POR CANAL, simultâneos.** A regra do mosaico sai da
+> medição de 18/08/2026: como `RTMP,ON,INOUT` registra `live/0` e `live/1` de
+> uma vez, a **JIMI leva um comando só** — mandar `OUT` e depois `IN`
+> reconfigura o push e derruba o primeiro canal, sem erro nenhum. A **JT/T
+> leva um `37121` por canal, serializado**, pela mesma razão que o `37381` do
+> playback já pagou. **Câmera JIMI para em 2 quadros** mesmo com
+> `camera_count` maior: o `RTMP,ON` só aceita `IN`/`OUT`/`INOUT`/`PIP`.
+> Os chips de canal viraram seleção múltipla ("quais abrir"), e com mais de um
+> quadro os players nascem mudos.
+>
+> Textos do Playback alinhados ao vocabulário do operador (câmera, não cartão;
+> "Upload efetuado", não "já no servidor"), listagem válida passou a dar hora e
+> data em BRT, e a lista corre em ordem ascendente, como a barra.
+>
+> Specs: `tests/video_aovivo_protocolo.spec.js` reescrito para o contrato novo
+> (dirigia a tela pela global `selCh`, que o mosaico eliminou) + 6 testes do
+> mosaico; `tests/video_playback_reproducao.spec.js` novo, com a
+> asserção-retrato do defeito (com 60 s fixos o MESMO bloco verde não acha
+> nada).
 
 > ### 📍 v4.17.4 — Rastreamento: coluna unica e escolha do que vai ao mapa
 >
