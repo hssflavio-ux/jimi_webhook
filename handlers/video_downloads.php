@@ -295,24 +295,34 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
 <div class="table-wrap">
     <table>
         <thead>
+            <?php /* 🔴 ORDEM E LARGURA (v4.17.16). "Arquivo" era a PRIMEIRA
+                     coluna, com `max-width:200px` e reticências — e o nome
+                     precisa de **894 px** (medido). O que sobrava na tela era
+                     `865478070654829_303635343832…`: o IMEI, que já tem coluna
+                     própria, mais o começo de um blob igual em todas as linhas.
+                     Ou seja, a coluna mostrava só o que se repete e escondia
+                     exatamente o que distingue uma linha da outra.
+                     Agora ela é a ÚLTIMA das colunas de dados — depois das
+                     curtas, que empacotam à esquerda —, quebra em vez de cortar,
+                     e fica colada na ação que a usa. */ ?>
             <tr>
-                <th>Arquivo</th>
                 <?php if (!$umEquipamento): ?>
-                <?php if ($mostrarCliente): ?><th>Cliente</th><?php endif; ?>
-                <th>Placa</th>
-                <th>IMEI</th>
-                <th>Modelo</th>
+                <?php if ($mostrarCliente): ?><th class="dl-curta">Cliente</th><?php endif; ?>
+                <th class="dl-curta">Placa</th>
+                <th class="dl-curta">IMEI</th>
+                <th class="dl-curta">Modelo</th>
                 <?php endif; ?>
-                <th>Canal</th>
+                <th class="dl-canal">Canal</th>
                 <?php /* 🔴 A tela dizia QUANDO foi pedido e nunca QUANDO é o
                          vídeo — que é a informação com que se procura uma
                          gravação. Sai do carimbo do NOME, que é o instante da
                          gravação; `created_at` é o do pedido, e os dois podem
                          estar a dias de distância quando se extrai algo antigo. */ ?>
-                <th>Início do vídeo</th>
-                <th>Requisitado em</th>
-                <th>Status</th>
-                <th style="text-align:center;">Download</th>
+                <th class="dl-data">Início do vídeo</th>
+                <th class="dl-data">Requisitado em</th>
+                <th class="dl-nome">Arquivo</th>
+                <th class="dl-curta">Status</th>
+                <th class="dl-acao" style="text-align:center;">Download</th>
             </tr>
         </thead>
         <tbody>
@@ -332,16 +342,13 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                 $jaBaixado   = !empty($f['downloaded_at']);
             ?>
             <tr>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                    <?= htmlspecialchars($f['file_name'] ?? '—') ?>
-                </td>
                 <?php if (!$umEquipamento): ?>
                 <?php if ($mostrarCliente): ?>
-                <td style="font-size:11px;"><?= htmlspecialchars($f['customer_name']) ?></td>
+                <td class="dl-curta" style="font-size:11px;"><?= htmlspecialchars($f['customer_name']) ?></td>
                 <?php endif; ?>
-                <td><span class="text-mono"><?= htmlspecialchars($f['device_name']) ?></span></td>
-                <td><span class="text-mono" style="font-size:11px;color:var(--muted);"><?= htmlspecialchars($f['imei']) ?></span></td>
-                <td><?= htmlspecialchars($f['model_name']) ?></td>
+                <td class="dl-curta"><span class="text-mono"><?= htmlspecialchars($f['device_name']) ?></span></td>
+                <td class="dl-curta"><span class="text-mono" style="font-size:11px;color:var(--muted);"><?= htmlspecialchars($f['imei']) ?></span></td>
+                <td class="dl-curta"><?= htmlspecialchars($f['model_name']) ?></td>
                 <?php endif; ?>
                 <?php
                     // Canal derivado do nome quando a linha é antiga: até a
@@ -350,10 +357,44 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     $canalF = $f['channel'] ?: media_canal_do_nome((string)$f['file_name']);
                     $inicio = filelist_ts_do_nome_utc((string)$f['file_name']) ?: $f['event_time'];
                 ?>
-                <td><?= $canalF ? 'CH' . (int)$canalF : '—' ?></td>
-                <td class="text-mono"><?= $inicio ? fmt_brt($inicio) : '—' ?></td>
-                <td class="text-mono"><?= fmt_brt($f['created_at'] ?? $f['event_time']) ?></td>
-                <td>
+                <td class="dl-canal"><?= $canalF ? 'CH' . (int)$canalF : '—' ?></td>
+                <td class="dl-data text-mono"><?= $inicio ? fmt_brt($inicio) : '—' ?></td>
+                <td class="dl-data text-mono"><?= fmt_brt($f['created_at'] ?? $f['event_time']) ?></td>
+                <?php
+                    // ── O NOME, INTEIRO ────────────────────────────────────
+                    //
+                    // 🔴 SÃO DOIS ARQUIVOS QUANDO A CÂMERA É JIMI, e a tela
+                    // imprimia a string CRUA: `..._I_40.mp4,..._F_39.mp4`, 119
+                    // caracteres num campo de 200 px. A coluna Download já
+                    // separa os dois em botões — `media_file_list()` é o ponto
+                    // único disso (includes/media.php) — e a coluna do nome
+                    // ignorava a separação, colando os dois num blob que não é
+                    // o nome de arquivo nenhum.
+                    $nomes = media_file_list($f['file_name']);
+                    if (!$nomes) $nomes = ['—'];
+                ?>
+                <td class="dl-nome" title="<?= htmlspecialchars((string)($f['file_name'] ?? '')) ?>">
+                    <?php foreach ($nomes as $nm): ?>
+                    <?php
+                        // O prefixo `(EVENT_)<imei>_` se repete em TODA linha e
+                        // já é a coluna IMEI ao lado: fica cinza, para que o
+                        // olho caia direto no que distingue este arquivo. Nada
+                        // é escondido — o nome inteiro continua na tela.
+                        $pref = '';
+                        $resto = $nm;
+                        if (preg_match('/^(EVENT_)?' . preg_quote((string)$f['imei'], '/') . '_/', $nm, $mm)) {
+                            $pref  = $mm[0];
+                            $resto = substr($nm, strlen($pref));
+                        }
+                        $chNm = count($nomes) > 1 ? media_canal_do_nome($nm) : null;
+                    ?>
+                    <div class="dl-arq">
+                        <?php if ($chNm): ?><span class="dl-arq-ch">CH<?= (int)$chNm ?></span><?php endif; ?>
+                        <span class="dl-arq-txt"><?php if ($pref !== ''): ?><span class="dl-arq-pref"><?= htmlspecialchars($pref) ?></span><?php endif; ?><?= htmlspecialchars($resto) ?></span>
+                    </div>
+                    <?php endforeach; ?>
+                </td>
+                <td class="dl-curta">
                     <?php if ($jaBaixado): ?>
                     <span class="badge badge-success" title="Baixado em <?= fmt_brt($f['downloaded_at']) ?><?= (int)($f['download_count'] ?? 0) > 1 ? ' · ' . (int)$f['download_count'] . 'x' : '' ?>">Já baixado</span>
                     <?php elseif ($isAvailable): ?>
@@ -364,7 +405,7 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     <span class="badge badge-warning"><span class="spinner-inline"></span> Pendente na câmera</span>
                     <?php endif; ?>
                 </td>
-                <td style="text-align:center;">
+                <td class="dl-acao" style="text-align:center;">
                     <?php if ($isAvailable):
                         // 🔴 `mf.file_url` pode trazer MAIS DE UM arquivo, vírgula-
                         // separados — a JIMI anuncia frontal e interna no MESMO
@@ -414,6 +455,41 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
 <style>
 .spinner-inline{display:inline-block;width:10px;height:10px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin-right:4px;vertical-align:middle;}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Largura das colunas (v4.17.16) ──────────────────────────────────────
+   🔴 O NOME DO ARQUIVO NÃO CABE EM UMA LINHA, e não é questão de apertar as
+   outras colunas: medido nesta tela, ele precisa de **894 px** — são 57
+   caracteres no caso simples e **119** quando a câmera JIMI anuncia frontal e
+   interna no mesmo campo. Cortar com reticências escondia justamente a parte
+   que muda de linha para linha (o prefixo visível era o IMEI, que tem coluna
+   própria). A saída é QUEBRAR, não truncar: `break-all` porque o nome não tem
+   espaço nenhum onde quebrar, e `max-width` para que ele não engula a tabela.
+
+   As demais colunas ganham `nowrap` e largura declarada: sem isso o navegador
+   reparte a folga igualmente e a coluna que precisa dela é a única que não a
+   recebe. O `.table-wrap` já rola na horizontal, então o pior caso é rolagem,
+   nunca texto cortado. */
+.dl-nome{min-width:280px;max-width:400px;white-space:normal;word-break:break-all;line-height:1.4;}
+.dl-curta{white-space:nowrap;}
+.dl-canal{white-space:nowrap;width:1%;}
+.dl-data{white-space:nowrap;width:1%;font-size:12px;}
+.dl-acao{white-space:nowrap;}
+/* Padding menor só aqui: são 10 colunas, e 16 px de cada lado em cada uma
+   custam 320 px — a largura que falta ao nome do arquivo. */
+.table-wrap thead th, .table-wrap tbody td{padding-left:12px;padding-right:12px;}
+
+/* Um arquivo REAL por linha. A JIMI manda os dois num campo só, e a coluna
+   Download já os separa em dois botões — o nome tem de contar a mesma
+   história, senão a linha diz "um arquivo" e a ação oferece dois. */
+.dl-arq{display:flex;align-items:baseline;gap:6px;}
+.dl-arq + .dl-arq{margin-top:5px;padding-top:5px;border-top:1px dashed var(--hairline);}
+.dl-arq-ch{flex:0 0 auto;font-size:9.5px;font-weight:600;letter-spacing:.3px;color:var(--muted);
+           background:var(--canvas-soft);border:1px solid var(--hairline);border-radius:100px;padding:1px 6px;}
+.dl-arq-txt{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--ink);min-width:0;}
+/* O prefixo `(EVENT_)<imei>_` é o mesmo em toda linha e já é a coluna ao lado:
+   cinza, para o olho cair no que distingue. Continua legível e selecionável —
+   esconder parte do nome seria repetir o defeito, só que mais discreto. */
+.dl-arq-pref{color:var(--muted-soft);}
 </style>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

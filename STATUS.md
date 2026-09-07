@@ -1,4 +1,29 @@
-# STATUS.md — Jimi Webhook System v4.17.15 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.17.16 (YUV Parity)
+
+> ### 📍 v4.17.16 — Downloads: o nome do arquivo aparecia pela metade
+>
+> Pedido do dono do produto: *"na tela de downloads, é necessário ajustar a
+> disposição e largura das colunas, o nome do arquivo não está aparecendo na
+> tela completamente"*.
+>
+> **🔴 A coluna mostrava só o que se REPETE.** Ela era a primeira, com
+> `max-width:200px` e reticências, e o nome precisa de **894 px** (medido na
+> tela). O que sobrava era `865478070654829_303635343832…` — o **IMEI, que já
+> tem coluna própria ao lado**, mais o começo de um blob igual entre linhas.
+> Tudo que distingue um arquivo do outro ficava fora da tela. Agora ela é a
+> **última coluna de dados** e **quebra em vez de cortar**: de **265 px para
+> 506 px**, **0 de 25 células cortadas**, tabela ainda sem rolagem horizontal
+> (1612 px em 1614 px).
+>
+> ⚠️ As colunas curtas precisavam de largura **declarada**, não só de menos
+> conteúdo: sem `nowrap`/`width:1%` o navegador reparte a folga por igual, e a
+> única coluna que precisa dela é justamente a que não recebe.
+>
+> **🔴 Nome de 119 caracteres não era um nome — eram DOIS arquivos numa
+> string.** A JIMI anuncia frontal e interna no mesmo campo, e a coluna
+> Download **já** os separava em dois botões (`media_file_list()`): a linha
+> dizia "um arquivo" enquanto a ação oferecia dois. O nome passou a usar a
+> mesma função — um arquivo real por linha, com o selo do canal.
 
 > ### 📍 v4.17.15 — foto sai da tela de playback
 >

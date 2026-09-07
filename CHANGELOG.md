@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.16
+
+**Downloads: o nome do arquivo aparecia pela metade — e a metade que aparecia era a que se repete.**
+
+### Fixed
+
+- 🔴 **A coluna "Arquivo" mostrava só o que é igual em toda linha.** Ela era a **primeira** coluna, com `max-width:200px` e reticências; medido na tela, o nome precisa de **894 px**. O que sobrava era `865478070654829_303635343832…` — o **IMEI, que já tem coluna própria ao lado**, mais o começo de um blob idêntico entre linhas. Tudo que distingue um arquivo do outro (o identificador do alarme, o carimbo e o sufixo de canal) ficava fora da tela. Agora "Arquivo" é a **última coluna de dados**, depois das curtas — que empacotam à esquerda com `nowrap` e largura declarada — e **quebra em vez de cortar**. Medido depois: a coluna passou de **265 px para 506 px**, **0 de 25 células cortadas**, e a tabela continua cabendo sem rolagem horizontal (1612 px em 1614 px de área).
+  - As colunas curtas precisavam de largura DECLARADA, não só de menos conteúdo: sem `nowrap`/`width:1%` o navegador reparte a folga por igual e a única coluna que precisa dela é a que não recebe.
+  - O padding da tabela caiu de 16 px para 12 px por lado **só nesta tela**: são 10 colunas, e 320 px de respiro era exatamente a largura que faltava ao nome.
+- 🔴 **Nome de 119 caracteres não era um nome — eram DOIS arquivos numa string.** A câmera JIMI anuncia frontal e interna no mesmo campo (`..._I_40.mp4,..._F_39.mp4`), e a tela imprimia a string crua. A coluna **Download já separava os dois em botões** (via `media_file_list()`, o ponto único disso), então a linha dizia "um arquivo" enquanto a ação oferecia dois. Agora o nome também usa `media_file_list()`: **um arquivo real por linha, cada um com o selo do seu canal**.
+
+### Changed
+
+- **O prefixo `(EVENT_)<imei>_` do nome fica em cinza.** Ele se repete em toda linha e já é a coluna IMEI ao lado; deixá-lo esmaecido faz o olho cair no que distingue o arquivo. **Nada é escondido** — o nome inteiro continua na tela e selecionável, e o `title` traz a string original. Esconder parte do nome seria repetir o defeito, só que mais discreto.
+
 ## [Unreleased] — 4.17.15
 
 **Foto sai da tela de playback.** Decisão do dono do produto, logo após a v4.17.14 subir: *"não vamos exibir fotos no sistema nesse momento, não trate nenhuma ação para esses arquivos"*.
