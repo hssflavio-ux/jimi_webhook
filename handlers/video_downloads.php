@@ -437,6 +437,25 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     // o nome de arquivo nenhum.
                     $nomes = media_file_list($f['file_name']);
                     if (!$nomes) $nomes = ['—'];
+
+                    /**
+                     * 🔴 ONDE QUEBRAR. O nome não tem UM espaço, então o
+                     * navegador não tem oportunidade de quebra e parte onde der
+                     * — medido na tela: o nome precisa de 407 px, a coluna dá
+                     * 412 e o padding come a diferença, e o resultado era
+                     * `..._2_00.mp` numa linha e `4` na outra. Um caractere
+                     * órfão é pior que texto cortado, porque parece defeito.
+                     *
+                     * `<wbr>` depois de cada `_` dá ao navegador separadores
+                     * REAIS para escolher: ele quebra no último que couber, e a
+                     * quebra cai onde o nome já se divide sozinho. É por isso
+                     * que o CSS usa `overflow-wrap:anywhere` e não
+                     * `word-break:break-all` — `break-all` ignora as dicas e
+                     * volta a partir no meio do token.
+                     */
+                    $comQuebras = static function (string $txt): string {
+                        return str_replace('_', '_<wbr>', htmlspecialchars($txt));
+                    };
                 ?>
                 <td class="dl-nome" title="<?= htmlspecialchars((string)($f['file_name'] ?? '')) ?>">
                     <?php foreach ($nomes as $nm): ?>
@@ -455,7 +474,7 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
                     ?>
                     <div class="dl-arq">
                         <?php if ($chNm): ?><span class="dl-arq-ch">CH<?= (int)$chNm ?></span><?php endif; ?>
-                        <span class="dl-arq-txt"><?php if ($pref !== ''): ?><span class="dl-arq-pref"><?= htmlspecialchars($pref) ?></span><?php endif; ?><?= htmlspecialchars($resto) ?></span>
+                        <span class="dl-arq-txt"><?php if ($pref !== ''): ?><span class="dl-arq-pref"><?= $comQuebras($pref) ?></span><?php endif; ?><?= $comQuebras($resto) ?></span>
                     </div>
                     <?php endforeach; ?>
                 </td>
@@ -534,7 +553,11 @@ $qsExport = function (string $fmt) use ($scopeCust, $filtroImeis, $selStatus): s
    reparte a folga igualmente e a coluna que precisa dela é a única que não a
    recebe. O `.table-wrap` já rola na horizontal, então o pior caso é rolagem,
    nunca texto cortado. */
-.dl-nome{min-width:280px;max-width:400px;white-space:normal;word-break:break-all;line-height:1.4;}
+/* `overflow-wrap:anywhere` e NÃO `word-break:break-all`: os dois quebram um
+   nome sem espaços, mas o `break-all` ignora as dicas de `<wbr>` e volta a
+   partir no meio do token (`..._2_00.mp` / `4`). O `anywhere` prefere a
+   oportunidade declarada e só parte à força quando não há nenhuma. */
+.dl-nome{min-width:280px;max-width:400px;white-space:normal;overflow-wrap:anywhere;line-height:1.4;}
 .dl-curta{white-space:nowrap;}
 /* O alarme quebra por PALAVRA (`ADAS: Distância Insegura` tem espaços onde
    quebrar, ao contrário do nome do arquivo) e cabe em duas linhas. */

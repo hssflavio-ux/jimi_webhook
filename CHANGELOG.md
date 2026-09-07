@@ -20,6 +20,10 @@ Pedido do dono do produto: *"nessa lista temos também os arquivos solicitados p
   - Arquivo que é as **duas coisas** (o operador pediu o vídeo de um alarme) mostra o nome do alarme **e** o selo: são fatos diferentes, respondendo "o que aconteceu" e "quem pediu este arquivo".
 - O export usa a mesma regra e o mesmo vocabulário.
 
+### Fixed
+
+- **O nome do arquivo quebrava no meio da extensão.** Com a coluna Alarme entrando na grade, o nome passou a precisar de **407 px** numa coluna de **412 px** — e o padding come a diferença, deixando `..._2_00.mp` numa linha e `4` na outra. Um caractere órfão é pior que texto cortado, porque parece defeito. O nome não tem **um** espaço, então o navegador não tinha oportunidade de quebra nenhuma: agora sai um `<wbr>` depois de cada `_`, e o CSS troca `word-break:break-all` por **`overflow-wrap:anywhere`** — `break-all` ignora as dicas e volta a partir no meio do token. A quebra passa a cair onde o nome já se divide sozinho.
+
 ### Verificação (produção, 2.000 linhas mais recentes)
 
 | rótulo | linhas |
