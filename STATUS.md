@@ -49,15 +49,19 @@
 > operadora, não do código.
 >
 > ⚠️ **Nenhum dos dois produziu uma resposta de TEXTO via SMS**, nem pelo
-> webhook nem pelo Pull, em ~15 min de acompanhamento — e isso não invalida a
-> implementação: **o teste usou equipamentos ONLINE**, e a wiki oficial
-> (`docs/COMANDOS_128_CONSULTA.md`) documenta `STATUS#` como consulta do
-> proNo 128, cuja resposta natural do equipamento é pelo canal que ele já tem
-> aberto — a sessão TCP com o IoT Hub. O SMS é o "canal de resgate" para
-> equipamento SEM esse canal; pedir a um equipamento COM TCP que responda por
-> SMS pode simplesmente não ser o comportamento do firmware. **Não foi
-> possível, nesta sessão, observar uma resposta de SMS real** — só a doc e o
-> formato sintético dela, cobertos em teste automatizado.
+> webhook nem pelo Pull, em ~15 min de acompanhamento. 🔴 **Correção do dono do
+> produto sobre a hipótese inicial desta entrada**: *"os equipamentos respondem
+> SMS mesmo estando conectados no TCP"* — a teoria de que o equipamento
+> responderia só pela sessão TCP por estar online está **descartada**. A causa
+> de nenhuma resposta ter chegado continua **em aberto**. Hipóteses ainda não
+> checadas: o equipamento levar mais que ~15 min para responder por SMS; a
+> resposta ter saído do device e não ter chegado ao número de recebimento da
+> conta Allcance (só o painel deles mostraria isso — próximo passo é olhar lá
+> pelas referências `e4253a7c30e460b83a0c9112f30f10de` (#30) e
+> `4c89101490d370c52ea6c60d9e71c76c` (#31)); ou algo específico do comando
+> `STATUS#` nesses dois modelos. **Não foi possível, nesta sessão, observar uma
+> resposta de SMS real** — só a doc e o formato sintético dela, cobertos em
+> teste automatizado.
 >
 > O que FICA provado contra produção: autenticação, envio, `status_entrega`
 > via webhook, e a API do Pull respondendo (`HTTP 404` com
