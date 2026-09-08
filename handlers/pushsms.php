@@ -40,6 +40,7 @@
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../includes/sms_inbound.php';
+require_once __DIR__ . '/../includes/sms_gateway.php';
 
 env_load();
 
@@ -157,34 +158,19 @@ $sel = $db->prepare("SELECT id, imei FROM sms_commands WHERE referencia = :r LIM
 // Acumula o item do webhook EXATAMENTE como a Allcance mandou (v4.17.13).
 // `webhook_payloads` já guarda o corpo inteiro da requisição; esta coluna é o
 // recorte por comando, para responder "o que o provedor disse sobre ESTE
-// envio?" sem garimpar JSON por referência.
-//
-// 🔴 Coluna JSON: json_encode() SEMPRE. String crua faz o MySQL recusar com
-// 3140 Invalid JSON text — o defeito que quebrou o callback de comando
-// offline por meses em `commands.response_payload` (CLAUDE.md).
-// 🔴 AUTO-CONTIDO E À PROVA DE FALHA, e isso não é zelo: migração nova NÃO
-// roda no deploy que a traz (CLAUDE.md). Entre um e outro a coluna não existe —
-// e se o SELECT dela ficasse na consulta principal, ou se a exceção subisse até
-// o `catch` do laço, o `/pushsms` pararia de gravar STATUS E RESPOSTA. A cópia
-// crua nunca pode valer mais que o dado que ela documenta.
-$gravaEvento = function (int $id, array $item) use ($db) {
-    try {
-        $st = $db->prepare('SELECT eventos_raw FROM sms_commands WHERE id = :id');
-        $st->execute([':id' => $id]);
-        $antes = json_decode((string)$st->fetchColumn(), true);
-        if (!is_array($antes)) $antes = [];
-        // Teto de 50 mantendo os MAIS RECENTES: o provedor reenvia, e um comando
-        // que ficasse repicando encheria a coluna sem fim.
-        $antes[] = ['em' => gmdate('Y-m-d H:i:s'), 'item' => $item];
-        if (count($antes) > 50) $antes = array_slice($antes, -50);
-        // Coluna JSON: json_encode() SEMPRE. String crua faz o MySQL recusar com
-        // 3140 Invalid JSON text (CLAUDE.md).
-        $db->prepare('UPDATE sms_commands SET eventos_raw = :e WHERE id = :id')
-           ->execute([':e' => json_encode($antes, JSON_UNESCAPED_UNICODE), ':id' => $id]);
-    } catch (Throwable $e) {
-        Logger::warning('SMS: evento cru não gravado', ['id' => $id, 'erro' => $e->getMessage()]);
-    }
-};
+// envio?" sem garimpar JSON por referência. `sms_grava_evento_raw()`
+// (includes/sms_gateway.php) é o ponto ÚNICO — compartilhado com
+// scripts/sms_respostas_pull.php, que grava a MESMA coluna pelo outro caminho.
+$gravaEvento = fn(int $id, array $item) => sms_grava_evento_raw($db, $id, $item, 'webhook');
+
+// 🔑 v4.17.24 — webhook e pull são REDUNDÂNCIA um do outro, nunca simultâneos
+// por padrão (decisão do dono do produto). O webhook nunca entregou uma
+// resposta sequer nesta conta (0 de 29 comandos, 0 payloads com `mensagem`);
+// enquanto `sms_respostas_metodo()` continuar em 'pull' (o padrão), este
+// endpoint grava STATUS DE ENTREGA normalmente e o evento cru sempre — só a
+// escrita de `resposta_texto`/`resposta_em` fica de fora, para não competir
+// com scripts/sms_respostas_pull.php. Ver includes/sms_gateway.php.
+$metodoRespostas = sms_respostas_metodo($db);
 
 foreach ($itens as $item) {
     $c = sms_classificar_item($item);
@@ -213,22 +199,30 @@ foreach ($itens as $item) {
             // sobrescreve status_entrega: a entrega já aconteceu (o aparelho
             // não responderia sem ter recebido), e o status dela veio — ou
             // virá — em outro item do mesmo lote.
-            $db->prepare("
-                UPDATE sms_commands
-                   SET resposta_texto = :t,
-                       resposta_em    = COALESCE(:em, UTC_TIMESTAMP())
-                 WHERE id = :id
-            ")->execute([
-                ':t'  => $c['resposta'],
-                ':em' => $c['enviado_em'],
-                ':id' => $linha['id'],
-            ]);
-            $respostas++;
+            //
+            // v4.17.24: só grava se este for o método ATIVO. O evento cru
+            // (acima) já entrou no histórico de qualquer jeito — o que fica de
+            // fora quando o método é 'pull' é só a ESCRITA em
+            // resposta_texto/resposta_em, para não competir com
+            // scripts/sms_respostas_pull.php.
+            if ($metodoRespostas === 'webhook') {
+                $db->prepare("
+                    UPDATE sms_commands
+                       SET resposta_texto = :t,
+                           resposta_em    = COALESCE(:em, UTC_TIMESTAMP())
+                     WHERE id = :id
+                ")->execute([
+                    ':t'  => $c['resposta'],
+                    ':em' => $c['enviado_em'],
+                    ':id' => $linha['id'],
+                ]);
+                $respostas++;
 
-            Logger::info('SMS: resposta do equipamento recebida', [
-                'imei'       => $linha['imei'],
-                'referencia' => $c['referencia'],
-            ]);
+                Logger::info('SMS: resposta do equipamento recebida', [
+                    'imei'       => $linha['imei'],
+                    'referencia' => $c['referencia'],
+                ]);
+            }
         } else {
             $db->prepare("
                 UPDATE sms_commands

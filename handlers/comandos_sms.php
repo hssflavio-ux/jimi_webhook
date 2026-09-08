@@ -297,7 +297,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <code>SERVER</code> errados). O texto do comando é o mesmo do
         <a href="/comandos">envio normal</a>.
         <strong style="color:var(--ink);">Cada disparo consome 1 crédito por equipamento</strong>,
-        e a resposta do equipamento (quando ele responde) chega pelo webhook e aparece no histórico abaixo.
+        e a resposta do equipamento (quando ele responde) aparece no histórico abaixo — o método de
+        captura (busca periódica ou webhook) se ajusta em <a href="/config-sms">Cadastros › SMS (Allcance)</a>.
     </div>
 </div>
 

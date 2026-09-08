@@ -75,8 +75,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Senha em branco = "não mexer". É o que permite editar o usuário
             // ou o switch de ativo sem redigitar a senha toda vez.
-            $sets   = ['username = :u', 'is_active = :a', 'updated_by = :ub'];
-            $params = [':u' => $username, ':a' => $isActive, ':ub' => $user['id'] ?? null];
+            // v4.17.24 — webhook e pull são redundância um do outro, nunca
+            // simultâneos por padrão. Qualquer valor fora do enum vira 'pull',
+            // o único já comprovado nesta conta — nunca 'webhook' por omissão.
+            $metodoResp = ($_POST['respostas_metodo'] ?? '') === 'webhook' ? 'webhook' : 'pull';
+
+            $sets   = ['username = :u', 'is_active = :a', 'respostas_metodo = :rm', 'updated_by = :ub'];
+            $params = [':u' => $username, ':a' => $isActive, ':rm' => $metodoResp, ':ub' => $user['id'] ?? null];
 
             if ($password !== '') {
                 $enc = app_encrypt($password);
@@ -271,6 +276,25 @@ require_once __DIR__ . '/../web/layout_base.php';
             </label>
         </div>
 
+        <?php $metodoAtual = $row['respostas_metodo'] ?? 'pull'; ?>
+        <div class="form-group mb-24">
+            <label>Como receber a resposta do equipamento</label>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+                As duas vias são <strong>redundância uma da outra</strong> — nunca ativas ao mesmo tempo.
+                O webhook nunca entregou uma resposta sequer nesta conta (medido: 0 de 29 comandos);
+                a busca periódica (<code>scripts/sms_respostas_pull.php</code>, a cada 2 min) é a via
+                já comprovada com equipamento real.
+            </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;margin-bottom:6px;">
+                <input type="radio" name="respostas_metodo" value="pull" <?= $metodoAtual === 'pull' ? 'checked' : '' ?>>
+                Busca periódica (Método Pull) — recomendado agora
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;">
+                <input type="radio" name="respostas_metodo" value="webhook" <?= $metodoAtual === 'webhook' ? 'checked' : '' ?>>
+                Webhook (evento empurrado pela Allcance)
+            </label>
+        </div>
+
         <div style="display:flex;gap:8px;">
             <button type="submit" class="btn btn-primary">Salvar</button>
         </div>
@@ -304,8 +328,14 @@ require_once __DIR__ . '/../web/layout_base.php';
     <h2 style="font-size:18px;font-weight:600;color:var(--ink);" class="mb-16">Webhook de retorno</h2>
 
     <div style="font-size:12px;color:var(--muted);line-height:1.6;" class="mb-16">
-        A Allcance envia aqui, em tempo real, o status de entrega de cada SMS <strong>e a resposta
-        que o equipamento devolve</strong>. Sem isso a tela mostra "enviado" e nunca mais nada.
+        A Allcance envia aqui, em tempo real, o <strong>status de entrega</strong> de cada SMS.
+        Sem isso a tela mostra "enviado" e nunca mais nada.
+        <?php if ($metodoAtual === 'webhook'): ?>
+        A resposta do equipamento também é esperada por aqui, no método ativo agora.
+        <?php else: ?>
+        A <strong>resposta do equipamento</strong> não depende deste endereço no método ativo agora
+        (Busca periódica) — ela vem de <code>scripts/sms_respostas_pull.php</code>.
+        <?php endif; ?>
         <br><br>
         <strong style="color:var(--ink);">Este endereço tem de ser cadastrado no painel da Allcance</strong>
         — não há endpoint de API para configurá-lo. É passo manual, e se a conta for

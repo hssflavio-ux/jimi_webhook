@@ -476,6 +476,79 @@ function sms_enviar(
     ];
 }
 
+// ── Respostas: webhook x pull ───────────────────────────────────────────────
+
+/**
+ * Qual dos dois caminhos preenche `resposta_texto`/`resposta_em` agora.
+ *
+ * 🔴 OS DOIS SÃO REDUNDÂNCIA UM DO OUTRO, NUNCA SIMULTÂNEOS POR PADRÃO — decisão
+ * do dono do produto (08/09/2026). O webhook (`/pushsms`, evento `status:
+ * "recebido"` com `mensagem`) nunca entregou uma resposta sequer nesta conta —
+ * medido: 0 de 29 comandos, 0 payloads com o campo `mensagem`. A doc oficial da
+ * Allcance documenta um endpoint SEPARADO pra esse caso exato — "Consulta
+ * Respostas (Método Pull)" — que `scripts/sms_respostas_pull.php` usa. Cada um
+ * lê um formato de campo DIFERENTE (`sms_classificar_item()` contra
+ * `sms_pull_classificar_item()`, includes/sms_inbound.php); ligar os dois ao
+ * mesmo tempo não quebra nada tecnicamente (ambos fazem UPDATE idempotente por
+ * referência), mas mistura a fonte do dado sem necessidade — daí o toggle.
+ *
+ * Falha ABERTA para o valor da COLUNA (`pull`, o DEFAULT em migration_v4.17.24),
+ * nunca para "desligado": tabela ausente ou linha ausente (migração não
+ * aplicada, ou instalação nova) devolve 'pull', que é o único caminho já
+ * comprovado nesta plataforma.
+ *
+ * @param PDO|null $db Conexão
+ * @returns string 'webhook' | 'pull'
+ */
+function sms_respostas_metodo(?PDO $db = null): string
+{
+    $row = sms_settings_row($db);
+    $v   = (string)($row['respostas_metodo'] ?? 'pull');
+    return $v === 'webhook' ? 'webhook' : 'pull';
+}
+
+/**
+ * Acumula o item cru (webhook OU pull) no histórico do comando.
+ *
+ * PONTO ÚNICO — usado tanto por `/pushsms` quanto por
+ * `scripts/sms_respostas_pull.php`. Compartilhado de propósito: os dois
+ * caminhos gravam a MESMA coluna (`eventos_raw`), com a MESMA regra de teto e
+ * a MESMA armadilha de coluna JSON.
+ *
+ * 🔴 Coluna JSON: json_encode() SEMPRE. String crua faz o MySQL recusar com
+ * 3140 Invalid JSON text (CLAUDE.md — é o defeito que quebrou o callback de
+ * comando offline por meses em `commands.response_payload`).
+ *
+ * 🔴 AUTO-CONTIDO E À PROVA DE FALHA: entre o deploy do código e a migração a
+ * coluna pode não existir (CLAUDE.md — "migração nova não roda no deploy que a
+ * traz"). Uma exceção aqui NUNCA pode subir e derrubar o webhook nem o cron —
+ * o `try/catch` garante que o pior caso é "este evento não entrou no
+ * histórico", nunca "o webhook parou de responder 200" ou "o cron morreu".
+ *
+ * @param PDO    $db
+ * @param int    $id     sms_commands.id
+ * @param array  $item   O item cru (do formato que for — webhook ou pull)
+ * @param string $origem 'webhook' | 'pull' — só para o registro, não muda a lógica
+ * @returns void
+ */
+function sms_grava_evento_raw(PDO $db, int $id, array $item, string $origem = 'webhook'): void
+{
+    try {
+        $st = $db->prepare('SELECT eventos_raw FROM sms_commands WHERE id = :id');
+        $st->execute([':id' => $id]);
+        $antes = json_decode((string)$st->fetchColumn(), true);
+        if (!is_array($antes)) $antes = [];
+        // Teto de 50 mantendo os MAIS RECENTES: reenvio do provedor (webhook) ou
+        // reexecução do cron (pull) enche a coluna sem fim, senão.
+        $antes[] = ['em' => gmdate('Y-m-d H:i:s'), 'origem' => $origem, 'item' => $item];
+        if (count($antes) > 50) $antes = array_slice($antes, -50);
+        $db->prepare('UPDATE sms_commands SET eventos_raw = :e WHERE id = :id')
+           ->execute([':e' => json_encode($antes, JSON_UNESCAPED_UNICODE), ':id' => $id]);
+    } catch (Throwable $e) {
+        Logger::warning('SMS: evento cru não gravado', ['id' => $id, 'origem' => $origem, 'erro' => $e->getMessage()]);
+    }
+}
+
 // ── Exibição ────────────────────────────────────────────────────────────────
 
 /**

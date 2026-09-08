@@ -133,6 +133,46 @@ checa('"messages" não-array',  [], sms_webhook_itens(['messages' => 'x']));
 checa('payload vazio',         [], sms_webhook_itens([]));
 
 // ════════════════════════════════════════════════════════════════════════════
+echo "\n── Leitura do payload do MÉTODO PULL (v4.17.24) ──\n";
+// 🔴 Formato DIFERENTE do webhook: array solto (sem envelope "messages"), nomes
+// de campo com a ordem das palavras trocada, texto da resposta em "resposta"
+// em vez de "mensagem". Payload real da doc oficial (seção "Consulta Respostas
+// — Método Pull").
+
+$pullPayload = json_decode('[
+  {"campanha_referencia":"","numero_referencia":"","resposta":"OK 1",
+   "data_envio":"2025-03-01 12:06:12","numero":"37999368807","status":"Recebido"},
+  {"campanha_referencia":"EXEMPLO-CAMP","numero_referencia":"EXEMPLO-REF-NUM",
+   "resposta":"OK 2","data_envio":"2025-03-01 12:06:17","numero":"37999368807","status":"Recebido"}
+]', true);
+
+$pullItens = sms_pull_itens($pullPayload);
+checa('extrai os 2 itens do array solto', 2, count($pullItens));
+
+// Item 1: resposta real, mas SEM referência (doc mostra assim) → descartável.
+$p0 = sms_pull_classificar_item($pullPayload[0]);
+checa('[pull 1] resposta preservada',        'OK 1', $p0['resposta']);
+checa('[pull 1] sem referência → não casável', null, $p0['referencia']);
+
+// Item 2: com referência — nome do campo é "numero_referencia", NÃO "referencia_numero".
+$p1 = sms_pull_classificar_item($pullPayload[1]);
+checa('[pull 2] referência lida de "numero_referencia"', 'EXEMPLO-REF-NUM', $p1['referencia']);
+checa('[pull 2] campanha lida de "campanha_referencia"', 'EXEMPLO-CAMP',    $p1['referencia_campanha']);
+checa('[pull 2] resposta lida de "resposta"',             'OK 2',           $p1['resposta']);
+// Mesma conversão BRT→UTC do webhook: 12:06:17 BRT = 15:06:17 UTC.
+checa('[pull 2] carimbo convertido p/ UTC', '2025-03-01 15:06:17', $p1['resposta_em']);
+
+// 🔴 Reusar a função do WEBHOOK neste formato tem de falhar (nomes não casam) —
+// é exatamente o bug que este teste existe para impedir de voltar.
+$errado = sms_classificar_item($pullPayload[1]);
+checa('sms_classificar_item() NO FORMATO PULL não acha a referência', null, $errado['referencia']);
+
+echo "\n  (envelope malformado — não pode estourar)\n";
+checa('payload não-array',   [], sms_pull_itens('x'));
+checa('payload vazio',       [], sms_pull_itens([]));
+checa('array de strings',    [], sms_pull_itens(['a', 'b']));
+
+// ════════════════════════════════════════════════════════════════════════════
 echo "\n── Rótulo de exibição ──\n";
 // A tradução é na EXIBIÇÃO; a coluna guarda o texto cru do provedor.
 checa('entregue celular → ok',   'ok',    sms_status_label('entregue celular')['nivel']);

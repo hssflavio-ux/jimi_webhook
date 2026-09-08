@@ -5,6 +5,27 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.24
+
+**Canal de SMS: resposta do equipamento agora chega pela busca periódica (Método Pull), não só pelo webhook.**
+
+Investigação partiu de um relato do dono do produto: o log não mostrava a resposta/status dos comandos enviados por SMS. Comparado byte a byte contra a doc oficial da Allcance, o webhook (`/pushsms`) estava parseando **corretamente** tudo que chegava — o problema é que nunca chegou um evento de resposta: **0 de 29 comandos**, **0 payloads** com o campo `mensagem`, medido em produção. A própria doc aponta a causa: respostas/interações vêm por um endpoint **separado** do webhook de status de entrega — `GET /v2/api/relatorios/campanhas/respostas/sms` ("Método Pull") — cujo exemplo de resposta já mostra texto real (`"resposta":"OK 1"`) que o webhook nunca recebeu.
+
+### Added
+
+- **`scripts/sms_respostas_pull.php`** — consulta o endpoint Pull a cada 2 min (cron registrado em `crontab-setup.sh`) e grava `resposta_texto`/`resposta_em`, com o mesmo registro de evento cru (`sms_commands.eventos_raw`) que o webhook já fazia.
+  - 🔴 **Os nomes dos campos vêm com a ordem das palavras trocada em relação ao webhook** — `numero_referencia`/`campanha_referencia` no Pull, contra `referencia_numero`/`referencia_campanha` no webhook — e o texto da resposta vem em `resposta`, nunca em `mensagem`. `sms_pull_classificar_item()` (`includes/sms_inbound.php`) é a função certa; reusar `sms_classificar_item()` neste formato descartaria tudo como "sem referência" (travado em teste).
+- **`sms_settings.respostas_metodo`** (`webhook` | `pull`, `migration_v4.17.24.sql`) — as duas vias são **redundância uma da outra, nunca simultâneas por padrão** (decisão do dono do produto). Toggle em `/config-sms`. Começa em `pull`: é a única via já comprovada com equipamento real.
+- **`sms_grava_evento_raw()`** (`includes/sms_gateway.php`) — ponto único de gravação do evento cru em `sms_commands.eventos_raw`, compartilhado agora por `/pushsms` e pelo poller novo (antes era uma closure local só do handler do webhook).
+
+### Changed
+
+- `/pushsms` continua gravando `status_entrega` e o evento cru normalmente; a escrita de `resposta_texto`/`resposta_em` fica condicionada a `sms_respostas_metodo() === 'webhook'`, para não competir com o poller.
+
+### Testado de ponta a ponta
+
+Comando real enviado a equipamento online via `/comandos-sms`, resposta do equipamento capturada pelo Pull e refletida em `sms_commands.resposta_texto` — ver `STATUS.md`.
+
 ## [Unreleased] — 4.17.23
 
 **`webhook_payloads`: filtrar por equipamento não achava os SMS.**

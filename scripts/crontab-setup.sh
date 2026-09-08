@@ -40,6 +40,11 @@ WORKER_ENTRIES=(
     # log_cleanup.php (03:10) e não colide com schedule_dispatcher (:05 de
     # cada hora).
     "scripts/maintenance_worker.php:maintenance_worker.log:24 h (6h10):10 6 * * *"
+    # v4.17.24 — busca (Método Pull) da resposta do equipamento ao comando SMS.
+    # Redundancia do webhook /pushsms, que nunca entregou um evento de resposta
+    # sequer nesta conta (0 de 29 comandos medidos). No-op quando
+    # sms_settings.respostas_metodo != 'pull' (config em /config-sms).
+    "scripts/sms_respostas_pull.php:sms_pull.log:2 min:*/2 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

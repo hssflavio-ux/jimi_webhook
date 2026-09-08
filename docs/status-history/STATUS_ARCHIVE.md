@@ -4,6 +4,1258 @@ Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recente
 
 ---
 
+> ### 📍 v4.17.20 — "Filial" sai do Relatório de Ocorrências
+>
+> Pedido do dono do produto: *"remova a coluna 'filial', não estamos usando
+> esse cadastro no sistema no momento, verifique se algum outro relatório
+> possui a coluna"*.
+>
+> **A resposta da varredura: existia em UM lugar só.** Nos 28 `stream_export()`
+> do projeto, `Filial` aparecia exclusivamente no header do
+> `rel_ocorrencias.php` — nenhum outro relatório a tem, sob esse nome ou
+> sinônimo, nem impresso nem na tela.
+>
+> 🔴 **E a TELA nunca teve a coluna — só o arquivo.** Mesma divergência
+> tela↔export que a v4.17.19 fechou em `/video/downloads`: quem conferisse o
+> PDF contra a grade achava uma coluna a mais, preenchida com `—` em toda
+> linha. Saiu junto o `branch_name` da consulta da GRADE, que era selecionado e
+> nunca desenhado — as duas consultas voltam a ser simétricas, e é essa
+> assimetria que deixa uma coluna fantasma sobreviver.
+>
+> Medido em produção: **0 filiais cadastradas**, 0 de 16 equipamentos e 0 de
+> 349 ocorrências com `branch_id`. A coluna nunca teve o que mostrar.
+>
+> ⚠️ **O FILTRO "Filial" continua** em `/relatorios/ocorrencias`,
+> `/relatorios/alarmes` e no cadastro de `/equipamentos` — com zero filiais, os
+> três desenham um `<select>` só com a opção vazia. Não foram tocados: o pedido
+> era sobre a coluna. Decisão pendente.
+
+> ### 📍 v4.17.19 — Downloads: fora IMEI e Modelo; export igual à tela
+>
+> Pedido do dono do produto: *"remova as colunas IMEI e Modelo, essas
+> informações não [são] relevantes para o usuário final, além disso,
+> padronize a impressão do xls e pdf na mesma disposição da exibição na tela"*.
+>
+> Grade e export agora na mesma ordem: **Cliente · Placa · Canal · Alarme ·
+> Hora do alarme · Início do vídeo · Requisitado em · Arquivo · Status**.
+>
+> ⚠️ **O `imei` continua no SELECT** — é a chave que casa o arquivo com o
+> alarme e o prefixo que o nome esmaece. Sumiu da TELA, não da consulta; essa
+> meia-remoção é o que volta pelo export se ninguém travar, e por isso virou
+> spec.
+>
+> 🔴 **Cabeçalho, larguras e células do export saem do MESMO array de flags.**
+> A tela esconde Cliente/Placa quando um equipamento único está filtrado, e o
+> export passa a esconder junto — com três listas separadas existiria o estado
+> em que uma mudou e as outras não.
+>
+> Duas diferenças permanecem por construção: "Download" é botão e não existe em
+> planilha; "Hora do alarme" é a segunda linha da célula de Alarme na tela e
+> vira coluna na planilha, colada na de Alarme.
+>
+> ⚠️ Saíram do export **"Tamanho (MB)" e "Baixado em"** — não têm coluna na
+> tela. Consequência direta de "mesma disposição"; voltam como colunas finais
+> se fizerem falta.
+
+> ### 📍 v4.17.18 — Downloads: o arquivo pedido pelo operador diz "On demand"
+>
+> Pedido do dono do produto: *"nessa lista temos também os arquivos
+> solicitados pelo operador, identifique esses arquivos na coluna que exibe o
+> alarme para 'On demand'"*.
+>
+> **🔴 O selo sai de `media_files.source_type`, NÃO de "não achei alarme".**
+> `media_pedido_pelo_operador()` reconhece `extracao_hvideo`,
+> `extracao_evideo`, `extracao_37382` e `pushftpfileupload`. Inferir pelo
+> buraco transformaria uma falha de vínculo numa afirmação sobre a **intenção
+> de uma pessoa**: um anexo de alarme com vínculo quebrado apareceria como
+> pedido do operador. Quem não tem alarme **nem** origem de extração mostra um
+> traço — honesto, e em produção não acontece com ninguém.
+>
+> ⚠️ **A marca sobrevive ao ciclo de vida da linha**, e é isso que faz a coluna
+> continuar certa depois que o arquivo fica pronto: o despacho grava a linha
+> com `download_status='solicitado'` e sem nome; quando o arquivo chega,
+> `media_register_file()` **promove** a linha (nome, url, tipo, status) e **não
+> toca em `source_type`**.
+>
+> ⚠️ **`pushftpfileupload` conta**: a extração do JT/T (`37382`) sobe por FTP e
+> o nome que a câmera dá (`ext20260831122209f7c617`) não tem carimbo parseável
+> — a promoção do pendente nem é tentada, e o arquivo entra como linha nova com
+> essa origem.
+>
+> Medido em 2.000 linhas: **1.999 alarme, 1 On demand, 0 traço**. Na câmera
+> Telecom, 2.000 de 2.000 são alarme.
+
+> ### 📍 v4.17.17 — Downloads: a fila diz POR QUE cada arquivo existe
+>
+> Observação do dono do produto: *"percebi que todos os arquivos listados nesse
+> momento da câmera TELECOM são arquivos relativos aos alarmes, é possível
+> adicionarmos uma coluna para identificar o alarme referente ao arquivo?"* —
+> e ela bate com a medição: **2.999 de 3.000** arquivos dos últimos 30 dias
+> têm alarme identificável.
+>
+> **🔴 São DOIS caminhos de vínculo, nenhum deles "nome parecido com".**
+> `media_alarmes_dos_arquivos()` (`includes/media.php`):
+> 1. **O nome CARREGA o `alarm_label`** na JT/T
+>    (`<imei>_<alarmLabel>_<canal>_NN.mp4`) — o mesmo rótulo de
+>    `link_upload_by_alarm_label()`, e a coluna é indexada: um `IN()` resolve a
+>    página inteira.
+> 2. **A JIMI não põe rótulo no nome** (`EVENT_…`); lá o vínculo vive em
+>    `alarms.file_url`. Uma consulta por **janela de tempo** traz os alarmes e o
+>    casamento é em PHP, **exato**, contra os pedaços do campo.
+>
+> ⚠️ **O `LIKE` foi evitado de propósito no caminho 2.** `%<nome>%` é a saída
+> óbvia e tem dois defeitos: `_` é curinga do LIKE e o nome do arquivo é cheio
+> deles (casaria arquivo diferente do mesmo comprimento), e um LIKE por linha
+> viraria 5.000 consultas no teto do export.
+>
+> ⚠️ Arquivo **sem** alarme não vira `—` seco: diz **"Extração manual"**, que é
+> o que ele é (Playback → "Subir para o storage"). Um traço faria o operador
+> procurar defeito onde não há.
+>
+> Medido em produção: página **25 de 25** em 1–3 ms, `EVENT_` da JIMI **30 de
+> 30** em 5 ms, teto do export **4.198 de 4.208** em 119 ms.
+
+> ### 📍 v4.17.16 — Downloads: o nome do arquivo aparecia pela metade
+>
+> Pedido do dono do produto: *"na tela de downloads, é necessário ajustar a
+> disposição e largura das colunas, o nome do arquivo não está aparecendo na
+> tela completamente"*.
+>
+> **🔴 A coluna mostrava só o que se REPETE.** Ela era a primeira, com
+> `max-width:200px` e reticências, e o nome precisa de **894 px** (medido na
+> tela). O que sobrava era `865478070654829_303635343832…` — o **IMEI, que já
+> tem coluna própria ao lado**, mais o começo de um blob igual entre linhas.
+> Tudo que distingue um arquivo do outro ficava fora da tela. Agora ela é a
+> **última coluna de dados** e **quebra em vez de cortar**: de **265 px para
+> 506 px**, **0 de 25 células cortadas**, tabela ainda sem rolagem horizontal
+> (1612 px em 1614 px).
+>
+> ⚠️ As colunas curtas precisavam de largura **declarada**, não só de menos
+> conteúdo: sem `nowrap`/`width:1%` o navegador reparte a folga por igual, e a
+> única coluna que precisa dela é justamente a que não recebe.
+>
+> **🔴 Nome de 119 caracteres não era um nome — eram DOIS arquivos numa
+> string.** A JIMI anuncia frontal e interna no mesmo campo, e a coluna
+> Download **já** os separava em dois botões (`media_file_list()`): a linha
+> dizia "um arquivo" enquanto a ação oferecia dois. O nome passou a usar a
+> mesma função — um arquivo real por linha, com o selo do canal.
+
+> ### 📍 v4.17.15 — foto sai da tela de playback
+>
+> Decisão do dono do produto, logo depois de a v4.17.14 subir: *"não vamos
+> exibir fotos no sistema nesse momento, não trate nenhuma ação para esses
+> arquivos"*.
+>
+> **O corte é na ORIGEM, não em cada tela.** `media_pb_reproduzivel()`
+> (`includes/media.php`) filtra a montagem de `$pbArquivos`; aquela lista
+> alimenta **cinco** consumidores — verde da barra, selo da lista, dica do
+> mouse, popover de ações e player — e barrar a foto em cada um deixaria a
+> ação viva no que fosse esquecido. A regra olha **tipo e extensão**, nessa
+> ordem, e a recíproca não vale: extensão desconhecida com `file_type` vazio
+> não vira vídeo por omissão, senão o corte teria o defeito ao contrário
+> (vídeo antigo de coluna vazia sumindo da tela).
+>
+> Com a foto fora, o desempate entre arquivos do mesmo bloco deixa de olhar o
+> tipo e passa a ser só por instante — ganha o **mais antigo**, o começo do
+> trecho. A razão original permanece: 34 dos 38 blocos verdes tinham mais de um
+> arquivo dentro (até 16).
+>
+> 🔴 **O filtro virou LOAD-BEARING, e é por isso que ele tem teste.** Medido:
+> a foto do alarme é carimbada **antes** do vídeo (ela é tirada no evento; o
+> vídeo sobe depois), então "ganha o mais antigo" **entregaria o `.jpg` em 34
+> dos 38 blocos** se o filtro fosse desfeito. Regressão nele reintroduz o
+> defeito da v4.17.14 pela porta dos fundos, em pior escala.
+>
+> Verificado em produção (JC371 `865478070654829`): arquivos na janela
+> **288 → 144** (metade eram fotos, uma `.jpg` por `.mp4`); blocos verdes
+> **38 → 38**, nenhum perdido — todo bloco com foto também tinha o vídeo.
+
+> ### 📍 v4.17.14 — Ao Vivo com um player por canal; o Playback que pintava de verde e recusava tocar
+>
+> Quatro pedidos do dono do produto sobre as telas de vídeo. O quarto era um
+> defeito: *"há uma falha na apresentação de arquivos já disponíveis no
+> servidor, estão marcados de verde na barra, mas não executam quando
+> clicados"*.
+>
+> **🔴 O defeito, medido na JC371 do veículo Telecom (`865478070654829`):
+> 34 dos 38 blocos verdes não reproduziam.** A barra e a lista resolviam o
+> arquivo pela duração REAL do bloco; o clique resolvia por `PB.bloco` = 60 s
+> fixos. **Os 60 s são a forma da JIMI** (um bloco por minuto no cartão), e a
+> JT/T entrega blocos de até 5 min: **162 dos 183 blocos vivos duravam
+> 300–301 s**. Tudo que caísse depois do primeiro minuto do bloco era
+> invisível para o clique. A duração passa a viajar com o clique nos três
+> caminhos (barra, lista, popover). Depois: **38 de 38**.
+>
+> **🔴 Segundo defeito, da mesma família, achado no caminho:**
+> `pbArquivoDoBloco()` devolvia o primeiro casamento de uma lista em
+> `event_time DESC`, e **34 dos 38 blocos tinham mais de um arquivo dentro
+> (até 16)** — cada alarme sobe `.mp4` **e** `.jpg` com segundos de diferença.
+> Em **4 dos 38** quem ganhava era o `.jpg`, e o player exibia o NOME do
+> arquivo como texto. ⚠️ A correção desta versão foi um desempate por tipo
+> (tocável primeiro) mais a exibição da foto — **substituídos na v4.17.15**,
+> que tira a foto da tela inteira, na origem.
+>
+> **Ao Vivo: um player POR CANAL, simultâneos.** A regra do mosaico sai da
+> medição de 18/08/2026: como `RTMP,ON,INOUT` registra `live/0` e `live/1` de
+> uma vez, a **JIMI leva um comando só** — mandar `OUT` e depois `IN`
+> reconfigura o push e derruba o primeiro canal, sem erro nenhum. A **JT/T
+> leva um `37121` por canal, serializado**, pela mesma razão que o `37381` do
+> playback já pagou. **Câmera JIMI para em 2 quadros** mesmo com
+> `camera_count` maior: o `RTMP,ON` só aceita `IN`/`OUT`/`INOUT`/`PIP`.
+> Os chips de canal viraram seleção múltipla ("quais abrir"), e com mais de um
+> quadro os players nascem mudos.
+>
+> Textos do Playback alinhados ao vocabulário do operador (câmera, não cartão;
+> "Upload efetuado", não "já no servidor"), listagem válida passou a dar hora e
+> data em BRT, e a lista corre em ordem ascendente, como a barra.
+>
+> Specs: `tests/video_aovivo_protocolo.spec.js` reescrito para o contrato novo
+> (dirigia a tela pela global `selCh`, que o mosaico eliminou) + 6 testes do
+> mosaico; `tests/video_playback_reproducao.spec.js` novo, com a
+> asserção-retrato do defeito (com 60 s fixos o MESMO bloco verde não acha
+> nada).
+
+> ### 📍 v4.17.4 — Rastreamento: coluna unica e escolha do que vai ao mapa
+>
+> Pedido do dono do produto: *"mescle a selecao de cliente e selecao de
+> veiculos na mesma coluna, cliente acima; e coloque a opcao de escolhermos
+> o(s) veiculo(s) que queremos exibir no mapa ao vivo."*
+>
+> - **Uma coluna de navegacao (300 px)**: Cliente (`<select>`) em cima,
+>   Ativos embaixo. O mapa fica com a largura das duas antigas.
+> - **Caixa por ativo decide o pino no mapa**, mais Todos/Nenhum e contador
+>   `N de M no mapa`. Guardado por cliente em `localStorage` — guardamos os
+>   OCULTOS, para que veiculo novo nasca aparecendo.
+> - Ativo sem posicao nasce com a caixa desabilitada e o contador diz
+>   quantos sao (`5 de 5 no mapa · 22 sem posicao`).
+>
+> **🔴 Vazamento entre clientes achado no caminho:** `/rastreamento` aceitava
+> `?customer_id=` CRU, sem `report_customer_scope()`. Medido: operador do
+> cliente 2 abrindo `?customer_id=1` recebia os **28 veiculos do cliente 1 ao
+> vivo** (placa, posicao, velocidade, ignicao), e a coluna "Clientes" listava
+> o NOME de todos os clientes da base. O `?ajax=1`, que atualiza o mapa de 30
+> em 30 s, vazava igual. Depois: so os 21 ativos do proprio cliente, e o
+> seletor nem e desenhado para nao-admin.
+>
+> **🔴 O refresh de 30 s teria desfeito a selecao:** o ciclo fazia
+> `.addTo(map)` em marcador novo, entao o veiculo recem-desmarcado
+> reapareceria sozinho — com a caixa ainda desmarcada. Quem decide agora e
+> `aplicarVisibilidade()`.
+>
+> Verificado em Chromium real (15 assercoes) + Chrome do usuario; suite nova
+> `tests/rastreamento_selecao.spec.js` com 7 testes.
+
+> ### 📍 v4.17.3 — a regra de fuso, conferida em producao
+>
+> Pergunta do dono do produto: *"ficou confusa a questao da hora gmt ou nao,
+> sempre temos que tratar a hora local, gmt-3?"*
+>
+> **A regra: UTC no MIOLO, BRT so nas DUAS BORDAS.** Guardar, comparar,
+> somar, agrupar e ordenar e sempre em UTC. Converter e operacao de borda, e
+> sao so duas: saida (UTC->BRT, `fmt_brt()`) e entrada de dia digitado
+> (BRT->UTC, `brt_day_range_to_utc()`).
+> **Resposta: sim para a EXIBICAO, nao para a ANALISE** — o dado do
+> equipamento ja chega em GMT 0, analisa-lo exige NAO converter.
+>
+> **Conferido, nao deduzido:**
+> - os quatro relogios (php.ini, PHP, sessao MySQL, SO) todos UTC, batendo
+>   ao segundo;
+> - a cadeia `gps_time` -> `gateway_time` -> `server_time` diverge em
+>   SEGUNDOS (0-6s), nao em horas: GMT 0 nos tres saltos;
+> - `metrics_snapshots.snapshot_at` em UTC (idade 2 min, nao -180);
+> - a excecao do NOME do arquivo reconferida em 12 de 12 pelo vinculo REAL
+>   (`alarms.file_url LIKE %nome%`): nome + 3h cai a 0-12 min do alarme;
+> - auditoria dos tres erros classicos: ZERO ocorrencias.
+>
+> **Duas fragilidades corrigidas:**
+> - ⚠️ `metrics_rollup.php` gravava `snapshot_at` com `date()` — acertava so
+>   porque o php.ini esta em UTC. Em php.ini BRT a snapshot nasceria
+>   PERMANENTEMENTE vencida pela regra da v4.17.2, em silencio. `gmdate()`
+>   agora, mais os 7 fallbacks dos `push*.php`.
+> - 🔴 O `#server-clock` do cabecalho mostrava o relogio do PC do OPERADOR,
+>   nao o do servidor (o FUSO estava certo, o INSTANTE nao). PC em UTC
+>   desloca exatamente 3h e o sintoma e indistinguivel de bug de fuso —
+>   candidato forte a ter causado parte da confusao. Simulado com +47min,
+>   +5min e -180min: agora mostra a hora do servidor nos tres.
+
+> ### 📍 v4.17.2 — o contador On/Off tinha quatro respostas diferentes
+>
+> Pergunta do dono do produto: *"qual e o parametro para o on e off no alto
+> direito da tela e do quadro de conectividade? nao parece ser o status atual
+> da frota."*
+>
+> **O parametro:** `devices.last_communication` a **5 min ou menos** de
+> `NOW()` (UTC), entre os `is_active = 1` do cliente da sessao. Nao tem
+> relacao com ignicao nem movimento — e recencia de comunicacao.
+> ⚠️ Convivem DOIS "online" de proposito: as telas de operacao (`/comandos`,
+> `/firmwares`, `/video-aovivo`, Status da Frota) usam 30 min
+> (`OFFLINE_GAP_SECONDS`) porque respondem "da pra mandar comando agora?".
+>
+> **O que estava errado**, medido em producao no mesmo instante:
+> - contador do topo + card Conectividade: **On 8 / Off 2**;
+>   KPI de `/ocorrencias` + selos de `/equipamentos`: **On 8 / Off 7**.
+>   Os 5 de diferenca eram os equipamentos DESATIVADOS — tres dos cinco
+>   pontos que faziam a conta nao filtravam `is_active`.
+> - 🔴 `last_communication` NULL sumia das DUAS colunas (`TIMESTAMPDIFF` de
+>   NULL nao e `<=5` nem `>5`). No banco de dev isso escondia **22 de 27**
+>   ativos: o contador dizia `On 0 / Off 5`.
+> - 🔴 `// or on-the-fly if stale` NUNCA conferia idade: o gatilho era "os
+>   quatro sao zero". Cron parado = numero congelado sob o rotulo "Tempo
+>   real", para sempre, sem erro. Agora vence em 15 min.
+> - ⚠️ `$customerId ?? 1` no fallback de ocorrencias do Resumo.
+>
+> **Ponto unico:** `device_connectivity_counts()` e `metrics_snapshot_stale()`
+> em `includes/fleet_state.php`, consumidos pelo cron, Resumo, `/painel` e
+> `/ocorrenciasdata`. Invariante garantida: **On + Off = ativos**.
+>
+> 📝 Corrigido comentario FALSO em `device_last_seen_sql()` ("nao ha trigger
+> no banco; conferido"): ha **quatro stored procedures** que gravam
+> `last_communication`. Conferido: a coluna e o `GREATEST` deram o mesmo
+> minuto em 10 de 10 equipamentos ativos de producao.
+
+> ### 📍 v4.17.1 — os três relatórios sem seleção de cliente
+>
+> Relato do dono do produto: *"os relatórios de posições, deslocamento e
+> cercas não têm a seleção do cliente, já listam automaticamente todos os
+> veículos."* Eram os **únicos três dos quinze** que não passavam por
+> `report_customer_scope()` — filtravam por `if ($customerId)`, o cliente da
+> SESSÃO, sem campo no formulário.
+>
+> - **Seletor de Cliente** nos três, no molde de `rel_velocidade.php`:
+>   `report_customer_options()`, só para admin/revendedor, "Todos" por padrão.
+> - 🔴 **As listas do formulário seguiam a sessão enquanto a grade seguia o
+>   filtro** — placas (e cercas, em geocercas) carregadas inline com
+>   `WHERE customer_id = :cid`. O seletor sozinho faria o admin trocar de
+>   cliente e continuar escolhendo a placa do anterior. As três listas agora
+>   leem o MESMO `$scopeCust` da grade.
+> - 🔴 **Drill-down divergia da grade**: `rel_deslocamento_rota.php` e
+>   `rel_deslocamento_replay.php` escopavam por sessão — a viagem aparecia na
+>   lista e o mapa dizia "Viagem não encontrada". Passaram a
+>   `report_customer_scope()`, com `&customer_id=` propagado no link.
+> - 🔒 **Correção de segurança de brinde**: `if ($customerId)` não filtrava
+>   NADA com sessão sem cliente resolvido (`get_customer_id()` NULL) — usuário
+>   comum nessa condição via a base inteira. Agora falha fechada (`= 0`).
+> - ✅ **Verificado em execução**, não só `php -l`: placas 45/26/19 por
+>   cliente, cercas 3/3/0, deslocamento 4/4/0 viagens, posições 1/0 linhas;
+>   exports XLSX/PDF íntegros; operador não-admin com `?customer_id=` de outro
+>   tenant tem o parâmetro ignorado e não vê o seletor.
+
+> ### 📍 v4.17.0 — catálogo de alarmes JIMI COMPLETO: 95 → 197 códigos
+>
+> Pedido do dono do produto na sequência da análise do VL01. Depois desta
+> migração **nenhum código publicado pela fabricante cai mais como
+> `Código NNNN (JIMI)`** nos relatórios — 197 é o total da Alarm Reference
+> oficial.
+>
+> - `alarm_name_en` é a descrição **oficial copiada literalmente**; `category`
+>   vem das **9 subseções em que a própria Jimi agrupa os alarmes**. Só o
+>   `alarm_name_pt` é meu.
+> - **30 dos 102 entram como `is_diagnostic = 1`** (bateria interna, cartão SD,
+>   erro de chip, MAC de Bluetooth, uso de dados): é o que o equipamento diz ao
+>   SISTEMA. Sem isso, cadastrar 102 códigos afogaria a tela em ruído.
+>
+> #### 🔴 A colisão JIMI × JT/T, que era o cuidado pedido
+>
+> O espaço JIMI vai até **262**; o nosso JT/T começa em **256**. Eles se cruzam
+> e há **um** caso real:
+>
+> | | JIMI (msgClass=0) | JT/T (msgClass=1) |
+> |---|---|---|
+> | **262** | Fim de Movimento | Comportamento de Condução Irregular |
+>
+> **Não é duplicidade e não se apaga**: a chave é `(alarm_code, protocol)` e
+> `alarm_label_sql()` desempata pelo `msg_class` gravado na chegada. O que
+> precisava de cuidado era o NOME — o filtro dos relatórios casa por
+> `alarm_name_pt`. Travado em `diagnostico_guard.test.php`, que também exige
+> que **só o 262** exista nos dois protocolos.
+>
+> #### Ocorrência e notificação: 98 dos 102 não mudam nada
+>
+> Notificação nasce de OCORRÊNCIA, e ocorrência exige parâmetro casado por
+> NOME. 98 nomes são novos → sem ocorrência, sem sino. Os **4 restantes**
+> (`90`, `106`, `135`, `183`) herdam o parâmetro do irmão porque compartilham
+> o nome — e isso é o certo: se o capotamento pelo código 45 abre ocorrência, o
+> mesmo capotamento pelo 106 tem de abrir também.
+>
+> #### ✅ Registros sem dono: DECIDIDO, é o comportamento certo
+>
+> Ver o bloco de 03/09 abaixo. A proposta de gravar `devices.customer_id` na
+> ausência de instalação está **arquivada** e marcada como "não implemente" no
+> CLAUDE.md.
+
+
+> ### 📍 ESTADO EM 03/09/2026 — o primeiro JM-VL01 real está no ar e foi analisado; a v4.16.0 JÁ ESTÁ EM PRODUÇÃO
+>
+> **A v4.16.0 foi publicada** — `JM-VL01`/`JM-VL02`, `device_models.family` e os
+> 14 alarmes da linha VL estão no banco de produção. O primeiro rastreador real
+> é o **`868982050616424`**, cliente 1, instalado no veículo 16 em
+> 03/09 01:29 UTC.
+>
+> #### ✅ O equipamento funciona ponta a ponta, e não falta handler nenhum
+>
+> GPS a cada 60 s, heartbeat a cada 3 min, evento `LOGIN` (com
+> `timezone: GMT-03:00`) e o par de alarmes 254/255. As chaves de **121 pushes
+> de GPS**, **40 heartbeats** e dos alarmes foram cruzadas uma a uma com as
+> colunas das tabelas: **`pushgps`/`pushhb`/`pushalarm` já cobrem tudo que a
+> linha VL manda.** Não há campo novo a mapear nem handler novo a escrever —
+> que era a pergunta que abriu esta linha de trabalho.
+>
+> O `255` chegou como `Código 255 (JIMI)`, provando que o catálogo da v4.16.0
+> era necessário; já aparece resolvido na tela porque `alarm_label_sql()`
+> re-resolve o rótulo genérico na leitura.
+>
+> #### 🔴 v4.16.1 — dois nomes de alarme errados, um deles meu
+>
+> - **`254` era "Status de Ignição Alterado".** A doc oficial publica, em dois
+>   lugares independentes, `254 = Ignition turned on` e `255 = Ignition turned
+>   off`: são os DOIS LADOS de um par. O VL01 confirmou na prática — `255` às
+>   23:33 (desligou), `254` às 23:39 (ligou). Vale para toda a linha JIMI.
+> - **`50` era "Alerta de Reboque", e o erro entrou na v4.16.0.** A wiki da VL
+>   rotula o `0x32` com a palavra solta "Puxar"; a doc oficial diz
+>   `Device was plugged out` — é o EQUIPAMENTO arrancado da instalação, irmão
+>   do `19`. Havia fonte melhor e escolhi a mais curta.
+>
+> A migração corrige o catálogo **e o histórico** (`alarms.alarm_name` é
+> desnormalizado), e **prova antes de renomear** que nenhuma
+> `occurrence_config_params`/`notification_rules` casa pelos nomes antigos.
+>
+> #### ✅ DECIDIDO EM 03/09/2026: os "órfãos" são o comportamento CERTO — não mexer
+>
+> **Decisão do dono do produto, textual:** *"somente devemos ter registros
+> legíveis no sistema depois de completo o processo de cadastramento no
+> sistema, chip–equipamento–veículo; aí sim, as posições estão completas com
+> seus respectivos donos."*
+>
+> Ou seja: linha sem `customer_id` **não é dado perdido, é dado ainda não
+> cadastrado**. O snapshot NULL antes da instalação é o que impede que posição
+> de um equipamento em bancada, em teste ou em estoque entre na operação de um
+> cliente. **A proposta de gravar `devices.customer_id` como dono de recurso
+> fica ARQUIVADA** — implementá-la faria o oposto do que o produto quer.
+>
+> ⚠️ Quem for mexer nisso depois: o número abaixo é a MEDIDA do comportamento
+> esperado, não o tamanho de um bug. E o "sintoma" de relatório vazio tem
+> resposta de suporte, não de código: **complete o cadastro chip → equipamento →
+> veículo**, e daí em diante os registros nascem com dono.
+>
+> #### 📏 A medida do que fica fora até o cadastro terminar (30 dias, produção)
+>
+> Medido em produção, últimos 30 dias:
+>
+> | tabela | linhas | sem `customer_id` | |
+> |---|---|---|---|
+> | `alarms` | 13.736 | **3.898** | **28,4%** |
+> | `gps_data` | 19.755 | 1.815 | 9,2% |
+> | `heartbeats` | 86.182 | 3.722 | 4,3% |
+> | `events` | 2.080 | 125 | 6,0% |
+>
+> **Causa:** desde a Fase 2 (v4.12.0) o dono é gravado como SNAPSHOT resolvido
+> por `resolve_installation_for_imei()`. Sem instalação aberta em
+> `device_installations`, o snapshot é **NULL** — e toda tela com escopo de
+> cliente filtra por `customer_id`, então a linha existe no banco e **não
+> aparece em lugar nenhum**.
+>
+Exemplos: um JC371 (`865478070649936`) tem **1.694 posições sem dono**, de 12 a
+> 20/08 — equipamento transmitindo sem estar instalado em veículo nenhum. E o
+> VL01 tem **116 das 122 posições e os DOIS alarmes** assim, porque transmitiu
+> das 23:18 até 01:29, antes de ser instalado. Nos dois casos o dado passa a
+> nascer completo assim que o cadastro é fechado — que é o desenho.
+>
+> #### Menor, e já existente
+> Alarme com `latitude/longitude = 0,0` (o `255` veio assim, sem fix de GPS).
+> Não é da linha VL: em 90 dias são **736 casos no JC182**. As telas de mapa
+> plotam isso no Golfo da Guiné em vez de dizer "sem posição".
+>
+> #### 📋 Pendente
+> - 🔴 **~100 códigos JIMI da doc oficial não estão no catálogo** (temos 95).
+>   Plausíveis na frota: `80`/`81` (porta), `84` (antena GNSS), `90` (tensão
+>   externa baixa), `95` (excesso dentro de cerca), `106` (tombamento), `111`
+>   (falha de cartão SD), `119`–`124` (tensão/temperatura ADC), `131` (colisão).
+> - Nenhum comando disparado contra o JM-VL01 real — o primeiro deve ser
+>   `STATUS#` ou `GPRSSET#`.
+
+
+
+> ### 📍 ESTADO EM 02/09/2026 — a frota deixou de ser só de câmeras: JM-VL01 e JM-VL02 cadastráveis, NÃO publicados e NÃO exercitados contra equipamento real
+>
+> **v4.16.0 — dois rastreadores entram no catálogo.** `JM-VL01` e `JM-VL02`
+> falam o MESMO protocolo JIMI (`msgClass=0`), chegam pelos MESMOS webhooks e
+> aceitam os MESMOS comandos de texto proNo 128 das câmeras da linha JC. O que
+> muda é que **não têm câmera**: são os dois primeiros modelos do sistema com
+> `camera_count = 0`, e isso quebrou premissas que ninguém tinha escrito.
+>
+> ⚠️ **O nome é `JM`-VL01, não `JC`-VL01.** `JC` é a linha de câmeras; `JM` é a
+> de rastreadores. `model_name` é UNIQUE e vira chave da trava por modelo, de
+> `/firmwares` e do `modelos` do catálogo de comandos.
+>
+> **O que está pronto e verificado (contra MySQL e servidor local, não contra
+> equipamento):**
+> - `migration_v4.16.0.sql` — os 2 modelos, `device_models.family`
+>   (`camera`/`tracker`) e **14 alarmes JIMI** da linha VL que faltavam
+>   (`0`,`19`,`50`,`60`,`61`,`62`,`75`–`79`,`83`,`94`,`255`). Aplicada **duas
+>   vezes** no banco local: idempotente. Linha no `deploy.sh`.
+> - `command_catalog.php`: 42 entradas novas (237 no total). Regra seguida à
+>   risca, a pedido do dono do produto: **entrada nova só onde a quantidade ou o
+>   formato dos parâmetros muda**; onde a sintaxe é a mesma, o modelo entrou na
+>   entrada que já existia.
+> - `/equipamentos` cadastra rastreador (campo Canais aceita 0);
+>   `/video/aovivo`, `/video/playback` e `/configuracoes-ia` não os listam;
+>   `/ativos/{id}` esconde as abas Ao Vivo e Vídeo. Tudo conferido por smoke
+>   autenticado com um JM-VL01 real no banco, **com guarda de não-vacuidade**
+>   (cada "não aparece" acompanhado de um "mas OUTRO equipamento aparece").
+> - `command_response.test.php`: **124/124**. Eram 111/115 — as 4 falhas eram
+>   **pré-existentes** (contagens do cabeçalho envelhecidas desde a v4.9.32 e o
+>   invariante da consulta contra a família `EVENTSET`).
+> - `tests/rastreador_vl.spec.js` (novo): **7/7**. Ele NÃO depende de um JM-VL
+>   cadastrado, de propósito — spec que pula não é cobertura; o que ele exige é
+>   a migração aplicada, e sem ela FALHA, que é o aviso que se quer.
+>
+> ⚠️ **Três specs afirmavam o significado ANTIGO de `universal`** e foram
+> corrigidos junto: o "comando universal libera TODOS os equipamentos"
+> (`comandos.spec.js`), o `CHECK#` do mesmo arquivo e o `UPDATE` de
+> `firmware.spec.js`. Os três asseriam "equipamento nenhum desabilitado" — uma
+> frase que só era verdadeira porque a frota inteira era câmera.
+>
+> **Playwright, 106 testes nos arquivos que esta versão toca**: `comandos` +
+> `firmware` + `comandos_sms` **34 passando**; `video_*` + `equipamento_vinculo`
+> + `navigation` **66 passando**; `rastreador_vl.spec.js` **7/7**.
+>
+> ⚠️ **As 3 falhas restantes são PRÉ-EXISTENTES** — cada uma reproduzida com o
+> código do HEAD (`git stash`) antes de ser descartada:
+> - `comandos.spec.js` × 2 (`VIDETIMEZONE`/`VIDEOTIMEZONE`): é DADO, não código.
+>   O cliente de teste local não tem nenhum **JC371**, e os dois comandos só
+>   existem nesse modelo — a trava desabilita todas as linhas e o `marcarUm()`
+>   do spec não acha checkbox livre. Some assim que houver um JC371 no cliente.
+> - `video_playback_filelist.spec.js` × 1: espera 3 canais no laço do 37381 e
+>   recebe 1. Não investigado — está fora do escopo desta versão, mas **entra na
+>   lista de pendências**, porque é um spec vermelho que ninguém estava vendo.
+>
+> ⚠️ **A suíte COMPLETA (201 testes) não foi rodada até o fim** — leva mais de
+> uma hora com um worker. O que foi rodado é o conjunto que toca os arquivos
+> alterados, e os helpers PHP inteiros.
+>
+> ⚠️ O banco de desenvolvimento local estava em **4.9.32** — sete migrações
+> atrás. Foi migrado até a 4.16.0 para a suíte rodar contra o esquema real (o
+> `senha_temporaria.spec.js` acusava `Unknown column 'must_change_password'`).
+>
+> #### 🔴 A trava por FAMÍLIA — o que a chegada do rastreador quebrou
+>
+> `universal`, no catálogo de comandos, foi derivado de "presente em >= 5 das 6
+> páginas de **câmera** da wiki", e a tela o traduzia como "libera a frota
+> inteira". Enquanto toda a frota era câmera, as duas frases eram a mesma. Com
+> um rastreador na lista, "liberar a frota" passou a significar oferecer
+> `RECORDSW`, `VOLUME`, `SSID` e `WIFIAP` a um aparelho que não os entende —
+> comandos que voltariam como "não suportado" horas depois, no callback.
+>
+> ⚠️ **Não é "rastreador não tem WiFi"** (corrigido pelo dono do produto,
+> 03/09/2026): o **JM-VL01 TEM** — hotspot WiFi é recurso de capa na wiki dele,
+> e o Android embarcado ainda o conecta como cliente a uma rede. O que ele não
+> entende é `WIFIAP`/`SSID`: a forma dele é `HOTSPOT,S,N,P#`, já catalogada.
+> Mesmo recurso, comando outro — como `LED` (JC/VL01) contra `LEDSLEEP` (VL02).
+> O JM-VL02, esse sim, não tem rádio WiFi (Cat-M1/NB2).
+>
+> Agora `universal` libera **as famílias que o próprio comando documenta**,
+> derivadas de `modelos` via `device_models.family`. Não há chave nova no
+> catálogo: comando universal que valha para rastreador é comando que lista
+> `JM-VL01`/`JM-VL02` em `modelos`.
+>
+> #### 🔴 Dois defeitos pré-existentes que só apareceram por causa disso
+>
+> - **`SOSALM,A,B#` era inenviável pela tela** — cinco parâmetros declarados
+>   para dois placeholders (três eram lixo de raspagem da wiki). Como
+>   `faltaParametro()` exige toda caixa preenchida, o botão Enviar nunca
+>   habilitava. Só funcionava pelo modo livre, o que ninguém percebe.
+> - **`parseInt(...) || 1`** em `onModelChange()`: `0` é falsy em JS, então o
+>   modelo de 0 câmeras gravava 1 canal e o rastreador nascia parecendo câmera.
+>   Latente desde sempre, porque até agora todo modelo tinha ao menos 1 canal.
+>
+> 🔴 **O que NÃO foi verificado — leia antes de confiar:**
+> 1. **Nenhum comando foi disparado contra um JM-VL real.** Toda entrada nova
+>    tem `consulta_ref => 'wiki'`, nunca `medido`. O primeiro teste tem de ser
+>    uma consulta inócua (`STATUS#` ou `GPRSSET#`) num equipamento só.
+> 2. **Nenhum webhook de um JM-VL foi lido.** Os 14 alarmes novos vieram da
+>    tabela da wiki, não de payload observado — falta ver o que o IoT Hub
+>    realmente manda (é o próximo passo combinado: o dono do produto vai deixar
+>    um VL01 ligado).
+> 3. **A cerca RETANGULAR (`FENCE,B,1,…`) ficou de fora de propósito**: a wiki
+>    escreve a sintaxe com 7 campos e descreve 8 logo abaixo. Aridade errada no
+>    proNo 128 é aceita sem erro nenhum — aqui daria cerca no lugar errado.
+> 4. Alarmes `33`/`34` não catalogados: a wiki os publica como "Reservado", e
+>    batizar por palpite é erro que este catálogo já pagou.
+> 5. Os 14 alarmes novos **não geram ocorrência** (sem `occurrence_config_params`)
+>    — ligar o motor para evento de rastreador muda volume de tratativa e é
+>    decisão de produto, não de migração.
+>
+> ⚠️ **Migração nova → DOIS deploys** (`--force` duas vezes) ou o `.sql` à mão.
+> No intervalo, `/comandos` cai no `catch` de `device_models.family` e trata
+> todo mundo como câmera — que é exatamente o comportamento anterior, de
+> propósito. As telas de vídeo filtram por `camera_count`, sem depender da
+> coluna nova.
+
+> ### 📍 ESTADO EM 29/08/2026 — canal de SMS implementado, NÃO publicado e NÃO exercitado contra equipamento real
+>
+> **v4.14.0 — comandos do proNo 128 por SMS (Allcance).** Segundo transporte
+> para o mesmo catálogo de comandos de texto: quando a câmera não fala com o IoT
+> Hub (APN ou `SERVER` errados), o SMS chega por um caminho independente.
+>
+> **O que está pronto e verificado:**
+> - Tela `/comandos-sms` (catálogo inteiro + trava de modelo + saldo a cada
+>   abertura), `/config-sms` (admin), webhook `/pushsms`, ação `/sendsms`,
+>   `includes/sms_gateway.php`, `includes/sms_inbound.php`.
+> - `migration_v4.14.0.sql` (`sms_settings`, `sms_commands`) + linha no `deploy.sh`.
+> - `php -l` limpo em `handlers/ config/ core/ includes/`; JS da tela validado
+>   por `node --check`; **44/44** em `tests/helpers/sms_webhook.test.php`.
+> - **A API foi exercitada de verdade** (29/08/2026): `POST /v2/api/login`
+>   devolveu `200 success` e `GET /v2/api/creditos` listou `SMS TRANSACIONAL`.
+>   O token é JWT de 3600 s e não há refresh — daí o cache em `sms_settings`.
+>
+> 🔴 **O que NÃO foi verificado — leia antes de confiar:**
+> 1. **Nenhum SMS foi enviado.** O caminho `/campanhas` está escrito contra a
+>    doc e a coleção do Postman, não contra uma resposta real. O primeiro teste
+>    tem de ser um comando inócuo (`STATUS#`) num equipamento só.
+> 2. **Chip M2M frequentemente NÃO recebe SMS** — é contratual da operadora, não
+>    técnico. Se o primeiro envio for aceito pela API e nunca entregue, suspeite
+>    disto antes do código.
+> 3. **O SQL não rodou contra MySQL nenhum** (a máquina de desenvolvimento não
+>    tem servidor). Foi revisado à mão; a `UNIQUE` na coluna gerada
+>    `customer_key` é o que impede duas linhas globais.
+> 4. **A conta usada tem 10 créditos** — de teste, não de operação.
+>
+> ⚠️ **Passo de infraestrutura FORA DO GIT:** a URL do webhook
+> (`APP_URL` + `/pushsms?k=<segredo>`) precisa ser cadastrada **no painel da
+> Allcance** — não há endpoint de API para isso. Sem ela, a tela mostra "aceito"
+> e o status de entrega e a resposta do equipamento nunca chegam. Mesma classe
+> do `docs/apache/filelist-chunked.conf`: some se a conta for reprovisionada, e
+> nada no deploy avisa. O segredo é gerado em `/config-sms`, que mostra a URL
+> pronta.
+>
+> ⚠️ **Migração nova → DOIS deploys** (`--force` duas vezes) ou o `.sql` à mão.
+>
+> Design completo em `docs/superpowers/specs/2026-08-29-comandos-sms-design.md`.
+
+> ### 📍 ESTADO EM 28/08/2026 — senha temporária por e-mail NO AR e testada ponta a ponta; v4.13.22–23 pendentes
+>
+> **Produção (`bycamera.ia.br`) está com o código da `4.13.21` e o banco migrado
+> para `4.13.21`.** ⚠️ O `/ping` e o rodapé do login continuam dizendo
+> **`4.13.19`**: o `SYSTEM_VERSION` do `.env` não foi bumpado no deploy. É só o
+> letreiro — o código no ar é o novo, provado pelas rotas que só existem nele.
+>
+> **Commitadas e NÃO publicadas: `4.13.22` (`424993e`) e `4.13.23` (`7b56c13`).**
+> Nenhuma das duas mexe em banco; sobem no próximo deploy junto com o bump do
+> `SYSTEM_VERSION`.
+>
+> #### 🔧 v4.13.20 — a camada de satélite virou HÍBRIDA (no ar)
+>
+> Imagem aérea sem via nem nome não serve para operação de frota: o operador vê
+> o telhado e não sabe em que rua o veículo está. `bcMapBaseLayers()`
+> (`web/components/map_assets.php`) monta um `L.layerGroup` com o
+> `World_Imagery` mais os dois overlays de referência do próprio Esri
+> (`Reference/World_Transportation` e `Reference/World_Boundaries_and_Places`).
+> Grátis, sem chave; o controle diz `Ruas` / `Híbrido`. Vale nos 10 mapas de uma
+> vez, sem tocar em handler nenhum — o retorno da padronização da v4.13.18.
+> ⚠️ As linhas finas de borda de tile em alguns zooms são do Leaflet e aparecem
+> **igualmente na camada anterior**; não é regressão.
+>
+> #### 🔧 v4.13.21 — cadastro por e-mail, senha temporária e "esqueci minha senha" (no ar)
+>
+> Antes: o admin inventava a senha em `/usuarios` (campo obrigatório), combinava
+> por WhatsApp, e ninguém era obrigado a trocá-la; quem esquecia dependia de um
+> admin — **não existia rota de recuperação nenhuma**. Agora: senha em branco no
+> cadastro = o sistema gera 6 caracteres, envia (`includes/password_reset.php`,
+> ponto único) e obriga a troca. Decisões do dono do produto: validade de 24 h,
+> campo de senha manual mantido como opção, falha de envio = mensagem + UMA
+> retentativa em 30 s (temporizador no navegador, nunca `sleep()` no PHP).
+>
+> 🔴 **A trava mora no `require_login()`**, não no `login.php`: só na tela de
+> login, bastaria digitar `/rastreamento` na barra de endereço para escapar dela.
+>
+> #### ✅ Verificado em produção, com o dono do produto (28/08, manhã)
+>
+> | Etapa | |
+> |---|---|
+> | Cadastro sem senha → e-mail | ✅ criado, enviado, selo `senha temporária` |
+> | Login com a temporária | ✅ |
+> | `/rastreamento` antes de trocar → `/trocar-senha` | ✅ **a trava, confirmada à mão** |
+> | Repetir a temporária como definitiva | ✅ recusada |
+> | `/esqueci-senha` fora da janela de 5 min | ✅ enviado; selo volta na lista |
+> | E-mail inexistente | ✅ resposta neutra, sem vazar existência |
+>
+> O selo voltando é **prova indireta do envio**: `issue_temp_password()` só grava
+> as flags depois que o `send_mail()` retorna sucesso.
+>
+> #### 🔴 Três armadilhas descobertas NO deploy — valem para a próxima vez
+>
+> 1. **A migração não rodou no deploy que a trouxe.** O `deploy.sh` ganhou a
+>    linha `run_migration "4.13.21"` no MESMO `git pull` que o estava
+>    executando, e o bash lê o script em execução aos poucos, direto do disco:
+>    alterar o arquivo no meio da execução faz o interpretador perder o pedaço
+>    novo. Sintoma: código no ar, colunas ausentes. **Toda migração nova precisa
+>    de um SEGUNDO deploy** (ou do `.sql` aplicado à mão).
+> 2. ⚠️ **Enquanto isso, o `/esqueci-senha` fica armado errado E EM SILÊNCIO**: o
+>    SMTP envia, o `UPDATE` falha por coluna ausente, a transação cai — e a
+>    pessoa recebe uma senha que não funciona. O `/usuarios` grita
+>    (`Erro: SQLSTATE[42S22]`), o `/esqueci-senha` não pode gritar, porque a
+>    resposta neutra é o que impede a tela de virar verificador de contas.
+> 3. **`require_once config/database.php` NÃO carrega o `.env`** — o
+>    carregamento morava dentro do construtor do `Database`, ou seja, só ao abrir
+>    conexão. Tela que renderiza sem tocar no banco via `getenv()` vazio:
+>    `/esqueci-senha` mostrava `v4.0.0` no GET e a versão certa no POST. Extraído
+>    para **`env_load()`** na v4.13.22; toda tela nova sem banco precisa chamá-la.
+>
+> #### 🔧 v4.13.23 — o limite de 5 min enganou o próprio dono do produto
+>
+> O limite por e-mail do `/esqueci-senha` é aplicado em silêncio (dizer "já
+> enviamos há pouco para este endereço" confirmaria que a conta existe). No
+> teste, dois pedidos seguidos → "enviamos" e nada chegou → conclusão natural de
+> que estava quebrado. A mensagem neutra passou a explicar o limite, em frase
+> genérica que vale para todo mundo e não revela nada. Travada no spec.
+>
+> #### ⏳ O que continua sem exercício
+>
+> - **Caminho de falha do envio**: selo `senha não entregue` e a retentativa de
+>   30 s. Exigiria derrubar o SMTP de propósito, com câmeras reais operando.
+> - **A trava com a flag ligada não tem teste automatizado** — exige usuário
+>   semeado com `must_change_password=1`, e criá-lo pela tela dispara e-mail de
+>   verdade. Hoje só a verificação manual acima cobre isso.
+> - `web/login_template.php` ainda duplica o CSS do cartão em vez de usar
+>   `web/auth_card_template.php` (é a única porta do sistema; não dá para
+>   exercê-la sem banco na máquina de desenvolvimento).
+> - Pedir recuperação invalida a senha atual na hora: quem souber o e-mail de
+>   alguém força a troca dessa pessoa (incômodo, não acesso). Consequência de
+>   "a temporária é a senha"; separar as duas exigiria um segundo caminho de
+>   autenticação.
+>
+> #### 🧹 Usuário de teste
+>
+> `flaviohses+teste28@gmail.com` (id 9109, Visualizador, Frota Principal) foi
+> criado para este teste e **desativado** ao fim. Não apagar sem necessidade: é
+> o registro do fluxo que funcionou.
+
+> ### 📍 ESTADO EM 26/08/2026 — produção em v4.13.17, `VIDEOUPLOAD` com o separador certo + gap histórico fechado
+>
+> **Produção está em `4.13.17`** (deploy + verificação nesta sessão). Dono do
+> produto testou `VIDEOUPLOAD` manualmente no Postman e achou o motivo pelo
+> qual a v4.13.3–7 (sessão anterior, `VIDEOUPLOAD` "confirmado" contra a
+> Telecom) não estava de fato enchendo o storage: o separador de canal e um
+> campo inteiro estavam errados. Corrigir isso destrancou um SEGUNDO bug, só
+> visível depois que o primeiro upload de verdade em escala aconteceu — mesmo
+> padrão em cadeia da entrada "ESTADO EM 25/08/2026" logo abaixo neste
+> arquivo (cadeia de 4 bugs do vídeo de evento JT/T).
+>
+> #### 🔧 v4.13.16 — `VIDEOUPLOAD`: sublinhado, não hífen, e faltava `mediaType`
+>
+> Formato usado desde a v4.13.6 (`1-2-3`, três canais com hífen) nunca tinha
+> sido testado contra hardware — só resgatado do dashboard morto por
+> semelhança de forma (mesma classe de erro do item 2 da cadeia de 25/08:
+> doc/código antigo dá candidato plausível, ninguém mede). Confirmado no Postman
+> (865478070654829, JC371): `VIDEOUPLOAD,<host>,<porta>,<alarmLabel>,1_2,2` —
+> canais com SUBLINHADO, e um 6º campo, `mediaType` (0=fotos, 1=vídeos,
+> 2=ambos), que não existia em versão nenhuma do código. Convenção fixada:
+> sempre canais 1 e 2 (só 1 no JC182), sempre `mediaType=2`. Corrigido em
+> `includes/alarm_video_request.php` e `includes/occurrence_engine.php`; doc
+> em `docs/COMANDOS_128_CONSULTA.md` §9.9 e `CLAUDE.md`.
+>
+> Aproveitado para fechar peças que faltavam: cliente novo pra
+> `GET /api/v2/alarm/getAlarm` (`includes/iothub_alarm_api.php` — não existia;
+> medido contra produção: `alarmLabel` vem separado por vírgula, concatenar
+> reproduz `alarms.alarm_label`; teto de 1000 linhas sem paginação, por isso
+> `iothub_get_alarms_chunked()` subdivide a janela), backfill
+> (`scripts/video_upload_backfill.php`, cron a cada 30 min desde esta sessão)
+> e player duplo (canal 1 + canal 2 simultâneos) em `rel_alarmes.php` e
+> `ocorrencias_dashboard.php`.
+>
+> #### 🔧 v4.13.17 — o bug que o `VIDEOUPLOAD` corrigido destrancou: `alarms.file_url` gated por ocorrência
+>
+> Rodando o backfill de verdade (não o dry-run) contra o 865478070654829: os
+> 4 arquivos por alarme (2 vídeos + 2 fotos) chegavam certos em `media_files`,
+> mas `alarms.file_url` continuava NULL pra alarmes sem ocorrência — medido:
+> `264-3` ("ADAS: Distância Insegura"), que não tem
+> `occurrence_config_params`. Causa: `link_upload_by_alarm_label()`
+> (`includes/occurrence_engine.php`) fazia `JOIN` até `occurrences` ANTES de
+> decidir gravar `alarms.file_url` — a MESMA função que a cadeia de 25/08
+> (item 4a) tinha corrigido pra passar a gravar `alarms.file_url` (antes só
+> gravava `occurrences.media_file_id`), sem perceber que a correção ainda
+> dependia do `JOIN` até ocorrência ficar de pé — e a MESMA classe do bug que
+> `media_register_file()`/`link_media_to_occurrence()` resolveu pra
+> `media_files` na v4.9.35 (ver `CLAUDE.md`, bullet logo acima do novo).
+> Corrigido resolvendo o alarme por `imei`+`alarm_label` sozinho, sem depender
+> de ocorrência; o vínculo com `occurrences.media_file_id` virou segundo passo
+> opcional. 199 arquivos que já tinham chegado nessa janela foram religados
+> retroativamente por script avulso (não versionado).
+>
+> **Resultado do backfill real (janela de 7 dias, só 865478070654829):** 131
+> `VIDEOUPLOAD` disparados, 3 já completos, 29 com pedido pendente de antes,
+> **85 alarmes existem só na câmera — o webhook nunca gravou** (achado
+> registrado, não investigado nesta sessão — é gap DIFERENTE deste, na
+> ingestão, não no vídeo).
+
+> ### 📍 ESTADO EM 25/08/2026 (tarde/noite) — produção em v4.13.7, vídeo de evento JT/T destravado nesta sessão
+>
+> **Produção está em `4.13.7`** (deployada pelo dono do produto, confirmado
+> por `git log` no servidor). Sessão longa, toda em cima da câmera Telecom
+> (JC371, `865478070654829`, cliente Frota Principal): o vídeo de evento
+> nunca tinha subido para NENHUMA câmera JT/T do histórico do banco, e a
+> causa era uma cadeia de 4 bugs empilhados — só depois de destravar os 4 é
+> que o primeiro upload de verdade aconteceu.
+>
+> #### 🔧 v4.13.3–4.13.7 — cadeia completa do vídeo de evento JT/T: 4 bugs, 1 por vez
+>
+> Dono do produto reportou que a câmera Telecom não subia vídeo dos eventos.
+> Cada correção revelou o bug seguinte — só ficou visível depois que o
+> anterior parou de mascará-lo:
+>
+> 1. **`flush_pending_video_requests()` chamava `iothub_dispatch_command()` —
+>    função que não existe** desde a v4.9.13 (12/08/2026), que a renomeou
+>    para `iothub_send_instruct()` e atualizou os outros dois chamadores
+>    (`sendcommand.php`, `param_sync_worker.php`), mas não este. `Error` de
+>    PHP (função indefinida) — não `Exception` —, então o `catch` do laço não
+>    pega, e o processo morre em silêncio, pós-`fastcgi_finish_request()`,
+>    sem log nenhum. O gatilho automático de vídeo esteve morto para a frota
+>    JT/T inteira por 13 dias sem nenhum sintoma visível. `commands` nunca
+>    teve uma linha `operator='auto_video'` nesse intervalo.
+> 2. **O proNo estava errado.** A escolha original era 37384 (0x9208, Alarm
+>    Attachment Upload) — plausível pela doc, mas NUNCA testado contra
+>    hardware real. Depois de destravar o item 1, 37384 passou a ser aceito
+>    e respondido `_content:"ok"` — só que é um ACK genérico do protocolo,
+>    não prova de upload: zero conexões da Telecom no serviço de upload
+>    (log do container `dvr-upload` cross-checado) apesar do "ok", enquanto
+>    outro device fazia upload real no mesmo período. O dono do produto
+>    apontou o comando certo — **`VIDEOUPLOAD`** (proNo 128, texto) — já
+>    documentado numa versão anterior do dashboard
+>    (`docs/_arquivo_morto/archive/web/dashboard.js`, função
+>    `requestVideoUpload()`) que não sobreviveu à reescrita do produto.
+>    Trocado em `queue_event_video_request()`/`flush_pending_video_requests()`
+>    (gatilho automático) e em `includes/alarm_video_request.php`
+>    (`request_alarm_video_jtt()`, botão manual "Pedir vídeo").
+> 3. **O primeiro upload real (pós-fix) revelou um bug de VINCULAÇÃO.**
+>    `pushfileupload.php` extrai o `alarmLabel` do NOME do arquivo por
+>    regex — a doc §1.8 descreve `{imei}_{alarmLabel}_{xy}.ext` com canal+
+>    sequência colados; o nome real medido foi
+>    `865478070654829_<label>_1_00.jpg` (**`_` entre canal e sequência**).
+>    Sem esse `_` no regex, `alarmLabel` nunca era extraído, e todo anexo
+>    JT/T caía no fallback impreciso de janela ±3min em vez do casamento
+>    preciso — e já ligou o anexo de UMA ocorrência a OUTRA (a mais próxima
+>    no tempo com `media_file_id` ainda vazio). Vínculo errado já gravado em
+>    produção desfeito manualmente.
+> 4. **Mesmo depois de 1–3, a tela de Alarmes continuava sem mostrar nada.**
+>    Duas causas independentes: (a) `link_upload_by_alarm_label()` só
+>    gravava `occurrences.media_file_id` — nunca `alarms.file_url`, que é a
+>    ÚNICA coluna que `handlers/rel_alarmes.php` lê por linha de alarme (e
+>    também a grade "Alarmes Agrupados" do detalhe da ocorrência). Corrigido
+>    gravando os dois, com a mesma convenção da JIMI pra múltiplos canais
+>    (nomes separados por vírgula). (b) O anexo do VIDEOUPLOAD pode chegar
+>    como **FOTO** (`.jpg`, um por canal — foi o caso medido), e tanto o
+>    filtro (`media_kind(...) === 'video'`, estrito) quanto o player em JS
+>    de `rel_alarmes.php` (`bcPlayer.montar()`, que só sabia montar
+>    `<video>`) excluíam imagem por completo — mesmo com o arquivo íntegro
+>    no disco, a coluna Ação mostrava `—`, e clicar num `.jpg` como se fosse
+>    `.mp4` dispararia erro silencioso no player. Os dois ganharam o ramo de
+>    imagem: filtro aceita `['video','image']`, `bcPlayer.montar()` ganhou
+>    parâmetro `kind` e monta `<img>` quando `kind==='image'`.
+>
+> **Verificado ao vivo em produção** (não em ambiente de teste): sessão de
+> admin temporária + `curl` no localhost do servidor confirmaram, em cada
+> passo, o sintoma antes da correção e o resultado depois. O primeiro
+> upload JT/T bem-sucedido do histórico do banco aconteceu nesta sessão
+> (ocorrência #120, dois `.jpg`, um por canal) e `/midia?f=...` serviu o
+> arquivo com `200`/`image/jpeg` válido.
+>
+> ⚠️ **A correção do item (a) só vale pra upload NOVO** — `pushfileupload.php`
+> já tinha processado os dois `.jpg` da ocorrência 120 ANTES do deploy da
+> v4.13.8, então `alarms.file_url` ficou vazio mesmo depois do fix (o código
+> corrigido nunca rodou pra esse registro específico). Rodado backfill único
+> (chamando `link_upload_by_alarm_label()` de novo para os dois
+> `media_files` já existentes) pra corrigir o caso já gravado. Confirmado
+> visualmente no Chrome da IDE, sessão de admin temporária: `/relatorios/
+> alarmes` mostra "📷 Ver Foto" na linha certa e o modal abre a foto real
+> (estrada, timestamp, velocidade, IMEI sobrepostos) — sem erro de console.
+> Evento NOVO, gerado depois do deploy, não precisa de backfill nenhum.
+>
+> **Pendência real, não de software**: as 30+ ocorrências da Telecom
+> anteriores a este fix (antes da v4.13.6 estar no ar) continuam sem
+> vídeo — o pedido foi reenviado pra todas depois da correção, mas a
+> câmera não tinha ATTACHMENT algum guardado pra esses eventos antigos
+> (o `VIDEOUPLOAD` pede o que já está no cartão sob aquele `alarmLabel`;
+> não é possível reconstruir depois). Só eventos NOVOS, a partir do deploy
+> da v4.13.6, têm chance real de trazer vídeo/foto.
+>
+> #### 🔧 v4.13.2 — formas de consulta corrigidas por teste ao vivo (Chrome)
+>
+> Dono do produto pediu para testar a 4.13.1 usando o Chrome da IDE contra
+> produção. Criei uma sessão de admin temporária (removida ao final),
+> selecionei a Telecom (JC371) e cliquei em "Ler agora" nas entradas
+> marcadas "a confirmar". Resultado: **as duas com maior confiança prévia
+> estavam erradas.** `ADAS,CALIBRATION#`/`DMSSP#` (a segunda herdada de
+> `command_catalog.php`) voltaram `Error:Number of parameters errors!` —
+> precisam da função (`ADAS,CALIBRATION#` inteiro, `DMSSP,ADAS#`/`DMSSP,DMS#`).
+> `EVENTSET#`/`EVENTALERT#` bare voltaram `Command was not recognized!` — a
+> forma certa leva o CÓDIGO do evento (`EVENTSET,ALDW#` → devolve
+> `EVENTSET,ALDW#,60`, batendo com o default documentado). Testei 4 códigos
+> nos dois verbos ao vivo (`ALDW`/`AOSD`/`ADCA`/`AFVS`, 8 disparos, 8
+> respostas) e generalizei o padrão confirmado pros outros 15 códigos de
+> cada verbo como `'inferido'` (mesma família de um comando MEDIDO, não
+> testado individualmente — distinção que `device_param_catalog.doc_ref`
+> já usa). Também confirmados: `DMSVSP#`, `DMSSW#` (JC371 e JC400AD),
+> `ADASSW#`, `DMS_SWITCH#`, `SPEED#` (JC181). `ADASSEP#`/`ADASSEN#`
+> respondem de verdade mas exigem ADAS ligado antes — forma confirmada,
+> câmera testada só estava com ADAS desligado ("Please Open Adas Switch").
+> Resultado: as 59 entradas do catálogo agora TODAS têm consulta (18
+> `medido`, 41 `inferido`, 0 sem forma nenhuma).
+>
+> Testado também o botão "Ler tudo (cadência)" em si — dispara em sequência
+> com status "Lendo N de 6: ...", desabilita o botão durante o disparo,
+> reabilita ao concluir. Confirmado por SELECT direto que as respostas
+> caem em `device_ia_config_state`. `php -l` limpo, suíte 115/115.
+>
+> Pedido do dono do produto: um comando que dispare, em cadência, a leitura
+> de todos os parâmetros configurados na câmera, pra análise. Adicionado o
+> botão em `/configuracoes-ia` — dispara a forma de consulta (`VERBO#`) de
+> cada comando do modelo, um de cada vez, 2,5s de intervalo. Pra isso,
+> `includes/ia_config_catalog.php` precisou ganhar forma de consulta pros
+> 21 verbos do catálogo (antes só `DMSSW#` tinha) — mas **20 dessas 21 são
+> `nao_confirmado`**: tentei extrair a marcação "vermelho = aceita consulta"
+> que a própria planilha JC371 documenta, e o parser de cor não distinguiu
+> destaque manual do estilo base da coluna (quase tudo testou "vermelho").
+> Em vez de inventar, assumi a dedução mecânica (`VERBO#`, mesma convenção
+> já usada pro `EVENTSET` no catálogo original) e deixei o próprio botão
+> "Ler tudo" como o MECANISMO DE MEDIÇÃO — mesmo caminho que resolveu
+> `CHECK#`/`ADASxx`/`FILELIST` no passado. Toda resposta de verdade (não
+> recusa, não fila) promove o campo pra `'medido'`; até lá, o card mostra
+> o selo "a confirmar". `php -l` limpo, JS extraído e validado com
+> `node --check`, checagem estrutural 0 problemas, suíte 115/115.
+>
+> #### 🆕 v4.13.0 — "Configurações IA" (ADAS/DMS/velocidade) + pausa do JT/T
+>
+> Pedido do dono do produto: os comandos JT/T de parâmetro (33027 escrita,
+> 33028/33030 leitura) não funcionam — firmware do fabricante, fora do nosso
+> controle. Pediu para pausar essa área e criar uma tela nova, só com
+> configuração de ADAS/DMS/velocidade, reprocessada do zero das planilhas
+> oficiais (não copiada do catálogo de `/comandos`), no layout de "quadros"
+> da aba de parâmetros, com a máscara de cada campo como tag de auxílio —
+> esses comandos saem de `/comandos` de vez, ficam só na tela nova.
+>
+> **Achado central:** cada família de câmera usa um vocabulário de comando
+> TOTALMENTE diferente pro mesmo conceito de ADAS/DMS — não existe sintaxe
+> universal no proNo 128. JC371 usa `EVENTSET,<código>`/`EVENTALERT,<código>`
+> (um par por evento) + `DMSSP`/`DMSVSP`/`ADAS,CALIBRATION`; a família
+> JC400AD/JC261/JC400D usa `DMSSW`/`DMS_*`/`ADASxx`; JC181 não tem ADAS/DMS
+> nenhum (sem chip de visão) — só `SPEED` por GPS. Reprocessei as 3
+> planilhas (`docs/JC 371 Command List V1.0.1.xlsx`, `docs/JC400 & JC261
+> Command List V5.0.3.20230626.xlsx`, `docs/JC181_Command_List_V1.0.7_20250811.xlsx`)
+> com um parser `.xlsx` escrito na hora (`ZipArchive`+DOM, sem lib nova) —
+> 58 entradas no catálogo novo (`includes/ia_config_catalog.php`), cada uma
+> com a máscara/faixa exata da planilha. A wiki (`wiki-foconavia...`) é uma
+> SPA em JS que o `WebFetch` não renderiza (só devolve o título) — JC450/JC182
+> não têm planilha própria, então a cobertura deles vem do que
+> `command_catalog.php` já confirmava, marcada `procedencia: 'wiki'`
+> (confiança menor, mesma disciplina do `doc_ref` de `device_param_catalog`).
+>
+> 45 comandos SAÍRAM de `includes/command_catalog.php` (238 → 193 entradas) —
+> `/comandos` fica só com configuração básica. `handlers/sendcommand.php`
+> ganhou um bloqueio único: `proNo` 33027/33028/33030 devolve HTTP 409 — é
+> o que garante que nenhuma das 4 telas de Parâmetros JT/T (que só ganharam
+> um AVISO, nada foi apagado) consegue de fato mandar comando, mesmo que
+> alguém chegue lá por um link antigo.
+>
+> Tabela nova `device_ia_config_state` (não mexi em
+> `device_param_catalog`/`device_params` — formato incompatível, chave
+> numérica JT/T vs. chave de texto com vários parâmetros por comando;
+> ficam paradas, prontas pra voltar se o firmware for corrigido).
+>
+> `php -l` limpo; `tests/helpers/command_response.test.php` 115/115 (a
+> contagem do cabeçalho é conferida dinamicamente, não hardcoded); checagem
+> estrutural do catálogo novo (todo campo obrigatório presente, placeholders
+> batendo com `params`) e do casador de comando→catálogo, 0 problemas.
+>
+> ⚠️ **Não testado com envio real a câmera de produção** — só leitura/
+> renderização foram verificadas nesta sessão. Validação do envio de verdade
+> fica para o dono do produto, depois do deploy.
+>
+> #### 🔧 v4.12.11 — mapa do `/painel` sem os pontos individuais de posição
+>
+> Pedido do dono do produto: o "Mapa de Posições Recentes" do `/painel`
+> deveria mostrar os pontos, igual ao mapa do Resumo (`/`), além da camada
+> de calor. `dashboard_render_heatmap()` só desenhava `L.heatLayer`;
+> `handlers/resumo.php` (origem deste widget) também desenha um
+> `L.circleMarker` por posição — ponto azul com popup de placa+velocidade —
+> que não tinha sido copiado. Adicionado dentro do `forEach` já existente,
+> mesmo estilo e popup do Resumo. `php -l` limpo.
+>
+> #### 🔧 v4.12.10 — contador On/Off do sino sempre inflava o "On"
+>
+> Dono do produto reportou que a sinalização On/Off ao lado do sino de
+> notificações parecia errada. Achado: `handlers/camerasdata.php` (que
+> alimenta esse contador no header) lia `device_statistics.is_online` — uma
+> coluna que as stored procedures de alarme/gps/heartbeat/evento só gravam
+> como `1`, nunca de volta a `0`. Câmera que comunicou uma vez fica "Online"
+> PARA SEMPRE nessa coluna. Medido em produção: câmera de teste sem
+> comunicar há 17.196 min (~12 dias) ainda com `is_online = 1`. O resto do
+> sistema já evita essa coluna (`equipamentos.php`, `dashboard_widgets.php`
+> calculam por `TIMESTAMPDIFF(MINUTE, last_communication, NOW()) <= 5`;
+> `rastreamento.php`/`video_aovivo.php` classificam ao vivo) — só
+> `camerasdata.php` lia a coluna estática. Corrigido com a mesma expressão
+> de 5 minutos, nas duas variantes da query (principal e fallback).
+> `ativo_detalhe.php`/`ativos.php` também selecionam a mesma coluna estática
+> mas não a exibem em tela nenhuma — não corrigidos por não terem efeito
+> visível, só documentado para não virar bug ativo se alguém passar a
+> renderizá-la.
+> `php -l` limpo; testado em produção (8 câmeras do cliente 1: contagem foi
+> de 8 On/0 Off para 7 On/1 Off, batendo com a real).
+>
+> #### 🔧 v4.12.9 — Rota/Replay do Deslocamento saem da nova janela
+>
+> Complemento pedido pelo dono do produto na mesma sessão da 4.12.8: com o
+> `return` já resolvendo "para onde volta", não havia mais motivo para os
+> links "Ver rota" (fechamento diário e por viagem) e "Replay" abrirem em
+> nova janela. Removido `target="_blank"` dos três, em `rel_deslocamento.php`
+> — navegação passa a ser na mesma aba. `php -l` limpo.
+>
+> #### 🔧 v4.12.8 — "Voltar ao relatório" do Deslocamento perdia o filtro
+>
+> Dono do produto reportou: em `/relatorios/deslocamento`, "Ver rota"/"Replay"
+> abrem em nova janela; o botão "Voltar ao relatório" dessas telas linkava
+> para `/relatorios/deslocamento` sem query string — caía no formulário
+> vazio, perdendo modalidade/placa/período/página/ordenação que o operador
+> tinha acabado de gerar. Corrigido com um parâmetro `return` (URL completa
+> da grade, gerado por `rel_deslocamento.php`) que `rel_deslocamento_rota.php`
+> e `rel_deslocamento_replay.php` usam no botão de volta, validado por regex
+> contra o próprio path para não virar redirecionamento aberto.
+> Varrida a base por `target="_blank"` para rota PRÓPRIA (não Google Maps
+> externo): só o Deslocamento tinha esse padrão — os demais "Ver Mapa" do
+> sistema apontam direto pro Maps, sem botão de volta.
+> `php -l` limpo; round-trip da URL simulado via `php -r`.
+>
+> #### 🔧 v4.12.7 — câmera inativa aparecendo em 6 pontos do sistema
+>
+> Dono do produto reportou que o Relatório de Deslocamento listava câmeras
+> inativas no filtro de placa, e pediu para varrer o resto do sistema pelo
+> mesmo padrão. Achado: o dropdown `SELECT imei, device_name FROM devices
+> WHERE customer_id = :cid ORDER BY device_name` (sem `is_active = 1`) estava
+> copiado em `rel_deslocamento.php` (o relato), `rel_alarmes.php`,
+> `rel_posicoes.php`, `relatorios.php` e `exportar.php` — mesma classe de
+> bug já corrigida antes em `bi.php` ("o dropdown Ativo listava câmera
+> desativada"), só não replicada para esses cinco. Mais grave:
+> `rel_desatualizados.php` tinha o `$where` compartilhado por TODAS as
+> consultas da tela (contagem por faixa, grade completa, drill-down, os três
+> exports) sem filtro de `is_active` nenhum — câmera desativada não posiciona
+> nunca mais, então ficava PARA SEMPRE na faixa "Nunca posicionados"/">30
+> dias", ruído permanente num relatório que existe para apontar problema na
+> frota ATIVA. Testado em produção com a câmera `865478070649936`
+> (desativada, 21 viagens históricas — cliente com 13 câmeras, 8 ativas): o
+> dropdown do Deslocamento não a lista mais, e a base do Desatualizados cai
+> de 13 para 8 dispositivos.
+>
+> `php -l` limpo nos 6 arquivos.
+>
+> #### 🔧 v4.12.6 — mapa do `/painel` sem rastro nenhum + legenda monocromática
+>
+> Dono do produto reportou dois defeitos visuais no `/painel`: o "Mapa de
+> Posições Recentes" não mostrava rastro nenhum dos veículos, e a legenda do
+> gráfico "Velocidade da Frota" saía toda na mesma cor. Achados em
+> `includes/dashboard_widgets.php`:
+>
+> - 🔴 **`dashboard_render_heatmap()` — consulta SEMPRE falhava, silenciada pelo
+>   `catch`.** `SELECT DISTINCT ... ORDER BY g.gps_time` sem `g.gps_time` no
+>   SELECT é erro 3065 do MySQL (`ORDER BY` sobre coluna ausente do SELECT é
+>   incompatível com `DISTINCT`) — regra fixa, não depende de `sql_mode`. O
+>   widget nunca teve um ponto sequer no mapa desde que foi criado (v4.10.3): a
+>   query sempre lançava exceção e o `catch (Throwable $e) {}` engolia, sem
+>   log nenhum. A mesma consulta em `handlers/resumo.php` (de onde este widget
+>   foi copiado) já tem `g.gps_time` no SELECT — só a cópia perdeu a coluna.
+>   Testado em produção: 180 linhas onde antes dava erro 3065 silencioso.
+> - **`dashboard_render_speed_dist()` — legenda sem `color:` nenhum.** As
+>   barras já usavam `var(--muted-soft)/--primary/--warning/--error`; os
+>   `<span>` da legenda (que em `handlers/resumo.php`, a versão original,
+>   repetem a mesma cor de cada faixa) saíram sem estilo — os quatro
+>   apareciam idênticos, cinza-padrão do texto. Corrigido replicando a cor de
+>   cada span da barra na etiqueta correspondente.
+>
+> `php -l` limpo.
+>
+> #### 🔧 v4.12.5 — vídeo de evento DMS/ADAS nunca subia (frota JT/T inteira)
+>
+> Dono do produto reportou que a câmera do veículo placa "Telecom" (JC371/JT-T,
+> IMEI 865478070654829) não subia vídeo dos eventos. Achado em produção: o
+> disparo automático (`queue_event_video_request()`,
+> `includes/occurrence_engine.php`) recusava TODA ocorrência DMS/ADAS com
+> `"Auto-vídeo: alarme sem alarmLabel de anexo — solicitação não enviada"` no
+> log. Causa: o IoT Hub manda `alarmLabel` como 16 bytes separados por vírgula
+> (`"30,36,35,...,05,00"`), não como string hex contígua de 32 chars — a doc
+> oficial descreve o formato errado. `ctype_xdigit()` falha por causa das
+> vírgulas. Confirmado por consulta em `commands`: **zero** comandos
+> `auto_video`/37384 emitidos desde que o proNo foi corrigido — não é defeito
+> só dessa câmera, é a frota JT/T inteira, desde que o recurso foi escrito.
+> Mesmo bug quebrava em segundo lugar `link_upload_by_alarm_label()`
+> (`pushfileupload.php`): o label extraído do NOME do arquivo (hex contínuo)
+> nunca batia contra `alarms.alarm_label` (com vírgulas), então até o vídeo que
+> chega pelo caminho de auto-upload da câmera só linkava pelo fallback
+> impreciso de janela ±3min. Corrigido tirando as vírgulas no ÚNICO ponto de
+> extração, em `handlers/pushalarm.php`. Retroativo: alarmes já gravados
+> continuam com o `alarm_label` antigo (com vírgula) — não houve backfill.
+>
+> #### 🔧 v4.12.4 — balão de `/rastreamento` com Estado contradizendo Ignição/Velocidade
+>
+> Dono do produto reportou o balão do veículo mostrando `Estado: Parado
+> (ignição desligada)` ao lado de `Ignição: Ligada` e velocidade real (3, 65,
+> 49 km/h em três amostras de 6 minutos). Causa: "Estado" vinha do segmento
+> aberto em `device_state_segments`, regravado só a cada 15 min pelo cron
+> `scripts/state_builder.php`; "Ignição"/"Vel", do MESMO balão, vinham de
+> `device_statistics` — atualizado a cada push de GPS, em tempo real. Um
+> veículo que liga e sai andando entre duas rodadas do cron fica com o
+> segmento em `parado` enquanto os outros dois campos já mostram a
+> realidade — os três campos do balão descrevendo instantes diferentes.
+> Corrigido com `resolve_live_state()` (`includes/fleet_state.php`): classifica
+> pelo ÚLTIMO PONTO (`classify_point()` sobre `device_statistics`), não pelo
+> segmento — os três campos passam a vir sempre da mesma leitura.
+> `resolve_current_state()` (baseada em segmento) segue em uso, de propósito,
+> nos relatórios batch (`rel_paradas`, `rel_ociosidade`, `rel_status_frota`),
+> que precisam do segmento para "Tempo no estado" — não foram tocados.
+> Reproduzido o cenário exato do relato via `resolve_current_state()` vs
+> `resolve_live_state()` isolados: o antigo devolve `parado`, o novo devolve
+> `movimento`; comportamento de `offline` conferido idêntico entre os dois.
+> `php -l` limpo.
+>
+> #### 🔧 v4.12.3 — 3 defeitos nos widgets do painel (`/painel`)
+>
+> Dono do produto pediu a mesma verificação já feita no BI: conferir os 13
+> widgets do painel widgetizado, um a um, com dados fictícios simulados.
+> Achados em `includes/dashboard_widgets.php`:
+>
+> - **`dashboard_outdated_kpis()` sem fallback ao vivo** — dos 4 KPIs do
+>   painel (dispositivos, ocorrências, velocidade, desatualizados), só este
+>   não caía para uma consulta ao vivo quando `metrics_snapshots` estava
+>   vazia. Sem o cron `scripts/metrics_rollup.php` já ter rodado, o widget
+>   "Desatualizados" mostrava **0 sempre** — indistinguível de frota em dia.
+>   Corrigido replicando a query do rollup como fallback.
+> - **`dashboard_render_reseller_view()` sem NENHUM escopo de revendedor** —
+>   as três consultas do ranking "Top 3" partiam de `FROM customers c` sem
+>   filtro; qualquer revendedor via clientes de OUTROS revendedores. Corrigido
+>   com `reseller_scope_ids()` (mesmo mecanismo de `/equipamentos`),
+>   distinguindo `null` (admin, sem restrição) de `[]` (revendedor sem
+>   cliente) — os dois tratados igual teria escondido o painel do admin.
+> - **Mesma função — "Top 3 por ocorrências" ignorava o período** (Hoje/7
+>   dias/Mês), único eixo do painel que não respeitava o seletor. Corrigido
+>   com `dashboard_series_window($periodo)`.
+>
+> Verificado com frota fictícia (5 câmeras, 4 veículos, 40 pontos de GPS, ~75
+> alarmes/48 ocorrências) sob 2 clientes de teste + sessão de revendedor
+> temporária, cobrindo os 3 períodos e o isolamento entre clientes. Capturas
+> publicadas como Artifact temporário; dados de teste removidos ao final.
+>
+> #### 🔧 v4.12.2 — BI listando câmera inativa + gráficos que nunca renderizavam
+>
+> Dono do produto reportou câmera inativa no filtro "Ativo" de `/bi`. Corrigido
+> (faltava `is_active = 1` na consulta do `<select>`) — e testando com dados
+> fictícios (10 análises simuladas, réplica local) apareceu um segundo defeito
+> mais sério: os 4 gráficos da tela NUNCA renderizavam, sempre com "Não foi
+> possível gerar os gráficos" — `GROUP BY alarm_label` agrupava pelo APELIDO de
+> um `CASE` que lê `alarm_types` via `LEFT JOIN`, e isso quebra sob
+> `sql_mode=ONLY_FULL_GROUP_BY` (padrão do MySQL desde 5.7). Corrigido
+> repetindo a expressão inteira no `GROUP BY`. Capturas das 10 análises
+> publicadas como Artifact temporário para revisão visual.
+>
+> #### 🔧 v4.12.1 — vínculo chip↔câmera só numa direção
+>
+> Dono do produto apontou: `handlers/chips.php` ainda deixava escolher a
+> câmera no formulário do CHIP — dava pra vincular dos dois lados, quando a
+> regra é só uma direção (a câmera escolhe o chip, nunca o inverso). Removido
+> o `<select>` de câmera de `chips.php`; o formulário só mostra a câmera
+> vinculada, texto somente leitura. **Achado no caminho, mais sério que o
+> pedido original:** trocar SÓ o chip de uma câmera em `/equipamentos` (nenhum
+> outro campo) não gravava nada, sem erro — o código usava `rowCount()` do
+> `UPDATE devices` pra decidir "está no escopo do cliente", e o MySQL conta 0
+> linhas quando nenhuma coluna do `SET` muda de valor (exatamente o caso de
+> "só o chip mudou"). A tela dizia "atualizado" e o vínculo ficava intocado,
+> nos dois sentidos. Corrigido: escopo agora é um `SELECT` dedicado, nunca o
+> efeito colateral do `UPDATE`. Testado ponta a ponta via HTTP (linkar só-o-
+> chip, desvincular só-o-chip, cada um como ÚNICA mudança no POST) — os dois
+> agora persistem.
+>
+> #### 🔑 Fase 1 do fluxo chip → câmera → veículo
+>
+> Pedido do dono do produto: a relação cadastral era ilógica — `devices` (a
+> câmera) sempre FOI o "ativo", com `device_name` ("Placa"), `vehicle_type` e
+> `activation_date` na mesma linha da câmera física. Não existia veículo sem
+> câmera, não existia histórico de duas instalações da mesma câmera em veículos
+> diferentes, e trocar a câmera de veículo reescrevia a identidade da própria
+> linha — o dado antigo desaparecia. `devices.sim_card_id` (FK de v4.0.0) nunca
+> foi escrita por código nenhum: todo o vínculo chip↔câmera sempre rodou por
+> `sim_cards.imei` (string, já com UNIQUE desde v4.10.4).
+>
+> Corrigido com duas tabelas novas: **`vehicles`** (o veículo, entidade própria,
+> pode existir sem câmera) e **`device_installations`** (histórico de qual
+> câmera esteve em qual veículo, de quando a quando — ponto único de escrita:
+> `install_device_on_vehicle()` / `uninstall_device_from_vehicle()`,
+> `includes/functions.php`, dentro de transação). `/equipamentos` cadastra só a
+> câmera (com chip); `/ativos` cadastra só o veículo; a instalação é ação
+> separada em `/ativos/{id}` — só oferece câmera que já tem chip. Migração faz
+> backfill 1:1 de toda `devices` com `customer_id` para `vehicles` +
+> `device_installations` (aberta se ativa, fechada em `updated_at` se já estava
+> soft-deletada) — nada some da grade.
+>
+> `/ativos/{id}` passou a usar o ID do veículo na URL (era o IMEI da câmera,
+> que deixou de identificar univocamente "qual ativo é esse"). Links antigos
+> por IMEI (relatórios, `/chips`, `/parametros`) continuam funcionando via
+> redirect de compatibilidade em `handlers/ativo_detalhe.php` — resolve pelo
+> veículo que tem aquele IMEI instalado AGORA.
+>
+> **Testado ponta a ponta** contra cópia local do banco (`jimi_test_bisect` +
+> réplica de `jimi_tracker` local, com backup prévio): criar chip → criar
+> câmera com o chip livre → chip some da lista de livres; criar veículo →
+> instalar só oferece a câmera com chip; tentar desativar câmera instalada
+> recusa; desinstalar libera a câmera; instalar a MESMA câmera num SEGUNDO
+> veículo confirma reuso sequencial (histórico do primeiro veículo mostra a
+> instalação fechada, o segundo mostra a aberta); desativar câmera livre libera
+> o chip automaticamente; desativar chip vinculado recusa, desativar chip livre
+> funciona. `php -l` limpo em todos os arquivos tocados.
+>
+> #### 🔑 Fase 2 — isolamento de dados por período de instalação
+>
+> Fecha o requisito que a Fase 1 deixou em aberto: *"quando a câmera é
+> reinstalada num novo veículo, o dono do carro só vê os dados do seu
+> veículo"*. `gps_data`, `alarms`, `events`, `heartbeats`, `media_files`
+> ganharam `customer_id`/`vehicle_id` (`occurrences` ganhou só `vehicle_id` —
+> já tinha `customer_id` como snapshot desde sempre, e é o padrão que esta
+> fase generaliza). Cada webhook grava o dono do MOMENTO via
+> `resolve_installation_for_imei()` (`includes/functions.php`); a leitura
+> nunca reconsulta — lê o valor já gravado. Backfill do histórico existente é
+> EXATO (não aproximado): a Fase 1 acabou de nascer, então cada câmera tinha
+> no máximo uma instalação.
+>
+> **~20 pontos de leitura** trocaram de "JOIN devices + filtro pelo dono
+> atual" para "filtro pelo dono gravado na própria linha" — relatórios,
+> painel, dashboard, download/playback de vídeo, `/midia`.
+> **`handlers/ativo_detalhe.php`**: as 4 abas históricas (Trajetos, Alertas,
+> Log, Vídeo) passaram de `WHERE imei = ?` para `WHERE vehicle_id = ?` — é a
+> mudança que efetivamente separa o histórico de dois veículos que
+> compartilharam a mesma câmera. Consequência que quase passou despercebida:
+> a trava da Fase 1 ("sem câmera instalada, esconde a aba") escondia essas 4
+> abas também — errado agora, porque elas são do HISTÓRICO do veículo, não da
+> câmera atual. Corrigido: só **Ao Vivo/Comandos/Configurações/Parâmetros**
+> (operação sobre o equipamento físico) continuam exigindo câmera instalada.
+>
+> 🔴 **Três achados de tenant leak, fora do escopo original, corrigidos no
+> caminho:** `rel_posicoes.php` não validava que `?imei=` da URL pertencesse
+> ao cliente da sessão (bastava trocar o parâmetro); `trackdata.php` e
+> `hbdata.php` (AJAX do mapa ao vivo) validavam o IMEI mas liam o histórico
+> sem limite de período; `midia.php` (servidor de vídeo) autorizava pelo dono
+> ATUAL da câmera. Os três tinham a MESMA forma: checar posse atual não
+> impede vazar dado de um período em que a posse era de outro cliente.
+>
+> **Testado ponta a ponta** contra réplica local: câmera QA instalada no
+> veículo A (cliente 1) → ponto de GPS via `/pushgps` real → gravado com
+> `customer_id=1, vehicle_id=A`. Desinstalada de A, instalada no veículo B
+> (cliente 2) → segundo ponto → gravado com `customer_id=2, vehicle_id=B`.
+> Confirmado: `/ativos/{A}` mostra só o primeiro ponto (mesmo sem câmera
+> instalada agora), consulta direta por `vehicle_id=B` mostra só o segundo.
+> `php -l` limpo em todos os ~27 arquivos tocados.
+
+
+> Entradas anteriores a "📍 ESTADO EM 25/08/2026" (a partir de "📍 ESTADO EM 21/08/2026") arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+
+---
+
+
+
 > ### 📍 ESTADO EM 21/08/2026 — v4.9.39 no ar; v4.9.40 pronta, NÃO publicada
 >
 > **Produção (`bycamera.ia.br`) está em `17d874e`, `/ping` reportando 4.9.39.**

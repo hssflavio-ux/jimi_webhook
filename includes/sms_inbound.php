@@ -138,6 +138,63 @@ function sms_data_utc_ou_null($v): ?string
 }
 
 /**
+ * Extrai a lista de itens do MÉTODO PULL (`GET /relatorios/campanhas/respostas/{tipo}`).
+ *
+ * 🔴 FORMATO DIFERENTE DO WEBHOOK. O webhook manda um envelope
+ * `{"messages":[...], "total":N}`; o Pull devolve um ARRAY SOLTO
+ * (`[ {...}, {...} ]`), sem envelope nenhum — é a forma como a doc da Allcance
+ * mostra os dois exemplos de resposta desse endpoint.
+ *
+ * @param mixed $payload Corpo já decodificado (json_decode de uma resposta HTTP 200)
+ * @returns array Lista de itens (possivelmente vazia)
+ */
+function sms_pull_itens($payload): array
+{
+    if (!is_array($payload)) return [];
+    return array_values(array_filter($payload, 'is_array'));
+}
+
+/**
+ * Classifica um item do MÉTODO PULL.
+ *
+ * 🔴 OS NOMES DOS CAMPOS VÊM COM AS PALAVRAS INVERTIDAS EM RELAÇÃO AO WEBHOOK —
+ * mesma informação, ordem trocada: aqui é `numero_referencia`/`campanha_referencia`,
+ * no `/pushsms` é `referencia_numero`/`referencia_campanha`. E o texto da
+ * resposta vem em `resposta`, nunca em `mensagem`. Reusar `sms_classificar_item()`
+ * neste payload descartaria TUDO como "sem referência" — os nomes não existem
+ * nesse formato.
+ *
+ * Este endpoint é EXCLUSIVAMENTE de respostas/interações (a doc: "Consulta de
+ * Respostas e Interações via API") — não devolve status de entrega puro, então
+ * não existe aqui a distinção que `sms_classificar_item()` faz entre "recebido
+ * sozinho" (status) e "recebido com mensagem" (resposta). Todo item com
+ * `resposta` não-vazia É uma resposta do equipamento.
+ *
+ * @param array $item Um elemento do array de resposta do Pull
+ * @returns array{
+ *   referencia:string|null, referencia_campanha:string|null, numero:string|null,
+ *   resposta:string|null, resposta_em:string|null
+ * }
+ */
+function sms_pull_classificar_item(array $item): array
+{
+    $ref  = trim((string)($item['numero_referencia'] ?? ''));
+    $refC = trim((string)($item['campanha_referencia'] ?? ''));
+    $resp = trim((string)($item['resposta'] ?? ''));
+
+    return [
+        'referencia'          => $ref !== ''  ? $ref  : null,
+        'referencia_campanha' => $refC !== '' ? $refC : null,
+        'numero'              => isset($item['numero']) ? (string)$item['numero'] : null,
+        'resposta'            => $resp !== '' ? $resp : null,
+        // Único carimbo que o endpoint devolve é `data_envio` — mesma conversão
+        // BRT→UTC do webhook (sms_data_utc_ou_null), porque é hora de PAREDE da
+        // mesma plataforma brasileira.
+        'resposta_em'         => sms_data_utc_ou_null($item['data_envio'] ?? null),
+    ];
+}
+
+/**
  * O IMEI a que um lote do webhook se refere — para a coluna indexada de
  * `webhook_payloads`.
  *
