@@ -24,7 +24,7 @@ Investigação partiu de um relato do dono do produto: o log não mostrava a res
 
 ### Testado de ponta a ponta
 
-Comando real enviado a equipamento online via `/comandos-sms`, resposta do equipamento capturada pelo Pull e refletida em `sms_commands.resposta_texto` — ver `STATUS.md`.
+Dois comandos `STATUS#` reais enviados a equipamentos online via o mesmo caminho de `/sendsms` — autenticação, envio, e `status_entrega` via webhook confirmados contra a Allcance real (um deles de "enviado" a "entregue celular" em segundos). Achado no caminho: o endpoint Pull usa **HTTP 404 com `{"message":"sem novas mensagens"}`** para "nada de novo" — não é rota quebrada, e o script trata isso explicitamente. Nenhum dos dois equipamentos (ambos ONLINE) produziu uma resposta de SMS — consistente com `STATUS#` sendo consulta do proNo 128, cuja resposta natural de um equipamento com TCP ativo é pela sessão já aberta, não por SMS. O poller já está no cron de produção e vai capturar a primeira resposta real assim que existir. Detalhes em `STATUS.md`.
 
 ## [Unreleased] — 4.17.23
 

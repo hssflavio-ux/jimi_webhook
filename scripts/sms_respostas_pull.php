@@ -80,6 +80,18 @@ if ($r['erro'] !== null) {
     exit(1);
 }
 
+// 🔴 A ALLCANCE USA HTTP 404 COMO "NADA DE NOVO" NESTE ENDPOINT — não é rota
+// errada. Medido em produção (08/09/2026): `{"message":"sem novas mensagens"}`
+// com status 404, exatamente na URL que a doc manda. `sms_pull_itens()` já
+// devolve `[]` para esse corpo (não é uma lista de itens), então o
+// comportamento estava certo por acidente de forma — isto só torna a
+// intenção explícita no log, para não confundir "sem novidade" com "rota
+// quebrada" quando alguém for ler `logs/sms_pull.log`.
+if ($r['http'] === 404 && is_array($r['json']) && array_key_exists('message', $r['json']) && !isset($r['json'][0])) {
+    echo "SMS pull: sem novas interações (a API sinaliza isso com HTTP 404 — não é erro de rota).\n";
+    exit(0);
+}
+
 // Lote vazio ("nada de novo desde a última consulta") é o caso normal, não erro.
 $itens = sms_pull_itens($r['json']);
 echo "SMS pull: http {$r['http']} — " . count($itens) . " interação(ões) no lote.\n";

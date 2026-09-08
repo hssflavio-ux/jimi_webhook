@@ -39,8 +39,33 @@
 > `eventos_raw`, compartilhado por `/pushsms` e pelo poller — antes era uma
 > closure local só do webhook.
 >
-> ⏳ **Teste de ponta a ponta com equipamento online em andamento** — resultado
-> na próxima entrada.
+> **Teste de ponta a ponta contra a Allcance real (08/09/2026, dois equipamentos
+> online, comandos #30 e #31):** o pedaço que dependia da API de verdade —
+> autenticar, montar o "lote avançado", enviar `STATUS#`, e a Allcance
+> devolver `status_entrega` pelo webhook — funcionou nos dois: comando #31
+> (`864993060429173`, JC400AD) foi de "enviado" a "entregue celular" em
+> **poucos segundos**, batendo com o padrão já visto em produção. O comando
+> #30 (JC371) demorou mais que o normal para confirmar entrega — variação da
+> operadora, não do código.
+>
+> ⚠️ **Nenhum dos dois produziu uma resposta de TEXTO via SMS**, nem pelo
+> webhook nem pelo Pull, em ~15 min de acompanhamento — e isso não invalida a
+> implementação: **o teste usou equipamentos ONLINE**, e a wiki oficial
+> (`docs/COMANDOS_128_CONSULTA.md`) documenta `STATUS#` como consulta do
+> proNo 128, cuja resposta natural do equipamento é pelo canal que ele já tem
+> aberto — a sessão TCP com o IoT Hub. O SMS é o "canal de resgate" para
+> equipamento SEM esse canal; pedir a um equipamento COM TCP que responda por
+> SMS pode simplesmente não ser o comportamento do firmware. **Não foi
+> possível, nesta sessão, observar uma resposta de SMS real** — só a doc e o
+> formato sintético dela, cobertos em teste automatizado.
+>
+> O que FICA provado contra produção: autenticação, envio, `status_entrega`
+> via webhook, e a API do Pull respondendo (`HTTP 404` com
+> `{"message":"sem novas mensagens"}` quando não há interação nova — descoberta
+> nesta sessão, tratada explicitamente no script). O poller está no cron de
+> produção (`*/2 * * * *`, `logs/sms_pull.log`) e vai capturar a primeira
+> resposta real assim que ela existir, de qualquer equipamento, sem precisar
+> de novo deploy.
 
 > ### 📍 v4.17.23 — filtrar `webhook_payloads` por equipamento não achava os SMS
 >
