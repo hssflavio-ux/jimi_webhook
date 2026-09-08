@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * Spec da tela de Comandos por SMS (v4.14.0).
+ * Spec da tela de Comandos por SMS (v4.14.0; UI de parâmetro único v4.17.25).
  *
  * Cobre o que distingue este canal do /comandos, e cada asserção existe por um
  * modo de falha concreto:
@@ -16,8 +16,15 @@
  *  3. **A trava de modelo pesa mais aqui.** Por SMS não há callback dizendo
  *     "comando não suportado" — o equipamento ignora e o crédito já foi gasto.
  *
- *  4. **Nada é enviado sem seleção e sem parâmetro preenchido.** O botão é a
- *     única barreira antes de gastar dinheiro.
+ *  4. **Nada é enviado sem seleção de equipamento.** O botão é a única barreira
+ *     antes de gastar dinheiro.
+ *
+ * 🔴 v4.17.25 — o catálogo é UNIFICADO por nome de comando (decisão do dono do
+ * produto: cada nome vira 1 linha na tela, com 1 campo de texto livre para os
+ * parâmetros, em vez de N campos estruturados por variante de aridade/modelo).
+ * `window.CATALOGO_SMS` deixou de ter `.s`/`.p`/`.t` por entrada — o que
+ * sobrou é `.c` (nome), `.e` (exemplos concatenados das variantes) e `.q`
+ * (consulta, quando alguma variante a documenta).
  *
  * ⚠️ Nenhum teste aqui dispara SMS de verdade: todos param no estado do botão e
  * do preview. Enviar consumiria crédito real a cada execução da suíte.
@@ -41,7 +48,9 @@ test.describe('Comandos por SMS', () => {
 
         // 🔴 A regra que define o canal: forma de PLATAFORMA, nunca a de SMS da
         // wiki. Uma única sintaxe com 666666 aqui quebra todos os envios.
-        expect(cat.some(c => /666666/.test(c.s))).toBe(false);
+        // (o catálogo exposto não carrega mais a chave crua por comando desde
+        // a unificação por nome — checa nome e exemplos, que sobrevivem.)
+        expect(cat.some(c => /666666/.test(c.c) || (c.e || []).some(e => /666666/.test(e.c)))).toBe(false);
 
         // O saldo é consultado a cada abertura — ou o número, ou o motivo de
         // não ter vindo. O que não pode é a área ficar muda.
@@ -104,8 +113,8 @@ test.describe('Comandos por SMS', () => {
         await authedPage.goto('/comandos-sms');
         const cat = await catalogo(authedPage);
 
-        const universal = cat.findIndex(c => c.u && !c.p.length);
-        test.skip(universal < 0, 'sem comando universal sem parâmetros');
+        const universal = cat.findIndex(c => c.u);
+        test.skip(universal < 0, 'sem comando universal no catálogo');
 
         await authedPage.selectOption('#f-cmd', String(universal));
 
@@ -114,23 +123,24 @@ test.describe('Comandos por SMS', () => {
         expect(reabilitados, 'comando universal reabilitou equipamento sem número').toBe(0);
     });
 
-    test('o preview mostra a string exata e conta os caracteres', async ({ authedPage }) => {
+    test('campo de parâmetros em branco monta a consulta exata e conta os caracteres', async ({ authedPage }) => {
         await authedPage.goto('/comandos-sms');
         const cat = await catalogo(authedPage);
 
-        const idx = cat.findIndex(c => c.u && !c.p.length);
-        test.skip(idx < 0, 'sem comando universal sem parâmetros');
+        // Comando universal com forma de consulta catalogada: campo em branco
+        // tem de virar exatamente `atual.q`, sem transformação nenhuma.
+        const idx = cat.findIndex(c => c.u && c.q);
+        test.skip(idx < 0, 'sem comando universal com consulta catalogada');
 
         await authedPage.selectOption('#f-cmd', String(idx));
         const preview = await authedPage.inputValue('#f-preview');
 
-        // É a sintaxe do catálogo, sem transformação nenhuma.
-        expect(preview).toBe(cat[idx].s);
+        expect(preview).toBe(cat[idx].q);
         expect(preview).not.toContain('666666');
         await expect(authedPage.locator('#preview-aviso')).toContainText(/caracteres/);
     });
 
-    test('o botão só libera com equipamento marcado e parâmetros preenchidos', async ({ authedPage }) => {
+    test('o botão só libera com equipamento marcado e um preview válido montado', async ({ authedPage }) => {
         await authedPage.goto('/comandos-sms');
         const btn = authedPage.locator('#btn-enviar');
 
@@ -138,8 +148,8 @@ test.describe('Comandos por SMS', () => {
         await expect(btn).toBeDisabled();
 
         const cat = await catalogo(authedPage);
-        const idx = cat.findIndex(c => c.u && !c.p.length);
-        test.skip(idx < 0, 'sem comando universal sem parâmetros');
+        const idx = cat.findIndex(c => c.u);
+        test.skip(idx < 0, 'sem comando universal no catálogo');
         await authedPage.selectOption('#f-cmd', String(idx));
 
         // Com comando mas sem equipamento: ainda bloqueado.
@@ -148,30 +158,31 @@ test.describe('Comandos por SMS', () => {
         const livre = authedPage.locator('.sel-dev:not([disabled])').first();
         test.skip(await livre.count() === 0, 'nenhum equipamento habilitado no escopo');
         await livre.check();
+        // Digita algo no campo único de parâmetros — livre escolha do operador
+        // (v4.17.25), sem campos estruturados por comando.
+        await authedPage.fill('#f-params-livre', '1');
 
         // Agora sim — e o resumo tem de dizer quanto vai custar.
         await expect(btn).toBeEnabled();
         await expect(authedPage.locator('#sel-resumo')).toContainText(/crédito/);
     });
 
-    test('comando com parâmetro em branco mantém o botão bloqueado', async ({ authedPage }) => {
-        // A guarda pergunta pelos CAMPOS, não pela aparência da string: um valor
-        // de UMA LETRA é indistinguível de um placeholder de uma letra, e a
-        // guarda por formato recusava o exemplo oficial do próprio comando.
+    test('comando sem consulta catalogada e campo vazio mantém o botão bloqueado', async ({ authedPage }) => {
+        // Sem uma forma de consulta conhecida, mandar o comando nu custaria um
+        // crédito de SMS só para descobrir que ele não faz nada — a tela
+        // bloqueia em vez de adivinhar.
         await authedPage.goto('/comandos-sms');
         const cat = await catalogo(authedPage);
 
-        const idx = cat.findIndex(c => c.u && c.p.length && c.p.some(p => !p.v));
-        test.skip(idx < 0, 'sem comando universal com parâmetro sem default');
+        const idx = cat.findIndex(c => c.u && !c.q);
+        test.skip(idx < 0, 'sem comando universal sem consulta catalogada');
 
         await authedPage.selectOption('#f-cmd', String(idx));
         const livre = authedPage.locator('.sel-dev:not([disabled])').first();
         test.skip(await livre.count() === 0, 'nenhum equipamento habilitado');
         await livre.check();
 
-        // Esvazia o primeiro parâmetro.
-        await authedPage.locator('.p-in').first().fill('');
         await expect(authedPage.locator('#btn-enviar')).toBeDisabled();
-        await expect(authedPage.locator('#preview-aviso')).toContainText(/Preencha/);
+        await expect(authedPage.locator('#preview-aviso')).toContainText(/Sem forma de consulta conhecida/);
     });
 });

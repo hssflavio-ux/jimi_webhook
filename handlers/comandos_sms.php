@@ -1,18 +1,17 @@
 <?php
 /**
- * bycamera — Comandos por SMS v4.14.0
+ * bycamera — Comandos por SMS v4.14.0 (redesenho de UI v4.17.25)
  * Rota: /comandos-sms
  *
  * O MESMO catálogo de comandos de texto do /comandos, despachado pela rede da
- * operadora em vez do IoT Hub. É o canal de RESGATE: quando a câmera não fala
- * com o Hub — APN errado, `SERVER` apontando para o lugar errado, equipamento
- * mudo — o SMS chega por um caminho independente.
+ * operadora em vez do IoT Hub — canal de RESGATE para equipamento que parou de
+ * falar com o Hub (APN/`SERVER` errados).
  *
  * 🔑 O texto é IDÊNTICO ao da plataforma (`CMD,A,B#`). Nenhuma conversão para a
  * forma `CMD#666666#…` da wiki. Por isso `command_catalog.php` é reusado
  * inteiro: um catálogo paralelo divergiria na primeira alteração.
  *
- * ── AS TRÊS REGRAS DA TELA ──────────────────────────────────────────────────
+ * ── AS QUATRO REGRAS DA TELA ────────────────────────────────────────────────
  *
  *  1. **Trava de modelo**, herdada do /comandos: comando específico de um
  *     modelo desabilita os outros equipamentos. Comando `universal` solta a
@@ -31,20 +30,25 @@
  *     da API, e travar a tela por uma consulta que falhou esconderia um canal
  *     que talvez estivesse funcionando.
  *
- *  4. **Parâmetro nasce EM BRANCO — nunca pré-preenchido com o padrão de
- *     fábrica.** (v4.14.1, pedido do dono do produto.) O padrão aparece só
- *     como dica de texto abaixo do campo. Isso abre DUAS formas de envio pelo
- *     mesmo comando, decididas pelo que o operador digitou:
- *       • TODOS os campos preenchidos → grava (`APN,val1,val2#`);
- *       • NENHUM campo preenchido → vira CONSULTA — a forma nua do comando
- *         (`atual.q`, o mesmo campo `consulta` de `command_catalog.php` que
- *         o /comandos já usa no chip "Consulta"), que LÊ em vez de escrever;
- *       • preenchimento PARCIAL é recusado — não há como adivinhar se o
- *         operador esqueceu um campo ou pretendia mesmo deixá-lo assim, e o
- *         SMS custa crédito para descobrir errado.
- *     Sem consulta catalogada (`atual.q` nulo) e campos em branco, o envio
- *     fica bloqueado — não existe forma nua conhecida desse comando para
- *     mandar.
+ *  4. 🔴 **Catálogo UNIFICADO POR NOME de comando, com 1 campo de texto livre
+ *     para os parâmetros** — v4.17.25, decisão EXPLÍCITA do dono do produto,
+ *     com o risco registrado antes de implementar. `command_catalog.php` tem
+ *     o MESMO nome em entradas de ARIDADE/MODELO diferentes (ex.:
+ *     `ANGLEREP,A,B#` universal de 2 campos, `ANGLEREP,A#` só do JC371 com 1,
+ *     `ANGLEREP,P1,P2,P3#` só da JM-VL01 com 3). A tela costumava mostrar cada
+ *     variante separada, com campos estruturados POR PARÂMETRO — o que
+ *     travava a aridade certa por modelo. Agora todo nome vira 1 linha só, e
+ *     o operador digita os parâmetros como quiser: **a validação de aridade
+ *     por modelo deixou de existir** — mandar o número errado de campos para
+ *     um modelo é aceito e mal interpretado pelo equipamento, sem erro nenhum
+ *     (mesma classe de risco documentada no CLAUDE.md para BCD/TIMER/SERVER).
+ *     A trava de MODELO (não de aridade) continua de pé: `modelos` do
+ *     catálogo em JS é a UNIÃO de todas as variantes do nome, então um modelo
+ *     que NENHUMA variante documenta continua recusado. Campo vazio → envia a
+ *     forma de CONSULTA (`atual.q`) se o catálogo souber uma; sem consulta
+ *     conhecida, bloqueia — não existe forma nua pra mandar. Os exemplos de
+ *     cada variante (concatenados) são exibidos ao escolher o comando: é a
+ *     única bússola de sintaxe que sobra sem os campos estruturados.
  *
  * ⚠️ Cada SMS CUSTA. É a diferença operacional para o /comandos, e é por isso
  * que a tela mostra o saldo, o custo do disparo em lote (1 crédito por
@@ -63,6 +67,175 @@ $db          = Database::getInstance()->getConnection();
 $customer_id = get_customer_id();
 $user        = get_jimi_user();
 $isAdmin     = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
+
+// ── Histórico: filtros e busca (função pura — reusada no load inicial E no
+// fragmento AJAX abaixo, para as duas vias nunca divergirem) ────────────────
+function comandos_sms_filtros_hist(array $params): array {
+    $imei = trim((string)($params['h_imei'] ?? ''));
+    // `imei` (sem prefixo) é compatibilidade com um link direto de fora desta
+    // tela (ex.: futura "ver histórico SMS" na página do equipamento).
+    if ($imei === '') $imei = trim((string)($params['imei'] ?? ''));
+    return [
+        'customer_raw' => trim((string)($params['h_customer_id'] ?? '')),
+        'imei'         => $imei,
+        'de'           => trim((string)($params['h_de'] ?? '')),
+        'ate'          => trim((string)($params['h_ate'] ?? '')),
+    ];
+}
+
+function comandos_sms_buscar_historico(PDO $db, bool $isAdmin, $sessionCustomerId, array $f): array {
+    $filtroAtivo = ($f['customer_raw'] !== '' || $f['imei'] !== '' || $f['de'] !== '' || $f['ate'] !== '');
+
+    // 🔴 Mesma regra de escopo do resto da tela (report_customer_scope()):
+    // para não-admin o cliente é sempre o da sessão, nunca o que vier do GET.
+    $scopeCustHist = report_customer_scope(
+        $f['customer_raw'] !== '' ? $f['customer_raw'] : null, $isAdmin, $sessionCustomerId
+    );
+
+    // 🔴 Lê o dono pelo SNAPSHOT (sms_commands.customer_id), NÃO por JOIN em
+    // devices.customer_id: a câmera pode ter trocado de cliente depois do
+    // envio, e o JOIN reatribuiria retroativamente o histórico inteiro.
+    $sql    = "SELECT sc.*, COALESCE(NULLIF(d.device_name,''), sc.imei) AS device_name
+                 FROM sms_commands sc
+                 LEFT JOIN devices d ON d.imei = sc.imei
+                WHERE 1 = 1";
+    $params = [];
+
+    if ($scopeCustHist !== null) {
+        $sql .= " AND sc.customer_id = :hcid";
+        $params[':hcid'] = $scopeCustHist;
+    } elseif ($isAdmin) {
+        $escopo = reseller_scope_ids();
+        if ($escopo !== null) {
+            if (!$escopo) {
+                $sql .= " AND 1 = 0";
+            } else {
+                $ph = [];
+                foreach ($escopo as $i => $cid) { $ph[] = ":hrc$i"; $params[":hrc$i"] = $cid; }
+                $sql .= " AND sc.customer_id IN (" . implode(',', $ph) . ")";
+            }
+        }
+    }
+
+    if ($f['imei'] !== '') {
+        $sql .= " AND sc.imei = :himei";
+        $params[':himei'] = $f['imei'];
+    }
+
+    if ($f['de'] !== '' || $f['ate'] !== '') {
+        $de  = $f['de']  !== '' ? $f['de']  : $f['ate'];
+        $ate = $f['ate'] !== '' ? $f['ate'] : $f['de'];
+        [$utcDe, $utcAte] = brt_day_range_to_utc($de, $ate);
+        $sql .= " AND sc.created_at BETWEEN :hde AND :hate";
+        $params[':hde']  = $utcDe;
+        $params[':hate'] = $utcAte;
+    }
+
+    // Sem filtro nenhum: só os 10 últimos, como pedido — é a vitrine, não um
+    // relatório. Com qualquer filtro ativo, teto mais folgado de resultados.
+    $limit = $filtroAtivo ? 100 : 10;
+
+    try {
+        $st = $db->prepare($sql . " ORDER BY sc.created_at DESC LIMIT {$limit}");
+        $st->execute($params);
+        return ['ok' => true, 'linhas' => $st->fetchAll(PDO::FETCH_ASSOC), 'filtro_ativo' => $filtroAtivo];
+    } catch (PDOException $e) {
+        // Tabela ausente = migração v4.14.0 não aplicada. A tela explica, em
+        // vez de dar erro de SQL cru como o /usuarios deu na v4.13.21.
+        Logger::warning('comandos-sms: sms_commands indisponível', ['erro' => $e->getMessage()]);
+        return ['ok' => false, 'linhas' => [], 'filtro_ativo' => $filtroAtivo];
+    }
+}
+
+function comandos_sms_renderizar_linha_hist(array $h): string {
+    $st = sms_status_label($h['status_entrega']);
+    ob_start(); ?>
+<tr>
+    <td style="font-size:12px;white-space:nowrap;"><?= fmt_brt($h['created_at']) ?></td>
+    <td>
+        <div style="font-size:12px;"><?= htmlspecialchars($h['device_name']) ?></div>
+        <div class="text-mono" style="font-size:11px;color:var(--muted);">
+            <?= htmlspecialchars((string)$h['msisdn']) ?>
+        </div>
+    </td>
+    <td class="text-mono" style="font-size:12px;"><?= htmlspecialchars($h['command_content']) ?></td>
+    <td style="font-size:12px;">
+        <?php if ($h['status_envio'] === 'enviado'): ?>
+            <span class="badge badge-success">aceito</span>
+        <?php elseif ($h['status_envio'] === 'sem_saldo'): ?>
+            <span class="badge badge-error">sem saldo</span>
+        <?php elseif ($h['status_envio'] === 'sem_msisdn'): ?>
+            <span class="badge badge-error">sem número</span>
+        <?php else: ?>
+            <span class="badge badge-error">falhou</span>
+        <?php endif; ?>
+    </td>
+    <td style="font-size:12px;">
+        <span class="badge badge-<?= htmlspecialchars($st['nivel']) ?>">
+            <?= htmlspecialchars($st['rotulo']) ?>
+        </span>
+    </td>
+    <td class="text-mono" style="font-size:12px;max-width:280px;word-break:break-word;">
+        <?php if (!empty($h['resposta_texto'])): ?>
+            <?= htmlspecialchars($h['resposta_texto']) ?>
+            <div style="font-size:11px;color:var(--muted);" class="text-mono">
+                <?= fmt_brt($h['resposta_em']) ?>
+            </div>
+        <?php else: ?>
+            <span style="color:var(--muted);">—</span>
+        <?php endif; ?>
+    </td>
+</tr>
+    <?php
+    return ob_get_clean();
+}
+
+function comandos_sms_opcoes_veiculo(PDO $db, bool $isAdmin, $sessionCustomerId): array {
+    try {
+        $sql = "SELECT d.imei, COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name, v.plate
+                  FROM devices d
+                  LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+                  LEFT JOIN vehicles v ON v.id = di.vehicle_id
+                 WHERE d.is_active = 1";
+        $params = [];
+        if (!$isAdmin) {
+            $sql .= " AND d.customer_id = :cid";
+            $params[':cid'] = $sessionCustomerId;
+        } else {
+            $allowed = reseller_scope_ids();
+            if ($allowed !== null) {
+                if (!$allowed) return [];
+                $ph = [];
+                foreach ($allowed as $i => $cid) { $ph[] = ":rc$i"; $params[":rc$i"] = $cid; }
+                $sql .= " AND d.customer_id IN (" . implode(',', $ph) . ")";
+            }
+        }
+        $sql .= " ORDER BY device_name";
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+// ── Fragmento AJAX do histórico (filtros da caixa "Últimos envios") ────────
+// Sai ANTES de qualquer HTML — devolve só as linhas da tabela, para o filtro
+// atualizar sem recarregar a página inteira (cliente, veículo e as duas
+// datas continuam com o resto da tela como estava).
+if (isset($_GET['ajax_hist'])) {
+    $f = comandos_sms_filtros_hist($_GET);
+    $r = comandos_sms_buscar_historico($db, $isAdmin, $customer_id, $f);
+    header('Content-Type: text/html; charset=utf-8');
+    if (!$r['ok']) {
+        echo '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Histórico indisponível — ver log.</td></tr>';
+    } elseif (!$r['linhas']) {
+        echo '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Nenhum comando encontrado para este filtro.</td></tr>';
+    } else {
+        foreach ($r['linhas'] as $h) echo comandos_sms_renderizar_linha_hist($h);
+    }
+    exit;
+}
 
 // ── Escopo multi-tenant ─────────────────────────────────────────────────────
 // O `?customer_id` passa OBRIGATORIAMENTE por report_customer_scope(): para
@@ -160,65 +333,65 @@ $rotuloCat = [
     'outros' => 'Outros',
 ];
 
+// 🔴 UNIFICAÇÃO POR NOME — decisão do dono do produto (08/09/2026), com o
+// risco registrado: o catálogo tem o MESMO nome de comando em entradas de
+// ARIDADE e MODELO diferentes (ex.: `ANGLEREP,A,B#` universal de 2 campos,
+// `ANGLEREP,A#` só do JC371 com 1 campo, `ANGLEREP,P1,P2,P3#` só da JM-VL01
+// com 3). Isto AQUI é o ponto que apaga essa distinção: cada nome vira UMA
+// linha na tela, com 1 campo de texto livre para os parâmetros — o operador
+// passa a ser responsável por saber a aridade certa para o modelo escolhido
+// (os exemplos de cada variante, concatenados abaixo, são a única ajuda que
+// sobra). Modelos = UNIÃO de todas as variantes do nome, então a trava
+// básica (recusar modelo que NENHUMA variante documenta) continua de pé —
+// só a distinção FINA entre variantes do mesmo modelo é que se perde.
+$porNome = [];
+foreach ($catalogo as $dd) {
+    $nome = $dd['cmd'];
+    if (!isset($porNome[$nome])) {
+        $porNome[$nome] = [
+            'cmd' => $nome, 'nome' => $dd['nome'], 'desc' => $dd['desc'],
+            'categoria' => $dd['categoria'], 'modelos' => [], 'universal' => false,
+            'consulta' => null, 'consulta_modelos' => [], 'exemplos' => [],
+        ];
+    }
+    $ref = &$porNome[$nome];
+    $ref['modelos']   = array_values(array_unique(array_merge($ref['modelos'], $dd['modelos'])));
+    $ref['universal'] = $ref['universal'] || (bool)$dd['universal'];
+    // Descrição mais longa entre as variantes tende a ser a mais completa.
+    if (mb_strlen((string)$dd['desc']) > mb_strlen((string)$ref['desc'])) {
+        $ref['desc'] = $dd['desc'];
+    }
+    if (!$ref['consulta'] && !empty($dd['consulta'])) {
+        $ref['consulta']          = $dd['consulta'];
+        $ref['consulta_modelos']  = $dd['consulta_modelos'] ?? [];
+    }
+    foreach (($dd['exemplos'] ?? []) as $ex) { $ref['exemplos'][] = $ex; }
+    unset($ref);
+}
+ksort($porNome);
+
 $catJs = [];
-foreach ($catalogo as $syn => $dd) {
+foreach ($porNome as $dd) {
     $catJs[] = [
-        's' => $syn, 'c' => $dd['cmd'], 'n' => $dd['nome'],
-        'd' => $dd['desc'], 'k' => $dd['categoria'],
-        'm' => $dd['modelos'], 'u' => (bool)$dd['universal'], 't' => (bool)$dd['template'],
-        // Famílias que o comando documenta — só tem efeito quando `u` é true.
+        'c' => $dd['cmd'], 'n' => $dd['nome'], 'd' => $dd['desc'], 'k' => $dd['categoria'],
+        'm' => $dd['modelos'], 'u' => (bool)$dd['universal'],
         'fam' => command_families($dd['modelos'], $familiaPorModelo),
-        'q' => $dd['consulta'] ?? null, 'qm' => $dd['consulta_modelos'] ?? [],
-        'p' => array_map(fn($p) => ['p' => $p['p'], 'd' => $p['desc'],
-                                    'f' => $p['format'], 'v' => $p['default']], $dd['params']),
+        'q' => $dd['consulta'], 'qm' => $dd['consulta_modelos'],
         'e' => array_map(fn($e) => ['c' => $e['cmd'], 'd' => $e['desc']], $dd['exemplos']),
     ];
 }
 
-// ── Histórico ───────────────────────────────────────────────────────────────
-// 🔴 Lê o dono pelo SNAPSHOT (sms_commands.customer_id), NÃO por JOIN em
-// devices.customer_id: a câmera pode ter trocado de cliente depois do envio, e
-// o JOIN reatribuiria retroativamente o histórico inteiro (regra da Fase 2).
-$histSql    = "SELECT sc.*, COALESCE(NULLIF(d.device_name,''), sc.imei) AS device_name
-                 FROM sms_commands sc
-                 LEFT JOIN devices d ON d.imei = sc.imei
-                WHERE 1 = 1";
-$histParams = [];
+// ── Histórico (load inicial: sem filtro = últimos 10) ──────────────────────
+$histFiltrosIniciais = comandos_sms_filtros_hist($_GET);
+$histResultado        = comandos_sms_buscar_historico($db, $isAdmin, $customer_id, $histFiltrosIniciais);
+$historico            = $histResultado['linhas'];
+$histIndisp           = !$histResultado['ok'];
 
-if ($scopeCust !== null) {
-    $histSql .= " AND sc.customer_id = :hcid";
-    $histParams[':hcid'] = $scopeCust;
-} elseif ($isAdmin) {
-    $escopo = reseller_scope_ids();
-    if ($escopo !== null) {
-        if (!$escopo) {
-            $histSql .= " AND 1 = 0";
-        } else {
-            $ph = [];
-            foreach ($escopo as $i => $cid) { $ph[] = ":hrc$i"; $histParams[":hrc$i"] = $cid; }
-            $histSql .= " AND sc.customer_id IN (" . implode(',', $ph) . ")";
-        }
-    }
-}
-
-$filtroImei = trim((string)($_GET['imei'] ?? ''));
-if ($filtroImei !== '' && in_array($filtroImei, array_column($devices, 'imei'), true)) {
-    $histSql .= " AND sc.imei = :himei";
-    $histParams[':himei'] = $filtroImei;
-}
-
-$historico   = [];
-$histIndisp  = false;
-try {
-    $h = $db->prepare($histSql . " ORDER BY sc.created_at DESC LIMIT 100");
-    $h->execute($histParams);
-    $historico = $h->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    // Tabela ausente = migração v4.14.0 não aplicada. A tela explica, em vez de
-    // dar erro de SQL cru como o /usuarios deu na v4.13.21.
-    $histIndisp = true;
-    Logger::warning('comandos-sms: sms_commands indisponível', ['erro' => $e->getMessage()]);
-}
+// Opções do filtro "Veículo / equipamento" da caixa de histórico — escopo
+// PRÓPRIO (não o do seletor de cliente do topo): a caixa é uma busca
+// autônoma, então um admin pode filtrar histórico de outro cliente sem mexer
+// no escopo da lista de equipamentos acima.
+$histDeviceOptions = comandos_sms_opcoes_veiculo($db, $isAdmin, $customer_id);
 
 $page_title = 'Comandos por SMS';
 require_once __DIR__ . '/../web/layout_base.php';
@@ -247,7 +420,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?= number_format((int)$saldo['saldo'], 0, ',', '.') ?>
                 </div>
                 <div style="font-size:12px;color:var(--muted);">
-                    consultado agora · 1 crédito por equipamento a cada disparo
+                    Consultado às <?= fmt_brt(gmdate('Y-m-d H:i:s'), 'H:i \d\o \d\i\a d/m/y') ?>
                 </div>
             <?php else: ?>
                 <div style="font-size:15px;color:#b3261e;font-weight:600;">saldo indisponível</div>
@@ -271,72 +444,34 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
-<?php if ($isAdmin && $customers): ?>
+<!-- ── Cliente + Equipamentos ──────────────────────────────────────────── -->
 <div class="card mb-16">
-    <form method="get" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-        <div class="form-group" style="margin:0;">
-            <label>Cliente</label>
-            <select name="customer_id" onchange="this.form.submit()">
-                <option value="">Todos os clientes</option>
-                <?php foreach ($customers as $c): ?>
-                <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($c['name']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-    </form>
-</div>
-<?php endif; ?>
-
-<div class="card mb-16">
-    <div style="font-size:12px;color:var(--muted);line-height:1.6;">
-        <strong style="color:var(--ink);">Canal de resgate.</strong>
-        O SMS chega pela rede da operadora, um caminho independente do IoT Hub — é o que
-        permite alcançar uma câmera que parou de falar com a plataforma (APN ou
-        <code>SERVER</code> errados). O texto do comando é o mesmo do
-        <a href="/comandos">envio normal</a>.
-        <strong style="color:var(--ink);">Cada disparo consome 1 crédito por equipamento</strong>,
-        e a resposta do equipamento (quando ele responde) aparece no histórico abaixo — o método de
-        captura (busca periódica ou webhook) se ajusta em <a href="/config-sms">Cadastros › SMS (Allcance)</a>.
-    </div>
-</div>
-
-<!-- ── Montagem do comando ─────────────────────────────────────────────── -->
-<div class="card mb-16">
-    <h2 style="font-size:16px;font-weight:600;color:var(--ink);" class="mb-16">Comando</h2>
-
-    <div class="form-row">
-        <div class="form-group" style="flex:1;">
-            <label>Categoria</label>
-            <select id="f-cat">
-                <option value="">Todas</option>
-                <?php foreach ($rotuloCat as $k => $lbl): ?>
-                <option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($lbl) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="form-group" style="flex:2;">
-            <label>Comando</label>
-            <select id="f-cmd"><option value="">Selecione…</option></select>
+    <div class="flex-between mb-16" style="flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <h2 style="font-size:16px;font-weight:600;color:var(--ink);margin:0;">Equipamentos</h2>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+            <?php if ($isAdmin && $customers): ?>
+            <form method="get" style="margin:0;">
+                <div class="form-group" style="margin:0;">
+                    <label>Cliente</label>
+                    <select name="customer_id" onchange="this.form.submit()">
+                        <option value="">Todos os clientes</option>
+                        <?php foreach ($customers as $c): ?>
+                        <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($c['name']) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </form>
+            <?php endif; ?>
+            <div class="form-group" style="margin:0;">
+                <label>Buscar</label>
+                <input type="text" id="f-busca-dev" placeholder="nome, IMEI, placa, modelo…" style="min-width:220px;">
+            </div>
         </div>
     </div>
 
-    <div id="cmd-desc" style="font-size:12px;color:var(--muted);margin:-8px 0 16px;"></div>
-    <div id="cmd-params"></div>
-
-    <div class="form-group">
-        <label>Texto que será enviado por SMS</label>
-        <input type="text" id="f-preview" class="text-mono" readonly
-               style="background:var(--surface-2);font-weight:600;">
-        <div id="preview-aviso" style="font-size:12px;margin-top:4px;"></div>
-    </div>
-</div>
-
-<!-- ── Equipamentos ────────────────────────────────────────────────────── -->
-<div class="card mb-16">
-    <div class="flex-between mb-16">
-        <h2 style="font-size:16px;font-weight:600;color:var(--ink);">Equipamentos</h2>
+    <div class="flex-between mb-8">
         <span id="sel-resumo" style="font-size:12px;color:var(--muted);"></span>
     </div>
 
@@ -352,7 +487,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Contato</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="dev-tbody">
         <?php foreach ($devices as $d): ?>
             <tr data-modelo="<?= htmlspecialchars($d['model_display']) ?>"
                 data-familia="<?= htmlspecialchars($familiaDe($d['model_display'])) ?>"
@@ -408,11 +543,90 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
+<!-- ── Montagem do comando ─────────────────────────────────────────────── -->
+<div class="card mb-16">
+    <h2 style="font-size:16px;font-weight:600;color:var(--ink);" class="mb-16">Comando</h2>
+
+    <div class="form-row">
+        <div class="form-group" style="flex:1;">
+            <label>Categoria</label>
+            <select id="f-cat">
+                <option value="">Todas</option>
+                <?php foreach ($rotuloCat as $k => $lbl): ?>
+                <option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($lbl) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group" style="flex:2;">
+            <label>Comando</label>
+            <select id="f-cmd"><option value="">Selecione…</option></select>
+        </div>
+    </div>
+
+    <div id="cmd-desc" style="font-size:12px;color:var(--muted);margin:-8px 0 16px;"></div>
+
+    <div class="form-group">
+        <label>Parâmetros (à sua escolha)</label>
+        <input type="text" id="f-params-livre" class="text-mono"
+               placeholder="ex.: 1,30 — deixe em branco para consultar, quando disponível">
+    </div>
+    <div id="cmd-exemplos" class="mb-16"></div>
+
+    <div class="form-group">
+        <label>Texto que será enviado por SMS</label>
+        <input type="text" id="f-preview" class="text-mono" readonly
+               style="background:var(--surface-2);font-weight:600;">
+        <div id="preview-aviso" style="font-size:12px;margin-top:4px;"></div>
+    </div>
+</div>
+
 <!-- ── Histórico ───────────────────────────────────────────────────────── -->
 <div class="card">
-    <h2 style="font-size:16px;font-weight:600;color:var(--ink);" class="mb-16">
-        Últimos envios por SMS
-    </h2>
+    <div class="flex-between mb-16" style="flex-wrap:wrap;gap:12px;align-items:flex-end;">
+        <h2 style="font-size:16px;font-weight:600;color:var(--ink);margin:0;">
+            Últimos envios por SMS
+        </h2>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+            <?php if ($isAdmin && $customers): ?>
+            <div class="form-group" style="margin:0;">
+                <label>Cliente</label>
+                <select id="h-cliente">
+                    <option value="">Todos</option>
+                    <?php foreach ($customers as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>"
+                            <?= $histFiltrosIniciais['customer_raw'] === (string)$c['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
+            <div class="form-group" style="margin:0;">
+                <label>Veículo / equipamento</label>
+                <select id="h-imei">
+                    <option value="">Todos</option>
+                    <?php foreach ($histDeviceOptions as $hd): ?>
+                    <option value="<?= htmlspecialchars($hd['imei']) ?>"
+                            <?= $histFiltrosIniciais['imei'] === $hd['imei'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($hd['device_name']) ?><?= !empty($hd['plate']) ? ' · ' . htmlspecialchars($hd['plate']) : '' ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label>De</label>
+                <input type="date" id="h-de" value="<?= htmlspecialchars($histFiltrosIniciais['de']) ?>">
+            </div>
+            <div class="form-group" style="margin:0;">
+                <label>Até</label>
+                <input type="date" id="h-ate" value="<?= htmlspecialchars($histFiltrosIniciais['ate']) ?>">
+            </div>
+            <button type="button" id="h-limpar" class="btn btn-outline btn-sm" style="height:38px;">Limpar</button>
+        </div>
+    </div>
+    <div id="hist-info" style="font-size:12px;color:var(--muted);margin:-8px 0 12px;">
+        <?= $histResultado['filtro_ativo'] ? '' : 'Sem filtro — mostrando os 10 mais recentes.' ?>
+    </div>
 
     <table class="table">
         <thead>
@@ -425,7 +639,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Resposta do equipamento</th>
             </tr>
         </thead>
-        <tbody>
+        <tbody id="hist-body">
         <?php foreach ($historico as $h): ?>
             <?php $st = sms_status_label($h['status_entrega']); ?>
             <tr>
@@ -493,7 +707,8 @@ const elCat = document.getElementById('f-cat');
 const elCmd = document.getElementById('f-cmd');
 const elPrev = document.getElementById('f-preview');
 const elAviso = document.getElementById('preview-aviso');
-const elParams = document.getElementById('cmd-params');
+const elParamsLivre = document.getElementById('f-params-livre');
+const elExemplos = document.getElementById('cmd-exemplos');
 const elDesc = document.getElementById('cmd-desc');
 const elBtn = document.getElementById('btn-enviar');
 const elResumo = document.getElementById('sel-resumo');
@@ -512,115 +727,94 @@ function popularComandos() {
        o.textContent = c.c + ' — ' + c.n;
        elCmd.appendChild(o);
      });
-  atual = null; elParams.innerHTML=''; elDesc.textContent='';
+  atual = null; elDesc.textContent=''; elExemplos.innerHTML=''; elParamsLivre.value='';
   montar();
 }
 
 function escolher() {
   atual = elCmd.value === '' ? null : CAT[+elCmd.value];
-  elParams.innerHTML = '';
   elDesc.textContent = atual ? (atual.d || '') : '';
+  elParamsLivre.value = '';
+  elExemplos.innerHTML = '';
 
-  if (atual && atual.p.length) {
-    const row = document.createElement('div');
-    row.className = 'form-row';
-    atual.p.forEach(p => {
-      const g = document.createElement('div');
-      g.className = 'form-group';
-      // 🔴 SEM `value` pré-preenchido — v4.14.1. O padrão de fábrica vira dica
-      // de texto, não valor já digitado: se o campo nascesse preenchido, o
-      // operador que só quer CONSULTAR (deixar tudo em branco) precisaria
-      // apagar cada campo um a um, e um clique apressado no "Enviar" gravaria
-      // o padrão de fábrica como se fosse uma escolha.
-      g.innerHTML = '<label>' + p.p + (p.d ? ' — ' + p.d : '') + '</label>'
-                  + '<input type="text" class="p-in" data-p="' + p.p + '" placeholder="valor de ' + p.p + '">'
-                  + (p.v ? '<div style="font-size:11px;color:var(--muted);margin-top:2px;">Padrão de fábrica: '
-                          + String(p.v).replace(/</g,'&lt;') + '</div>' : '');
-      row.appendChild(g);
-    });
-    elParams.appendChild(row);
-    elParams.querySelectorAll('.p-in').forEach(i => i.addEventListener('input', montar));
-
-    // Nota da forma de CONSULTA — só existe quando o catálogo conhece uma
-    // (`atual.q`). Puramente informativa: a decisão real acontece em montar(),
-    // olhando se os campos estão todos vazios.
-    const nota = document.createElement('div');
-    nota.id = 'nota-consulta';
-    nota.style.cssText = 'font-size:12px;color:var(--muted);margin-top:4px;';
-    if (atual.q) {
-      nota.innerHTML = 'Deixe os campos acima em branco para <strong>consultar</strong> em vez de gravar — envia <span class="text-mono">'
-                      + atual.q + '</span>'
-                      + (atual.qm && atual.qm.length ? ' (' + atual.qm.join(', ') + ')' : '');
-    } else {
-      nota.innerHTML = 'Este comando não tem forma de consulta conhecida — preencha todos os campos para enviar.';
+  if (atual) {
+    // 🔴 Comando UNIFICADO por nome (v4.17.25) — pode reunir variantes de
+    // aridade/modelo diferentes que só compartilham o nome (ex.: ANGLEREP
+    // universal de 2 campos x ANGLEREP só-JC371 de 1 campo). Sem campos
+    // estruturados por comando, os EXEMPLOS são a única bússola de sintaxe
+    // que sobra — mostrados sempre que o catálogo tiver algum.
+    if (atual.e && atual.e.length) {
+      const box = document.createElement('div');
+      box.style.cssText = 'font-size:12px;color:var(--muted);';
+      box.innerHTML = '<strong style="color:var(--ink);">Exemplos catalogados:</strong><br>'
+        + atual.e.map(e => '<span class="text-mono">' + e.c + '</span>' + (e.d ? ' — ' + e.d : '')).join('<br>');
+      elExemplos.appendChild(box);
     }
-    elParams.appendChild(nota);
+
+    const nota = document.createElement('div');
+    nota.style.cssText = 'font-size:12px;color:var(--muted);margin-top:6px;';
+    nota.innerHTML = atual.q
+      ? 'Deixe o campo de parâmetros em branco para <strong>consultar</strong> em vez de gravar — envia <span class="text-mono">'
+        + atual.q + '</span>' + (atual.qm && atual.qm.length ? ' (' + atual.qm.join(', ') + ')' : '')
+      : 'Este comando não tem forma de consulta conhecida — digite os parâmetros para enviar.';
+    elExemplos.appendChild(nota);
   }
+
   aplicarTravaModelo();
   montar();
 }
 
 /**
- * Monta a string exata.
+ * Monta a string exata a partir do campo ÚNICO de parâmetros.
  *
- * 🔴 A DECISÃO "grava ou consulta" olha os CAMPOS, nunca a aparência do
- * resultado — mesma lição do /comandos (`faltaParametro()`): um valor de UMA
- * LETRA é indistinguível de um placeholder de uma letra, então a pergunta
- * certa é "o campo está vazio?", não "o texto parece um placeholder?".
+ *   Campo em branco    → CONSULTA (`atual.q`), se o catálogo souber uma;
+ *                         senão, bloqueia — não existe forma nua conhecida
+ *                         desse comando para mandar.
+ *   Campo preenchido    → `<CMD>,<o que foi digitado>#`. O operador escreve
+ *                         os valores à própria escolha (v4.17.25) — sem
+ *                         validação de aridade por campo, porque comandos
+ *                         unificados por nome podem ter aridade diferente
+ *                         por modelo (ver comentário em escolher()).
  *
- *   TODOS os campos vazios      → CONSULTA (`atual.q`), se o catálogo souber
- *                                  uma; senão, bloqueia — não existe forma nua
- *                                  conhecida desse comando para mandar.
- *   TODOS os campos preenchidos → grava, substituição posicional (idêntica a
- *                                  montarComando() de comandos.php).
- *   Preenchimento PARCIAL       → bloqueia. Não há como adivinhar se o campo
- *                                  vazio foi esquecido ou é intencional, e
- *                                  errar aqui custa um crédito de SMS.
+ * Tolerante a hábito: se o operador colar o exemplo inteiro (com o nome do
+ * comando e/ou o `#` final), a normalização abaixo não duplica nada.
  */
 function montar() {
   if (!atual) { elPrev.value=''; elAviso.textContent=''; atualizarBotao(); return; }
 
-  const ins = elParams.querySelectorAll('.p-in');
-  const vals = Array.prototype.map.call(ins, i => i.value.trim());
-  const preenchidos = vals.filter(v => v !== '').length;
-  const todosVazios = ins.length > 0 && preenchidos === 0;
-  const parcial = ins.length > 0 && preenchidos > 0 && preenchidos < ins.length;
+  const texto = elParamsLivre.value.trim();
+  const vazio = texto === '';
 
   let s = null;
-  if (!ins.length) {
-    s = atual.s;
-  } else if (todosVazios) {
+  if (vazio) {
     s = atual.q || null;
-  } else if (!parcial) {
-    // Todos preenchidos — substituição posicional: quebra por vírgula e troca
-    // os tokens que são placeholder (P1..Pn ou letra única maiúscula), na
-    // ordem dos campos. Nada de regex sobre o texto inteiro — o nome do
-    // parâmetro pode aparecer noutro lugar da string.
-    const corpo = atual.s.replace(/#$/, '');
-    let idx = 0;
-    s = corpo.split(',').map((t, pos) => {
-      if (pos === 0) return t;
-      if (/^(P\d+|[A-Z])$/.test(t)) { const v = vals[idx]; idx++; return v; }
-      return t;
-    }).join(',') + '#';
+  } else {
+    let corpo = texto.replace(/#$/, '').trim();
+    const cUp = atual.c.toUpperCase();
+    if (corpo.toUpperCase().startsWith(cUp + ',')) {
+      corpo = corpo.slice(atual.c.length + 1);
+    } else if (corpo.toUpperCase() === cUp) {
+      corpo = '';
+    }
+    s = corpo === '' ? (atual.c + '#') : (atual.c + ',' + corpo + '#');
   }
 
   elPrev.value = s || '';
 
-  if (parcial) {
-    elAviso.innerHTML = '<span style="color:#a97a00;">Preencha todos os campos para gravar, ou deixe todos em branco para consultar.</span>';
-  } else if (todosVazios && !atual.q) {
-    elAviso.innerHTML = '<span style="color:#b3261e;">Sem forma de consulta conhecida para este comando — preencha os campos.</span>';
+  if (vazio && !atual.q) {
+    elAviso.innerHTML = '<span style="color:#b3261e;">Sem forma de consulta conhecida para este comando — digite os parâmetros.</span>';
   } else if (s && s.length > LIMITE_SMS) {
     elAviso.innerHTML = '<span style="color:#b3261e;">' + s.length + ' caracteres — acima do limite de '
       + LIMITE_SMS + '. A operadora partiria a mensagem e o equipamento receberia meio comando.</span>';
   } else if (s) {
-    elAviso.innerHTML = '<span style="color:var(--muted);">' + (todosVazios ? 'consulta · ' : '') + s.length + '/' + LIMITE_SMS + ' caracteres</span>';
+    elAviso.innerHTML = '<span style="color:var(--muted);">' + (vazio ? 'consulta · ' : '') + s.length + '/' + LIMITE_SMS + ' caracteres</span>';
   } else {
     elAviso.textContent = '';
   }
   atualizarBotao();
 }
+
+elParamsLivre.addEventListener('input', montar);
 
 /**
  * Trava de modelo. Por SMS ela pesa MAIS que no /comandos: não há callback do
@@ -716,6 +910,63 @@ elBtn.addEventListener('click', async () => {
 });
 
 popularComandos();
+
+// ── Busca client-side na lista de equipamentos ──────────────────────────────
+// Filtra por texto visível na linha (nome, IMEI, placa, modelo, chip) sem ida
+// ao servidor — a lista já está inteira na página, então não há por que.
+const elBuscaDev = document.getElementById('f-busca-dev');
+if (elBuscaDev) {
+  elBuscaDev.addEventListener('input', () => {
+    const termo = elBuscaDev.value.trim().toLowerCase();
+    document.querySelectorAll('#dev-tbody tr[data-imei]').forEach(tr => {
+      const alvo = tr.textContent.toLowerCase();
+      tr.style.display = (!termo || alvo.includes(termo)) ? '' : 'none';
+    });
+  });
+}
+
+// ── Filtro do histórico (AJAX — sem recarregar a página) ────────────────────
+const elHCliente = document.getElementById('h-cliente');
+const elHImei    = document.getElementById('h-imei');
+const elHDe      = document.getElementById('h-de');
+const elHAte     = document.getElementById('h-ate');
+const elHistBody = document.getElementById('hist-body');
+const elHistInfo = document.getElementById('hist-info');
+const elHLimpar  = document.getElementById('h-limpar');
+
+function historicoFiltroAtivo() {
+  return !!((elHCliente && elHCliente.value) || (elHImei && elHImei.value) || elHDe.value || elHAte.value);
+}
+
+async function atualizarHistorico() {
+  const p = new URLSearchParams();
+  if (elHCliente && elHCliente.value) p.set('h_customer_id', elHCliente.value);
+  if (elHImei && elHImei.value) p.set('h_imei', elHImei.value);
+  if (elHDe.value) p.set('h_de', elHDe.value);
+  if (elHAte.value) p.set('h_ate', elHAte.value);
+  p.set('ajax_hist', '1');
+
+  elHistInfo.textContent = 'Carregando…';
+  try {
+    const r = await fetch('/comandos-sms?' + p.toString());
+    elHistBody.innerHTML = await r.text();
+    elHistInfo.textContent = historicoFiltroAtivo() ? '' : 'Sem filtro — mostrando os 10 mais recentes.';
+  } catch (e) {
+    elHistInfo.textContent = 'Falha ao carregar o histórico.';
+  }
+}
+
+[elHCliente, elHImei, elHDe, elHAte].forEach(el => el && el.addEventListener('change', atualizarHistorico));
+
+if (elHLimpar) {
+  elHLimpar.addEventListener('click', () => {
+    if (elHCliente) elHCliente.value = '';
+    if (elHImei) elHImei.value = '';
+    elHDe.value = '';
+    elHAte.value = '';
+    atualizarHistorico();
+  });
+}
 </script>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

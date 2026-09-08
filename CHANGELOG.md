@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.25
+
+**Redesenho da tela `/comandos-sms`: caixa de saldo, cliente+equipamentos numa única caixa, catálogo de comandos unificado por nome, e filtros no histórico.**
+
+- **Removido** o texto explicativo "Canal de resgate" (caixa fixa acima do formulário de comando) — informação já coberta pelo restante da tela.
+- **Alterado** o rodapé da caixa de saldo: `consultado agora · 1 crédito por equipamento a cada disparo` virou `Consultado às HH:MM do dia DD/MM/AA`.
+- **Alterado** o layout: seletor de cliente e a lista/multi-seleção de equipamentos passaram a viver na MESMA caixa, logo abaixo do saldo — antes eram duas caixas separadas. Ganhou um campo de busca client-side (nome, IMEI, placa, modelo, chip) para navegar listas grandes.
+- 🔴 **Alterado** o catálogo de comandos: passou a ser **unificado por nome** (`cmd`), com 1 campo de texto livre para os parâmetros, em vez de N campos estruturados por variante de aridade/modelo. Decisão EXPLÍCITA do dono do produto, com o risco registrado antes de implementar: o catálogo tem o MESMO nome em entradas de aridade/modelo diferentes (ex.: `ANGLEREP,A,B#` universal de 2 campos, `ANGLEREP,A#` só do JC371 com 1, `ANGLEREP,P1,P2,P3#` só da JM-VL01 com 3) — a tela não trava mais a aridade certa por modelo, só o modelo em si (união de todas as variantes do nome). Ver comentário no cabeçalho de `handlers/comandos_sms.php`.
+- **Adicionado** exibição dos exemplos catalogados (`consulta`/`exemplos` do `command_catalog.php`) ao escolher um comando — é a bússola de sintaxe que substitui os campos estruturados removidos.
+- **Adicionado** filtros (cliente, veículo/equipamento, data início, data fim) na caixa "Últimos envios por SMS", com atualização via AJAX (`?ajax_hist=1`, fragmento de `<tr>`s) sem recarregar a página. Sem filtro, mostra os 10 mais recentes; com filtro, até 100.
+- `tests/comandos_sms.spec.js` atualizado: o catálogo exposto em `window.CATALOGO_SMS` perdeu os campos `.s`/`.p`/`.t` por entrada (unificação por nome); os testes de trava de modelo e preview passaram a usar `.u`/`.q` no lugar de `.p.length`.
+
 ## [Unreleased] — 4.17.24
 
 **Canal de SMS: resposta do equipamento agora chega pela busca periódica (Método Pull), não só pelo webhook.**
