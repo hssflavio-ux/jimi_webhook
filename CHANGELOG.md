@@ -5,6 +5,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.26
+
+**`/comandos-sms`: as barras de filtro das caixas "Equipamentos" e "Últimos envios por SMS" foram padronizadas.**
+
+Reportado pelo dono do produto: os seletores estavam "fora do padrão". A causa era usar `.form-group` (classe de formulário de cadastro) com os filtros ficando à DIREITA do título, no mesmo cabeçalho — enquanto o padrão real do frontend (`.filtro-campo`/`.filtro-rotulo`, criado na v4.9.38 exatamente para esse sintoma, e já em uso em `handlers/comandos.php` — a tela irmã deste mesmo canal) é: título sozinho no cabeçalho, filtros numa **segunda linha, alinhados à ESQUERDA**, com rótulo maiúsculo pequeno acima de cada campo.
+
+- **Equipamentos**: título + resumo da seleção no cabeçalho; Cliente e Buscar movidos para uma linha própria abaixo, à esquerda, com `.filtro-campo`/`.filtro-rotulo`. Ganhou um link "Limpar" (mesmo padrão de `equipamentos.php`) quando há filtro de cliente ativo.
+- **Últimos envios por SMS**: mesma reestruturação — Cliente, Veículo/equipamento, De, Até e o botão "Limpar" foram para a linha de filtros, à esquerda.
+- Nenhuma lógica mudou (os `id`s dos campos são os mesmos, JS intocado) — confirmado ao vivo contra o app local: busca de equipamento e o fragmento AJAX do histórico continuam funcionando.
+
 ## [Unreleased] — 4.17.25
 
 **Redesenho da tela `/comandos-sms`: caixa de saldo, cliente+equipamentos numa única caixa, catálogo de comandos unificado por nome, e filtros no histórico.**

@@ -446,33 +446,35 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <!-- ── Cliente + Equipamentos ──────────────────────────────────────────── -->
 <div class="card mb-16">
-    <div class="flex-between mb-16" style="flex-wrap:wrap;gap:12px;align-items:flex-end;">
+    <div class="flex-between mb-16">
         <h2 style="font-size:16px;font-weight:600;color:var(--ink);margin:0;">Equipamentos</h2>
-        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-            <?php if ($isAdmin && $customers): ?>
-            <form method="get" style="margin:0;">
-                <div class="form-group" style="margin:0;">
-                    <label>Cliente</label>
-                    <select name="customer_id" onchange="this.form.submit()">
-                        <option value="">Todos os clientes</option>
-                        <?php foreach ($customers as $c): ?>
-                        <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($c['name']) ?>
-                        </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </form>
-            <?php endif; ?>
-            <div class="form-group" style="margin:0;">
-                <label>Buscar</label>
-                <input type="text" id="f-busca-dev" placeholder="nome, IMEI, placa, modelo…" style="min-width:220px;">
-            </div>
-        </div>
+        <span id="sel-resumo" style="font-size:12px;color:var(--muted);"></span>
     </div>
 
-    <div class="flex-between mb-8">
-        <span id="sel-resumo" style="font-size:12px;color:var(--muted);"></span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+        <?php if ($isAdmin && $customers): ?>
+        <form method="get" style="margin:0;">
+            <div>
+                <label class="filtro-rotulo" for="f-cliente-dev">Cliente</label>
+                <select id="f-cliente-dev" name="customer_id" class="filtro-campo" style="min-width:170px;"
+                        onchange="this.form.submit()">
+                    <option value="">Todos os clientes</option>
+                    <?php foreach ($customers as $c): ?>
+                    <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($c['name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </form>
+        <?php endif; ?>
+        <div>
+            <label class="filtro-rotulo" for="f-busca-dev">Buscar</label>
+            <input type="text" id="f-busca-dev" class="filtro-campo" placeholder="nome, IMEI, placa, modelo…" style="min-width:220px;">
+        </div>
+        <?php if ($scopeCust !== null): ?>
+        <a href="/comandos-sms" class="btn btn-outline btn-sm">Limpar</a>
+        <?php endif; ?>
     </div>
 
     <div style="max-height:420px;overflow:auto;">
@@ -582,50 +584,51 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <!-- ── Histórico ───────────────────────────────────────────────────────── -->
 <div class="card">
-    <div class="flex-between mb-16" style="flex-wrap:wrap;gap:12px;align-items:flex-end;">
+    <div class="flex-between mb-16">
         <h2 style="font-size:16px;font-weight:600;color:var(--ink);margin:0;">
             Últimos envios por SMS
         </h2>
-        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-            <?php if ($isAdmin && $customers): ?>
-            <div class="form-group" style="margin:0;">
-                <label>Cliente</label>
-                <select id="h-cliente">
-                    <option value="">Todos</option>
-                    <?php foreach ($customers as $c): ?>
-                    <option value="<?= (int)$c['id'] ?>"
-                            <?= $histFiltrosIniciais['customer_raw'] === (string)$c['id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($c['name']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <?php endif; ?>
-            <div class="form-group" style="margin:0;">
-                <label>Veículo / equipamento</label>
-                <select id="h-imei">
-                    <option value="">Todos</option>
-                    <?php foreach ($histDeviceOptions as $hd): ?>
-                    <option value="<?= htmlspecialchars($hd['imei']) ?>"
-                            <?= $histFiltrosIniciais['imei'] === $hd['imei'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($hd['device_name']) ?><?= !empty($hd['plate']) ? ' · ' . htmlspecialchars($hd['plate']) : '' ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group" style="margin:0;">
-                <label>De</label>
-                <input type="date" id="h-de" value="<?= htmlspecialchars($histFiltrosIniciais['de']) ?>">
-            </div>
-            <div class="form-group" style="margin:0;">
-                <label>Até</label>
-                <input type="date" id="h-ate" value="<?= htmlspecialchars($histFiltrosIniciais['ate']) ?>">
-            </div>
-            <button type="button" id="h-limpar" class="btn btn-outline btn-sm" style="height:38px;">Limpar</button>
-        </div>
+        <span id="hist-info" style="font-size:12px;color:var(--muted);">
+            <?= $histResultado['filtro_ativo'] ? '' : 'Sem filtro — mostrando os 10 mais recentes.' ?>
+        </span>
     </div>
-    <div id="hist-info" style="font-size:12px;color:var(--muted);margin:-8px 0 12px;">
-        <?= $histResultado['filtro_ativo'] ? '' : 'Sem filtro — mostrando os 10 mais recentes.' ?>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+        <?php if ($isAdmin && $customers): ?>
+        <div>
+            <label class="filtro-rotulo" for="h-cliente">Cliente</label>
+            <select id="h-cliente" class="filtro-campo" style="min-width:150px;">
+                <option value="">Todos</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>"
+                        <?= $histFiltrosIniciais['customer_raw'] === (string)$c['id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($c['name']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <?php endif; ?>
+        <div>
+            <label class="filtro-rotulo" for="h-imei">Veículo / equipamento</label>
+            <select id="h-imei" class="filtro-campo" style="min-width:180px;">
+                <option value="">Todos</option>
+                <?php foreach ($histDeviceOptions as $hd): ?>
+                <option value="<?= htmlspecialchars($hd['imei']) ?>"
+                        <?= $histFiltrosIniciais['imei'] === $hd['imei'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars($hd['device_name']) ?><?= !empty($hd['plate']) ? ' · ' . htmlspecialchars($hd['plate']) : '' ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label class="filtro-rotulo" for="h-de">De</label>
+            <input type="date" id="h-de" class="filtro-campo" value="<?= htmlspecialchars($histFiltrosIniciais['de']) ?>">
+        </div>
+        <div>
+            <label class="filtro-rotulo" for="h-ate">Até</label>
+            <input type="date" id="h-ate" class="filtro-campo" value="<?= htmlspecialchars($histFiltrosIniciais['ate']) ?>">
+        </div>
+        <button type="button" id="h-limpar" class="btn btn-outline btn-sm">Limpar</button>
     </div>
 
     <table class="table">
