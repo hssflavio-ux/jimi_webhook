@@ -5,6 +5,14 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.17.27
+
+**`/comandos-sms`: a caixa "Texto que será enviado por SMS" ganhou o mesmo tratamento visual de `.cmd-preview` (terminal escuro, mono) já usado em `/comandos`.**
+
+Reportado pelo dono do produto: a caixa de "Comando" continuava "fora do padrão" mesmo após a v4.17.26. A v4.17.26 corrigiu as barras de FILTRO (Equipamentos / Últimos envios); esta corrige a caixa de PREVIEW do comando — `.form-group`/`.form-row` continuam corretos para o restante da caixa (Categoria, Comando, Parâmetros), pois é isso que `/equipamentos` e o próprio `/comandos` usam para formulário de verdade. O que destoava era só o preview: um `<input readonly>` cinza-claro (`background:var(--surface-2)`), enquanto `/comandos` mostra "o que será mandado ao device" (tanto no formulário quanto no modal de histórico) num terminal escuro com texto mono verde-menta (`.cmd-preview`: `background:#0a0b0d; color:#7fe3a8`) — o mesmo conceito, duas fazendas visuais diferentes.
+
+- Aplicado o mesmo tratamento ao `#f-preview` via seletor de ID (vence `.form-group input` do layout base sem depender de ordem no cascade). Nenhum id, nenhuma lógica JS e nenhum teste mudaram — `elPrev.value` continua sendo lido/escrito normalmente, confirmado ao vivo contra o app local (seleção de comando `ACC` renderizou `ACC#` em mono verde sobre fundo escuro).
+
 ## [Unreleased] — 4.17.26
 
 **`/comandos-sms`: as barras de filtro das caixas "Equipamentos" e "Últimos envios por SMS" foram padronizadas.**

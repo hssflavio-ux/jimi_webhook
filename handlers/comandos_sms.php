@@ -576,8 +576,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
     <div class="form-group">
         <label>Texto que será enviado por SMS</label>
-        <input type="text" id="f-preview" class="text-mono" readonly
-               style="background:var(--surface-2);font-weight:600;">
+        <input type="text" id="f-preview" readonly>
         <div id="preview-aviso" style="font-size:12px;margin-top:4px;"></div>
     </div>
 </div>
@@ -696,6 +695,21 @@ require_once __DIR__ . '/../web/layout_base.php';
 .linha-bloqueada td { background:var(--surface-2); }
 tr.modelo-travado { opacity:.35; }
 tr.modelo-travado input { pointer-events:none; }
+/* Caixa de preview do comando bruto — MESMO tratamento visual de `.cmd-preview`
+   em /comandos (terminal escuro, mono), não um input cinza ad-hoc. É o padrão
+   já estabelecido para "o que será mandado ao device" nas duas telas; seletor
+   por ID para vencer `.form-group input` do layout base sem depender de ordem
+   no cascade. */
+#f-preview {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    background: #0a0b0d;
+    color: #7fe3a8;
+    border: 1px solid #0a0b0d;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+}
+#f-preview:focus { outline: none; border-color: #0a0b0d; box-shadow: none; }
 </style>
 
 <script>
