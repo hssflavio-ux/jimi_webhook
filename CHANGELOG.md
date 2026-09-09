@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.18.1
+
+**`/comandos`: máscara de parâmetros sensível ao comando; auditoria de compatibilidade de modelo e tradução completa do catálogo para PT-BR.**
+
+Reportado pelo dono do produto: a máscara do campo de parâmetros mostrava o mesmo texto genérico para qualquer comando, e o catálogo tinha entradas com compatibilidade de modelo errada (ex.: `FENCE`) e descrições em inglês (ex.: `RAPIDDEC`).
+
+- 🔴 **Corrigido** — o `placeholder` do campo de parâmetros (`/comandos` e `/comandos-sms`) era um texto FIXO no HTML, igual para qualquer comando. Agora `atualizarMascaraParams()` monta a máscara a partir do(s) exemplo(s) catalogados do comando escolhido (`command_catalog_examples_by_family()`), tirando o nome do comando e mostrando só os parâmetros de verdade daquele comando específico.
+- **Removido** "(não altera nada no equipamento)" do rótulo "Ler o valor atual"; renomeado "Exemplos da documentação (clique para preencher)" para "Exemplo".
+- 🔴 **Auditoria de compatibilidade de modelo** (`includes/command_catalog.php`) contra as 4 planilhas oficiais em `docs/`: 9 comandos com modelo faltando corrigidos (`BCD`, `CAMERA`, `MILE`, `GMT`, `ASETGMT`, `CENTER`, `MILEAGE`, `WIFIAP` ganharam JC181; `CAR` ganhou JC450). O caso citado como exemplo (`FENCE` só JM-VL01/VL02) já estava correto — o JC181 tem cerca eletrônica sob outro nome (`GFENCE`), já cadastrado separadamente. Três divergências de aridade-igual-semântica-diferente (`SSID`, `APN` da linha VL, `TIMER,A,B#`) foram documentadas com comentário `⚠️ INCERTEZA GENUÍNA` em vez de mescladas às cegas — mesma aridade com sentido diferente é a classe de erro que o catálogo evita.
+- 🔴 **~85 descrições em inglês traduzidas para PT-BR** (`desc` de nível de comando e de parâmetro), concentradas no bloco da planilha `JC400 & JC261 Command List V5.0.3` — incluindo a correção do `RAPIDDEC`/`RAPIDTURN,A#` citados como exemplo, que tinham a MESMA frase em inglês copiada da entrada de aceleração (evento errado: frenagem/curva não é aceleração).
+- **Pendências registradas, não implementadas nesta sessão**: JC181 tem `FATIGUE`/`POWERALM`/`SENALM`/`SOSALM`/`EXBATALM`/`SERVER` com aridade própria, ainda sem entrada no catálogo (exigem cadastro novo, não só ajuste de `modelos`); e o comando de reboot tem token diferente por modelo (`REBOOT` no JC400/JC450, `RESET` no JC181, `RESTART`/sinônimos só medidos no JC371) — não unificado por ser um comando destrutivo.
+
 ## [Unreleased] — 4.18.0
 
 **Fila offline de comandos: consulta real ao hub (§2.21 `queryOfflineInstruct`) em vez de só supor que o comando "será entregue na reconexão".**

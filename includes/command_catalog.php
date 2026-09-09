@@ -307,6 +307,9 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A014: `BCD,<A>` com a MESMA semântica (0 = ID em hex, 14 dígitos do
+  // IMEI; 1 = últimos 12 dígitos). Faltava na auditoria de compatibilidade.
   'BCD,P1#' => [
     'cmd' => 'BCD',
     'nome' => 'Formato do identificador',
@@ -315,6 +318,7 @@ return [
     'modelos' => [
       0 => 'JC182',
       1 => 'JC371',
+      2 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -332,6 +336,9 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A008: `CAMERA,TF` — "Query the memory card status", texto e sintaxe
+  // idênticos ao já catalogado para JC182.
   'CAMERA,TF#' => [
     'cmd' => 'CAMERA',
     'nome' => 'Espaço do cartão',
@@ -339,6 +346,7 @@ return [
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC182',
+      1 => 'JC181',
     ],
     'universal' => false,
     'template' => false,
@@ -2228,6 +2236,8 @@ return [
     'exemplos' => [
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha B003: `MILE,<A>` — A=0 KMH / 1 MPH, mesma semântica já catalogada.
   'MILE,P1#' => [
     'cmd' => 'MILE',
     'nome' => 'Unidade de velocidade',
@@ -2236,6 +2246,7 @@ return [
     'modelos' => [
       0 => 'JC182',
       1 => 'JC371',
+      2 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -3451,6 +3462,17 @@ return [
     'exemplos' => [
     ],
   ],
+  // ⚠️ INCERTEZA GENUÍNA, direção OPOSTA às outras desta auditoria (09/09/2026):
+  // a planilha PRÓPRIA do JC181 (linha C001) documenta `TIMER,<A>` com UM
+  // campo só (intervalo em segundos, igual à entrada `TIMER,A#` do JC371,
+  // abaixo) — não achei, nela, um segundo campo de "intervalo sem ignição"
+  // como a wiki VL descreve. Ou seja: aqui o risco pode ser o OPOSTO do
+  // resto da auditoria — dar ao JC181 uma sintaxe de 2 campos que a fonte
+  // PRIMÁRIA dele não documenta. `consulta_ref: medido+wiki` abaixo sugere
+  // que isso já foi checado em algum grau; mantido como está, mas registrado
+  // para não confundir "silêncio da planilha" com "confirmado por medição" —
+  // confirmar em equipamento JC181 real antes de decidir manter ou mover
+  // para `TIMER,A#`.
   'TIMER,A,B#' => [
     'cmd' => 'TIMER',
     'nome' => 'Posição',
@@ -4198,7 +4220,7 @@ return [
   'COREKITSW,A#' => [
     'cmd' => 'COREKITSW',
     'nome' => 'Método de envio de dados (integração)',
-    'desc' => 'The device will use Jimi\'s method to upload the data to the Tracksolid Pro server, if you want to use other platforms, you need to ues this command to change to integrated method.',
+    'desc' => 'O equipamento usa o método da Jimi para enviar os dados ao servidor Tracksolid Pro; para usar outras plataformas, use este comando para mudar para o método integrado.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4213,7 +4235,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1. It refers to the working logic, wherein "0" refers to the integrated version and "1" the distributed version. Note: Before switching the device to the integrated method, you must first do the followings in the st...',
+        'desc' => '0/1. Lógica de funcionamento — "0" é o método integrado, "1" o distribuído. Obs.: antes de trocar para o método integrado, siga os passos indicados na planilha oficial.',
         'format' => '',
         'default' => '',
       ],
@@ -4228,7 +4250,7 @@ return [
   'HTTPUPLOADLIMIT,A,B#' => [
     'cmd' => 'HTTPUPLOADLIMIT',
     'nome' => 'Tentativas de envio do vídeo do evento',
-    'desc' => 'It defines the mechanism to deal with such a situation as the platform doesn\'t respond after the device uploads data over HTTP.',
+    'desc' => 'Define o mecanismo para lidar com a situação em que a plataforma não responde depois que o equipamento envia dados por HTTP.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4243,13 +4265,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–10. It specifies the retry count. Default: 5.',
+        'desc' => '1–10. Número de tentativas. Padrão: 5.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1–30 (minutes). It specifies the interval between each retry. Default: 3.',
+        'desc' => '1–30 (minutos). Intervalo entre tentativas. Padrão: 3.',
         'format' => '',
         'default' => '',
       ],
@@ -4291,7 +4313,7 @@ return [
   'REPLAYLIST,A#' => [
     'cmd' => 'REPLAYLIST',
     'nome' => 'Push de vídeo histórico p/ RTMP',
-    'desc' => 'Let the device to push the playback video streaming to RTMP server, then you can use them to display in your platform.',
+    'desc' => 'Faz o equipamento transmitir o vídeo de playback por streaming para um servidor RTMP, para exibição na sua plataforma.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4321,7 +4343,7 @@ return [
   'REPLAYLIST,OFF' => [
     'cmd' => 'REPLAYLIST',
     'nome' => 'Push de vídeo histórico p/ RTMP',
-    'desc' => 'Stop pushing playback video streaming.',
+    'desc' => 'Para o envio do streaming de vídeo de playback.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4354,7 +4376,7 @@ return [
     // reintroduzir HVIDEO/EVIDEO como fallback pra device JT/T sem medir de
     // novo — os dois já causaram um ciclo de tentativa-e-erro documentado.
     'nome' => 'Enviar vídeo histórico da memória',
-    'desc' => 'You can request the device to upload the playback video file which store in memory (which is one minute each file and with low video quality) to the server.',
+    'desc' => 'Pede ao equipamento que envie ao servidor o arquivo de vídeo de playback guardado na memória (um arquivo por minuto, em baixa qualidade).',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4369,13 +4391,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'The timestamp which including in the video to upload (format: Year_Month_Day_Hour_Minute_Second)',
+        'desc' => 'O carimbo de data/hora do vídeo a enviar (formato: Ano_Mês_Dia_Hora_Minuto_Segundo)',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1/2 (1=Front camera; 2=Inward camera)',
+        'desc' => '1/2 (1=câmera frontal; 2=câmera interna)',
         'format' => '',
         'default' => '',
       ],
@@ -4395,7 +4417,7 @@ return [
     // história do HVIDEO acima: é comando JIMI, JC371 fala JT/T. Ver
     // docs/COMANDOS_128_CONSULTA.md §9.
     'nome' => 'Gerar e enviar trecho do cartão TF',
-    'desc' => 'This command is for High video quality which record and stored in TF card with 3 mins for each video file. You can request the device to generate a new short video file with the period you need, and then upload the file to the server.',
+    'desc' => 'Para vídeo em alta qualidade, gravado no cartão TF em arquivos de 3 minutos. Pede ao equipamento que gere um novo arquivo curto no período desejado e o envie ao servidor.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4410,19 +4432,19 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'The timestamp to generate pre & post video (Format=Year-Month-Day Hour:Minute:Second)',
+        'desc' => 'O carimbo de data/hora para gerar o vídeo (antes e depois) — formato Ano-Mês-Dia Hora:Minuto:Segundo',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1/2 1=Front camera; 2=Inward camera;',
+        'desc' => '1/2 — 1=câmera frontal; 2=câmera interna',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '10–60 (seconds). It refers to the video length. Default: 15',
+        'desc' => '10–60 (segundos). Duração do vídeo. Padrão: 15',
         'format' => '',
         'default' => '',
       ],
@@ -4437,7 +4459,7 @@ return [
   'Video,A,B#' => [
     'cmd' => 'Video',
     'nome' => 'Capturar vídeo (H.264)',
-    'desc' => 'Capture the video (H.264) from the device.',
+    'desc' => 'Captura o vídeo (H.264) do equipamento.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4482,7 +4504,7 @@ return [
   'RTMP,A,B#' => [
     'cmd' => 'RTMP',
     'nome' => 'Transmissão ao vivo (RTMP)',
-    'desc' => 'Request live streaming. O device faz PUSH para o endereço gravado em RSERVICE.',
+    'desc' => 'Pede o vídeo ao vivo — o device faz PUSH para o endereço gravado em RSERVICE.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -4522,7 +4544,7 @@ return [
   'APN,A,B,C,D,E,F,G,H,I,J,K,L,M,N#' => [
     'cmd' => 'APN',
     'nome' => '2 - Configurações',
-    'desc' => 'Add and set the APN of the SIM card in detail',
+    'desc' => 'Adiciona e configura em detalhe a APN do chip.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4615,7 +4637,7 @@ return [
       ],
       13 => [
         'p' => 'N',
-        'desc' => 'NUMERIC When only A, B, C, and D are required to be set for the APN, you can deliver it as a simple parameter; while if more parameters ("E" and these following it) are required to be set, commas (,) should be used to...',
+        'desc' => 'NUMÉRICO. Quando só A, B, C e D precisam ser configurados, envie como parâmetro simples; se mais campos ("E" em diante) forem necessários, use vírgulas para separá-los.',
         'format' => '',
         'default' => '',
       ],
@@ -4660,7 +4682,7 @@ return [
   'ROAMING,A#' => [
     'cmd' => 'ROAMING',
     'nome' => 'Roaming',
-    'desc' => 'Enable or disable roaming feature.',
+    'desc' => 'Ativa ou desativa o recurso de roaming.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4675,7 +4697,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF It is the roaming switch.',
+        'desc' => 'ON/OFF. Liga/desliga o roaming.',
         'format' => '',
         'default' => '',
       ],
@@ -4687,14 +4709,19 @@ return [
       ],
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A024: `WIFIAP,<A>,<B>,<C>` — ON/OFF, nome (padrão IMEI), senha
+  // (padrão últimos 8 dígitos do IMEI) — texto quase idêntico ao já citado
+  // ("planilha JIMI V5.0.3 B005").
   'WIFIAP,A,B,C#' => [
     'cmd' => 'WIFIAP',
     'nome' => 'HOTSPOT',
-    'desc' => 'Turn on/off the WiFi hotspot, AP Mode',
+    'desc' => 'Liga/desliga o hotspot WiFi (modo AP).',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
       1 => 'JC400D',
+      2 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -4705,19 +4732,19 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF WiFi hot-spot switch.',
+        'desc' => 'ON/OFF. Liga/desliga o hotspot WiFi.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Hot-spot name, default is IMEI number',
+        'desc' => 'Nome do hotspot; padrão é o número do IMEI.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => 'password, default is last 8 digits of IMEI',
+        'desc' => 'Senha; padrão são os últimos 8 dígitos do IMEI.',
         'format' => '',
         'default' => '',
       ],
@@ -4729,10 +4756,19 @@ return [
       ],
     ],
   ],
+  // ⚠️ INCERTEZA GENUÍNA (auditoria 09/09/2026) — JC181 documenta `SSID,<A>,<B>,<C>`
+  // com a MESMA aridade (docs/JC181_Command_List_V1.0.7_20250811.xlsx, linha
+  // A025), mas o campo A lá é simplesmente ON/OFF, enquanto aqui é 0/1/2/3.
+  // Curiosamente esta MESMA planilha já avisa, na descrição do campo C, que
+  // "A=ON/OFF a partir do firmware V4.2.x" — pode ser questão de VERSÃO de
+  // firmware do JC400, não de modelo. Por isso o JC181 NÃO foi adicionado a
+  // `modelos`: mesma aridade com semântica potencialmente diferente é
+  // exatamente o caso "aceito e mal interpretado, sem erro" que este catálogo
+  // evita — confirmar em equipamento real antes de unir as duas.
   'SSID,A,B,C#' => [
     'cmd' => 'SSID',
     'nome' => 'SSID',
-    'desc' => 'Trun on/off WiFi, Client Mode',
+    'desc' => 'Liga/desliga o WiFi (modo cliente).',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4747,19 +4783,19 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2/3, 0 means off, 1 means WIFI enable during acc on, 2 means WIFI enable all the time, 3 means delete the wifi connection record',
+        'desc' => '0/1/2/3 — 0=desligado, 1=WiFi ligado só com ACC on, 2=WiFi sempre ligado, 3=apaga o registro de conexão WiFi. A partir do firmware V4.2.x, este campo passa a ser ON/OFF.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Router\'s name',
+        'desc' => 'Nome do roteador',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => 'Router\'s password Remark: A=ON/OFF @ firmware V4.2.x or above',
+        'desc' => 'Senha do roteador',
         'format' => '',
         'default' => '',
       ],
@@ -4774,7 +4810,7 @@ return [
   'BTNAME,A#' => [
     'cmd' => 'BTNAME',
     'nome' => 'Bluetooth',
-    'desc' => 'Turn on/off the Bluetooth',
+    'desc' => 'Liga/desliga o Bluetooth.',
     'categoria' => 'rede',
     'modelos' => [
       0 => 'JC400AD',
@@ -4789,7 +4825,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF It is a switch to enable the Bluetooth. Only when A is set to "ON" will the device enable the Bluetooth after entering ACC ON mode.',
+        'desc' => 'ON/OFF. Com "ON", o equipamento liga o Bluetooth ao entrar em modo ACC ON.',
         'format' => '',
         'default' => '',
       ],
@@ -4804,7 +4840,7 @@ return [
   'GTRANS,A,B,C,D#' => [
     'cmd' => 'GTRANS',
     'nome' => 'Coleta e envio de dados do acelerômetro',
-    'desc' => 'Collect and upload G-Sensor data',
+    'desc' => 'Coleta e envia os dados do acelerômetro (G-Sensor).',
     'categoria' => 'posicao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4819,25 +4855,25 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2 It is a function switch, wherein 0 means the function is off, 1 transparent transmission over TCP, and 2 transparent transmission over HTTP.',
+        'desc' => '0/1/2 — 0 desliga a função, 1 transmissão transparente por TCP, 2 transmissão transparente por HTTP.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1/2 It refers to the transmission mode, wherein 1 means timed upload and 2 means re-upload.',
+        'desc' => '1/2 — modo de transmissão: 1 = envio programado, 2 = reenvio.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1–10 (TCP)/10–100 (HTTP) It refers to the sampling rate and the unit is samples per second. The default value 6 samples per second for transmission over TCP and 100 samples per second for transmission over HTTP.',
+        'desc' => '1–10 (TCP) / 10–100 (HTTP) — taxa de amostragem, em amostras por segundo. Padrão: 6/s por TCP, 100/s por HTTP.',
         'format' => '',
         'default' => '',
       ],
       3 => [
         'p' => 'D',
-        'desc' => '1–60 It refers to the time for timed upload and the unit is second. The time for timed upload over TCP is 2s (unchangeable) and the time for timed upload over HTTP is 10s.',
+        'desc' => '1–60 (segundos) — tempo do envio programado. Por TCP é fixo em 2s; por HTTP, 10s.',
         'format' => '',
         'default' => '',
       ],
@@ -4852,7 +4888,7 @@ return [
   'GCALIBRAT' => [
     'cmd' => 'GCALIBRAT',
     'nome' => 'Calibrar acelerômetro',
-    'desc' => 'Calibrate the G-Sensor',
+    'desc' => 'Calibra o acelerômetro (G-Sensor).',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4872,7 +4908,7 @@ return [
   'RANGE,A#' => [
     'cmd' => 'RANGE',
     'nome' => 'Faixa do acelerômetro',
-    'desc' => 'Set the G-Sensor application range.',
+    'desc' => 'Define a faixa de aplicação do acelerômetro (G-Sensor).',
     'categoria' => 'posicao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4887,7 +4923,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '2/4/8/16 It specifies the measuring range of GSENSOR, will effect the crashalm sensitivity',
+        'desc' => '2/4/8/16 — faixa de medição do acelerômetro (G-Sensor); afeta a sensibilidade do CRASHALM.',
         'format' => '',
         'default' => '',
       ],
@@ -4902,7 +4938,7 @@ return [
   'LOG,ALL,A#' => [
     'cmd' => 'LOG',
     'nome' => 'Enviar logs do equipamento',
-    'desc' => 'Upload logs to Jimi server or specific TCP server',
+    'desc' => 'Envia os logs ao servidor da Jimi ou a um servidor TCP específico.',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4932,7 +4968,7 @@ return [
   'PING,A#' => [
     'cmd' => 'PING',
     'nome' => 'Testar conexão de rede',
-    'desc' => 'Check the network connection status.',
+    'desc' => 'Confere o estado da conexão de rede.',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4947,7 +4983,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'TCP/HTTP/RTMP, device will ping the server to check the connection',
+        'desc' => 'TCP/HTTP/RTMP — o equipamento faz ping no servidor para checar a conexão.',
         'format' => '',
         'default' => '',
       ],
@@ -4962,7 +4998,7 @@ return [
   'PASSWORD,<A><B>#' => [
     'cmd' => 'PASSWORD',
     'nome' => 'Alterar senha de comando',
-    'desc' => 'Change the password of the command.',
+    'desc' => 'Troca a senha usada nos comandos.',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -4986,7 +5022,7 @@ return [
   'FORMAT' => [
     'cmd' => 'FORMAT',
     'nome' => 'Formatar cartão SD',
-    'desc' => 'Format the memory card',
+    'desc' => 'Formata o cartão de memória.',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -5006,7 +5042,7 @@ return [
   'CAMERA,A,B#' => [
     'cmd' => 'CAMERA',
     'nome' => 'Espaço do cartão',
-    'desc' => 'Set the parameters for normal recording video which will be saved in TF card.',
+    'desc' => 'Define os parâmetros da gravação normal de vídeo, salva no cartão TF.',
     'categoria' => 'manutencao',
     'modelos' => [
       0 => 'JC400AD',
@@ -5027,7 +5063,7 @@ return [
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0/1/2/3 When OUT, 0 is 1080P 8M; 1 is 720P 4M; 2 is 720*480 2M; 3 is 640*360 0.5M When IN, 0 is 720P 6M; 1 is 720P 3M; 2 is 720*480 2M; 3 is 640*360 0.5M',
+        'desc' => '0/1/2/3 — na câmera frontal (OUT): 0=1080P 8M, 1=720P 4M, 2=720×480 2M, 3=640×360 0,5M. Na interna (IN): 0=720P 6M, 1=720P 3M, 2=720×480 2M, 3=640×360 0,5M.',
         'format' => '',
         'default' => '',
       ],
@@ -5042,7 +5078,7 @@ return [
   'VIDEORESOLUTION_SUB,A#' => [
     'cmd' => 'VIDEORESOLUTION_SUB',
     'nome' => 'Resolução do sub-stream (ao vivo/playback)',
-    'desc' => 'Set the parameters for live streaming or playback video',
+    'desc' => 'Define os parâmetros do vídeo ao vivo (streaming) ou de playback.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5069,14 +5105,18 @@ return [
       ],
     ],
   ],
+  // 🔴 JC450 adicionado (09/09/2026) — docs/JC450 series command list-EN V2.1.1.xlsx,
+  // linha B010: `CAR,A,B,C` — "15 dígitos no máx., só letras e números",
+  // exemplo `CAR,HUANGXIN,4414221982,JIMIIOT` — mesmo comando, 3 campos.
   'CAR,A,B,C#' => [
     'cmd' => 'CAR',
     'nome' => 'Conteúdo da marca d’água do vídeo',
-    'desc' => 'Customize the content of the video watermark.',
+    'desc' => 'Personaliza o conteúdo da marca d\'água do vídeo.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
       1 => 'JC400D',
+      2 => 'JC450',
     ],
     'universal' => false,
     'template' => true,
@@ -5114,7 +5154,7 @@ return [
   'MIRROR,in,A#' => [
     'cmd' => 'MIRROR',
     'nome' => 'Espelhamento da câmera interna',
-    'desc' => 'Set the mirroring mode of the backup camera (rear-view)',
+    'desc' => 'Define o modo de espelhamento da câmera de ré (rear-view).',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5129,7 +5169,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF Whether to enable the mirroring mode of the backup camera (rear-view)',
+        'desc' => 'ON/OFF — ativa ou não o modo espelhado da câmera de ré.',
         'format' => '',
         'default' => '',
       ],
@@ -5144,7 +5184,7 @@ return [
   'PICTIMER,A,B,C#' => [
     'cmd' => 'PICTIMER',
     'nome' => 'Captura programada de fotos',
-    'desc' => 'Enable or disable feature.',
+    'desc' => 'Ativa ou desativa a captura programada de fotos.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5159,19 +5199,19 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF. It defines whether to enable timed image taking.',
+        'desc' => 'ON/OFF. Ativa ou não a captura programada de fotos.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '30–300 (seconds). It specifies the length of the timer. Default: 300.',
+        'desc' => '30–300 (segundos). Duração do temporizador. Padrão: 300.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1–3. It specifies how many times will the device take images during one trigger. Default: 1.',
+        'desc' => '1–3. Quantas fotos o equipamento tira por disparo. Padrão: 1.',
         'format' => '',
         'default' => '',
       ],
@@ -5186,7 +5226,7 @@ return [
   'PICTIMERSIZE,A,B#' => [
     'cmd' => 'PICTIMERSIZE',
     'nome' => 'Resolução da foto temporizada',
-    'desc' => 'Set the resolution of photos',
+    'desc' => 'Define a resolução das fotos.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5201,13 +5241,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'IN/OUT; OUT is front camera; IN is inner camera.',
+        'desc' => 'IN/OUT — OUT é a câmera frontal, IN é a câmera interna.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0/1/2, 0 is 1080P, 1 is 720P, 2 is 480P When A is OUT, B can be set to be 0/1/2 When A is IN, B can be 1/2 only',
+        'desc' => '0/1/2 — 0=1080P, 1=720P, 2=480P. Com A=OUT, B aceita 0/1/2; com A=IN, só 1/2.',
         'format' => '',
         'default' => '',
       ],
@@ -5222,7 +5262,7 @@ return [
   'TIMERPICRAM' => [
     'cmd' => 'TIMERPICRAM',
     'nome' => 'Espaço das fotos temporizadas',
-    'desc' => 'Query the size of images in the device that are taken via this feature',
+    'desc' => 'Consulta o tamanho das imagens no equipamento tiradas por este recurso.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5242,7 +5282,7 @@ return [
   'TIMERPICRAM,DEL' => [
     'cmd' => 'TIMERPICRAM',
     'nome' => 'Espaço das fotos temporizadas',
-    'desc' => 'Delete images that are taken via this feature from the device',
+    'desc' => 'Apaga do equipamento as imagens tiradas por este recurso.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5262,7 +5302,7 @@ return [
   'EVENTGPS,A#' => [
     'cmd' => 'EVENTGPS',
     'nome' => 'Reenvio do pacote de posição do evento',
-    'desc' => 'Event-generated location packet re-upload',
+    'desc' => 'Reenvio do pacote de posição gerado por evento.',
     'categoria' => 'posicao',
     'modelos' => [
       0 => 'JC400AD',
@@ -5277,7 +5317,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF It is a function switch. When A is set to "ON", the device will re-upload a location packet every time an event is triggered.',
+        'desc' => 'ON/OFF. Com "ON", o equipamento reenvia um pacote de posição a cada evento disparado.',
         'format' => '',
         'default' => '',
       ],
@@ -5292,7 +5332,7 @@ return [
   'BUFFERCACHEQUERY' => [
     'cmd' => 'BUFFERCACHEQUERY',
     'nome' => 'Reenvio do pacote de alerta do evento',
-    'desc' => 'Event-generated alert packet re-upload',
+    'desc' => 'Reenvio do pacote de alerta gerado por evento.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5312,14 +5352,18 @@ return [
   'MILEAGE,A,B#' => [
     'cmd' => 'MILEAGE',
     'nome' => 'Hodômetro (ajuste manual)',
-    'desc' => 'Enable or disable mileage feature',
+    'desc' => 'Ativa ou desativa o recurso de hodômetro.',
     'categoria' => 'posicao',
     // v4.16.0: mesma sintaxe de dois campos na linha VL.
+    // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+    // linha C003: `MILEAGE,<A>,<B>` — "A=Function switch, ON/OFF…", mesma
+    // forma de 2 campos (liga/desliga + valor) já catalogada.
     'modelos' => [
       0 => 'JC400AD',
       1 => 'JC400D',
       2 => 'JM-VL01',
       3 => 'JM-VL02',
+      4 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -5353,7 +5397,7 @@ return [
   'FILTER,A,B#' => [
     'cmd' => 'FILTER',
     'nome' => 'Intervalo de filtro de eventos',
-    'desc' => 'Set the interval of the device to trigger the same type of events',
+    'desc' => 'Define o intervalo para o equipamento disparar de novo o mesmo tipo de evento.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5374,7 +5418,7 @@ return [
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1–60; It defines the time interval to trigger a same-type event after the last one (input a value) Default: 5 Unit: Minute',
+        'desc' => '1–60. Intervalo mínimo para disparar de novo o mesmo tipo de evento. Padrão: 5. Unidade: minuto.',
         'format' => '',
         'default' => '',
       ],
@@ -5389,7 +5433,7 @@ return [
   'UPLOADSW,A,B#' => [
     'cmd' => 'UPLOADSW',
     'nome' => 'Upload por tipo de evento',
-    'desc' => 'Set device to upload event video by auto or not.',
+    'desc' => 'Define se o equipamento envia o vídeo do evento automaticamente ou não.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -5410,7 +5454,7 @@ return [
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'OFF, ON, 1, 2 It indicates whether to upload event videos automatically or on demand. OFF=Do not upload by auto ON=Upload front / inward camera\'s video both 1=Upload front camera video only 2=Upload imward camera vide...',
+        'desc' => 'OFF/ON/1/2 — OFF=não envia automaticamente, ON=envia vídeo das duas câmeras, 1=só câmera frontal, 2=só câmera interna.',
         'format' => '',
         'default' => '',
       ],
@@ -5425,7 +5469,7 @@ return [
   'EXBATALM,A,B#' => [
     'cmd' => 'EXBATALM',
     'nome' => 'Subtensão da bateria do veículo',
-    'desc' => 'Set the undervoltage event threshold, this feature will prevent your vehicle\'s battery from draining.',
+    'desc' => 'Define o limiar do evento de subtensão — protege a bateria do veículo contra descarga excessiva.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5440,13 +5484,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1; It indicates the vehicle\'s battery type 0=12V 1=24V',
+        'desc' => '0/1 — tipo de bateria do veículo: 0=12V, 1=24V.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Threshold value Value range for 12V vehicles:90–130, Default: 118 Value range for 24V vehicles: 180–255, Default: 230 wherein 90,180 indicates the undervoltage alert value is 9V.18V, therefore if you set the value to ...',
+        'desc' => 'Valor do limiar. Veículos 12V: 90–130 (padrão 118); veículos 24V: 180–255 (padrão 230) — 90/180 corresponde ao alerta de subtensão em 9V/18V (valor = tensão × 10).',
         'format' => '',
         'default' => '',
       ],
@@ -5461,7 +5505,7 @@ return [
   'SOS,A,<A>,<B>,<C>#' => [
     'cmd' => 'SOS',
     'nome' => 'Números SOS',
-    'desc' => 'Add SOS numbers(s), then if you set report method to 2&3, the device will make the call to this list.',
+    'desc' => 'Adiciona número(s) de SOS — com a forma de aviso 2 ou 3, o equipamento liga para esta lista.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5485,7 +5529,7 @@ return [
   'SOS,D <A>,<B>,<C>#' => [
     'cmd' => 'SOS',
     'nome' => 'Números SOS',
-    'desc' => 'Delete SOS number(s) of the list.',
+    'desc' => 'Apaga número(s) da lista de SOS.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5509,7 +5553,7 @@ return [
   'CALL,A#' => [
     'cmd' => 'CALL',
     'nome' => 'Ciclos de ligação do SOS',
-    'desc' => 'Set the cycle count of the SOS calls, which the device will call to the SOS list after the event be triggered.',
+    'desc' => 'Define quantas vezes o equipamento liga para a lista de SOS depois que o evento dispara.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5524,7 +5568,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1/2/3. It specifies the cyclic dialing count; Default: 2',
+        'desc' => '1/2/3. Quantas vezes o ciclo de ligações se repete. Padrão: 2.',
         'format' => '',
         'default' => '',
       ],
@@ -5539,7 +5583,7 @@ return [
   'SHOCK,A#' => [
     'cmd' => 'SHOCK',
     'nome' => 'Sensibilidade de vibração (detalhada)',
-    'desc' => 'Set the sensitivity to trigger a vibration event when the vehicle parking in detail. This command is the same as the SENALM and CRASHALM command, but it is more specific.',
+    'desc' => 'Define a sensibilidade para disparar o evento de vibração com o veículo estacionado. Equivalente ao SENALM/CRASHALM, só que mais específico.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5554,7 +5598,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–255. It specifies the sensitivity range, wherein the lower the value, the more sensitive the vehicle to detect a vibration. How to count the acceleration (x+1)/256*RANGE eg: RANGE=2, SHOCK,40, SENSOR,255 so vibratio...',
+        'desc' => '1–255. Faixa de sensibilidade — quanto menor o valor, mais sensível à vibração. Cálculo da aceleração: (x+1)/256×RANGE. Ex.: RANGE=2, SHOCK,40, SENSOR,255 (valor truncado na planilha original).',
         'format' => '',
         'default' => '',
       ],
@@ -5569,7 +5613,7 @@ return [
   'DEFENSE,A#' => [
     'cmd' => 'DEFENSE',
     'nome' => 'Modo de vigilância (estacionado)',
-    'desc' => 'Enable or disable Defense mode/',
+    'desc' => 'Ativa ou desativa o modo vigilância (Defense).',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5584,7 +5628,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF; Whether to enable the defense mode',
+        'desc' => 'ON/OFF — ativa ou desativa o modo vigilância.',
         'format' => '',
         'default' => '',
       ],
@@ -5599,7 +5643,7 @@ return [
   'DEFENSE_TIME,A#' => [
     'cmd' => 'DEFENSE_TIME',
     'nome' => 'Atraso para entrar em vigilância',
-    'desc' => 'Set the period delay for the device to entry defense mode after the ACC OFF. Need to make sure already enable the defense mode.',
+    'desc' => 'Define o atraso para o equipamento entrar no modo vigilância depois do ACC OFF. Exige o modo vigilância já ativado.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5614,7 +5658,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–30; It refers to the delay time; Unit: Minute. Default: 5',
+        'desc' => '1–30. Tempo de atraso. Unidade: minuto. Padrão: 5.',
         'format' => '',
         'default' => '',
       ],
@@ -5629,7 +5673,7 @@ return [
   'SHAKEDELAY,A#' => [
     'cmd' => 'SHAKEDELAY',
     'nome' => 'Janela sem alerta de vibração após ACC ON',
-    'desc' => 'It refers to the time during which a vibrating alert won\'t be triggered if the device is ACC ON during that time. It will filtter the normal drive behavior/',
+    'desc' => 'Período em que o alerta de vibração não dispara se o equipamento estiver com ACC ON — filtra a condução normal.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5659,7 +5703,7 @@ return [
   'SENSOR,A#' => [
     'cmd' => 'SENSOR',
     'nome' => 'Sensibilidade de colisão (valor direto)',
-    'desc' => 'Set the sensitivity with the value when the CRASHALM not match your requirment.',
+    'desc' => 'Ajusta a sensibilidade quando o CRASHALM não atender à necessidade.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5674,7 +5718,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–255 The lower the value, the more sensitive the device to trigger a collision event/ Default: 150',
+        'desc' => '1–255 — quanto menor o valor, mais sensível o equipamento ao disparar o evento de colisão. Padrão: 150.',
         'format' => '',
         'default' => '',
       ],
@@ -5689,7 +5733,7 @@ return [
   'RAPIDACC,A#' => [
     'cmd' => 'RAPIDACC',
     'nome' => 'Aceleração Brusca',
-    'desc' => 'Set the sensitivity level to trigger harsh acceleration event. If you want to have more choice to set the value, you can use command "RAPIDTEST".',
+    'desc' => 'Define o nível de sensibilidade para disparar o evento de aceleração brusca. Para mais opções de ajuste, use o comando "RAPIDTEST".',
     'categoria' => 'posicao',
     'modelos' => [
       0 => 'JC400AD',
@@ -5704,7 +5748,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2/3; Detect time is 3 second 0-Off, 1-Low 45, 2-Mid 35, 3-High 25, Unit is kmh',
+        'desc' => '0/1/2/3; tempo de detecção de 3 segundos — 0-Desligado, 1-Baixo 45, 2-Médio 35, 3-Alto 25 (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
@@ -5716,10 +5760,14 @@ return [
       ],
     ],
   ],
+  // 🔴 As duas entradas abaixo (E020/E021) vieram da planilha com a MESMA
+  // frase em inglês ("harsh acceleration"), copiada sem adaptar ao evento de
+  // cada comando — RAPIDDEC é frenagem, RAPIDTURN é curva, nenhum dos dois é
+  // aceleração. Traduzido e corrigido para o evento certo de cada um.
   'RAPIDDEC,A#' => [
     'cmd' => 'RAPIDDEC',
     'nome' => 'Frenagem Brusca',
-    'desc' => 'Set the sensitivity level to trigger harsh acceleration event. If you want to have more choice to set the value, you can use command "RAPIDTEST".',
+    'desc' => 'Define o nível de sensibilidade para disparar o evento de frenagem brusca. Para mais opções de ajuste, use o comando "RAPIDTEST".',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5734,7 +5782,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2/3; Detect time is 3 second 0-Off, 1-Low 55, 2-Mid 45, 3-High 25, Unit is kmh',
+        'desc' => '0/1/2/3; tempo de detecção de 3 segundos — 0-Desligado, 1-Baixo 55, 2-Médio 45, 3-Alto 25 (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
@@ -5749,7 +5797,7 @@ return [
   'RAPIDTURN,A#' => [
     'cmd' => 'RAPIDTURN',
     'nome' => 'Curva Brusca',
-    'desc' => 'Set the sensitivity level to trigger harsh acceleration event. If you want to have more choice to set the value, you can use command "RAPIDTEST".',
+    'desc' => 'Define o nível de sensibilidade para disparar o evento de curva brusca. Para mais opções de ajuste, use o comando "RAPIDTEST".',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5764,7 +5812,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2/3; Detect time is 3 second 0-Off, 1-Low 60, 2-Mid 40, 3-High 30, Unit is kmh',
+        'desc' => '0/1/2/3; tempo de detecção de 3 segundos — 0-Desligado, 1-Baixo 60, 2-Médio 40, 3-Alto 30 (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
@@ -5779,7 +5827,7 @@ return [
   'RAPIDTEST,A,B,C#' => [
     'cmd' => 'RAPIDTEST',
     'nome' => 'Limiares de direção agressiva',
-    'desc' => 'Set the threshold to trigger an aggressive driving behavior alert',
+    'desc' => 'Define o limiar para disparar o alerta de comportamento de direção agressiva',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5794,19 +5842,19 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–255. It specifies the threshold to trigger a harsh acceleration alert, unit is kmh',
+        'desc' => '1–255. Limiar para disparar o alerta de aceleração brusca (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '1–255. It specifies the threshold to trigger a harsh braking alert, unit is kmh',
+        'desc' => '1–255. Limiar para disparar o alerta de frenagem brusca (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1–255. It specifies the threshold to trigger a harsh cornering alert, unit is kmh',
+        'desc' => '1–255. Limiar para disparar o alerta de curva brusca (unidade: km/h)',
         'format' => '',
         'default' => '',
       ],
@@ -5821,7 +5869,9 @@ return [
   'NOSDCARDALM,A,B#' => [
     'cmd' => 'NOSDCARDALM',
     'nome' => 'Alarme de erro do cartão de memória',
-    'desc' => 'Set the parameters of',
+    // Frase original TRUNCADA na planilha ("Set the parameters of"). Traduzido
+    // a partir do sentido do parâmetro A, único campo desta entrada.
+    'desc' => 'Define os parâmetros do alarme de erro do cartão de memória.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -5836,13 +5886,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF. It specifies whether to enable the feature to trigger an alert when the memory card is inserted or removed.',
+        'desc' => 'ON/OFF. Ativa o alarme quando o cartão de memória é inserido ou removido.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0–3. It specifies the alert mode. 0: GPRS, 1: SMS+GPRS, 2: GPRS+SMS+Call, 3: GPRS+Call',
+        'desc' => '0–3. Forma de aviso: 0=GPRS, 1=SMS+GPRS, 2=GPRS+SMS+ligação, 3=GPRS+ligação.',
         'format' => '',
         'default' => '',
       ],
@@ -5857,7 +5907,7 @@ return [
   'UART,A,B,C,D,E,F#' => [
     'cmd' => 'UART',
     'nome' => 'Sensor de porta pela UART',
-    'desc' => 'Connect the door sensor via the UART, then you can enable or disable this function.',
+    'desc' => 'Conecte o sensor de porta pela UART; depois é só ativar ou desativar esta função.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -5872,37 +5922,37 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1/2;it defines the trigger condition 0 - disable the function 1 - take close as a trigger 2 - take open as a trigger',
+        'desc' => '0/1/2 — condição de disparo: 0=desligado, 1=dispara ao fechar, 2=dispara ao abrir.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0/1/2;it defines ACC state 0- detecting in any state 1 -detecting only in ACC ON 2- detecting only in ACC OFF',
+        'desc' => '0/1/2 — estado do ACC: 0=detecta em qualquer estado, 1=só com ACC ON, 2=só com ACC OFF.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1~3600, it defines the Detection interval unit is second,default is 120',
+        'desc' => '1–3600 (segundos). Intervalo de detecção. Padrão: 120.',
         'format' => '',
         'default' => '',
       ],
       3 => [
         'p' => 'D',
-        'desc' => '1~120, it defines the speed condition, GPS speed 0 is unlimited unit is kmh',
+        'desc' => '1–120 (km/h). Condição de velocidade pelo GPS; 0 = sem limite.',
         'format' => '',
         'default' => '',
       ],
       4 => [
         'p' => 'E',
-        'desc' => '1/2, it defines the Action after trigger 1 -short video 2 -photo',
+        'desc' => '1/2 — ação ao disparar: 1=vídeo curto, 2=foto.',
         'format' => '',
         'default' => '',
       ],
       5 => [
         'p' => 'F',
-        'desc' => '0/1/2, it defines the whether to broadcast voice after trigger 0 is no broadcast 1 is seat belt version 2 is door sensor detection version, while F=0,means door sensor detection without voice prompt 1',
+        'desc' => '0/1/2 — anúncio de voz ao disparar: 0=sem voz, 1=versão cinto de segurança, 2=versão sensor de porta (com F=0, o sensor de porta funciona sem aviso de voz).',
         'format' => '',
         'default' => '',
       ],
@@ -5917,7 +5967,7 @@ return [
   'SPEEDOMETER,A#' => [
     'cmd' => 'SPEEDOMETER',
     'nome' => 'Velocímetro',
-    'desc' => 'It is a function switch',
+    'desc' => 'Liga/desliga o velocímetro.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -5932,7 +5982,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF An accessory is required to be connected to use this feature.',
+        'desc' => 'ON/OFF. Exige um acessório conectado para funcionar.',
         'format' => '',
         'default' => '',
       ],
@@ -5947,7 +5997,7 @@ return [
   'CARDREADER,A#' => [
     'cmd' => 'CARDREADER',
     'nome' => 'Leitor de cartão magnético',
-    'desc' => 'It is a function switch',
+    'desc' => 'Liga/desliga o leitor de cartão magnético.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -5962,7 +6012,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF An accessory is required to be connected to use this feature.',
+        'desc' => 'ON/OFF. Exige um acessório conectado para funcionar.',
         'format' => '',
         'default' => '',
       ],
@@ -5977,7 +6027,7 @@ return [
   'DRIVERLEVEL,A,B,C,X#' => [
     'cmd' => 'DRIVERLEVEL',
     'nome' => 'Níveis de permissão do leitor de cartão',
-    'desc' => 'Set the permission level for the card reader',
+    'desc' => 'Define o nível de permissão do leitor de cartão.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6021,7 +6071,7 @@ return [
   'OILPARAM,A,B,C,D#' => [
     'cmd' => 'OILPARAM',
     'nome' => 'Limiares do sensor de nível de combustível',
-    'desc' => 'Set the threshold fuel level at which the sensor will generate an alert',
+    'desc' => 'Define o nível de combustível a partir do qual o sensor gera um alerta.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6036,25 +6086,25 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0–60 (min). It refers to the interval to collect fuel level data when the vehicle is ACC OFF and the value "0" indicates the sensor will not collect data.',
+        'desc' => '0–60 (min). Intervalo de coleta do nível de combustível com ACC OFF; "0" desliga a coleta.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0–60 (min). It refers to the interval to collect fuel level data when the vehicle is ACC ON and the value "0" indicates the sensor will not collect data.',
+        'desc' => '0–60 (min). Intervalo de coleta do nível de combustível com ACC ON; "0" desliga a coleta.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1–10000. It refers to the difference between the fuel level data collected before and after the vehicle is ACC OFF, at which value a fuel exception alert will be triggered. The accuracy is "0.01".Default: 1000',
+        'desc' => '1–10000. Diferença de nível de combustível (antes/depois do ACC OFF) que dispara o alerta de exceção. Precisão: 0,01. Padrão: 1000.',
         'format' => '',
         'default' => '',
       ],
       3 => [
         'p' => 'D',
-        'desc' => '1–10000. It refers to the difference between the fuel level data collected before and after the vehicle is ACC ON, at which value a fuel exception alert will be triggered. The accuracy is "0.01".Default: 1000 For exam...',
+        'desc' => '1–10000. Diferença de nível de combustível (antes/depois do ACC ON) que dispara o alerta de exceção. Precisão: 0,01. Padrão: 1000.',
         'format' => '',
         'default' => '',
       ],
@@ -6069,7 +6119,7 @@ return [
   'OILIDSET,A,B#' => [
     'cmd' => 'OILIDSET',
     'nome' => 'ID do sensor de combustível',
-    'desc' => 'Set the ID of the fuel level sensor.',
+    'desc' => 'Define o ID do sensor de nível de combustível.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6084,13 +6134,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1. It refers to the fuel level sensor to set. The device supports two fuel level sensors: A and B. 0: Fuel level sensor A; 1: Fuel level sensor B',
+        'desc' => '0/1. Qual sensor de nível de combustível configurar — o equipamento suporta dois: 0=sensor A, 1=sensor B.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0–254. It refers to the ID of the fuel level sensor to set (The IDs for the two fuel level sensors should be set differently) If no parameters are specified in a query command, the device will return the data of the t...',
+        'desc' => '0–254. ID do sensor de nível de combustível a configurar (os dois sensores precisam de IDs diferentes). Numa consulta sem parâmetro, o equipamento devolve os dois.',
         'format' => '',
         'default' => '',
       ],
@@ -6105,7 +6155,7 @@ return [
   'TEMPCOLLECTINTERVAL,A,B#' => [
     'cmd' => 'TEMPCOLLECTINTERVAL',
     'nome' => 'Intervalo de coleta de temperatura',
-    'desc' => 'Set the interval to collect temperature data',
+    'desc' => 'Define o intervalo de coleta dos dados de temperatura.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6141,7 +6191,7 @@ return [
   'TCALIBRAT#' => [
     'cmd' => 'TCALIBRAT',
     'nome' => 'Formato do dado do sensor de temperatura',
-    'desc' => 'Set the format of the data collected by the temperature sensor',
+    'desc' => 'Define o formato dos dados coletados pelo sensor de temperatura.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6161,7 +6211,7 @@ return [
   'DMSSW,A#' => [
     'cmd' => 'DMSSW',
     'nome' => 'Chave de Funções de IA',
-    'desc' => 'Set sub-camera for JC261 series product, if you connect device with JC170, then you need to send command to change it first. Note: After you change the mode, the device will restart 10 seconds later',
+    'desc' => 'Define a subcâmera da linha JC261. Ao conectar com o JC170, mande este comando primeiro para trocar o modo. Obs.: depois de trocar, o equipamento reinicia em 10 segundos.',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6204,7 +6254,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–10. It indicates after how many alignment exceptions will the device generate a relevant alert. If A is set to "0", the feature is disabled.',
+        'desc' => '1–10. Quantas exceções de calibração até gerar o alerta. Com A="0", desativa o recurso.',
         'format' => '',
         'default' => '',
       ],
@@ -6216,7 +6266,7 @@ return [
       ],
       2 => [
         'p' => 'C',
-        'desc' => '0/1, wherein "0" indicates do not upload and "1" indicates upload. It is used to set whether to upload alignment exception messages to the platform.',
+        'desc' => '0/1 — "0" não envia, "1" envia à plataforma as mensagens de exceção de calibração.',
         'format' => '',
         'default' => '',
       ],
@@ -6231,7 +6281,7 @@ return [
   'DMS_SECOND_EVENT,A,B,C,D#' => [
     'cmd' => 'DMS_SECOND_EVENT',
     'nome' => 'DMS: eventos de nível 2 (L2)',
-    'desc' => 'Feature switch for level 2 (L2) events',
+    'desc' => 'Liga/desliga os eventos de nível 2 (L2).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400D',
@@ -6245,25 +6295,25 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '1–6; It indicates the type of L2 events to set; 1: Distracted; 2: Eyes closed; 3: Yawning; 4: Calling; 5: Smoking; 6: No face detected.',
+        'desc' => '1–6. Tipo de evento L2 a configurar: 1=distração, 2=olhos fechados, 3=bocejo, 4=ao telefone, 5=fumando, 6=rosto não detectado.',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => '0/1–10; It refers to the number of consecutive trigger times of L2 events. 0 indicates the feature is disabled.',
+        'desc' => '0/1–10. Quantos disparos consecutivos do evento L2. 0 desativa o recurso.',
         'format' => '',
         'default' => '',
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1–180 Unit: second It indicates the duration to compute the number of L2 events.',
+        'desc' => '1–180 (segundos). Janela de tempo para contar os eventos L2.',
         'format' => '',
         'default' => '',
       ],
       3 => [
         'p' => 'D',
-        'desc' => '0/1–10 Unit: second It indicates how long will the buzzer sound after an L2 event is triggered. 0 indicates the feature is disabled.',
+        'desc' => '0/1–10 (segundos). Duração do bipe depois de um evento L2. 0 desativa o recurso.',
         'format' => '',
         'default' => '',
       ],
@@ -6278,7 +6328,7 @@ return [
   'ADASSW,A#' => [
     'cmd' => 'ADASSW',
     'nome' => 'ADAS: liga/desliga a função',
-    'desc' => 'Function switch, Enable or Disable ADAS Function Note: After you enable or disable the function, the device will restart 10 seconds later',
+    'desc' => 'Ativa ou desativa a função ADAS. Obs.: depois de ativar ou desativar, o equipamento reinicia em 10 segundos.',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6292,7 +6342,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0/1 0=Disable 1=Enable Need to reboot the device after sending the command.',
+        'desc' => '0/1 — 0=desativa, 1=ativa. O equipamento reinicia depois de enviar este comando.',
         'format' => '',
         'default' => '',
       ],
@@ -6307,7 +6357,7 @@ return [
   'ADASSEP,A,B#' => [
     'cmd' => 'ADASSEP',
     'nome' => 'ADAS: liga/desliga cada evento',
-    'desc' => 'Enable or Disable each ADAS function Note: Please make sure the ADAS funtion is enabled (G009)',
+    'desc' => 'Ativa ou desativa cada função do ADAS individualmente. Obs.: confirme que o ADAS está ativado (G009).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6321,7 +6371,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Type of event, fill in with the code 1=ADAS function, FCW, front car collision 2=ADAS function, HMW, vehicle too close 3=ADAS function, LDW, lane deviation',
+        'desc' => 'Tipo de evento, pelo código: 1=ADAS FCW (colisão frontal), 2=ADAS HMW (veículo muito próximo), 3=ADAS LDW (saída de faixa).',
         'format' => '',
         'default' => '',
       ],
@@ -6342,7 +6392,7 @@ return [
   'ADASPI,A,B#' => [
     'cmd' => 'ADASPI',
     'nome' => 'ADAS: filtro de alertas repetidos',
-    'desc' => 'Set the device to filter alerts for the same type of events Note: Please make sure the ADAS funtion is enabled (G009)',
+    'desc' => 'Define o filtro de alertas repetidos do mesmo tipo de evento. Obs.: confirme que o ADAS está ativado (G009).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6356,13 +6406,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Type of event, fill in with the code 1=ADAS function, FCW, front car collision 2=ADAS function, HMW, vehicle too close 3=ADAS function, LDW, lane deviation',
+        'desc' => 'Tipo de evento, pelo código: 1=ADAS FCW (colisão frontal), 2=ADAS HMW (veículo muito próximo), 3=ADAS LDW (saída de faixa).',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Period，0-3600 Unit: Second Default FCW:60,HMW:60,LDW:60',
+        'desc' => 'Período, 0–3600 (segundos). Padrão: FCW:60, HMW:60, LDW:60.',
         'format' => '',
         'default' => '',
       ],
@@ -6377,7 +6427,7 @@ return [
   'ADASVI,A,B#' => [
     'cmd' => 'ADASVI',
     'nome' => 'ADAS: filtro de avisos sonoros repetidos',
-    'desc' => 'Set the device to filter same voice announcements Note: Please make sure the ADAS funtion is enabled (G009)',
+    'desc' => 'Define o filtro de avisos de voz repetidos. Obs.: confirme que o ADAS está ativado (G009).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6391,13 +6441,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Type of event, fill in with the code 1=ADAS function, FCW, front car collision 2=ADAS function, HMW, vehicle too close 3=ADAS function, LDW, lane deviation',
+        'desc' => 'Tipo de evento, pelo código: 1=ADAS FCW (colisão frontal), 2=ADAS HMW (veículo muito próximo), 3=ADAS LDW (saída de faixa).',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'Period，0-3600 Unit: Second Default FCW:60,HMW:60,LDW:60',
+        'desc' => 'Período, 0–3600 (segundos). Padrão: FCW:60, HMW:60, LDW:60.',
         'format' => '',
         'default' => '',
       ],
@@ -6412,7 +6462,7 @@ return [
   'ADASSP,A,B#' => [
     'cmd' => 'ADASSP',
     'nome' => 'ADAS: velocidade mínima para disparar',
-    'desc' => 'Set the speed threshold value which will enable device to trigger the ADAS event after device\'s speed over it. Note: Please make sure the ADAS funtion is enabled (G009)',
+    'desc' => 'Define o limiar de velocidade acima do qual o equipamento passa a disparar eventos do ADAS. Obs.: confirme que o ADAS está ativado (G009).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6426,13 +6476,13 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'Type of event, fill in with the code 1=ADAS function, FCW, front car collision & HMW, vehicle too close 2=ADAS function, LDW, lane deviation',
+        'desc' => 'Tipo de evento, pelo código: 1=ADAS FCW (colisão frontal) e HMW (veículo muito próximo), 2=ADAS LDW (saída de faixa).',
         'format' => '',
         'default' => '',
       ],
       1 => [
         'p' => 'B',
-        'desc' => 'speed, unit :km/h AI events will only be triggered when the vehicle reaches this preset speed value Default: FCW:30,HMW:30,LDW:60',
+        'desc' => 'Velocidade (km/h) — os eventos de IA só disparam a partir dela. Padrão: FCW:30, HMW:30, LDW:60.',
         'format' => '',
         'default' => '',
       ],
@@ -6447,7 +6497,7 @@ return [
   'ADASSEN,A,B,C#' => [
     'cmd' => 'ADASSEN',
     'nome' => 'ADAS: sensibilidade por evento',
-    'desc' => 'Set the trigger sensitivity of each ADAS event. Note: Please make sure the ADAS funtion is enabled (G009)',
+    'desc' => 'Define a sensibilidade de disparo de cada evento do ADAS. Obs.: confirme que o ADAS está ativado (G009).',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6473,7 +6523,7 @@ return [
       ],
       2 => [
         'p' => 'C',
-        'desc' => '1 The smaller the value, the more sensitive.A negative value indicates the distance to the compression line, while a positive value indicates the distance to the compression line.There is no limit to the number of dig...',
+        'desc' => 'Quanto menor o valor, mais sensível. Valor negativo/positivo indica a distância até a linha de compressão. Sem limite de casas decimais (planilha truncada).',
         'format' => '',
         'default' => '',
       ],
@@ -6488,7 +6538,7 @@ return [
   'ADASVSP,A#' => [
     'cmd' => 'ADASVSP',
     'nome' => 'ADAS: velocidade simulada (teste em bancada)',
-    'desc' => 'Set the speed to the device to simulate a driving test scenario, which will let you enable to test the ADAS function in office.',
+    'desc' => 'Define a velocidade simulada para testar o ADAS sem sair do escritório.',
     'categoria' => 'ia',
     'modelos' => [
       0 => 'JC400AD',
@@ -6502,7 +6552,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '10-120 Unit:km/h',
+        'desc' => '10–120 (km/h)',
         'format' => '',
         'default' => '',
       ],
@@ -6517,7 +6567,7 @@ return [
   'UPLOADFILE,A#' => [
     'cmd' => 'UPLOADFILE',
     'nome' => 'Enviar vídeos de um tipo de evento',
-    'desc' => 'Upload videos of a specific event type (a command to upload video files on demand)',
+    'desc' => 'Envia o vídeo de um tipo de evento específico (extração de vídeo sob demanda).',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -6532,7 +6582,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'The name of the file to upload For Tracksolidpro',
+        'desc' => 'Nome do arquivo a enviar (para o Tracksolid Pro).',
         'format' => '',
         'default' => '',
       ],
@@ -6547,7 +6597,7 @@ return [
   'WIFIKIT,Get_first_page_info' => [
     'cmd' => 'WIFIKIT',
     'nome' => 'WIFIKIT: informações da página inicial',
-    'desc' => 'Get the information of the homepage',
+    'desc' => 'Consulta as informações da página inicial.',
     'categoria' => 'outros',
     'modelos' => [
       0 => 'JC400AD',
@@ -6567,7 +6617,7 @@ return [
   'RAPIDSW,A#' => [
     'cmd' => 'RAPIDSW',
     'nome' => 'Lógica de detecção de aceleração brusca',
-    'desc' => 'Change the detect logic for RAPID',
+    'desc' => 'Muda a lógica de detecção dos eventos RAPID (aceleração/frenagem/curva bruscas).',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -6582,7 +6632,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => '0 is old logic A=1 is new logic, all to change the paramer of detect time & angel',
+        'desc' => '0=lógica antiga; A=1 usa a lógica nova, que muda o parâmetro de tempo e ângulo de detecção.',
         'format' => '',
         'default' => '',
       ],
@@ -6597,7 +6647,7 @@ return [
   'RAPIDTURN,A,B,C,D#' => [
     'cmd' => 'RAPIDTURN',
     'nome' => 'Curva Brusca',
-    'desc' => 'Set the harsh cornering alert',
+    'desc' => 'Define o alerta de curva brusca.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -6612,7 +6662,7 @@ return [
     'params' => [
       0 => [
         'p' => 'A',
-        'desc' => 'ON/OFF B is detect time, default is 4 second C is speed threshold D is detect angel',
+        'desc' => 'ON/OFF — B é o tempo de detecção (padrão 4 segundos), C é o limiar de velocidade, D é o ângulo de detecção.',
         'format' => '',
         'default' => '',
       ],
@@ -6645,7 +6695,7 @@ return [
   'ALARMTONE,A,B#' => [
     'cmd' => 'ALARMTONE',
     'nome' => 'Aviso sonoro por tipo de evento',
-    'desc' => 'Whether to enable alert tone for a specific event type',
+    'desc' => 'Ativa ou desativa o som de alerta para um tipo de evento específico.',
     'categoria' => 'alarme',
     'modelos' => [
       0 => 'JC400AD',
@@ -6693,7 +6743,7 @@ return [
   'Picture,A#' => [
     'cmd' => 'Picture',
     'nome' => 'Capturar foto',
-    'desc' => 'Capture the images from the device.',
+    'desc' => 'Captura as imagens do equipamento.',
     'categoria' => 'video',
     'modelos' => [
       0 => 'JC400AD',
@@ -6771,6 +6821,13 @@ return [
       ['cmd' => 'APN,teste.teste.com.br#', 'desc' => 'exemplo literal da wiki'],
     ],
   ],
+  // ⚠️ INCERTEZA GENUÍNA (auditoria 09/09/2026) — JC181 documenta `APN,<A>,<B>,<C>`
+  // na linha A001 (docs/JC181_Command_List_V1.0.7_20250811.xlsx) com a MESMA
+  // aridade e sentido (endereço/usuário/senha) desta entrada, mas o TEXTO da
+  // célula também menciona um possível 4º campo ("D=1/2/3 protocolo") que não
+  // aparece na sintaxe formal documentada ali. Igual à ressalva do `APN` de
+  // quatorze campos da JC400 logo abaixo: JC181 NÃO foi adicionado aos
+  // `modelos` até confirmar se o 4º campo é obrigatório em equipamento real.
   'APN,P1,P2,P3#' => [
     'cmd' => 'APN',
     'nome' => 'APN do chip, com usuário e senha',
@@ -6892,12 +6949,15 @@ return [
   ],
 
   // ── Fuso horário ──────────────────────────────────────────────────────────
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A011: `GMT,<A>,<B>,<C>` — A=E/W, B=0–12h, C=0/15/30/45 — mesma
+  // estrutura já catalogada para a linha VL.
   'GMT,P1,P2,P3#' => [
     'cmd' => 'GMT',
     'nome' => 'Fuso horário do equipamento',
     'desc' => '⚠️ O sistema grava tudo em UTC e converte na exibição (CLAUDE.md). Mexer no fuso do equipamento muda o carimbo que ele usa para NOMEAR arquivo e para os relógios locais — não muda a hora do webhook.',
     'categoria' => 'manutencao',
-    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'modelos' => ['JM-VL01', 'JM-VL02', 'JC181'],
     'universal' => false,
     'template' => true,
     'consulta' => 'GMT#',
@@ -6913,12 +6973,15 @@ return [
       ['cmd' => 'GMT,W,3,0#', 'desc' => 'exemplo literal da wiki — é o fuso de Brasília (UTC−3)'],
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A012: `ASETGMT,<A>` — ON/OFF, calibração automática de fuso por
+  // MCC/MNC, mesma semântica já catalogada para a linha VL.
   'ASETGMT,P1#' => [
     'cmd' => 'ASETGMT',
     'nome' => 'Fuso horário automático',
     'desc' => 'Deixa o equipamento resolver o fuso pela rede, em vez do valor fixo do GMT.',
     'categoria' => 'manutencao',
-    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'modelos' => ['JM-VL01', 'JM-VL02', 'JC181'],
     'universal' => false,
     'template' => true,
     'consulta' => 'ASETGMT#',
@@ -7509,12 +7572,15 @@ return [
       ['cmd' => 'SOS,D,011956661773#', 'desc' => 'exemplo literal da wiki — apaga'],
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx,
+  // linha A028: `CENTER,<A>,<B>` — A=A/D (add/delete), B=número, mesma
+  // semântica já catalogada para a linha VL.
   'CENTER,P1,P2#' => [
     'cmd' => 'CENTER',
     'nome' => 'Central de alarmes (número, adicionar/apagar)',
     'desc' => '⚠️ É o número da central que recebe os alarmes por SMS — e a wiki avisa que, para BLOQUEAR por SMS (RELAY), o telefone precisa estar cadastrado aqui.',
     'categoria' => 'alarme',
-    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'modelos' => ['JM-VL01', 'JM-VL02', 'JC181'],
     'universal' => false,
     'template' => true,
     'consulta' => 'CENTER#',

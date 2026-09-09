@@ -1,6 +1,6 @@
-# STATUS.md — Jimi Webhook System v4.18.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.18.1 (YUV Parity)
 
-> ### 📍 v4.17.28–v4.18.0 — `/comandos` sem trava de modelo, painel sem "35 parados" fantasma, fila offline confirmada no hub
+> ### 📍 v4.17.28–v4.18.1 — `/comandos` sem trava de modelo, painel sem "35 parados" fantasma, fila offline confirmada no hub
 >
 > Sessão única cobrindo 5 pedidos do dono do produto sobre `/comandos` e o painel.
 >
@@ -43,6 +43,23 @@
 > `?? 1` em `handlers/resumo.php` (mesma classe do bug histórico do
 > `/equipamentos` v4.9.26) — sessão sem `customer_id` resolvido via dados do
 > cliente de id 1 em vez de tela vazia.
+>
+> **6. Retorno do dono do produto (09/09/2026) — três correções na mesma sessão:**
+> a máscara do campo de parâmetros mostrava o mesmo texto genérico para
+> qualquer comando (`atualizarMascaraParams()` corrigiu, tirando a máscara do
+> exemplo catalogado do comando escolhido); auditoria de compatibilidade de
+> modelo contra as 4 planilhas oficiais achou 9 comandos com JC181/JC450
+> faltando no `modelos` (`BCD`, `CAMERA`, `MILE`, `GMT`, `ASETGMT`, `CENTER`,
+> `MILEAGE`, `WIFIAP`, `CAR`) — o caso citado como exemplo (`FENCE` só
+> VL01/VL02) já estava certo, o JC181 tem cerca sob outro nome (`GFENCE`) já
+> cadastrado; e ~85 descrições em inglês no catálogo (bloco JC400/JC261)
+> traduzidas para PT-BR, incluindo `RAPIDDEC`/`RAPIDTURN,A#` citados como
+> exemplo (tinham a frase de ACELERAÇÃO copiada por engano — eles são
+> frenagem/curva). **Pendente, registrado e não implementado**: JC181 tem
+> `FATIGUE`/`POWERALM`/`SENALM`/`SOSALM`/`EXBATALM`/`SERVER` com aridade
+> própria (exige cadastro novo, não só ajuste de `modelos`), e o reboot usa
+> token diferente por modelo (`REBOOT`/`RESET`/`RESTART`) — não unificado por
+> ser comando destrutivo.
 
 > ### 📍 v4.17.24 — resposta do equipamento por SMS: o webhook nunca entregou, a busca periódica sim
 >

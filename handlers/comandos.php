@@ -589,8 +589,14 @@ include __DIR__ . '/../web/layout_base.php';
                compartilhavam o NOME do comando com aridade diferente. */ ?>
       <div id="p-params-wrap" style="display:none;margin-bottom:12px">
         <label for="p-params-livre">Parâmetros <span style="font-weight:400;color:var(--muted);font-size:11px">(à sua escolha)</span></label>
+        <?php /* O `placeholder` fixo abaixo é só o estado ANTES de escolher um
+                 comando (nenhuma máscara faz sentido sem saber qual é o
+                 comando). Depois de escolhido, `aoEscolherComando()` troca o
+                 texto pela máscara DESTE comando específico, tirada do
+                 exemplo (`cmdAtual.e`) — nunca um texto genérico igual para
+                 todos, que é o defeito que existia até a v4.17.29. */ ?>
         <input type="text" id="p-params-livre" style="font-family:'JetBrains Mono',monospace"
-               oninput="atualizarPreview()" placeholder="ex.: 1,30 — deixe em branco para consultar, quando disponível">
+               oninput="atualizarPreview()" placeholder="Escolha um comando para ver a máscara de parâmetros">
       </div>
 
       <!-- Comando estruturado JT/T (JSON) — não tem forma livre por posição,
@@ -614,7 +620,7 @@ include __DIR__ . '/../web/layout_base.php';
            Fica ANTES dos exemplos de propósito — perguntar é o passo natural
            antes de mudar, e até a v4.9.24 a tela não sabia fazê-lo. -->
       <div id="p-cons-wrap" style="display:none;margin-bottom:12px">
-        <label style="display:block;margin-bottom:4px">Ler o valor atual <span style="font-weight:400;color:var(--muted);font-size:11px">(não altera nada no equipamento)</span></label>
+        <label style="display:block;margin-bottom:4px">Ler o valor atual</label>
         <div>
           <span class="ex-chip" id="p-cons-chip" style="border-color:var(--brand);color:var(--brand)"></span>
           <span id="p-cons-ref" style="font-size:11px;color:var(--muted);margin-left:6px"></span>
@@ -622,7 +628,7 @@ include __DIR__ . '/../web/layout_base.php';
       </div>
 
       <div id="p-ex-wrap" style="display:none;margin-bottom:12px">
-        <label style="display:block;margin-bottom:4px">Exemplos da documentação <span style="font-weight:400;color:var(--muted);font-size:11px">(clique para preencher)</span></label>
+        <label style="display:block;margin-bottom:4px">Exemplo</label>
         <div id="p-ex"></div>
       </div>
 
@@ -1149,6 +1155,7 @@ function aoEscolherComando() {
     document.getElementById('p-params-wrap').style.display = 'block';
 
     montarPacotesFirmware();
+    atualizarMascaraParams();
 
     // Consulta: a forma nua do comando, que LÊ em vez de escrever. Deixar o
     // campo de parâmetros em branco já envia a consulta (ver montarComandoTexto);
@@ -1188,13 +1195,47 @@ function aoEscolherComando() {
 }
 
 /** Preenche o campo de parâmetros a partir de um exemplo (sem o nome do comando nem o `#`). */
-function usarExemplo(exemplo) {
+/** Tira o nome do comando (e o `#` final) de um exemplo, sobrando só os parâmetros. */
+function paramsDoExemplo(exemplo, nomeCmd) {
     var corpo = exemplo.replace(/#$/, '');
-    var cUp = cmdAtual.c.toUpperCase();
-    if (corpo.toUpperCase().indexOf(cUp + ',') === 0) corpo = corpo.slice(cmdAtual.c.length + 1);
-    else if (corpo.toUpperCase() === cUp) corpo = '';
-    document.getElementById('p-params-livre').value = corpo;
+    var cUp = nomeCmd.toUpperCase();
+    if (corpo.toUpperCase().indexOf(cUp + ',') === 0) return corpo.slice(nomeCmd.length + 1);
+    if (corpo.toUpperCase() === cUp) return '';
+    return corpo;
+}
+
+function usarExemplo(exemplo) {
+    document.getElementById('p-params-livre').value = paramsDoExemplo(exemplo, cmdAtual.c);
     atualizarPreview();
+}
+
+/**
+ * Máscara de parâmetros SENSÍVEL AO COMANDO escolhido (v4.17.29).
+ *
+ * 🔴 Até aqui o campo tinha um `placeholder` FIXO no HTML — o mesmo texto
+ * ("ex.: 1,30 — deixe em branco…") para qualquer comando, o oposto do que
+ * "mascara de auxílio" deveria significar. A máscara real vem do(s) exemplo(s)
+ * já calculados no PHP (`command_catalog_examples_by_family()`, no máximo 1
+ * por família) — aqui só se tira o nome do comando de cada um, sobrando os
+ * parâmetros de verdade daquele comando específico.
+ */
+function atualizarMascaraParams() {
+    var el = document.getElementById('p-params-livre');
+    if (!cmdAtual) { el.placeholder = 'Escolha um comando para ver a máscara de parâmetros'; return; }
+
+    var exemplos = cmdAtual.e || [];
+    if (!exemplos.length) {
+        el.placeholder = cmdAtual.q
+            ? 'Deixe em branco para consultar (' + cmdAtual.q + ')'
+            : 'Sem exemplo catalogado — confira a sintaxe na wiki do modelo';
+        return;
+    }
+
+    var partes = exemplos.map(function (e) {
+        var p = paramsDoExemplo(e.c, cmdAtual.c);
+        return (p === '' ? 'sem parâmetros' : p) + (e.l ? ' (' + e.l + ')' : '');
+    });
+    el.placeholder = 'Ex.: ' + partes.join('  ·  ');
 }
 
 /**

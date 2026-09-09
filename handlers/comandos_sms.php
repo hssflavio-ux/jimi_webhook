@@ -547,7 +547,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div class="form-group">
         <label>Parâmetros (à sua escolha)</label>
         <input type="text" id="f-params-livre" class="text-mono"
-               placeholder="ex.: 1,30 — deixe em branco para consultar, quando disponível">
+               placeholder="Escolha um comando para ver a máscara de parâmetros">
     </div>
     <div id="cmd-exemplos" class="mb-16"></div>
 
@@ -722,6 +722,7 @@ function popularComandos() {
        elCmd.appendChild(o);
      });
   atual = null; elDesc.textContent=''; elExemplos.innerHTML=''; elParamsLivre.value='';
+  atualizarMascaraParams();
   montar();
 }
 
@@ -754,8 +755,39 @@ function escolher() {
     elExemplos.appendChild(nota);
   }
 
+  atualizarMascaraParams();
   aplicarTravaModelo();
   montar();
+}
+
+/** Tira o nome do comando (e o `#` final) de um exemplo, sobrando só os parâmetros. */
+function paramsDoExemplo(exemplo, nomeCmd) {
+  let corpo = exemplo.replace(/#$/, '');
+  const cUp = nomeCmd.toUpperCase();
+  if (corpo.toUpperCase().indexOf(cUp + ',') === 0) return corpo.slice(nomeCmd.length + 1);
+  if (corpo.toUpperCase() === cUp) return '';
+  return corpo;
+}
+
+/**
+ * Máscara de parâmetros SENSÍVEL AO COMANDO (v4.17.29) — o `placeholder` do
+ * campo era FIXO ("ex.: 1,30…") para qualquer comando; agora vem do(s)
+ * exemplo(s) catalogados daquele nome específico.
+ */
+function atualizarMascaraParams() {
+  if (!atual) { elParamsLivre.placeholder = 'Escolha um comando para ver a máscara de parâmetros'; return; }
+  const exemplos = atual.e || [];
+  if (!exemplos.length) {
+    elParamsLivre.placeholder = atual.q
+      ? 'Deixe em branco para consultar (' + atual.q + ')'
+      : 'Sem exemplo catalogado — confira a sintaxe na wiki do modelo';
+    return;
+  }
+  // Comandos unificados por nome podem reunir variantes com sintaxe
+  // diferente (ver comentário no topo do arquivo) — dedupe e mostra até 2.
+  const unicos = [...new Set(exemplos.map((e) => paramsDoExemplo(e.c, atual.c)))];
+  const partes = unicos.slice(0, 2).map((p) => (p === '' ? 'sem parâmetros' : p));
+  elParamsLivre.placeholder = 'Ex.: ' + partes.join('  ·  ') + (unicos.length > 2 ? ' (+' + (unicos.length - 2) + ')' : '');
 }
 
 /**
