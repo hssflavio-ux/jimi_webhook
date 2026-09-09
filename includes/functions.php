@@ -1560,6 +1560,109 @@ function command_families(array $modelos, array $familias): array
     return array_keys($f);
 }
 
+/**
+ * Mescla o catálogo (`includes/command_catalog.php`) por NOME de comando.
+ *
+ * 🔴 Ponto único, extraído de `handlers/comandos_sms.php` (v4.17.25) quando
+ * `/comandos` passou a usar a mesma unificação — decisão do dono do produto: o
+ * catálogo tem o MESMO nome em entradas de ARIDADE/MODELO diferentes (ex.:
+ * `ANGLEREP,A,B#` universal de 2 campos, `ANGLEREP,A#` só do JC371 com 1,
+ * `ANGLEREP,P1,P2,P3#` só da JM-VL01 com 3). Antes de existir esta função, as
+ * duas telas duplicavam o mesmo laço — e duas cópias do mesmo merge são
+ * exatamente o padrão que já causou defeito noutros pontos deste projeto
+ * (`alarm_label_sql()`, ver comentário em `includes/iothub_command.php`).
+ *
+ * Cada nome vira UMA entrada, com `modelos` = união de todas as variantes —
+ * a trava de MODELO (não a de aridade) continua correta com o resultado desta
+ * função. `params` das variantes NÃO é mesclado: aridades diferentes por
+ * modelo tornariam uma lista de campos estruturados enganosa, e é por isso que
+ * as telas que consomem este resultado usam parametrização livre (1 campo de
+ * texto), não campos por posição.
+ *
+ * @param array<string,array> $catalogo Como `require command_catalog.php` devolve
+ * @returns array<string,array> Indexado por nome do comando (`cmd`), ordenado
+ */
+function command_catalog_merge_by_name(array $catalogo): array
+{
+    $porNome = [];
+    foreach ($catalogo as $dd) {
+        $nome = $dd['cmd'];
+        if (!isset($porNome[$nome])) {
+            $porNome[$nome] = [
+                'cmd' => $nome, 'nome' => $dd['nome'], 'desc' => $dd['desc'],
+                'categoria' => $dd['categoria'], 'modelos' => [], 'universal' => false,
+                'consulta' => null, 'consulta_modelos' => [], 'exemplos' => [],
+            ];
+        }
+        $ref = &$porNome[$nome];
+        $ref['modelos']   = array_values(array_unique(array_merge($ref['modelos'], $dd['modelos'])));
+        $ref['universal'] = $ref['universal'] || (bool)$dd['universal'];
+        // Descrição mais longa entre as variantes tende a ser a mais completa.
+        if (mb_strlen((string)$dd['desc']) > mb_strlen((string)$ref['desc'])) {
+            $ref['desc'] = $dd['desc'];
+        }
+        if (!$ref['consulta'] && !empty($dd['consulta'])) {
+            $ref['consulta']         = $dd['consulta'];
+            $ref['consulta_modelos'] = $dd['consulta_modelos'] ?? [];
+        }
+        foreach (($dd['exemplos'] ?? []) as $ex) { $ref['exemplos'][] = $ex; }
+        unset($ref);
+    }
+    ksort($porNome);
+    return $porNome;
+}
+
+/**
+ * Um exemplo de sintaxe por família de equipamento, para cada NOME de comando.
+ *
+ * `/comandos` (v4.17.28) parou de listar os exemplos de TODAS as variantes
+ * mescladas por `command_catalog_merge_by_name()` — um comando com entradas
+ * para câmera E rastreador podia acumular meia dúzia de exemplos repetidos, e
+ * era exatamente a poluição que o pedido de redesenho queria tirar da tela.
+ * Aqui: no máximo 1 exemplo por família (`camera`/`tracker`), tirado da
+ * PRIMEIRA variante de cada família encontrada no catálogo; famílias cujo
+ * exemplo é IDÊNTICO colapsam numa linha só, sem rótulo — o rótulo de família
+ * (`l`) só aparece quando sobra mais de um exemplo distinto para o mesmo nome,
+ * porque aí a diferença importa para quem vai escolher.
+ *
+ * @param array<string,array> $catalogo
+ * @param array<string,string> $familiaPorModelo
+ * @returns array<string,array> Indexado por nome do comando; cada item é
+ *          `{c: sintaxe do exemplo, d: descrição, l: rótulo de família ou null}`
+ */
+function command_catalog_examples_by_family(array $catalogo, array $familiaPorModelo): array
+{
+    $porNomeFam = [];
+    foreach ($catalogo as $dd) {
+        if (empty($dd['exemplos'])) continue;
+        $nome     = $dd['cmd'];
+        $primeiro = $dd['exemplos'][0];
+        foreach (command_families($dd['modelos'], $familiaPorModelo) as $fam) {
+            if (!isset($porNomeFam[$nome][$fam])) {
+                $porNomeFam[$nome][$fam] = $primeiro;
+            }
+        }
+    }
+
+    $rotFam = ['camera' => 'câmera', 'tracker' => 'rastreador'];
+    $out = [];
+    foreach ($porNomeFam as $nome => $porFam) {
+        $porTexto = [];
+        foreach ($porFam as $fam => $ex) {
+            $porTexto[$ex['cmd']]['d']        = $ex['desc'];
+            $porTexto[$ex['cmd']]['fams'][]   = $fam;
+        }
+        $multiplos = count($porTexto) > 1;
+        foreach ($porTexto as $cmd => $u) {
+            $out[$nome][] = [
+                'c' => $cmd, 'd' => $u['d'],
+                'l' => ($multiplos && count($u['fams']) === 1) ? ($rotFam[$u['fams'][0]] ?? null) : null,
+            ];
+        }
+    }
+    return $out;
+}
+
 function video_stream_config() {
     $flvBase = rtrim(getenv('STREAM_URL') ?: 'http://localhost:8881', '/');
     $host = parse_url($flvBase, PHP_URL_HOST) ?: 'localhost';

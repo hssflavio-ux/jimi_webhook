@@ -2,6 +2,61 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 v4.17.22 — duas migrações fora da lista do deploy
+>
+> Achado ao responder a uma pergunta sobre o log do webhook de SMS.
+>
+> **🔴 `migration_v4.17.12.sql` e `v4.17.13.sql` não estavam na lista de
+> `run_migration` do `deploy.sh`.** O script chama as migrações uma a uma,
+> explicitamente; o que não está na lista não roda. É a armadilha que o
+> `CLAUDE.md` já documentava — **deploy verde, coluna inexistente**.
+>
+> A prova estava no log, e só apareceu porque alguém foi olhar:
+> `[WARNING] SMS: evento cru não gravado {erro: Unknown column 'eventos_raw'}`.
+> O `try/catch` engolia o erro e o webhook respondia 200 — o recurso da
+> v4.17.13 estava **morto desde que subiu**. `system_info.version` marcava
+> **4.17.12** enquanto o `/ping` anunciava 4.17.18: a 4.17.12 fora aplicada à
+> mão, a 4.17.13 não.
+>
+> Migração aplicada pelo mesmo caminho do `run_migration`. O conserto de fuso
+> dela corrigiu 1 linha: o comando #13 tinha `entregue_em` **3 h antes** do
+> próprio envio.
+>
+> **Guarda:** `tests/helpers/migracoes_no_deploy.test.php`, nos DOIS sentidos —
+> arquivo fora da lista (nunca roda) e entrada sem arquivo (deploy aborta em
+> produção, depois do `git pull`). Provado contra o defeito real.
+>
+> **Verificado com 1 SMS real ao E2E** (`STATUS#`, 1 crédito): `eventos_raw`
+> gravou 2 eventos / 578 bytes, os 2 corpos crus entraram em
+> `webhook_payloads`, e o WARNING sumiu do log. O fuso ficou provado no dado
+> novo: provedor mandou `20:26:03` (BRT), gravamos `23:26:03` (UTC), entrega
+> 9 s depois do envio.
+>
+> ⚠️ `resposta_texto` continua NULL — a Allcance segue sem mandar o evento de
+> resposta. Pendência com o provedor, não defeito nosso.
+
+> ### 📍 v4.17.21 — o filtro de Filial sai junto
+>
+> Continuação do pedido da v4.17.20: *"remova dos filtros também"*. Saiu o
+> `<select>`, a variável, a cláusula `WHERE` e a consulta da lista, em
+> `/relatorios/ocorrencias` e `/relatorios/alarmes` — mais o texto da wiki que
+> anunciava o filtro.
+>
+> ⚠️ **Isso não tirou nada da vista de ninguém.** Os dois `<select>` já viviam
+> dentro de um `<?php if ($branchList): ?>` e, com zero filiais, **não eram
+> desenhados**. O que saiu foi código morto — que voltaria a aparecer no dia
+> em que alguém cadastrasse uma filial "só para testar". Por isso o spec
+> verifica o NOME do campo, não a aparência: o defeito estava latente.
+>
+> **O que fica:** o campo "Filial" do cadastro de `/equipamentos` (é entrada de
+> dados, não filtro — removê-lo impede preencher `devices.branch_id` algum
+> dia); o `occurrence_engine.php`, que continua copiando `branch_id` para a
+> ocorrência (sem custo, e é o que permite religar sem migração); e a coluna
+> `branch_id` nas tabelas. **Nada foi apagado do banco.**
+>
+> ⚠️ O spec cobre o parâmetro ÓRFÃO: `?branch_id=42` na URL — link antigo,
+> favorito ou modelo de relatório salvo — tem de ser ignorado, nunca virar erro.
+
 ---
 
 > ### 📍 v4.17.20 — "Filial" sai do Relatório de Ocorrências

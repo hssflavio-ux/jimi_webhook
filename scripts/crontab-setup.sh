@@ -45,6 +45,11 @@ WORKER_ENTRIES=(
     # sequer nesta conta (0 de 29 comandos medidos). No-op quando
     # sms_settings.respostas_metodo != 'pull' (config em /config-sms).
     "scripts/sms_respostas_pull.php:sms_pull.log:2 min:*/2 * * * *"
+    # v4.18.0 — confirma no hub (§2.21 queryOfflineInstruct) se um comando que
+    # virou commands.status='sent' ainda está na fila offline dele. Fecha a
+    # lacuna do docs/FILA_OFFLINE_COMANDOS.md: até aqui a tela só SUPUNHA que o
+    # comando seria entregue na reconexão, sem nenhuma confirmação do hub.
+    "scripts/offline_instruct_poll.php:offline_instruct_poll.log:10 min:*/10 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

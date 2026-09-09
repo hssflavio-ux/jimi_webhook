@@ -16,10 +16,15 @@
  *      que ele não entende é `WIFIAP`/`SSID`: a forma dele é `HOTSPOT`.
  *   2. O cadastro aceita `0` canais. O campo tinha `min="1"`, e o navegador
  *      recusava o formulário do único valor certo para um rastreador.
- *   3. As variantes de aridade da linha VL existem e ficam presas aos modelos
- *      dela — mandar o `SPEED` de quatro campos da JC para um VL01 (onde o 2º
- *      campo é o TEMPO, não a forma de aviso) é aceito e mal interpretado, sem
- *      erro nenhum.
+ *   3. 🔴 Desde a v4.17.28 a tela une as variantes de aridade por NOME de
+ *      comando (`command_catalog_merge_by_name()`) e não trava mais a
+ *      seleção por modelo — decisão do dono do produto, igual ao
+ *      `/comandos-sms`. Mandar o `SPEED` de quatro campos da JC para um VL01
+ *      (onde o 2º campo é o TEMPO, não a forma de aviso) continua aceito e
+ *      mal interpretado, sem erro nenhum: a proteção que existia deixou de
+ *      ser da UI e passou a ser o exemplo por família mostrado na tela
+ *      (`command_catalog_examples_by_family()`) — o que este spec passa a
+ *      proteger é a UNIÃO de modelos/famílias, não mais a aridade exposta ao JS.
  *
  * ⚠️ Estes testes NÃO precisam de um equipamento JM-VL cadastrado — de
  * propósito. Spec que depende de fixture opcional vira spec que PULA, e spec
@@ -94,7 +99,7 @@ test.describe('Rastreadores JM-VL — cadastro e trava por família', () => {
                 total: cat.length,
                 vazam: cat
                     .filter((c) => soCamera.includes(c.c) && (c.f || []).includes('tracker'))
-                    .map((c) => c.s),
+                    .map((c) => c.c),
             };
         }, SO_CAMERA);
 
@@ -119,46 +124,49 @@ test.describe('Rastreadores JM-VL — cadastro e trava por família', () => {
         expect(soCamera, 'nenhum comando ficou exclusivo de câmera').toBeGreaterThan(0);
     });
 
-    test('as variantes de aridade da VL existem e ficam presas aos modelos dela', async ({ authedPage }) => {
+    // 🔴 v4.17.28 — a tela deixou de mostrar uma linha por VARIANTE de aridade
+    // (`command_catalog_merge_by_name()`, decisão do dono do produto): SPEED
+    // (4 campos na JC, 4 na VL01 em ORDEM diferente, 5 na VL02) vira UMA linha,
+    // com `modelos` = união das três e parametrização livre. A distinção fina
+    // por aridade continua existindo só no catálogo PHP (`includes/command_catalog.php`)
+    // e na consulta que monta a lista de EXEMPLOS por família — não mais como
+    // campo estruturado nem como trava. Este teste passou a proteger a UNIÃO
+    // de modelos/famílias, não mais a aridade exata exposta ao JS.
+    test('SPEED, DEFENSE, HOTSPOT e STATUS ficam unidos por nome, com a família certa', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
 
         const info = await authedPage.evaluate(() => {
             const cat = window.CATALOGO || [];
-            const acha = (s) => cat.find((c) => c.s === s) || null;
+            const acha = (c) => cat.find((x) => x.c === c) || null;
             return {
-                // SPEED tem TRÊS formatos reais: 4 campos na JC, 4 na VL01 (com
-                // a ordem trocada) e 5 na VL02 (buzzer).
-                speedVl01: acha('SPEED,P1,P2,P3,P4#'),
-                speedVl02: acha('SPEED,P1,P2,P3,P4,P5#'),
-                // DEFENSE divide nome E aridade com a JC significando outra coisa.
-                defenseVl: acha('DEFENSE,P1#'),
-                // Comando que só a linha VL tem.
-                hotspot: acha('HOTSPOT,P1,P2,P3#'),
-                // Universal que a VL documenta: precisa listar os dois modelos.
-                status: cat.find((c) => c.s === 'STATUS#'),
+                speed: acha('SPEED'),
+                defense: acha('DEFENSE'),
+                hotspot: acha('HOTSPOT'),
+                status: acha('STATUS'),
             };
         });
 
-        expect(info.speedVl01, 'SPEED de 4 campos da VL01').toBeTruthy();
-        expect(info.speedVl01.m).toEqual(['JM-VL01']);
-        expect(info.speedVl01.u, 'variante de aridade nunca é universal').toBe(false);
-        expect(info.speedVl01.p).toHaveLength(4);
-        // O 2º campo da VL01 é o TEMPO — na linha JC é a forma de aviso.
-        expect(info.speedVl01.p[1].d).toMatch(/tempo/i);
-
-        expect(info.speedVl02, 'SPEED de 5 campos da VL02').toBeTruthy();
-        expect(info.speedVl02.m).toEqual(['JM-VL02']);
-        expect(info.speedVl02.p).toHaveLength(5);
-
-        expect(info.defenseVl, 'DEFENSE da VL (atraso em minutos)').toBeTruthy();
-        expect(info.defenseVl.p[0].f).toMatch(/minuto/i);
-
-        expect(info.hotspot, 'HOTSPOT só existe na VL01').toBeTruthy();
-        expect(info.hotspot.m).toEqual(['JM-VL01']);
-
-        expect(info.status.m, 'STATUS# precisa alcançar os dois rastreadores')
+        expect(info.speed, 'SPEED precisa existir na lista unificada').toBeTruthy();
+        expect(info.speed.m, 'SPEED precisa unir os modelos JC com as duas VL')
             .toEqual(expect.arrayContaining(['JM-VL01', 'JM-VL02']));
-        expect(info.status.f, 'STATUS# vale para as duas famílias')
+        expect(info.speed.f, 'SPEED vale para as duas famílias').toEqual(expect.arrayContaining(['camera', 'tracker']));
+        // Com mais de 1 família, o exemplo mostrado não pode ficar mudo sobre
+        // qual é qual — ver command_catalog_examples_by_family().
+        if (info.speed.e.length > 1) {
+            expect(info.speed.e.every((e) => e.l), 'exemplo sem rótulo de família com mais de um exemplo').toBe(true);
+        }
+
+        expect(info.defense, 'DEFENSE precisa existir').toBeTruthy();
+        expect(info.defense.f, 'DEFENSE vale para as duas famílias, com significado diferente em cada uma')
+            .toEqual(expect.arrayContaining(['camera', 'tracker']));
+
+        expect(info.hotspot, 'HOTSPOT só existe na linha VL01').toBeTruthy();
+        expect(info.hotspot.m).toEqual(['JM-VL01']);
+        expect(info.hotspot.f).toEqual(['tracker']);
+
+        expect(info.status.m, 'STATUS precisa alcançar os dois rastreadores')
+            .toEqual(expect.arrayContaining(['JM-VL01', 'JM-VL02']));
+        expect(info.status.f, 'STATUS vale para as duas famílias')
             .toEqual(expect.arrayContaining(['camera', 'tracker']));
     });
 
@@ -168,7 +176,7 @@ test.describe('Rastreadores JM-VL — cadastro e trava por família', () => {
         const comConsulta = await authedPage.evaluate(() =>
             (window.CATALOGO || [])
                 .filter((c) => ['OUT2', 'FACTORY', 'RELAY', 'RESET'].includes(c.c) && c.q)
-                .map((c) => c.s));
+                .map((c) => c.c));
 
         // A wiki da Jimi documenta `OUT2#`, `RELAY#` e `FACTORY` como consulta.
         // Aqui vale a régua do repo: acionar saída no veículo e apagar a

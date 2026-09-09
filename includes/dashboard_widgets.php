@@ -236,12 +236,19 @@ function dashboard_speed_dist(PDO $db, int $cid): array
     }
     if (array_sum($keys) === 0) {
         try {
+            // 🔴 Corrigido (v4.17.28) — mesmo bug e mesma correção da consulta
+            // equivalente em scripts/metrics_rollup.php: `COUNT(DISTINCT g.imei)`
+            // no lugar de contar linhas de `gps_data`, e `JOIN devices` para
+            // excluir equipamento desativado. Ver o comentário lá para o
+            // raciocínio completo (é o que fazia "35 parados" aparecer com uma
+            // frota muito menor — a query contava PONTOS de GPS, não veículos).
             $stmt = $db->prepare("
-                SELECT SUM(CASE WHEN speed=0 THEN 1 ELSE 0 END) parados,
-                       SUM(CASE WHEN speed>0 AND speed<=20 THEN 1 ELSE 0 END) ate20,
-                       SUM(CASE WHEN speed>20 AND speed<=60 THEN 1 ELSE 0 END) ate60,
-                       SUM(CASE WHEN speed>60 THEN 1 ELSE 0 END) acima60
+                SELECT COUNT(DISTINCT CASE WHEN speed=0 THEN g.imei END) parados,
+                       COUNT(DISTINCT CASE WHEN speed>0 AND speed<=20 THEN g.imei END) ate20,
+                       COUNT(DISTINCT CASE WHEN speed>20 AND speed<=60 THEN g.imei END) ate60,
+                       COUNT(DISTINCT CASE WHEN speed>60 THEN g.imei END) acima60
                 FROM gps_data g
+                JOIN devices d ON d.imei = g.imei AND d.is_active = 1
                 WHERE g.customer_id=:cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
             ");
             $stmt->execute([':cid' => $cid]);
@@ -286,7 +293,11 @@ function dashboard_render_idle(PDO $db, int $cid, bool $isReseller, string $peri
 {
     $idle = 0;
     try {
+        // `JOIN devices ... is_active` (v4.17.28): mesma lacuna do `speed_dist`
+        // ao lado — sem ela, um equipamento desativado que transmitiu dentro
+        // dos 30 min ainda contava como veículo ocioso.
         $stmt = $db->prepare("SELECT COUNT(DISTINCT g.imei) FROM gps_data g
+                               JOIN devices d ON d.imei = g.imei AND d.is_active = 1
                                WHERE g.customer_id=:cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc=1 AND g.speed=0");
         $stmt->execute([':cid' => $cid]);
         $idle = (int)$stmt->fetchColumn();

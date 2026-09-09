@@ -337,38 +337,15 @@ $rotuloCat = [
 // risco registrado: o catálogo tem o MESMO nome de comando em entradas de
 // ARIDADE e MODELO diferentes (ex.: `ANGLEREP,A,B#` universal de 2 campos,
 // `ANGLEREP,A#` só do JC371 com 1 campo, `ANGLEREP,P1,P2,P3#` só da JM-VL01
-// com 3). Isto AQUI é o ponto que apaga essa distinção: cada nome vira UMA
-// linha na tela, com 1 campo de texto livre para os parâmetros — o operador
-// passa a ser responsável por saber a aridade certa para o modelo escolhido
-// (os exemplos de cada variante, concatenados abaixo, são a única ajuda que
-// sobra). Modelos = UNIÃO de todas as variantes do nome, então a trava
-// básica (recusar modelo que NENHUMA variante documenta) continua de pé —
-// só a distinção FINA entre variantes do mesmo modelo é que se perde.
-$porNome = [];
-foreach ($catalogo as $dd) {
-    $nome = $dd['cmd'];
-    if (!isset($porNome[$nome])) {
-        $porNome[$nome] = [
-            'cmd' => $nome, 'nome' => $dd['nome'], 'desc' => $dd['desc'],
-            'categoria' => $dd['categoria'], 'modelos' => [], 'universal' => false,
-            'consulta' => null, 'consulta_modelos' => [], 'exemplos' => [],
-        ];
-    }
-    $ref = &$porNome[$nome];
-    $ref['modelos']   = array_values(array_unique(array_merge($ref['modelos'], $dd['modelos'])));
-    $ref['universal'] = $ref['universal'] || (bool)$dd['universal'];
-    // Descrição mais longa entre as variantes tende a ser a mais completa.
-    if (mb_strlen((string)$dd['desc']) > mb_strlen((string)$ref['desc'])) {
-        $ref['desc'] = $dd['desc'];
-    }
-    if (!$ref['consulta'] && !empty($dd['consulta'])) {
-        $ref['consulta']          = $dd['consulta'];
-        $ref['consulta_modelos']  = $dd['consulta_modelos'] ?? [];
-    }
-    foreach (($dd['exemplos'] ?? []) as $ex) { $ref['exemplos'][] = $ex; }
-    unset($ref);
-}
-ksort($porNome);
+// com 3). Cada nome vira UMA linha na tela, com 1 campo de texto livre para
+// os parâmetros — o operador passa a ser responsável por saber a aridade
+// certa para o modelo escolhido (os exemplos de cada variante, concatenados
+// abaixo, são a única ajuda que sobra). Modelos = UNIÃO de todas as variantes
+// do nome, então a trava básica (recusar modelo que NENHUMA variante
+// documenta) continua de pé — só a distinção FINA entre variantes do mesmo
+// modelo é que se perde. `/comandos` (v4.17.28) passou a usar o MESMO merge
+// — ponto único em `command_catalog_merge_by_name()` (includes/functions.php).
+$porNome = command_catalog_merge_by_name($catalogo);
 
 $catJs = [];
 foreach ($porNome as $dd) {

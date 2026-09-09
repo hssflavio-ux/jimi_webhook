@@ -1,15 +1,18 @@
 // @ts-check
 /**
- * Spec da tela de Comandos (v4.9.7).
+ * Spec da tela de Comandos (v4.17.28 — lista única por nome, parametrização livre).
  *
- * Cobre as duas regras que definem a tela: a lista de comandos é sensível ao
- * MODELO do equipamento, e o núcleo universal do proNo 128 é a exceção que
- * solta a trava.
+ * 🔴 A tela deixou de travar por MODELO (decisão do dono do produto, mesma
+ * linha do `/comandos-sms` v4.17.25): uma linha por NOME de comando
+ * (`command_catalog_merge_by_name()`), 1 campo de texto livre para os
+ * parâmetros, e nenhum equipamento fica desabilitado — quem opera esta tela
+ * conhece a sintaxe de cada modelo. `window.CATALOGO` deixou de ter `.s`
+ * (sintaxe exata) / `.p` (campos estruturados) / `.t` (template) por entrada
+ * — o que sobrou é `.c` (nome, único), `.m` (união de modelos), `.f`
+ * (famílias), `.e` (no máximo 1 exemplo por família) e `.q`/`.qm` (consulta).
  *
- * As asserções são feitas sobre o estado REAL dos checkboxes depois de o JS
- * rodar, não sobre a presença de texto: "o aviso de trava apareceu" passaria
- * mesmo se os equipamentos continuassem clicáveis — e é justamente o clique
- * indevido que esta tela existe para impedir.
+ * As asserções cobrem o oposto do que a versão anterior testava: nenhum
+ * checkbox fica desabilitado, e o aviso de compatibilidade é só informativo.
  */
 const { test, expect, hasCreds } = require('./fixtures/auth');
 
@@ -20,129 +23,100 @@ async function catalogo(page) {
     return await page.evaluate(() => window.CATALOGO || []);
 }
 
-test.describe('Comandos — lista sensível ao modelo', () => {
+test.describe('Comandos — lista única, sem trava de modelo', () => {
 
-    test('a página carrega o catálogo e a lista de equipamentos', async ({ authedPage }) => {
+    test('a página carrega o catálogo unificado e a lista de equipamentos', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
-        expect(cat.length).toBeGreaterThan(50);          // catálogo da wiki, não um punhado curado
+        expect(cat.length).toBeGreaterThan(50);          // catálogo inteiro por NOME, não um punhado curado
         expect(await authedPage.locator('.dev-row').count()).toBeGreaterThan(0);
-        // Toda sintaxe é a forma de PLATAFORMA — a de SMS levaria a senha 666666
-        expect(cat.some(c => /666666/.test(c.s))).toBe(false);
+
+        // Nome único por comando — a unificação por nome não pode duplicar linha.
+        const nomes = cat.map((c) => c.c);
+        expect(new Set(nomes).size).toBe(nomes.length);
+
+        // Toda sintaxe é a forma de PLATAFORMA — a de SMS levaria a senha 666666.
+        expect(cat.some((c) => /666666/.test(c.c) || (c.e || []).some((e) => /666666/.test(e.c)))).toBe(false);
     });
 
-    test('comando específico de um modelo desabilita os equipamentos dos outros', async ({ authedPage }) => {
+    test('🔴 nenhum equipamento fica desabilitado ao escolher um comando específico de modelo', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
+        const naoUniversal = cat.find((c) => !c.u && c.m.length);
+        test.skip(!naoUniversal, 'catálogo sem comando não-universal');
 
-        // Modelos presentes na tela deste cliente
-        const modelos = await authedPage.$$eval('.dev-row', rows =>
-            [...new Set(rows.map(r => r.dataset.modelo))]);
-        // Um comando não-universal que cubra ao menos um dos modelos da tela
-        const alvo = cat.find(c => !c.u && c.m.some(m => modelos.includes(m))
-                                 && modelos.some(m => !c.m.includes(m)));
-        test.skip(!alvo, 'este cliente não tem modelos suficientes para exercitar a trava');
+        await authedPage.selectOption('#cmd-sel', 'T:' + naoUniversal.c);
 
-        await authedPage.selectOption('#cmd-sel', 'T:' + alvo.s);
+        const desabilitados = await authedPage.$$eval('.dev-row .dev-chk',
+            (chks) => chks.filter((c) => c.disabled).length);
+        expect(desabilitados, 'a tela não trava mais por modelo (v4.17.28)').toBe(0);
+    });
 
-        const estado = await authedPage.$$eval('.dev-row', rows => rows.map(r => ({
-            modelo: r.dataset.modelo,
-            desabilitado: r.querySelector('.dev-chk').disabled,
-        })));
-        for (const d of estado) {
-            expect(d.desabilitado, `${d.modelo} para ${alvo.c}`).toBe(!alvo.m.includes(d.modelo));
-        }
+    test('equipamento de modelo não documentado gera aviso informativo, não bloqueio', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        const modelos = await authedPage.$$eval('.dev-row', (rows) =>
+            [...new Set(rows.map((r) => r.dataset.modelo))]);
+
+        const alvo = cat.find((c) => !c.u && c.m.length && modelos.some((m) => !c.m.includes(m)));
+        test.skip(!alvo, 'este cliente não tem modelo fora da documentação de nenhum comando');
+
+        await authedPage.selectOption('#cmd-sel', 'T:' + alvo.c);
         await expect(authedPage.locator('#lock-note')).toBeVisible();
+        await expect(authedPage.locator('#lock-note')).toContainText('envio continua liberado');
+
+        const desabilitados = await authedPage.$$eval('.dev-row .dev-chk',
+            (chks) => chks.filter((c) => c.disabled).length);
+        expect(desabilitados).toBe(0);
     });
 
-    // 🔴 v4.16.0 — este teste dizia "libera TODOS os equipamentos", e essa
-    // afirmação morreu com a chegada dos rastreadores da linha JM-VL.
-    //
-    // `universal` foi derivado de "presente em >= 5 das 6 páginas de CÂMERA da
-    // wiki". Enquanto a frota inteira era câmera, "não trava por modelo" e
-    // "vale para todo mundo" eram a mesma frase; com um rastreador na lista,
-    // "libera todos" passaria a significar oferecer `RECORDSW`/`VOLUME`/
-    // `SSID`/`WIFIAP` a um aparelho que não os entende. A regra agora é por
-    // FAMÍLIA — e é isso que o teste passa a exigir.
-    //
-    // ⚠️ Não é "rastreador não tem WiFi": o JM-VL01 tem, e configura pelo
-    // comando `HOTSPOT`. É a FORMA que difere, não o recurso.
-    test('comando universal libera as famílias que ele documenta — e só elas', async ({ authedPage }) => {
+    test('campo de parâmetros em branco monta a consulta exata, quando o catálogo souber uma', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
-        const univ = cat.find(c => c.u);
-        expect(univ, 'catálogo precisa ter ao menos um comando universal').toBeTruthy();
-        expect(univ.f, 'comando universal precisa declarar as famílias').toBeTruthy();
+        const comConsulta = cat.find((c) => c.q);
+        test.skip(!comConsulta, 'catálogo sem comando com consulta catalogada');
 
-        await authedPage.selectOption('#cmd-sel', 'T:' + univ.s);
-
-        const estado = await authedPage.$$eval('.dev-row', rows => rows.map(r => ({
-            modelo: r.dataset.modelo,
-            familia: r.dataset.familia || 'camera',
-            desabilitado: r.querySelector('.dev-chk').disabled,
-        })));
-        expect(estado.length, 'a tela precisa listar algum equipamento').toBeGreaterThan(0);
-
-        for (const d of estado) {
-            const deveriaAceitar = univ.f.includes(d.familia) || univ.m.includes(d.modelo);
-            expect(d.desabilitado, `${d.modelo} (${d.familia}) para ${univ.c}`).toBe(!deveriaAceitar);
-        }
+        await authedPage.selectOption('#cmd-sel', 'T:' + comConsulta.c);
+        const preview = (await authedPage.locator('#p-preview').textContent()).trim();
+        expect(preview).toBe(comConsulta.q);
     });
 
-    // A outra metade da mesma regra, e a que realmente protege o equipamento:
-    // um comando que só as câmeras documentam não pode alcançar um rastreador.
-    // Pula quando o cliente de teste não tem rastreador — e o skip é explícito
-    // para não se confundir com "passou".
-    test('🔴 comando universal só de câmera não alcança rastreador', async ({ authedPage }) => {
+    test('parâmetros digitados livremente montam <NOME>,<texto>#', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
+        const alvo = cat.find((c) => c.c === 'TIMER') || cat[0];
 
-        const temRastreador = await authedPage.$$eval('.dev-row',
-            rows => rows.some(r => r.dataset.familia === 'tracker'));
-        test.skip(!temRastreador, 'este cliente não tem rastreador cadastrado');
-
-        // Universal cuja lista de famílias NÃO inclui rastreador (ex.: RECORDSW).
-        const soCamera = cat.find(c => c.u && c.f && !c.f.includes('tracker'));
-        expect(soCamera, 'precisa haver universal exclusivo de câmera').toBeTruthy();
-
-        await authedPage.selectOption('#cmd-sel', 'T:' + soCamera.s);
-        const rastreadoresLivres = await authedPage.$$eval('.dev-row',
-            rows => rows.filter(r => r.dataset.familia === 'tracker'
-                                  && !r.querySelector('.dev-chk').disabled)
-                        .map(r => r.dataset.modelo));
-        expect(rastreadoresLivres, 'rastreador habilitado para comando de câmera').toEqual([]);
+        await authedPage.selectOption('#cmd-sel', 'T:' + alvo.c);
+        await authedPage.fill('#p-params-livre', '20');
+        const preview = (await authedPage.locator('#p-preview').textContent()).trim();
+        expect(preview).toBe(alvo.c + ',20#');
     });
 
-    test('parâmetros viram campos e o preview monta a string final', async ({ authedPage }) => {
+    test('colar o exemplo inteiro no campo de parâmetros não duplica o nome do comando', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
-        const comParam = cat.find(c => c.p && c.p.length >= 2 && c.t);
-        test.skip(!comParam, 'catálogo sem comando com 2+ parâmetros');
+        const comExemplo = cat.find((c) => c.e && c.e.length);
+        test.skip(!comExemplo, 'catálogo sem exemplo catalogado');
 
-        await authedPage.selectOption('#cmd-sel', 'T:' + comParam.s);
-        const campos = authedPage.locator('.p-in');
-        await expect(campos).toHaveCount(comParam.p.length);
-
-        // O formato aceito precisa estar na tela — é o "padrão a ser seguido"
-        await expect(authedPage.locator('#p-params')).toContainText(comParam.p[0].p);
-
-        for (let i = 0; i < comParam.p.length; i++) await campos.nth(i).fill(String(i + 1));
-        const preview = await authedPage.locator('#p-preview').textContent();
+        await authedPage.selectOption('#cmd-sel', 'T:' + comExemplo.c);
+        await authedPage.fill('#p-params-livre', comExemplo.e[0].c);   // exemplo inteiro, com nome e #
+        const preview = (await authedPage.locator('#p-preview').textContent()).trim();
+        const vezes = (preview.match(new RegExp(comExemplo.c, 'g')) || []).length;
+        expect(vezes, 'nome do comando duplicado ao colar o exemplo inteiro').toBe(1);
         expect(preview).toMatch(/#$/);
-        expect(preview).not.toMatch(/,P\d|,[A-Z](,|#)/);   // nenhum placeholder sobrando
-        expect(preview.startsWith(comParam.c)).toBe(true);
     });
 
-    test('parâmetro em branco bloqueia o envio em vez de mandar placeholder', async ({ authedPage }) => {
+    test('sem forma de consulta conhecida, campo vazio bloqueia o envio com o motivo', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
-        const comParam = cat.find(c => c.p && c.p.length >= 2 && c.t);
-        test.skip(!comParam, 'catálogo sem comando com 2+ parâmetros');
+        const semConsulta = cat.find((c) => !c.q);
+        test.skip(!semConsulta, 'catálogo sem comando sem consulta catalogada');
 
-        await authedPage.selectOption('#cmd-sel', 'T:' + comParam.s);
-        await authedPage.locator('.p-in').first().fill('1');   // demais em branco
-        const preview = await authedPage.locator('#p-preview').textContent();
-        expect(preview).toMatch(/P\d|[A-Z](,|#)/);             // placeholder permanece visível
+        await authedPage.selectOption('#cmd-sel', 'T:' + semConsulta.c);
+        await authedPage.locator('.dev-row .dev-chk').first().check();
+
+        await expect(authedPage.locator('#p-preview-erro')).toContainText(/Sem forma de consulta conhecida/);
+        await expect(authedPage.locator('#btn-enviar')).toBeDisabled();
     });
 
     test('🔴 os filtros do histórico seguem o padrão visual do sistema', async ({ authedPage }) => {
@@ -196,201 +170,61 @@ test.describe('Comandos — lista sensível ao modelo', () => {
     });
 });
 
-test.describe('Comandos — o CHECK# e as sintaxes do JC371 (v4.9.40)', () => {
+test.describe('Comandos — merge por nome e exemplos por família (v4.17.28)', () => {
 
-    test('🔴 CHECK# não trava a seleção, CHECKVIDEO# trava', async ({ authedPage }) => {
+    test('TIMER vira uma linha só, com os modelos das duas aridades antigas unidos', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
+        const timers = cat.filter((c) => c.c === 'TIMER');
+        expect(timers.length, 'TIMER não pode duplicar linha depois do merge por nome').toBe(1);
+        expect(timers[0].m.length, 'modelos das duas aridades antigas devem estar unidos').toBeGreaterThan(0);
+    });
 
-        const chk = cat.find(c => c.s === 'CHECK#');
-        expect(chk, 'CHECK# precisa estar no catálogo da tela').toBeTruthy();
-
-        // A exceção manual: medido respondendo em JC400AD, JC371 e JC182. Uma
-        // regeneração do catálogo por script a desfaz em silêncio, e o sintoma
-        // seria este — equipamento desabilitado numa consulta de LEITURA.
-        await authedPage.selectOption('#cmd-sel', 'T:CHECK#');
-        // v4.16.0 — "na linha JC inteira" passou a ser literal: o filtro por
-        // família exclui os rastreadores JM-VL, para os quais o `CHECK#` não é
-        // documentado. Antes disso a asserção era sobre TODA a frota, porque
-        // toda a frota era da linha JC.
-        const presos = await authedPage.$$eval('.dev-row',
-            rows => rows.filter(r => (r.dataset.familia || 'camera') === 'camera'
-                                  && r.querySelector('.dev-chk').disabled)
-                        .map(r => r.dataset.modelo));
-        expect(presos, 'CHECK# é leitura e vale na linha JC inteira').toEqual([]);
-
-        // ⚠️ O contraste é o ponto: mesma planilha, mesma família, e o
-        // CHECKVIDEO# NÃO vale na linha JC400. Se os dois soltassem a trava,
-        // o teste acima passaria por vacuidade — a trava estaria quebrada.
-        const cv = cat.find(c => c.s === 'CHECKVIDEO#');
-        expect(cv, 'CHECKVIDEO# precisa estar no catálogo').toBeTruthy();
-        expect(cv.u, 'CHECKVIDEO# não é universal').toBeFalsy();
-
-        const modelos = await authedPage.$$eval('.dev-row',
-            rows => [...new Set(rows.map(r => r.dataset.modelo))]);
-        test.skip(!modelos.some(m => m && m !== 'JC371'),
-                  'este cliente só tem JC371; a trava não tem o que segurar');
-
-        await authedPage.selectOption('#cmd-sel', 'T:CHECKVIDEO#');
-        const estado = await authedPage.$$eval('.dev-row', rows => rows.map(r => ({
-            modelo: r.dataset.modelo,
-            desabilitado: r.querySelector('.dev-chk').disabled,
-        })));
-        for (const d of estado) {
-            expect(d.desabilitado, `${d.modelo} para CHECKVIDEO#`).toBe(d.modelo !== 'JC371');
+    test('exemplos nunca repetem o mesmo rótulo de família para o mesmo comando', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        const cat = await catalogo(authedPage);
+        for (const c of cat) {
+            if (!c.e || c.e.length < 2) continue;
+            const fams = c.e.map((e) => e.l).filter(Boolean);
+            expect(new Set(fams).size, `${c.c}: exemplos repetem rótulo de família`).toBe(fams.length);
         }
-        await expect(authedPage.locator('#lock-note')).toBeVisible();
     });
 
-    test('CHECK# é oferecido como leitura, com a procedência à vista', async ({ authedPage }) => {
+    test('os nomes da planilha do JC371 continuam presentes na lista unificada', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
         const cat = await catalogo(authedPage);
-        const chk = cat.find(c => c.s === 'CHECK#');
-        expect(chk.q, 'CHECK# é consulta de si mesmo').toBe('CHECK#');
-        expect(chk.qr, 'a procedência é medição em câmera real').toContain('medido');
-
-        await authedPage.selectOption('#cmd-sel', 'T:CHECK#');
-        // Sendo consulta sem parâmetro, não pode pedir campo nenhum ao operador
-        await expect(authedPage.locator('.p-in')).toHaveCount(0);
-        const preview = await authedPage.locator('#p-preview').textContent();
-        expect(preview.trim()).toBe('CHECK#');
-    });
-
-    test('🔴 as duas aridades do TIMER convivem, e a nova fica presa ao JC371', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-
-        // Comparar por nome-base esconderia isto: são duas entradas do MESMO
-        // comando, com números de campos diferentes.
-        const timers = cat.filter(c => c.c === 'TIMER');
-        expect(timers.length, 'TIMER tem duas sintaxes catalogadas').toBeGreaterThanOrEqual(2);
-
-        const umCampo = timers.find(c => c.p.length === 1);
-        const doisCampos = timers.find(c => c.p.length === 2);
-        expect(umCampo, 'a sintaxe de um campo, da planilha do JC371').toBeTruthy();
-        expect(doisCampos, 'a sintaxe de dois campos, universal').toBeTruthy();
-        expect(umCampo.u, 'a variante nasce presa ao modelo da planilha').toBeFalsy();
-        expect(doisCampos.u, 'a antiga continua universal').toBeTruthy();
-
-        // Só a primeira sintaxe carrega a consulta — senão a tela ofereceria
-        // dois botões idênticos de "ler o valor atual".
-        expect(umCampo.q, 'variante de aridade não duplica a consulta').toBeFalsy();
-
-        await authedPage.selectOption('#cmd-sel', 'T:' + umCampo.s);
-        await expect(authedPage.locator('.p-in')).toHaveCount(1);
-        await authedPage.locator('.p-in').first().fill('20');
-        expect((await authedPage.locator('#p-preview').textContent()).trim()).toBe('TIMER,20#');
-    });
-
-    test('as 18 sintaxes da planilha do JC371 chegaram à tela', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-        const esperadas = [
-            'CHECK#', 'CHECKVIDEO#', 'STATUSVIDEO#', 'SENSORSET,A,B,C,D#',
-            'SHUTDOWNTIME,A#', 'VIDEORSL_SUB,A,B,C,D,E#', 'VIDETIMEZONE,A,B,C#',
-            'KEYFUN,A,B#', 'APN,A,B,C,D#', 'SERVER,A,B,C,D,E,F#', 'BCD,A,B#',
-            'LOG,ALL#', 'RECORDAUDIO,A,B#', 'RECORDAUDIO_SUB,A,B#',
-            'RATATION,A,B,C,D#', 'PICTIMER,A,B,C,D#', 'TIMER,A#', 'ANGLEREP,A#',
+        const esperados = [
+            'CHECK', 'CHECKVIDEO', 'STATUSVIDEO', 'SENSORSET', 'SHUTDOWNTIME',
+            'VIDEORSL_SUB', 'VIDETIMEZONE', 'KEYFUN', 'APN', 'SERVER', 'BCD',
+            'LOG', 'RECORDAUDIO', 'RECORDAUDIO_SUB', 'RATATION', 'PICTIMER',
+            'TIMER', 'ANGLEREP',
         ];
-        const presentes = new Set(cat.map(c => c.s));
-        expect(esperadas.filter(s => !presentes.has(s))).toEqual([]);
+        const presentes = new Set(cat.map((c) => c.c));
+        expect(esperados.filter((n) => !presentes.has(n))).toEqual([]);
 
         // A tela agrupa por categoria pelo mapa de rótulos; categoria fora do
         // mapa cairia no valor cru (`manutencao` em vez de "Manutenção e
         // diagnóstico"). Toda entrada nova precisa cair num grupo conhecido.
         const rotulos = await authedPage.evaluate(() => Object.keys(window.ROTCAT || {}));
-        const forasteiras = [...new Set(cat.map(c => c.k))].filter(k => !rotulos.includes(k));
+        const forasteiras = [...new Set(cat.map((c) => c.k))].filter((k) => !rotulos.includes(k));
         expect(forasteiras, 'categoria sem rótulo na tela').toEqual([]);
     });
 
-    test('LOG,ALL# é comando pronto, não um campo para preencher', async ({ authedPage }) => {
+    test('CHECK continua oferecido como leitura', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
-        // `ALL` é palavra literal do comando, não placeholder — pedir que o
-        // operador a digite seria o erro que `template: false` evita.
-        await authedPage.selectOption('#cmd-sel', 'T:LOG,ALL#');
-        await expect(authedPage.locator('.p-in')).toHaveCount(0);
+        const cat = await catalogo(authedPage);
+        const chk = cat.find((c) => c.c === 'CHECK');
+        expect(chk, 'CHECK precisa estar na lista unificada').toBeTruthy();
+        expect(chk.q, 'CHECK é consulta de si mesmo').toBe('CHECK#');
+
+        await authedPage.selectOption('#cmd-sel', 'T:CHECK');
+        expect((await authedPage.locator('#p-preview').textContent()).trim()).toBe('CHECK#');
+    });
+
+    test('LOG,ALL# é digitado no campo de parâmetros, não mais um campo estruturado', async ({ authedPage }) => {
+        await authedPage.goto('/comandos');
+        await authedPage.selectOption('#cmd-sel', 'T:LOG');
+        await authedPage.fill('#p-params-livre', 'ALL');
         expect((await authedPage.locator('#p-preview').textContent()).trim()).toBe('LOG,ALL#');
-    });
-});
-
-test.describe('Comandos — placeholder é campo em branco, não formato (v4.9.40)', () => {
-
-    /** Marca o primeiro equipamento habilitado, para o botão poder ficar pronto. */
-    async function marcarUm(page) {
-        const chk = page.locator('.dev-row .dev-chk:not([disabled])').first();
-        await chk.check();
-    }
-
-    test('🔴 valor legítimo de UMA LETRA não é lido como placeholder', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-        const vtz = cat.find(c => c.s === 'VIDETIMEZONE,A,B,C#');
-        expect(vtz, 'a entrada da planilha JC371 A006').toBeTruthy();
-
-        // A guarda antiga casava `,[A-Z],` no texto montado e recusava o `W` —
-        // oeste de GMT, o valor do exemplo OFICIAL do próprio comando.
-        await authedPage.selectOption('#cmd-sel', 'T:VIDETIMEZONE,A,B,C#');
-        const campos = authedPage.locator('.p-in');
-        await expect(campos).toHaveCount(3);
-        await campos.nth(0).fill('W');
-        await campos.nth(1).fill('3');
-        await campos.nth(2).fill('0');
-
-        expect((await authedPage.locator('#p-preview').textContent()).trim())
-            .toBe('VIDETIMEZONE,W,3,0#');
-
-        // A pergunta exata, no ponto exato: para a tela, este `W` esta
-        // preenchido. E o predicado que a guarda antiga nao tinha.
-        const bloqueia = await authedPage.evaluate(() => faltaParametro());
-        expect(bloqueia, 'W e valor, nao placeholder').toBe(false);
-
-        await marcarUm(authedPage);
-        const btn = authedPage.locator('#btn-enviar');
-        await expect(btn).toBeEnabled();
-        await expect(btn).toContainText('Enviar para');
-    });
-
-    test('🔴 campo em branco desabilita o botão, não só recusa depois do clique', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-        const comParam = cat.find(c => c.t && c.p && c.p.length >= 2);
-        test.skip(!comParam, 'catálogo sem comando com 2+ parâmetros');
-
-        await authedPage.selectOption('#cmd-sel', 'T:' + comParam.s);
-        await authedPage.locator('.p-in').first().fill('1');   // demais em branco
-        await marcarUm(authedPage);
-
-        const btn = authedPage.locator('#btn-enviar');
-        await expect(btn).toBeDisabled();
-        await expect(btn).toContainText('Preencha');
-    });
-
-    test('comando pronto com valores literais é enviável', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-        const vtz = cat.find(c => c.s === 'VIDEOTIMEZONE,W,3,0#');
-        expect(vtz, 'a entrada cuja CHAVE é o exemplo oficial').toBeTruthy();
-        // 🔴 Estava marcada como template sem nenhum parâmetro declarado: a tela
-        // não desenhava campo, o preview ficava com a string crua e a guarda por
-        // formato recusava o `W`. Comando impossível de enviar pela tela.
-        expect(vtz.t, 'não é molde, é comando pronto').toBeFalsy();
-
-        await authedPage.selectOption('#cmd-sel', 'T:VIDEOTIMEZONE,W,3,0#');
-        await expect(authedPage.locator('.p-in')).toHaveCount(0);
-        expect((await authedPage.locator('#p-preview').textContent()).trim())
-            .toBe('VIDEOTIMEZONE,W,3,0#');
-
-        await marcarUm(authedPage);
-        await expect(authedPage.locator('#btn-enviar')).toBeEnabled();
-    });
-
-    test('nenhum comando do catálogo pede campo que a tela não desenha', async ({ authedPage }) => {
-        await authedPage.goto('/comandos');
-        const cat = await catalogo(authedPage);
-        // ⚠️ `template: true` com `params: []` é a combinação que criava o
-        // buraco: a tela não desenha campo, o preview sai com o placeholder cru
-        // e o operador manda a letra para o equipamento. Eram sete entradas.
-        const mudas = cat.filter(c => c.t && (!c.p || c.p.length === 0)).map(c => c.s);
-        expect(mudas).toEqual([]);
     });
 });

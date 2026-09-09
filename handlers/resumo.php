@@ -87,6 +87,10 @@ if ($metricsStale || ($devTotal == 0 && $devActive == 0 && $devOnline == 0 && $d
 $gpsData = [];
 try {
     if (($_GET['ajax'] ?? '') === 'kpis') throw new Exception('skip');
+    // ⚠️ `?? 1` proibido pelo CLAUDE.md (mesma classe do bug histórico do
+    // /equipamentos): sessão sem cliente resolvido não pode ver as posições
+    // do tenant de id 1 como se fossem suas. Sem cliente, o mapa fica vazio.
+    if ($customerId === null) throw new Exception('sem cliente resolvido');
     $gpsRows = $db->prepare("
         SELECT DISTINCT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
                COALESCE(d.device_name, g.imei) as device_name
@@ -97,7 +101,7 @@ try {
           AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 2 HOUR)
         ORDER BY g.gps_time DESC LIMIT 500
     ");
-    $gpsRows->execute([':cid' => $customerId ?? 1]);
+    $gpsRows->execute([':cid' => $customerId]);
     $gpsData = $gpsRows->fetchAll();
 } catch (Exception $e) {}
 
@@ -113,19 +117,26 @@ $outGt30d = get_metric($db, $customerId, 'outdated_gt30d', 0);
 $outNever = get_metric($db, $customerId, 'outdated_never', 0);
 
 // On-the-fly fallback for speed
-if ($spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
+//
+// 🔴 Corrigido (v4.17.28), mesmo bug e mesma correção de
+// includes/dashboard_widgets.php e scripts/metrics_rollup.php: a query
+// contava LINHAS de gps_data (pontos), não veículos — `COUNT(DISTINCT
+// g.imei)` por faixa, mais `JOIN devices ... is_active` para não contar
+// equipamento desativado. E o `?? 1` era o fallback proibido do CLAUDE.md:
+// sem cliente resolvido, mostrava a distribuição do tenant de id 1.
+if ($customerId !== null && $spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0 && $spdAcima60 == 0) {
     try {
         $speedStmt = $db->prepare("
             SELECT
-                SUM(CASE WHEN speed = 0 THEN 1 ELSE 0 END) as parados,
-                SUM(CASE WHEN speed > 0 AND speed <= 20 THEN 1 ELSE 0 END) as ate20,
-                SUM(CASE WHEN speed > 20 AND speed <= 60 THEN 1 ELSE 0 END) as ate60,
-                SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60,
-                COUNT(*) as total
+                COUNT(DISTINCT CASE WHEN speed = 0 THEN g.imei END) as parados,
+                COUNT(DISTINCT CASE WHEN speed > 0 AND speed <= 20 THEN g.imei END) as ate20,
+                COUNT(DISTINCT CASE WHEN speed > 20 AND speed <= 60 THEN g.imei END) as ate60,
+                COUNT(DISTINCT CASE WHEN speed > 60 THEN g.imei END) as acima60
             FROM gps_data g
+            JOIN devices d ON d.imei = g.imei AND d.is_active = 1
             WHERE g.customer_id = :cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1
         ");
-        $speedStmt->execute([':cid' => $customerId ?? 1]);
+        $speedStmt->execute([':cid' => $customerId]);
         $speedDist = $speedStmt->fetch();
         $spdParados = $speedDist['parados'] ?? 0;
         $spdAte20   = $speedDist['ate20'] ?? 0;
@@ -138,30 +149,37 @@ $outTotal   = $outLt7d + $outGt7d + $outGt30d + $outNever;
 
 // ── D1 (v4.2.0 — YUV): Ociosidade (ignição ligada + parado, últimos 30 min) ──
 $idleCount = 0;
-try {
-    $idleStmt = $db->prepare("
-        SELECT COUNT(DISTINCT g.imei) FROM gps_data g
-        WHERE g.customer_id = :cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1 AND g.speed = 0
-    ");
-    $idleStmt->execute([':cid' => $customerId ?? 1]);
-    $idleCount = (int)$idleStmt->fetchColumn();
-} catch (Exception $e) {}
+if ($customerId !== null) {
+    try {
+        // `JOIN devices ... is_active` (v4.17.28): sem ela, equipamento
+        // desativado que transmitiu dentro dos 30 min contava como ocioso.
+        $idleStmt = $db->prepare("
+            SELECT COUNT(DISTINCT g.imei) FROM gps_data g
+            JOIN devices d ON d.imei = g.imei AND d.is_active = 1
+            WHERE g.customer_id = :cid AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE) AND g.acc = 1 AND g.speed = 0
+        ");
+        $idleStmt->execute([':cid' => $customerId]);
+        $idleCount = (int)$idleStmt->fetchColumn();
+    } catch (Exception $e) {}
+}
 
 // ── D1: Status de Equipamentos por modelo (on/off) ──────────
 $modelStatus = [];
-try {
-    $modelStmt = $db->prepare("
-        SELECT COALESCE(dm.model_name, d.device_model, '—') as model,
-               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as on_cnt,
-               SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) > 5 OR d.last_communication IS NULL THEN 1 ELSE 0 END) as off_cnt
-        FROM devices d
-        LEFT JOIN device_models dm ON dm.id = d.device_model_id
-        WHERE d.customer_id = :cid AND d.is_active = 1
-        GROUP BY model ORDER BY (on_cnt + off_cnt) DESC LIMIT 6
-    ");
-    $modelStmt->execute([':cid' => $customerId ?? 1]);
-    $modelStatus = $modelStmt->fetchAll();
-} catch (Exception $e) {}
+if ($customerId !== null) {
+    try {
+        $modelStmt = $db->prepare("
+            SELECT COALESCE(dm.model_name, d.device_model, '—') as model,
+                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) <= 5 THEN 1 ELSE 0 END) as on_cnt,
+                   SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, d.last_communication, NOW()) > 5 OR d.last_communication IS NULL THEN 1 ELSE 0 END) as off_cnt
+            FROM devices d
+            LEFT JOIN device_models dm ON dm.id = d.device_model_id
+            WHERE d.customer_id = :cid AND d.is_active = 1
+            GROUP BY model ORDER BY (on_cnt + off_cnt) DESC LIMIT 6
+        ");
+        $modelStmt->execute([':cid' => $customerId]);
+        $modelStatus = $modelStmt->fetchAll();
+    } catch (Exception $e) {}
+}
 
 // ── D1: auto-refresh dos KPIs sem reload ────────────────────
 if (($_GET['ajax'] ?? '') === 'kpis') {
@@ -241,6 +259,11 @@ $oVals = array_fill(0, count($seriesLabels), 0);
 // veículo. Resolvido FORA dos try/catch, para as duas enxergarem a variável.
 ['joins' => $diagJoins, 'diag' => $diagExpr] = alarm_label_sql();
 
+// ⚠️ Os cinco `?? 1` que seguiam abaixo (séries de alarmes/ocorrências, top
+// placas, faceid, top motoristas) eram o mesmo fallback proibido do CLAUDE.md
+// — sessão sem cliente resolvido via as séries e o ranking do tenant de id 1.
+// Corrigido em v4.17.28: cada bloco só roda com `$customerId` resolvido.
+if ($customerId !== null) {
 try {
     $stmt = $db->prepare("
         SELECT " . sprintf($bucketFmt, 'a.alarm_time') . " as bk, COUNT(*) as cnt
@@ -249,7 +272,7 @@ try {
         WHERE a.customer_id = :cid AND a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY bk
     ");
-    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    $stmt->execute([':cid' => $customerId, ':ts' => $seriesStartUtc]);
     while ($r = $stmt->fetch()) {
         $bk = $periodo === 'hoje' ? str_pad((string)$r['bk'], 2, '0', STR_PAD_LEFT) : $r['bk'];
         if (isset($labelIndex[$bk])) $aVals[$labelIndex[$bk]] = (int)$r['cnt'];
@@ -263,12 +286,13 @@ try {
         WHERE customer_id = :cid AND first_alarm_at >= :ts
         GROUP BY bk
     ");
-    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    $stmt->execute([':cid' => $customerId, ':ts' => $seriesStartUtc]);
     while ($r = $stmt->fetch()) {
         $bk = $periodo === 'hoje' ? str_pad((string)$r['bk'], 2, '0', STR_PAD_LEFT) : $r['bk'];
         if (isset($labelIndex[$bk])) $oVals[$labelIndex[$bk]] = (int)$r['cnt'];
     }
 } catch (Exception $e) {}
+}
 
 $alarmsTotal = array_sum($aVals);
 $occsTotal   = array_sum($oVals);
@@ -276,6 +300,7 @@ $periodLabel = ['hoje' => 'Hoje', '7d' => 'Últimos 7 dias', 'mes' => 'Último m
 
 // ── D1: Top 3 placas com mais alarmes (período das séries) ───
 $topPlates = [];
+if ($customerId !== null) {
 try {
     $stmt = $db->prepare("
         SELECT COALESCE(d.device_name, a.imei) as name, COUNT(*) as cnt
@@ -285,30 +310,33 @@ try {
         WHERE a.customer_id = :cid AND a.alarm_time >= :ts AND ($diagExpr) = 0
         GROUP BY a.imei, name ORDER BY cnt DESC LIMIT 3
     ");
-    $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
+    $stmt->execute([':cid' => $customerId, ':ts' => $seriesStartUtc]);
     $topPlates = $stmt->fetchAll();
 } catch (Exception $e) {}
+}
 
 // ── D1: Top 3 motoristas (exige FaceID do cliente — senão upsell) ──
 $faceidEnabled = false;
 $topDrivers = [];
-try {
-    $stmt = $db->prepare("SELECT faceid_enabled FROM customers WHERE id = :cid");
-    $stmt->execute([':cid' => $customerId ?? 1]);
-    $faceidEnabled = (bool)$stmt->fetchColumn();
-} catch (Exception $e) {}
-if ($faceidEnabled) {
+if ($customerId !== null) {
     try {
-        $stmt = $db->prepare("
-            SELECT dr.name, COUNT(*) as cnt
-            FROM occurrences o
-            JOIN drivers dr ON dr.id = o.driver_id
-            WHERE o.customer_id = :cid AND o.first_alarm_at >= :ts
-            GROUP BY dr.id ORDER BY cnt DESC LIMIT 3
-        ");
-        $stmt->execute([':cid' => $customerId ?? 1, ':ts' => $seriesStartUtc]);
-        $topDrivers = $stmt->fetchAll();
+        $stmt = $db->prepare("SELECT faceid_enabled FROM customers WHERE id = :cid");
+        $stmt->execute([':cid' => $customerId]);
+        $faceidEnabled = (bool)$stmt->fetchColumn();
     } catch (Exception $e) {}
+    if ($faceidEnabled) {
+        try {
+            $stmt = $db->prepare("
+                SELECT dr.name, COUNT(*) as cnt
+                FROM occurrences o
+                JOIN drivers dr ON dr.id = o.driver_id
+                WHERE o.customer_id = :cid AND o.first_alarm_at >= :ts
+                GROUP BY dr.id ORDER BY cnt DESC LIMIT 3
+            ");
+            $stmt->execute([':cid' => $customerId, ':ts' => $seriesStartUtc]);
+            $topDrivers = $stmt->fetchAll();
+        } catch (Exception $e) {}
+    }
 }
 
 $page_title = 'Resumo';

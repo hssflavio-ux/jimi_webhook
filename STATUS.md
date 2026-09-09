@@ -1,4 +1,48 @@
-# STATUS.md — Jimi Webhook System v4.17.24 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.18.0 (YUV Parity)
+
+> ### 📍 v4.17.28–v4.18.0 — `/comandos` sem trava de modelo, painel sem "35 parados" fantasma, fila offline confirmada no hub
+>
+> Sessão única cobrindo 5 pedidos do dono do produto sobre `/comandos` e o painel.
+>
+> **1-3. `/comandos` ganhou o mesmo redesenho do `/comandos-sms` (v4.17.25):**
+> lista única por NOME de comando (`command_catalog_merge_by_name()`, extraído
+> para `includes/functions.php` e agora compartilhado pelas duas telas), 1
+> campo de texto livre para parâmetros, e a trava de modelo **removida** —
+> nenhum equipamento fica desabilitado ao escolher um comando; o aviso de
+> incompatibilidade virou informativo. Toggle "modo livre" removido
+> (redundante). Exemplos: no máximo 1 por família de equipamento
+> (`command_catalog_examples_by_family()`), para não repetir a mesma sintaxe
+> quando ela não muda entre modelos. `tests/comandos.spec.js` reescrito;
+> `tests/firmware.spec.js`/`tests/rastreador_vl.spec.js` atualizados.
+>
+> **4. Fila offline de comandos — a hipótese de ontem (07/09) estava errada.**
+> `docs/FILA_OFFLINE_COMANDOS.md` registrava "não mandamos `offlineFlag`, é
+> por isso que a fila aparece vazia" como decisão do dono do produto de só
+> **registrar, não corrigir**. 🔴 **O teste decisivo (produção, equipamento
+> offline há 19 dias) derrubou isso**: o comando apareceu na fila do hub
+> IMEDIATAMENTE após o envio, SEM `offlineFlag` — mandar o flag depois não
+> mudou nada observável. A fila vazia de 07/09 era de comandos cuja janela de
+> validade já tinha expirado, não de comandos nunca cacheados. Implementado:
+> `iothub_query_offline_instruct()` (só leitura) + cron
+> `scripts/offline_instruct_poll.php` (10 min) gravando o estado real em
+> `commands.hub_queue_status`/`hub_queue_checked_at` (migração v4.18.0,
+> **precisa do segundo deploy/`.sql` manual** — ver CLAUDE.md); `/comandos` e
+> `/commandstatus` leem essas colunas com fallback `try/catch` para o
+> intervalo até isso acontecer. `sendcommand.php`: `_code=300` passou a valer
+> como `_code=600` no rótulo `offline_queued`. `iothub_send_instruct()`
+> continua **sem** `offlineFlag` — sem efeito medido, não vale reintroduzir o
+> risco que a cautela original apontava.
+>
+> **5. Painel "Velocidade da Frota" com "35 parados" fantasma — bug real,
+> confirmado.** A query contava LINHAS de `gps_data` (pontos de GPS), não
+> veículos — `COUNT(DISTINCT g.imei)` corrigido em `includes/dashboard_widgets.php`
+> (`/painel`), `handlers/resumo.php` (`/resumo`, a home) e
+> `scripts/metrics_rollup.php` (cron do cache lido pelas duas telas), com
+> `JOIN devices ... is_active` que faltava nas três (e no widget-irmão
+> `idle`, que já tinha o `COUNT(DISTINCT)` certo). De quebra: 9 fallbacks
+> `?? 1` em `handlers/resumo.php` (mesma classe do bug histórico do
+> `/equipamentos` v4.9.26) — sessão sem `customer_id` resolvido via dados do
+> cliente de id 1 em vez de tela vazia.
 
 > ### 📍 v4.17.24 — resposta do equipamento por SMS: o webhook nunca entregou, a busca periódica sim
 >
@@ -104,62 +148,7 @@
 > teste anterior. Intermitência da operadora/aparelho, não nossa: `casados: 1`
 > nas duas chamadas, sem WARNING.
 
-> ### 📍 v4.17.22 — duas migrações fora da lista do deploy
->
-> Achado ao responder a uma pergunta sobre o log do webhook de SMS.
->
-> **🔴 `migration_v4.17.12.sql` e `v4.17.13.sql` não estavam na lista de
-> `run_migration` do `deploy.sh`.** O script chama as migrações uma a uma,
-> explicitamente; o que não está na lista não roda. É a armadilha que o
-> `CLAUDE.md` já documentava — **deploy verde, coluna inexistente**.
->
-> A prova estava no log, e só apareceu porque alguém foi olhar:
-> `[WARNING] SMS: evento cru não gravado {erro: Unknown column 'eventos_raw'}`.
-> O `try/catch` engolia o erro e o webhook respondia 200 — o recurso da
-> v4.17.13 estava **morto desde que subiu**. `system_info.version` marcava
-> **4.17.12** enquanto o `/ping` anunciava 4.17.18: a 4.17.12 fora aplicada à
-> mão, a 4.17.13 não.
->
-> Migração aplicada pelo mesmo caminho do `run_migration`. O conserto de fuso
-> dela corrigiu 1 linha: o comando #13 tinha `entregue_em` **3 h antes** do
-> próprio envio.
->
-> **Guarda:** `tests/helpers/migracoes_no_deploy.test.php`, nos DOIS sentidos —
-> arquivo fora da lista (nunca roda) e entrada sem arquivo (deploy aborta em
-> produção, depois do `git pull`). Provado contra o defeito real.
->
-> **Verificado com 1 SMS real ao E2E** (`STATUS#`, 1 crédito): `eventos_raw`
-> gravou 2 eventos / 578 bytes, os 2 corpos crus entraram em
-> `webhook_payloads`, e o WARNING sumiu do log. O fuso ficou provado no dado
-> novo: provedor mandou `20:26:03` (BRT), gravamos `23:26:03` (UTC), entrega
-> 9 s depois do envio.
->
-> ⚠️ `resposta_texto` continua NULL — a Allcance segue sem mandar o evento de
-> resposta. Pendência com o provedor, não defeito nosso.
-
-> ### 📍 v4.17.21 — o filtro de Filial sai junto
->
-> Continuação do pedido da v4.17.20: *"remova dos filtros também"*. Saiu o
-> `<select>`, a variável, a cláusula `WHERE` e a consulta da lista, em
-> `/relatorios/ocorrencias` e `/relatorios/alarmes` — mais o texto da wiki que
-> anunciava o filtro.
->
-> ⚠️ **Isso não tirou nada da vista de ninguém.** Os dois `<select>` já viviam
-> dentro de um `<?php if ($branchList): ?>` e, com zero filiais, **não eram
-> desenhados**. O que saiu foi código morto — que voltaria a aparecer no dia
-> em que alguém cadastrasse uma filial "só para testar". Por isso o spec
-> verifica o NOME do campo, não a aparência: o defeito estava latente.
->
-> **O que fica:** o campo "Filial" do cadastro de `/equipamentos` (é entrada de
-> dados, não filtro — removê-lo impede preencher `devices.branch_id` algum
-> dia); o `occurrence_engine.php`, que continua copiando `branch_id` para a
-> ocorrência (sem custo, e é o que permite religar sem migração); e a coluna
-> `branch_id` nas tabelas. **Nada foi apagado do banco.**
->
-> ⚠️ O spec cobre o parâmetro ÓRFÃO: `?branch_id=42` na URL — link antigo,
-> favorito ou modelo de relatório salvo — tem de ser ignorado, nunca virar erro.
-
-> Entradas anteriores a 07/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a 09/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

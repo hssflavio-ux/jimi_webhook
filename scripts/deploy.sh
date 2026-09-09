@@ -473,6 +473,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.17.13" "mysql/migration_v4.17.13.sql" "SMS: carimbos do provedor em BRT + eventos crus por comando (sms_commands.eventos_raw)"
     run_migration "4.17.23" "mysql/migration_v4.17.23.sql" "webhook_payloads: imei/item_count/hash das linhas de pushsms (filtro por equipamento nao achava SMS)"
     run_migration "4.17.24" "mysql/migration_v4.17.24.sql" "sms_settings.respostas_metodo (webhook|pull) - metodo Pull como redundancia do webhook para resposta do equipamento"
+    run_migration "4.18.0" "mysql/migration_v4.18.0.sql" "commands.hub_queue_status/hub_queue_checked_at - consulta da fila offline do hub (queryOfflineInstruct)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

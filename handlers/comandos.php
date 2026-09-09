@@ -1,22 +1,26 @@
 <?php
 /**
- * JIMI Webhook System — Comandos v4.9.7
+ * JIMI Webhook System — Comandos v4.17.28
  * Rota: /comandos
  *
- * Envio de comandos com a lista SENSÍVEL AO MODELO do equipamento.
+ * Envio de comandos do proNo 128 (texto) e de um punhado de comandos JT/T
+ * estruturados (JSON), para operador que já conhece a sintaxe de cada modelo.
  *
- * O catálogo (`includes/command_catalog.php`) é gerado da wiki Foco na Via e
- * diz, por comando, quais modelos o documentam. Daí saem as duas regras da
- * tela:
+ * 🔴 A tela deixou de travar por modelo (v4.17.28, decisão do dono do
+ * produto). Até a v4.17.27 marcar um equipamento desabilitava comandos que o
+ * catálogo não documentava para o modelo dele, e a lista era uma linha por
+ * VARIANTE (comando × aridade × modelo) com um campo POR PARÂMETRO desenhado
+ * a partir dela. Isso quebrava assim que dois modelos compartilhavam o nome
+ * do comando com aridade DIFERENTE (`SPEED` da linha JC tem 4 campos numa
+ * ordem; da JM-VL01, 4 campos NOUTRA ordem) — a tela ou escondia o comando ou
+ * desenhava campos que não valiam para o equipamento marcado.
  *
- *   1. **Trava de modelo.** Marcar um JC371 desabilita os equipamentos de outro
- *      modelo, porque um comando específico (`DMSSP`, `EVENTALERT`…) só existe
- *      naquele modelo e mandá-lo para outro devolve "comando não suportado" —
- *      um erro que só aparece minutos depois, no callback.
- *   2. **Exceção do proNo 128 universal.** Comando presente em 5+ das 6 páginas
- *      da wiki (`STATUS#`, `VERSION#`, `REBOOT#`, `SERVER`…) é o núcleo comum do
- *      protocolo de texto: com um desses escolhido a trava solta e dá para
- *      mandar para a frota inteira de uma vez.
+ * Agora, igual ao `/comandos-sms` (v4.17.25): uma linha por NOME de comando
+ * (`command_catalog_merge_by_name()`, includes/functions.php), parametrização
+ * em 1 campo de texto LIVRE, e nenhum equipamento fica desabilitado — quem usa
+ * esta tela sabe a sintaxe de cada modelo. A lista de `modelos` documentados
+ * e o exemplo por família (`command_catalog_examples_by_family()`) continuam
+ * aparecendo, mas como AJUDA, nunca como bloqueio.
  *
  * O envio em lote NÃO virou um endpoint novo: o frontend chama `/sendcommand`
  * uma vez por equipamento. Assim a checagem de posse por IMEI, o log e o
@@ -123,24 +127,38 @@ $rotuloCat = [
     'outros' => 'Outros',
 ];
 
-// Enxuga o catálogo para o JS: só o que a tela usa.
+// ── Lista ÚNICA por NOME de comando, parametrização livre (v4.17.28) ───────
+//
+// Até aqui a tela mostrava uma linha por VARIANTE do catálogo (comando x
+// aridade x modelo) e desenhava um campo POR PARÂMETRO a partir dela — o que
+// exigia travar a lista pelo modelo marcado, senão a mesma sintaxe de nome
+// respondia por campos incompatíveis entre si (ex.: `SPEED` da linha JC tem
+// 4 campos numa ordem, `SPEED` da JM-VL01 tem 4 campos NOUTRA ordem).
+//
+// Decisão do dono do produto (08/09/2026, mesma decisão já aplicada em
+// `/comandos-sms` v4.17.25): uma linha por NOME (`command_catalog_merge_by_name()`,
+// ponto único em includes/functions.php), com 1 campo de texto livre para os
+// parâmetros — o operador desta tela conhece a sintaxe de cada modelo e não
+// precisa de campos estruturados nem de trava para escolher certo. Os exemplos
+// continuam sendo a bússola de sintaxe (`command_catalog_examples_by_family()`,
+// no máximo 1 por família de equipamento, para não empilhar exemplo repetido).
+$catalogoPorNome = command_catalog_merge_by_name($catalogo);
+$exemplosPorNome = command_catalog_examples_by_family($catalogo, $familiaPorModelo);
+
 $catJs = [];
-foreach ($catalogo as $syn => $d) {
+foreach ($catalogoPorNome as $d) {
     $catJs[] = [
-        's' => $syn, 'c' => $d['cmd'], 'n' => $d['nome'],
+        'c' => $d['cmd'], 'n' => $d['nome'],
         'd' => $d['desc'], 'k' => $d['categoria'],
-        'm' => $d['modelos'], 'u' => (bool)$d['universal'], 't' => (bool)$d['template'],
+        'm' => $d['modelos'], 'u' => (bool)$d['universal'],
         // `f`: famílias que este comando documenta, derivadas de `modelos`.
-        // Só tem efeito quando `u` é true — é o que impede a trava solta de
-        // liberar um comando de câmera para um rastreador.
+        // Só INFORMA (a partir da v4.17.28 a tela não trava mais por modelo);
+        // vira aviso na hora de escolher equipamento, nunca desabilita nada.
         'f' => command_families($d['modelos'], $familiaPorModelo),
         // Forma de consulta (v4.9.25): `q` é o que enviar, `qm` os modelos em
-        // que ela é sabidamente aceita, `qr` a procedência (medido/wiki).
+        // que ela é sabidamente aceita.
         'q' => $d['consulta'] ?? null, 'qm' => $d['consulta_modelos'] ?? [],
-        'qr' => $d['consulta_ref'] ?? null,
-        'p' => array_map(fn($p) => ['p' => $p['p'], 'd' => $p['desc'],
-                                    'f' => $p['format'], 'v' => $p['default']], $d['params']),
-        'e' => array_map(fn($e) => ['c' => $e['cmd'], 'd' => $e['desc']], $d['exemplos']),
+        'e' => $exemplosPorNome[$d['cmd']] ?? [],
     ];
 }
 
@@ -219,25 +237,51 @@ if ($filtroImeis) {
     $imeiSql = ' AND c.imei IN (' . implode(',', $ph) . ')';
 }
 
-$hist = $db->prepare("
-    SELECT c.id, c.imei, c.command_content, c.status, c.response_payload,
-           c.created_at, c.response_time,
-           COALESCE(NULLIF(d.device_name,''), c.imei) AS device_name,
-           COALESCE(dm.model_name, d.device_model, '-') AS model_display,
-           COALESCE(cu.name, '—') AS customer_name
-    FROM commands c
-    JOIN devices d ON c.imei = d.imei
-    LEFT JOIN device_models dm ON d.device_model_id = dm.id
-    LEFT JOIN customers cu ON cu.id = d.customer_id
-    WHERE c.created_at BETWEEN :de AND :ate
-      {$scopeSql}{$imeiSql}
-    ORDER BY c.created_at DESC LIMIT " . CMD_HIST_TETO . "
-");
-$hist->execute(array_merge(
-    [':de' => $janelaDe, ':ate' => $janelaAte],
-    $scopeParams, $imeiParams
-));
-$hist = $hist->fetchAll(PDO::FETCH_ASSOC);
+// 🔴 `hub_queue_status`/`hub_queue_checked_at` (migração v4.18.0) lidas com
+// fallback: uma migração nova NÃO roda no deploy que a traz (CLAUDE.md), e a
+// tela INTEIRA não pode quebrar por causa de duas colunas informativas no
+// intervalo até o segundo deploy/aplicação manual do .sql.
+try {
+    $hist = $db->prepare("
+        SELECT c.id, c.imei, c.command_content, c.status, c.response_payload,
+               c.created_at, c.response_time, c.hub_queue_status, c.hub_queue_checked_at,
+               COALESCE(NULLIF(d.device_name,''), c.imei) AS device_name,
+               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+               COALESCE(cu.name, '—') AS customer_name
+        FROM commands c
+        JOIN devices d ON c.imei = d.imei
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN customers cu ON cu.id = d.customer_id
+        WHERE c.created_at BETWEEN :de AND :ate
+          {$scopeSql}{$imeiSql}
+        ORDER BY c.created_at DESC LIMIT " . CMD_HIST_TETO . "
+    ");
+    $hist->execute(array_merge(
+        [':de' => $janelaDe, ':ate' => $janelaAte],
+        $scopeParams, $imeiParams
+    ));
+    $hist = $hist->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $hist = $db->prepare("
+        SELECT c.id, c.imei, c.command_content, c.status, c.response_payload,
+               c.created_at, c.response_time,
+               COALESCE(NULLIF(d.device_name,''), c.imei) AS device_name,
+               COALESCE(dm.model_name, d.device_model, '-') AS model_display,
+               COALESCE(cu.name, '—') AS customer_name
+        FROM commands c
+        JOIN devices d ON c.imei = d.imei
+        LEFT JOIN device_models dm ON d.device_model_id = dm.id
+        LEFT JOIN customers cu ON cu.id = d.customer_id
+        WHERE c.created_at BETWEEN :de AND :ate
+          {$scopeSql}{$imeiSql}
+        ORDER BY c.created_at DESC LIMIT " . CMD_HIST_TETO . "
+    ");
+    $hist->execute(array_merge(
+        [':de' => $janelaDe, ':ate' => $janelaAte],
+        $scopeParams, $imeiParams
+    ));
+    $hist = $hist->fetchAll(PDO::FETCH_ASSOC);
+}
 $tetoEstourado = count($hist) >= CMD_HIST_TETO;
 
 // Rótulo de cada nível de desfecho. Fica aqui, e não só no HTML, porque a
@@ -279,6 +323,11 @@ foreach ($hist as $h) {
         // legítimo e de espera — diferente de "falhou" —, e sem rótulo próprio
         // era lido como erro por quem opera.
         'fila' => ($h['status'] === 'sent' && $desf['nivel'] === 'aguardando'),
+        // Estado CONFIRMADO pelo hub (§2.21, scripts/offline_instruct_poll.php),
+        // quando já houve tempo de consultar — NULL não é "não está na fila",
+        // é "ainda não checado" (cron roda a cada 10 min).
+        'hub_fila' => $h['hub_queue_status'] ?? null,
+        'hub_fila_em' => !empty($h['hub_queue_checked_at']) ? fmt_brt_cmd($h['hub_queue_checked_at']) : null,
         'kv' => command_response_kv($desf['detalhe']),
         // Envelope cru, para o detalhe. Quando a interpretação erra — e ela
         // errou por meses lendo o campo errado — sem isto ninguém consegue ver
@@ -438,13 +487,6 @@ $extra_head = '<style>
 .hist-paginacao { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:10px; font-size:12px; }
 .lock-note { font-size:12px; padding:8px 10px; border-radius:var(--radius-sm); background:#fdf3e8; border:1px solid #fce8d0; color:#8a5a20; margin-top:8px; }
 .lock-note.free { background:#f0faf5; border-color:#d4f0e2; color:#0a7a52; }
-.param-grid { display:flex; flex-direction:column; gap:10px; }
-.param-item { border:1px solid var(--hairline); border-radius:var(--radius-sm); padding:10px; background:var(--canvas-soft); }
-.param-head { display:flex; align-items:baseline; gap:8px; margin-bottom:5px; }
-.param-tag { font-family:"JetBrains Mono",monospace; font-size:11px; font-weight:700; color:var(--brand); background:#e8f0ff; padding:1px 6px; border-radius:4px; }
-.param-desc { font-size:12px; color:var(--ink); font-weight:500; }
-.param-fmt { font-size:11px; color:var(--muted); margin-top:4px; line-height:1.5; }
-.param-item input { margin-top:6px; font-family:"JetBrains Mono",monospace; font-size:12px; }
 .cmd-preview { font-family:"JetBrains Mono",monospace; font-size:13px; background:#0a0b0d; color:#7fe3a8; padding:10px 12px; border-radius:var(--radius-sm); word-break:break-all; }
 .ex-chip { display:inline-block; font-family:"JetBrains Mono",monospace; font-size:11px; background:var(--canvas-soft); border:1px solid var(--hairline); border-radius:100px; padding:3px 10px; margin:3px 4px 3px 0; cursor:pointer; }
 .ex-chip:hover { border-color:var(--brand); color:var(--brand); }
@@ -475,7 +517,7 @@ include __DIR__ . '/../web/layout_base.php';
       <label style="display:flex;justify-content:space-between;align-items:baseline">
         <span>Equipamentos</span>
         <span style="font-size:11px;font-weight:400;color:var(--muted)">
-          <a href="#" onclick="marcarTodos(true);return false">todos compatíveis</a> ·
+          <a href="#" onclick="marcarTodos(true);return false">todos</a> ·
           <a href="#" onclick="marcarTodos(false);return false">limpar</a>
         </span>
       </label>
@@ -540,9 +582,23 @@ include __DIR__ . '/../web/layout_base.php';
         <div id="p-modelos" style="font-size:11px;margin-top:6px"></div>
       </div>
 
+      <?php /* Parametrização LIVRE (v4.17.28): 1 campo de texto, igual ao
+               /comandos-sms. Quem usa esta tela conhece a sintaxe de cada
+               modelo — campos estruturados por posição travavam a aridade
+               certa por modelo e quebravam assim que dois modelos
+               compartilhavam o NOME do comando com aridade diferente. */ ?>
       <div id="p-params-wrap" style="display:none;margin-bottom:12px">
-        <label style="display:block;margin-bottom:6px">Parâmetros</label>
-        <div class="param-grid" id="p-params"></div>
+        <label for="p-params-livre">Parâmetros <span style="font-weight:400;color:var(--muted);font-size:11px">(à sua escolha)</span></label>
+        <input type="text" id="p-params-livre" style="font-family:'JetBrains Mono',monospace"
+               oninput="atualizarPreview()" placeholder="ex.: 1,30 — deixe em branco para consultar, quando disponível">
+      </div>
+
+      <!-- Comando estruturado JT/T (JSON) — não tem forma livre por posição,
+           o conteúdo inteiro é editável aqui. -->
+      <div id="p-json-wrap" style="display:none;margin-bottom:12px">
+        <label for="p-manual">Conteúdo (JSON)</label>
+        <textarea id="p-manual" rows="4" style="font-family:'JetBrains Mono',monospace;font-size:12px;width:100%"
+                  oninput="atualizarPreview()"></textarea>
       </div>
 
       <!-- Pacotes de firmware (v4.9.32): só aparece com o `UPDATE` escolhido.
@@ -573,12 +629,7 @@ include __DIR__ . '/../web/layout_base.php';
       <div class="form-group">
         <label>Será enviado</label>
         <div class="cmd-preview" id="p-preview">—</div>
-        <label style="display:flex;align-items:center;gap:7px;font-size:12px;margin-top:8px;cursor:pointer;font-weight:400">
-          <input type="checkbox" id="p-livre" style="width:auto" onchange="alternarLivre()">
-          Editar manualmente (modo livre)
-        </label>
-        <input type="text" id="p-manual" style="display:none;margin-top:6px;font-family:'JetBrains Mono',monospace"
-               oninput="atualizarPreview()" placeholder="Digite o comando exatamente como será enviado">
+        <div id="p-preview-erro" style="display:none;font-size:12px;color:var(--error);margin-top:6px"></div>
       </div>
     </div>
 
@@ -752,8 +803,14 @@ include __DIR__ . '/../web/layout_base.php';
               <div style="display:flex;gap:6px;align-items:flex-start">
                 <span class="res-dot dot-<?= htmlspecialchars($l['desfecho']['nivel']) ?>" style="margin-top:4px"></span>
                 <span><?= htmlspecialchars($l['desfecho']['titulo']) ?></span>
-                <?php if ($l['fila']): ?>
-                  <span class="badge" style="font-size:10px" title="O gateway aceitou e guardou o comando; a entrega acontece quando o equipamento reconectar.">na fila</span>
+                <?php if ($l['fila'] && $l['hub_fila'] === 'queued'): ?>
+                  <span class="badge badge-success" style="font-size:10px"
+                        title="Confirmado no hub às <?= htmlspecialchars($l['hub_fila_em'] ?? '') ?> — ainda está na fila offline dele.">na fila (confirmado)</span>
+                <?php elseif ($l['fila'] && $l['hub_fila'] === 'not_found'): ?>
+                  <span class="badge" style="font-size:10px;background:#fdf3e8;color:#8a5a20"
+                        title="Consultado no hub às <?= htmlspecialchars($l['hub_fila_em'] ?? '') ?> — não está mais na fila dele. Pode ter sido entregue (aguarde o histórico) ou ter expirado sem confirmação.">saiu da fila</span>
+                <?php elseif ($l['fila']): ?>
+                  <span class="badge" style="font-size:10px" title="O gateway aceitou o comando. A confirmação de que ainda está na fila do hub chega em até 10 min (scripts/offline_instruct_poll.php).">na fila (a confirmar)</span>
                 <?php endif; ?>
               </div>
               <?php if ($l['kv']): ?>
@@ -875,26 +932,16 @@ function imeisMarcados() {
 }
 
 /**
- * Um equipamento aceita o comando escolhido?
+ * O comando escolhido é documentado para o modelo desta linha?
  *
- * 🔴 v4.16.0 — a regra deixou de ser "universal libera todo mundo". Ela é:
- *   1. o modelo está na lista `m` do comando → liberado, sempre; ou
- *   2. o comando é `universal` E a FAMÍLIA do equipamento é uma das que o
- *      comando documenta (`f`, derivada de `m` no PHP).
- *
- * A regra 2 é o que impede `RECORDSW`/`VOLUME`/`SSID`/`WIFIAP` — universais
- * porque estão em 5 das 6 páginas de CÂMERA da wiki — de chegarem a um
- * rastreador da linha VL. Antes disso, `universal` queria dizer "toda a frota",
- * e a frota era só de câmeras.
- *
- * ⚠️ E o motivo NÃO é "rastreador não tem WiFi": o JM-VL01 TEM. Hotspot WiFi é
- * recurso de capa na wiki dele, e o Android embarcado ainda o conecta como
- * CLIENTE a uma rede. O que ele não entende é `WIFIAP`/`SSID` — a forma dele é
- * `HOTSPOT,S,N,P#`. Mesmo recurso, comando outro, como `LED` (JC/VL01) contra
- * `LEDSLEEP` (VL02). Mandar a forma da câmera não dá erro visível: dá recusa
- * no callback, minutos depois.
+ * 🔴 v4.17.28 — deixou de ser usada para HABILITAR/DESABILITAR nada (decisão
+ * do dono do produto: quem usa esta tela conhece a sintaxe de cada modelo).
+ * Sobrevive só como classificação para o aviso INFORMATIVO de
+ * `atualizarAvisoCompatibilidade()` — a mesma regra de antes (modelo na lista
+ * `m`, ou `universal` com a família do equipamento em `f`), sem nenhum efeito
+ * sobre o que pode ser marcado ou enviado.
  */
-function comandoAceitaLinha(cmd, row) {
+function comandoDocumentaLinha(cmd, row) {
     if (!cmd) return true;
     if (cmd.m && cmd.m.indexOf(row.dataset.modelo) >= 0) return true;
     if (!cmd.u) return false;
@@ -903,46 +950,29 @@ function comandoAceitaLinha(cmd, row) {
 }
 
 /**
- * Aplica a trava: com um comando escolhido, só fica habilitado o equipamento
- * que `comandoAceitaLinha()` aceita. Sem comando escolhido, todos ficam
- * habilitados — é a escolha do comando que restringe a lista, não o contrário.
+ * Aviso não-bloqueante: algum equipamento MARCADO não está entre os modelos
+ * que o comando escolhido documenta. Informa e sugere conferência — nunca
+ * desabilita o equipamento nem esconde o comando (ver cabeçalho do arquivo).
  */
-function aplicarTrava() {
+function atualizarAvisoCompatibilidade() {
     var nota = document.getElementById('lock-note');
-    var motivo = '';
+    if (!cmdAtual) { nota.style.display = 'none'; return; }
 
-    if (cmdAtual && !cmdAtual.u) {
-        motivo = '<strong>' + cmdAtual.c + '</strong> é documentado só para ' + cmdAtual.m.join(', ') +
-                 '. Equipamentos de outro modelo estão desabilitados — enviar para eles devolveria ' +
-                 '“comando não suportado” minutos depois, no callback.';
-    } else if (cmdAtual && cmdAtual.u) {
-        var fams = cmdAtual.f || ['camera'];
-        var rotFam = fams.map(function (f) { return f === 'tracker' ? 'rastreadores' : 'câmeras'; }).join(' e ');
-        motivo = '<strong>' + cmdAtual.c + '</strong> é do núcleo comum do proNo 128 (documentado em ' +
-                 cmdAtual.m.length + ' modelos). Trava liberada para <strong>' + rotFam + '</strong>' +
-                 (fams.length === 1 ? ' — os equipamentos da outra família continuam desabilitados, ' +
-                                      'porque o comando não é documentado para eles.' : '.');
-    }
+    var marcadas = Array.prototype.slice.call(document.querySelectorAll('.dev-chk:checked'))
+        .map(function (c) { return c.closest('.dev-row'); });
+    var foraDaDoc = marcadas.filter(function (row) { return !comandoDocumentaLinha(cmdAtual, row); });
 
-    document.querySelectorAll('.dev-row').forEach(function (row) {
-        var chk = row.querySelector('.dev-chk');
-        var ok = comandoAceitaLinha(cmdAtual, row);
-        chk.disabled = !ok;
-        row.classList.toggle('dev-off', !ok);
-        if (!ok && chk.checked) chk.checked = false;
-    });
+    if (!foraDaDoc.length) { nota.style.display = 'none'; return; }
 
-    if (motivo) {
-        nota.style.display = 'block';
-        nota.className = 'lock-note' + (cmdAtual && cmdAtual.u ? ' free' : '');
-        nota.innerHTML = motivo;
-    } else {
-        nota.style.display = 'none';
-    }
-    atualizarBotao();
+    var nomes = foraDaDoc.map(function (row) { return row.querySelector('span').textContent.trim(); });
+    nota.style.display = 'block';
+    nota.className = 'lock-note';
+    nota.innerHTML = '<strong>' + esc(cmdAtual.c) + '</strong> é documentado para ' + esc(cmdAtual.m.join(', ')) +
+        '. Não consta a documentação para <strong>' + esc(nomes.join(', ')) + '</strong> — ' +
+        'o envio continua liberado; confirme a sintaxe do modelo antes de mandar.';
 }
 
-function aoMarcarDevice() { montarListaComandos(); aplicarTrava(); avisarFila(); montarPacotesFirmware(); }
+function aoMarcarDevice() { montarListaComandos(); atualizarAvisoCompatibilidade(); avisarFila(); montarPacotesFirmware(); }
 
 /**
  * Avisa que há equipamento sem contato recente entre os marcados.
@@ -971,14 +1001,16 @@ function avisarFila() {
 }
 
 function marcarTodos(v) {
-    document.querySelectorAll('.dev-chk').forEach(function (c) { if (!c.disabled) c.checked = v; });
+    document.querySelectorAll('.dev-chk').forEach(function (c) { c.checked = v; });
     aoMarcarDevice();
 }
 
 /**
- * Lista de comandos filtrada pelos modelos marcados. Comando que nenhum
- * equipamento marcado suporta simplesmente não aparece — mostrar e desabilitar
- * encheria a lista de 119 itens de ruído.
+ * Lista ÚNICA de todos os comandos do proNo 128 (v4.17.28) — não filtra mais
+ * pelos equipamentos marcados. Até a v4.17.27 um comando que nenhum marcado
+ * documentava simplesmente sumia da lista; com a trava de modelo removida,
+ * esconder deixou de fazer sentido — a busca de texto continua sendo o único
+ * filtro.
  */
 function montarListaComandos() {
     var busca = (document.getElementById('cmd-busca').value || '').toLowerCase().trim();
@@ -988,24 +1020,12 @@ function montarListaComandos() {
         protos[c.closest('.dev-row').dataset.proto] = 1;
     });
 
-    // Linhas marcadas — a lista só oferece comando que PELO MENOS UMA delas
-    // aceita. v4.16.0: o teste passou a ser `comandoAceitaLinha()`, o mesmo da
-    // trava, em vez de "é universal OU o modelo está na lista". Com as duas
-    // famílias na frota, o atalho `!x.u` mostrava comando de câmera para quem
-    // tinha só rastreador marcado — e a trava logo depois desabilitava todas as
-    // linhas, deixando um comando escolhível e nenhum destino possível.
-    var linhasMarcadas = Array.prototype.slice.call(document.querySelectorAll('.dev-chk:checked'))
-        .map(function (c) { return c.closest('.dev-row'); });
-
     var itens = CATALOGO.filter(function (x) {
-        if (linhasMarcadas.length && !linhasMarcadas.some(function (row) {
-                return comandoAceitaLinha(x, row);
-            })) return false;
         if (!busca) return true;
-        return (x.n + ' ' + x.s + ' ' + x.c + ' ' + x.d).toLowerCase().indexOf(busca) >= 0;
+        return (x.n + ' ' + x.c + ' ' + x.d).toLowerCase().indexOf(busca) >= 0;
     }).map(function (x) {
-        return { tipo: 'txt', k: x.k, rot: x.n + '  [' + x.s + ']', val: 'T:' + x.s, u: x.u,
-                 nome: x.n, syn: x.s, desc: x.d };
+        return { tipo: 'txt', k: x.k, rot: x.n + '  [' + x.c + ']', val: 'T:' + x.c, u: x.u,
+                 nome: x.n, syn: x.c, desc: x.d };
     });
 
     // JT/T estruturado só entra se todos os marcados forem JT/T
@@ -1066,8 +1086,7 @@ function montarListaComandos() {
     marcarItemLista();
 
     document.getElementById('cmd-conta').textContent =
-        itens.length + ' comando(s) disponível(is)' +
-        (mods.length ? ' para ' + mods.join(', ') : '') + '. ★ = universal (proNo 128).';
+        itens.length + ' comando(s) do protocolo 128. ★ = universal (documentado em mais modelos).';
 }
 
 /** Clique na lista: o <select> continua sendo a fonte da verdade. */
@@ -1091,7 +1110,9 @@ function marcarItemLista() {
 function aoEscolherComando() {
     var v = document.getElementById('cmd-sel').value;
     var painel = document.getElementById('cmd-painel');
-    if (!v) { painel.style.display = 'none'; cmdAtual = null; aplicarTrava(); montarPacotesFirmware(); return; }
+    if (!v) { painel.style.display = 'none'; cmdAtual = null; atualizarAvisoCompatibilidade(); montarPacotesFirmware(); return; }
+
+    document.getElementById('p-params-livre').value = '';
 
     if (v.charAt(0) === 'J') {
         var pro = parseInt(v.slice(2), 10);
@@ -1099,82 +1120,62 @@ function aoEscolherComando() {
         cmdAtual = null; proAtual = pro;
         painel.style.display = 'block';
         document.getElementById('p-nome').textContent = j.n + ' (proNo ' + pro + ')';
-        document.getElementById('p-desc').textContent = 'Comando estruturado JT/T 808. O conteúdo é JSON — ajuste os campos no modo livre.';
+        document.getElementById('p-desc').textContent = 'Comando estruturado JT/T 808. O conteúdo é JSON — edite abaixo.';
         document.getElementById('p-modelos').innerHTML = '<span class="badge badge-info">só modelos JT/T</span>';
         document.getElementById('p-params-wrap').style.display = 'none';
+        document.getElementById('p-json-wrap').style.display = 'block';
         document.getElementById('p-ex-wrap').style.display = 'none';
         document.getElementById('p-cons-wrap').style.display = 'none';
-        document.getElementById('p-livre').checked = true;
-        alternarLivre();
         document.getElementById('p-manual').value = j.c;
         atualizarPreview();
-        aplicarTrava();
+        atualizarAvisoCompatibilidade();
         montarPacotesFirmware();
         return;
     }
 
-    var syn = v.slice(2);
-    cmdAtual = CATALOGO.filter(function (x) { return x.s === syn; })[0];
+    var nome = v.slice(2);
+    cmdAtual = CATALOGO.filter(function (x) { return x.c === nome; })[0];
     proAtual = 128;
     if (!cmdAtual) { painel.style.display = 'none'; montarPacotesFirmware(); return; }
 
     painel.style.display = 'block';
-    document.getElementById('p-nome').textContent = cmdAtual.n + '  —  ' + cmdAtual.s;
+    document.getElementById('p-nome').textContent = cmdAtual.n + '  —  ' + cmdAtual.c;
     document.getElementById('p-desc').textContent = cmdAtual.d || '';
     document.getElementById('p-modelos').innerHTML =
         (cmdAtual.u ? '<span class="badge badge-success">universal (proNo 128)</span> ' : '') +
         cmdAtual.m.map(function (m) { return '<span class="badge" style="font-size:10px">' + m + '</span>'; }).join(' ');
 
-    // Campos de parâmetro
-    var wrap = document.getElementById('p-params-wrap');
-    var box  = document.getElementById('p-params');
-    box.innerHTML = '';
-    if (cmdAtual.p && cmdAtual.p.length) {
-        cmdAtual.p.forEach(function (p, i) {
-            var d = document.createElement('div');
-            d.className = 'param-item';
-            d.innerHTML =
-                '<div class="param-head"><span class="param-tag">' + esc(p.p) + '</span>' +
-                '<span class="param-desc">' + esc(p.d || '') + '</span></div>' +
-                (p.f ? '<div class="param-fmt"><strong>Formato aceito:</strong> ' + esc(p.f) + '</div>' : '') +
-                (p.v ? '<div class="param-fmt"><strong>Padrão de fábrica:</strong> ' + esc(p.v) + '</div>' : '') +
-                '<input type="text" class="p-in" data-i="' + i + '" oninput="atualizarPreview()" placeholder="valor de ' + esc(p.p) + '">';
-            box.appendChild(d);
-        });
-        wrap.style.display = 'block';
-    } else {
-        wrap.style.display = 'none';
-    }
+    document.getElementById('p-json-wrap').style.display = 'none';
+    document.getElementById('p-params-wrap').style.display = 'block';
 
     montarPacotesFirmware();
 
-    // Consulta: a forma nua do comando, que LÊ em vez de escrever.
+    // Consulta: a forma nua do comando, que LÊ em vez de escrever. Deixar o
+    // campo de parâmetros em branco já envia a consulta (ver montarComandoTexto);
+    // o chip só é o atalho visível para essa mesma regra.
     var cw = document.getElementById('p-cons-wrap');
     if (cmdAtual.q) {
         var chip = document.getElementById('p-cons-chip');
         chip.textContent = cmdAtual.q;
-        chip.onclick = function () { usarConsulta(cmdAtual.q); };
+        chip.onclick = function () { usarConsulta(); };
         chip.tabIndex = 0;
         chip.onkeydown = function (ev) {
-            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); usarConsulta(cmdAtual.q); }
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); usarConsulta(); }
         };
-        // A procedência aparece porque `medido` e `wiki` não valem o mesmo:
-        // um foi conferido em câmera real, o outro é o que a página promete.
         document.getElementById('p-cons-ref').textContent =
-            (cmdAtual.qm && cmdAtual.qm.length ? cmdAtual.qm.join(', ') : '') +
-            (cmdAtual.qr ? ' · ' + (cmdAtual.qr.indexOf('medido') === 0
-                 ? 'conferido em equipamento real' : 'conforme a documentação') : '');
+            cmdAtual.qm && cmdAtual.qm.length ? cmdAtual.qm.join(', ') : '';
         cw.style.display = 'block';
     } else { cw.style.display = 'none'; }
 
-    // Exemplos clicáveis
+    // Exemplos clicáveis — no máximo 1 por família de equipamento (ver
+    // command_catalog_examples_by_family() no PHP), para não poluir a tela.
     var exw = document.getElementById('p-ex-wrap'), exb = document.getElementById('p-ex');
     exb.innerHTML = '';
     if (cmdAtual.e && cmdAtual.e.length) {
         cmdAtual.e.forEach(function (e) {
             var c = document.createElement('span');
             c.className = 'ex-chip';
-            c.textContent = e.c;
+            c.textContent = e.c + (e.l ? ' (' + e.l + ')' : '');
             c.title = e.d || '';
             c.onclick = function () { usarExemplo(e.c); };
             exb.appendChild(c);
@@ -1182,68 +1183,55 @@ function aoEscolherComando() {
         exw.style.display = 'block';
     } else { exw.style.display = 'none'; }
 
-    document.getElementById('p-livre').checked = false;
-    alternarLivre();
     atualizarPreview();
-    aplicarTrava();
+    atualizarAvisoCompatibilidade();
 }
 
-/** Preenche os campos a partir de um exemplo da wiki. */
+/** Preenche o campo de parâmetros a partir de um exemplo (sem o nome do comando nem o `#`). */
 function usarExemplo(exemplo) {
     var corpo = exemplo.replace(/#$/, '');
-    var toks  = corpo.split(',');
-    var ins   = document.querySelectorAll('.p-in');
-    // O 1º token é o nome do comando; sub-comandos fixos também são pulados,
-    // então alinha pelo FIM: os N últimos tokens são os N parâmetros.
-    var vals = toks.slice(Math.max(1, toks.length - ins.length));
-    ins.forEach(function (inp, i) { inp.value = vals[i] !== undefined ? vals[i] : ''; });
-    document.getElementById('p-livre').checked = false;
-    alternarLivre();
+    var cUp = cmdAtual.c.toUpperCase();
+    if (corpo.toUpperCase().indexOf(cUp + ',') === 0) corpo = corpo.slice(cmdAtual.c.length + 1);
+    else if (corpo.toUpperCase() === cUp) corpo = '';
+    document.getElementById('p-params-livre').value = corpo;
     atualizarPreview();
 }
 
 /**
- * Carrega a forma de CONSULTA do comando (`CMD#`, sem parâmetros).
- *
- * Vai pelo modo livre porque a consulta não é o template: o template monta
- * `APN,valor,valor#` a partir dos campos, e a consulta é justamente o comando
- * SEM eles. Tentar expressá-la pelo template devolveria `APN,A,B#` com os
- * placeholders crus, que o equipamento recusa.
+ * Limpa o campo de parâmetros — campo vazio já significa "consultar" em vez
+ * de "gravar" (ver `montarComandoTexto()`). O chip só existe para deixar essa
+ * regra visível e clicável, em vez de o operador ter de saber que apagar o
+ * campo é a forma de consultar.
  */
-function usarConsulta(q) {
-    document.getElementById('p-livre').checked = true;
-    alternarLivre();
-    document.getElementById('p-manual').value = q;
+function usarConsulta() {
+    document.getElementById('p-params-livre').value = '';
     atualizarPreview();
 }
 
-function alternarLivre() {
-    var livre = document.getElementById('p-livre').checked;
-    document.getElementById('p-manual').style.display = livre ? 'block' : 'none';
-    document.getElementById('p-params-wrap').style.opacity = livre ? .45 : 1;
-    if (livre && !document.getElementById('p-manual').value) {
-        document.getElementById('p-manual').value = montarComando();
+/**
+ * Monta a string final a partir do campo ÚNICO de parâmetros (v4.17.28, igual
+ * ao /comandos-sms — ver o comentário no topo do arquivo). Sem validação de
+ * aridade: quem usa esta tela sabe a sintaxe de cada modelo.
+ *
+ *   Campo em branco   → forma de CONSULTA (`cmdAtual.q`), se o catálogo souber
+ *                        uma; senão, erro — não existe forma nua conhecida.
+ *   Campo preenchido  → `<CMD>,<o que foi digitado>#`, tolerante a colar o
+ *                        exemplo inteiro (com o nome do comando e/ou `#`).
+ */
+function montarComandoTexto() {
+    if (!cmdAtual) return { texto: '', erro: '' };
+    var texto = (document.getElementById('p-params-livre').value || '').trim();
+
+    if (texto === '') {
+        if (!cmdAtual.q) return { texto: '', erro: 'Sem forma de consulta conhecida para este comando — digite os parâmetros.' };
+        return { texto: cmdAtual.q, erro: '' };
     }
-    atualizarPreview();
-}
 
-/** Monta a string final substituindo os placeholders pelos valores digitados. */
-function montarComando() {
-    if (!cmdAtual) return '';
-    var corpo = cmdAtual.s.replace(/#$/, '');
-    var toks  = corpo.split(',');
-    var ins   = document.querySelectorAll('.p-in');
-    if (!ins.length) return cmdAtual.s;
-
-    var vals = Array.prototype.map.call(ins, function (i) { return i.value.trim(); });
-    var idx  = 0;
-    var saida = toks.map(function (t, pos) {
-        if (pos === 0) return t;
-        // placeholder = P1..Pn ou letra única maiúscula
-        if (/^(P\d+|[A-Z])$/.test(t)) { var v = vals[idx]; idx++; return v !== undefined && v !== '' ? v : t; }
-        return t;
-    });
-    return saida.join(',') + '#';
+    var corpo = texto.replace(/#$/, '').trim();
+    var cUp = cmdAtual.c.toUpperCase();
+    if (corpo.toUpperCase().indexOf(cUp + ',') === 0) corpo = corpo.slice(cmdAtual.c.length + 1);
+    else if (corpo.toUpperCase() === cUp) corpo = '';
+    return { texto: (corpo === '' ? (cmdAtual.c + '#') : (cmdAtual.c + ',' + corpo + '#')), erro: '' };
 }
 
 /**
@@ -1302,67 +1290,43 @@ function montarPacotesFirmware() {
     atualizarBotao();
 }
 
-/** Preenche o P1 do UPDATE com a URL escolhida. */
+/** Preenche o campo de parâmetros com a URL do pacote escolhido. */
 function usarUrlFirmware(url) {
-    var ins = document.querySelectorAll('.p-in');
-    if (ins.length) {
-        document.getElementById('p-livre').checked = false;
-        alternarLivre();
-        ins[0].value = url;
-    } else {
-        document.getElementById('p-livre').checked = true;
-        alternarLivre();
-        document.getElementById('p-manual').value = 'UPDATE,' + url + '#';
-    }
+    document.getElementById('p-params-livre').value = url;
     atualizarPreview();
 }
-function atualizarPreview() {
-    var livre = document.getElementById('p-livre').checked;
-    var txt = livre ? document.getElementById('p-manual').value : montarComando();
-    document.getElementById('p-preview').textContent = txt || '—';
-    atualizarBotao();
-}
 
-/**
- * Ficou parâmetro por preencher? (v4.9.40)
- *
- * 🔴 A pergunta é sobre os CAMPOS, não sobre o formato do texto. A guarda
- * anterior olhava a string montada e recusava o que casasse com `,[A-Z],` —
- * "parece placeholder" —, e isso é indistinguível de um VALOR legítimo de uma
- * letra só. O `VIDEOTIMEZONE,W,3,0#` (W = oeste de GMT, o exemplo oficial da
- * planilha JC371 A006) era recusado pela própria tela, sem que houvesse nada
- * de errado com ele. Mesma armadilha esperava o `VIDETIMEZONE,A,B,C#` assim
- * que alguém preenchesse o primeiro campo com `W`.
- *
- * Olhando os campos, não há ambiguidade: o que está em branco está em branco,
- * e um `W` digitado é um valor. No modo livre não há campo a checar — ali o
- * operador escreve o comando inteiro e responde por ele.
- */
-function faltaParametro() {
-    if (document.getElementById('p-livre').checked) return false;
-    var ins = document.querySelectorAll('.p-in');
-    return Array.prototype.some.call(ins, function (i) { return i.value.trim() === ''; });
+function atualizarPreview() {
+    var txt, erro = '';
+    if (proAtual !== 128) {
+        txt = document.getElementById('p-manual').value;
+    } else {
+        var r = montarComandoTexto();
+        txt = r.texto; erro = r.erro;
+    }
+    document.getElementById('p-preview').textContent = txt || '—';
+    var elErro = document.getElementById('p-preview-erro');
+    elErro.style.display = erro ? 'block' : 'none';
+    elErro.textContent = erro;
+    atualizarBotao();
 }
 
 function atualizarBotao() {
     var b = document.getElementById('btn-enviar');
     var n = imeisMarcados().length;
     var txt = document.getElementById('p-preview').textContent;
-    var pronto = n > 0 && txt && txt !== '—';
+    var temErro = document.getElementById('p-preview-erro').style.display === 'block';
+    var pronto = n > 0 && txt && txt !== '—' && !temErro;
     // 🔴 v4.9.32 — `UPDATE` é o único comando cujo PARÂMETRO é específico do
-    // modelo. Soltar a trava de modelo (ele vale para a linha JC inteira) sem
-    // esta guarda deixaria o lote mandar a mesma URL para modelos diferentes.
+    // modelo (a URL do pacote). O envio em lote manda a MESMA string para
+    // todos os marcados, então modelos diferentes marcados aplicariam o
+    // pacote de um no outro sem erro de comando para denunciar.
     var fwMisto = cmdAtual && cmdAtual.c === 'UPDATE' && modelosMarcados().length > 1;
     if (fwMisto) pronto = false;
-    // Campo em branco desabilita o botão AQUI, e não só na recusa do envio: o
-    // operador via "Enviar para 3 equipamentos" e descobria o problema depois
-    // de clicar.
-    var falta = faltaParametro();
-    if (falta) pronto = false;
     b.disabled = !pronto;
     b.textContent = fwMisto ? 'UPDATE: marque um modelo por vez'
-                  : !n ? 'Selecione equipamento e comando'
-                  : falta ? 'Preencha os parâmetros'
+                  : !n ? 'Selecione equipamento(s)'
+                  : temErro ? 'Corrija os parâmetros'
                   : (!pronto ? 'Escolha um comando'
                   : 'Enviar para ' + n + ' equipamento' + (n > 1 ? 's' : ''));
 }
@@ -1376,17 +1340,18 @@ function esc(s) {
 /** Envia um comando por equipamento — /sendcommand continua sendo 1 IMEI por chamada. */
 function enviarLote() {
     var imeis = imeisMarcados();
-    var livre = document.getElementById('p-livre').checked;
-    var conteudo = livre ? document.getElementById('p-manual').value.trim() : montarComando();
-    if (!imeis.length || !conteudo) return;
-
-    // Placeholder não substituído é erro de preenchimento, não comando válido.
-    // ⚠️ A pergunta é sobre os CAMPOS — ver faltaParametro(). Casar por formato
-    // (`,[A-Z],`) recusava valor legítimo de uma letra, como o `W` de oeste de
-    // GMT no VIDEOTIMEZONE.
-    if (faltaParametro()) {
-        document.getElementById('envio-feedback').innerHTML =
-            '<span style="color:var(--error)">Preencha todos os parâmetros — ainda há campo em branco em <code>' + esc(conteudo) + '</code>.</span>';
+    var conteudo, erro = '';
+    if (proAtual !== 128) {
+        conteudo = document.getElementById('p-manual').value.trim();
+    } else {
+        var r = montarComandoTexto();
+        conteudo = r.texto; erro = r.erro;
+    }
+    if (!imeis.length || !conteudo || erro) {
+        if (erro) {
+            document.getElementById('envio-feedback').innerHTML =
+                '<span style="color:var(--error)">' + esc(erro) + '</span>';
+        }
         return;
     }
 
@@ -1531,6 +1496,10 @@ function verDetalhe(id) {
           '<div><strong>Comando:</strong> ' + esc(l.rotulo) + '</div>' +
           '<div><strong>Enviado em:</strong> ' + esc(l.quando) + (l.espera ? ' · respondeu em ' + esc(l.espera) : '') + '</div>' +
           '<div><strong>Status no banco:</strong> <span class="badge">' + esc(l.status) + '</span></div>' +
+          (l.hub_fila ? '<div><strong>Fila do hub:</strong> ' +
+              (l.hub_fila === 'queued' ? 'confirmado, ainda na fila' :
+               l.hub_fila === 'not_found' ? 'não está mais lá (entregue ou expirado)' : 'erro ao consultar') +
+              (l.hub_fila_em ? ' — checado em ' + esc(l.hub_fila_em) : '') + '</div>' : '') +
         '</div>' +
         '<div style="margin-top:10px"><label style="font-size:11px">Conteúdo enviado</label>' +
           '<div class="cmd-preview">' + esc(l.enviado) + '</div></div>' +
@@ -1609,7 +1578,7 @@ function autoBloqueado() {
     // só porque há um comando escolhido deixaria a atualização em pausa
     // permanente, que é o estado normal de quem está usando a tela.
     var editados = Array.prototype.slice
-        .call(document.querySelectorAll('#p-params input, #p-manual'))
+        .call(document.querySelectorAll('#p-params-livre, #p-manual'))
         .some(function (i) { return i.value !== i.defaultValue; });
     if (editados) return 'comando em edição';
     return '';
@@ -1633,12 +1602,12 @@ function restaurarSelecao() {
     if (!s) return;
     if (s.imeis && s.imeis.length) {
         document.querySelectorAll('.dev-chk').forEach(function (c) {
-            if (s.imeis.indexOf(c.value) >= 0 && !c.disabled) c.checked = true;
+            if (s.imeis.indexOf(c.value) >= 0) c.checked = true;
         });
     }
     if (s.busca) document.getElementById('cmd-busca').value = s.busca;
     montarListaComandos();
-    aplicarTrava();
+    atualizarAvisoCompatibilidade();
     avisarFila();
     if (s.cmd) {
         var sel = document.getElementById('cmd-sel');

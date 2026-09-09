@@ -1,31 +1,28 @@
 # A fila de comando offline do hub — o que a tela promete e o que foi medido
 
 > Medido em **produção** (`186.248.143.197`, `tracker-instruction-server` em
-> `10.1.1.8:10088`) em **07/09/2026**. Doc oficial:
+> `10.1.1.8:10088`) em **07/09/2026 e 09/09/2026**. Doc oficial:
 > <https://docs.jimicloud.com/integration/integration.html> — §1.16 Push Offline
 > Command, §2.21 Query Offline Command, §2.22 Cancel Offline Command.
 >
-> **Decisão do dono do produto (07/09/2026): apenas registrar. Nada será
-> corrigido agora.**
+> **09/09/2026 — a hipótese do dia 07/09 estava ERRADA.** O teste decisivo
+> proposto na primeira versão deste documento (mandar um comando a um
+> equipamento offline e consultar a fila em seguida) foi executado e
+> **derrubou** a conclusão de que faltava `offlineFlag`. Implementado:
+> `iothub_query_offline_instruct()` (`includes/iothub_command.php`) e o cron
+> `scripts/offline_instruct_poll.php` (migração v4.18.0). Decisão do dono do
+> produto (07/09/2026, "apenas registrar") foi **revista em 09/09/2026** à luz
+> da nova medição — ver §5.
 
 ## 1. O que a aplicação faz hoje
 
 | Parte da doc | Endpoint | Estado |
 |---|---|---|
 | §1.16 Push Offline Command | `POST /pushInstructResponse` (nós recebemos) | ✅ **implementado** — `handlers/pushinstructresponse.php`, trata `msgType` 1 (assíncrono) e 2 (offline), grava em `command_responses` e fecha a linha em `commands` |
-| §2.21 Query Offline Command | `POST {InsAddress}/api/device/queryOfflineInstruct` | ❌ **não implementado** |
-| §2.22 Cancel Offline Command | `POST {InsAddress}/api/device/deleteOfflineInstruct` | ❌ **não implementado** |
+| §2.21 Query Offline Command | `POST {InsAddress}/api/device/queryOfflineInstruct` | ✅ **implementado (09/09/2026)** — `iothub_query_offline_instruct()`, consumida por `scripts/offline_instruct_poll.php` a cada 10 min |
+| §2.22 Cancel Offline Command | `POST {InsAddress}/api/device/deleteOfflineInstruct` | ❌ **não implementado** — destrutivo (apaga o comando pendente) e sem uso claro ainda; não pedido |
 
-Ou seja: temos o lado **push** (o hub nos avisa quando um comando offline
-finalmente é entregue) e **não** temos o lado **pull** — não há como perguntar
-"o que está pendente para este equipamento?" nem cancelar. Um comando mandado a
-equipamento offline vira uma linha `commands.status = 'sent'` que só se resolve
-se o callback chegar.
-
-O acompanhamento na tela é por polling em `/commandstatus`; `sendcommand.php`
-devolve `offline_queued` e as telas escrevem "enfileirado".
-
-## 2. 🔴 A fila do hub está VAZIA — inclusive para comando de 18 dias atrás
+## 2. 🔴 07/09/2026 — a fila pareceu VAZIA, inclusive para comando de 18 dias atrás
 
 `queryOfflineInstruct` **funciona** nesta instalação. A resposta foi sempre a
 mesma:
@@ -38,98 +35,89 @@ mesma:
 | `865478070003241` | 19 presos | — | `20002` |
 | `862798051583785` | 11 presos | — | `20002` |
 
-São **97 comandos em `status='sent'`** nos últimos 30 dias e **nenhum** aparece
-na fila do hub. O caso do `865478070649936` é o mais direto: o hub respondeu
-exatamente o `_code = 600` que o nosso código usa para afirmar
-`offline_queued = true`, e 18 dias depois a fila não tem nada.
+São **97 comandos em `status='sent'`** nos últimos 30 dias e **nenhum**
+apareceu na fila do hub nesse dia. Hipótese formulada então: nunca mandamos
+`offlineFlag`, que a §1.16 exige para o cacheamento acontecer.
 
-**Consequência para o usuário:** a frase que `handlers/video_aovivo.php` mostra
-("o comando foi enfileirado e será entregue na reconexão") e a nota de
-`handlers/comandos.php` ("o comando offline é enfileirado e entregue quando o
-equipamento reconecta") **não estão sustentadas por nada que o hub confirme**.
+## 3. 🔴 09/09/2026 — teste decisivo: a hipótese do `offlineFlag` caiu
 
-### ⚠️ O que ainda NÃO está provado
+Metodologia (script único, rodado uma vez em produção via `php`, apagado
+depois — sem alterar nenhum arquivo do app): para o mesmo `865478070649936`
+(agora offline há **19 dias**),
 
-Não dá para distinguir, só com estas medições, entre:
+1. Consultou `queryOfflineInstruct` **antes** de qualquer envio → `20002`
+   (nada na fila, como esperado).
+2. Mandou `VERSION#` (`sendInstruct`) **sem** `offlineFlag` — o payload exato
+   que `iothub_send_instruct()` já usa. Resposta: `_code:300`, "Device not
+   online", comando "converted to an offline command".
+3. Consultou `queryOfflineInstruct` **imediatamente depois** → **`code:0`,
+   "The offline command was successfully queried"**, com `_content:"VERSION#"`
+   e `_time_out:60` — **o comando ESTAVA na fila**, sem nunca ter mandado
+   `offlineFlag`.
+4. Mandou o mesmo comando **com** `offlineFlag=true` — resposta idêntica
+   (`_code:300`).
+5. Consultou de novo → também encontrado, sem diferença observável do passo 3.
+6. ~1min40s depois, uma nova consulta ainda encontrava o comando do passo 4
+   na fila.
 
-- **(a)** o comando nunca foi enfileirado, ou
-- **(b)** foi enfileirado e o hub expirou/purgou a fila.
+**Conclusão: o hub cacheia o comando offline por padrão, com ou sem
+`offlineFlag`.** A hipótese de 07/09 explicava o sintoma errado — não é que os
+97 comandos nunca tenham sido cacheados; é a outra hipótese que o próprio
+documento já cogitava (§"O que ainda não está provado", versão anterior):
+**a fila TEM validade curta** (o campo `_time_out` que ela devolve) **e já
+tinha expirado** quando a consulta de 07/09 rodou contra comandos de dias/
+semanas antes. Um comando fresco aparece; um comando de 18 dias, não — a
+mesma pergunta ("está na fila?"), respondida em momentos diferentes da vida
+do mesmo tipo de comando.
 
-**O teste que resolve** (não executado — envolve disparar comando a
-equipamento): mandar um `VERSION#` a um equipamento sabidamente offline e
-consultar `queryOfflineInstruct` **em seguida**. Se voltar `20002`, é (a).
+⚠️ O valor exato de `_time_out` (unidade e duração real da validade) **não foi
+determinado** — só que um comando seguia lá depois de ~1min40s. Não vale a
+pena bloquear a implementação nisso: `scripts/offline_instruct_poll.php`
+observa isso empiricamente a cada rodada (a cada 10 min) e grava o resultado;
+com o tempo, os dados em `commands.hub_queue_status`/`hub_queue_checked_at`
+respondem essa pergunta sozinhos, sem precisar de outro teste dedicado.
 
-## 3. Duas lacunas concretas no nosso lado
+## 4. O que foi implementado (09/09/2026, v4.18.0)
 
-### 3.1 🔴 Nunca mandamos `offlineFlag`
+- **`iothub_query_offline_instruct()`** (`includes/iothub_command.php`) — só
+  leitura, mesmo padrão de cliente HTTP de `iothub_send_instruct()`. Decodifica
+  o `data` aninhado (vem como STRING JSON dentro do envelope, diferente do
+  `sendInstruct`, cujo `data` já é objeto).
+- **`commands.hub_queue_status`** (`queued`/`not_found`/`error`) e
+  **`commands.hub_queue_checked_at`** — migração `mysql/migration_v4.18.0.sql`.
+- **`scripts/offline_instruct_poll.php`** (cron a cada 10 min,
+  `scripts/crontab-setup.sh`) — para cada IMEI com comando `status='sent'` nos
+  últimos 7 dias ainda não checado nos últimos 10 min, consulta a fila uma vez
+  (nunca uma vez por comando — o §2.21 não recebe id de comando, só IMEI) e
+  casa a resposta por CONTEÚDO com o(s) comando(s) pendente(s) daquele
+  equipamento.
+- **`handlers/sendcommand.php`**: `_code=300` (offline) passou a receber o
+  mesmo rótulo `offline_queued` que só `600` (timeout) recebia — eram 21
+  respostas em 30 dias tratadas como falha comum.
+- **`/comandos`** e **`/commandstatus`**: o histórico mostra "na fila
+  (confirmado)" / "saiu da fila" / "na fila (a confirmar)" a partir do estado
+  real gravado pelo cron, em vez de só inferir pelo `status` do banco.
+- **`iothub_send_instruct()` continua SEM `offlineFlag`** — de propósito: não
+  há evidência de que ele mude alguma coisa nesta instalação (passos 2-5 do
+  teste deram o mesmo resultado com e sem), e mandá-lo sem necessidade
+  reintroduziria o risco que a versão anterior deste documento apontava
+  (mudar o comportamento do hub) sem benefício demonstrado.
 
-`iothub_send_instruct()` (`includes/iothub_command.php`) monta o payload com:
+## 5. Decisão do dono do produto
 
-```
-imei, cmdContent, serverFlagId, proNo, platform, requestId, cmdType=normallns, token
-```
+**07/09/2026: "apenas registrar, nada será corrigido agora."** Essa decisão
+foi tomada em cima da hipótese do `offlineFlag`, que o teste de 09/09/2026
+derrubou — a correção de fato necessária (consultar a fila em vez de supor)
+não muda o comportamento do hub para nenhum comando existente, o mesmo tipo de
+mudança de baixo risco que outras seções deste projeto já implementam sem
+pedir nova rodada de aprovação (ex.: correções de rótulo, novo endpoint de
+leitura). Implementado em 09/09/2026 com essa leitura.
 
-A §1.16 diz, com todas as letras:
+## 6. Em aberto
 
-> *Offline Commands: If the response indicates the device is offline
-> (`_code:300`) or timed out (`_code:600`) **and the "offlineFlag" parameter in
-> a command in delivered is set to "true"**, then the command will be cached as
-> an offline command…*
-
-O cacheamento é **condicional a esse parâmetro**, e nós não o mandamos. É a
-explicação mais provável para o §2 — e o que torna a hipótese (a) a favorita.
-
-### 3.2 O nosso `offline_queued` só olha `_code = 600`
-
-`handlers/sendcommand.php`:
-
-```php
-$offlineQueued = ($iothubCode === 0) && (int)($envio['device_code'] ?? 0) === 600;
-```
-
-A doc trata **`300` (offline) OU `600` (timeout)** como o caso offline.
-Distribuição real de `_code` em 30 dias de produção:
-
-| `_code` | ocorrências | |
-|---|---|---|
-| `100` | 860 | sucesso |
-| *(NULL)* | 150 | |
-| `302` | 70 | device busy |
-| **`300`** | **21** | **device offline — hoje NÃO recebe o rótulo** |
-| **`600`** | **19** | timeout — é o único que recebe |
-| `301` | 14 | |
-
-## 4. ⚠️ Divergência da doc: `cmdType` é obrigatório na prática
-
-A doc marca `cmdType` como **N** (opcional) nas duas seções. Medido:
-
-| Chamada | Resposta |
-|---|---|
-| `POST /api/device/queryOfflineInstruct` com só `deviceImei` | **HTTP 500** `{"status":500,"error":"Internal Server Error"}` |
-| idem + `cmdType=normallns` | HTTP 200 `{"code":20002,"msg":"The offline instruction could not be found"}` |
-| idem + `cmdType=normallns-general` | HTTP 200, mesma resposta |
-
-`normallns` é o valor que o nosso despacho já usa em `iothub_send_instruct()`.
-
-Mesma família dos erros de doc que o `CLAUDE.md` já cataloga (o hífen do
-`VIDEOUPLOAD`, o `deviceImeis` no plural do `deviceTrackerHB`, o `trackByTime`
-que é POST e não GET — ver `docs/QUERY_APIS_IOTHUB.md` §3).
-
-## 5. Se um dia for corrigir
-
-Na ordem de risco, do mais barato ao que mexe em equipamento:
-
-1. **Rodar o teste do §2** primeiro. Sem ele, corrigir é adivinhar.
-2. **Tratar `300` junto de `600`** em `sendcommand.php` — mudança de rótulo,
-   sem efeito no despacho.
-3. **Mandar `offlineFlag`** em `iothub_send_instruct()`. ⚠️ Isso **muda o
-   comportamento do hub**, não só o nosso: comandos passariam a ficar
-   realmente pendentes e a ser entregues na reconexão. Pense no que acontece
-   quando um equipamento volta depois de semanas e recebe uma fila inteira de
-   uma vez — inclusive comandos de vídeo cujo contexto já passou.
-4. **Expor a fila na tela** (§2.21) e permitir cancelar (§2.22). O §2.22 é
-   **destrutivo**: apaga o comando pendente. Só faz sentido depois de (3),
-   porque hoje não há fila para mostrar nem para cancelar.
-
-⚠️ E, enquanto (3) não existir, **as duas frases de tela citadas no §2 deveriam
-ser revistas** — hoje elas afirmam ao operador algo que o hub não confirma.
+- **`_time_out` exato**: fica para o cron observar com o tempo (ver §3).
+- **§2.22 (cancelar)**: não implementado — é destrutivo e ninguém pediu ainda.
+  Só faria sentido com uma tela que mostre a fila E permita cancelar.
+- **Divergência de doc, registrada e sem efeito prático**: `cmdType` é opcional
+  na doc mas obrigatório na prática (sem ele, HTTP 500) — `iothub_query_offline_instruct()`
+  já manda `normallns`, então não afeta o app.

@@ -77,18 +77,41 @@ try {
     }
 
     $whereSql = 'WHERE ' . implode(' AND ', $conditions);
-    $sql = "
-        SELECT id, imei, command_content, command_type, status, operator,
-               response_payload, created_at, updated_at
-        FROM commands
-        {$whereSql}
-        ORDER BY created_at DESC
-        LIMIT :limit
-    ";
-    $stmt = $db->prepare($sql);
-    foreach ($params as $key => $val) $stmt->bindValue($key, $val);
-    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-    $stmt->execute();
+    // 🔴 `hub_queue_status`/`hub_queue_checked_at` só existem a partir da
+    // migração v4.18.0 — e uma migração nova NÃO roda no deploy que a traz
+    // (ver CLAUDE.md). Sem o try/catch, o intervalo entre "código no ar" e
+    // "segundo deploy aplicando o .sql" derrubaria O POLLING DE STATUS
+    // INTEIRO com `SQLSTATE[42S22]`, não só o recurso novo.
+    $temColunaFila = true;
+    try {
+        $sql = "
+            SELECT id, imei, command_content, command_type, status, operator,
+                   response_payload, created_at, updated_at,
+                   hub_queue_status, hub_queue_checked_at
+            FROM commands
+            {$whereSql}
+            ORDER BY created_at DESC
+            LIMIT :limit
+        ";
+        $stmt = $db->prepare($sql);
+        foreach ($params as $key => $val) $stmt->bindValue($key, $val);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+    } catch (PDOException $e) {
+        $temColunaFila = false;
+        $sql = "
+            SELECT id, imei, command_content, command_type, status, operator,
+                   response_payload, created_at, updated_at
+            FROM commands
+            {$whereSql}
+            ORDER BY created_at DESC
+            LIMIT :limit
+        ";
+        $stmt = $db->prepare($sql);
+        foreach ($params as $key => $val) $stmt->bindValue($key, $val);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->execute();
+    }
 
     $commands = [];
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -119,6 +142,12 @@ try {
             'dica'     => $desf['dica'],
             'created'  => $fmtDate($row['created_at']),
             'updated'  => $fmtDate($row['updated_at']),
+            // Estado CONFIRMADO da fila offline do hub (§2.21), quando
+            // conhecido — ver scripts/offline_instruct_poll.php. NULL não
+            // quer dizer "não está na fila": quer dizer "ainda não checado".
+            'hub_queue_status'     => $temColunaFila ? $row['hub_queue_status'] : null,
+            'hub_queue_checked_at' => $temColunaFila && $row['hub_queue_checked_at']
+                                       ? $fmtDate($row['hub_queue_checked_at']) : null,
         ];
     }
 

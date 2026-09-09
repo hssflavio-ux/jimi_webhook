@@ -773,20 +773,23 @@ try {
 // que não vai começar.
 // `device_code` vem do helper; era lido de $iothubResp['data']['_code'].
 //
-// 🔴 DUAS RESSALVAS MEDIDAS (07/09/2026), nenhuma corrigida — ver
-// `docs/FILA_OFFLINE_COMANDOS.md`:
+// 🔴 Corrigido em 09/09/2026 — ver `docs/FILA_OFFLINE_COMANDOS.md`:
 //
-//  1. **`300` também é o caso offline, e não entra nesta conta.** A §1.16 da
-//     doc trata `_code:300` (device offline) OU `_code:600` (timeout). Em 30
-//     dias de produção vieram 21 respostas `300` além das 19 de `600` — essas
-//     21 não recebem o rótulo, e a tela as trata como falha comum.
+//  1. **`300` também é o caso offline, e passou a entrar nesta conta.** A
+//     §1.16 da doc trata `_code:300` (device offline) OU `_code:600`
+//     (timeout) como o mesmo caso; até aqui só `600` recebia o rótulo — em 30
+//     dias de produção (medição de 07/09) vieram 21 respostas `300` além das
+//     19 de `600`, e as 21 apareciam como falha comum.
 //
-//  2. **"será entregue na reconexão" não é confirmado pelo hub.** Não mandamos
-//     `offlineFlag`, que é o que a doc exige para o comando ser cacheado; a
-//     consulta §2.21 (`queryOfflineInstruct`) devolveu fila VAZIA para todos os
-//     equipamentos testados, inclusive um offline há 18 dias cujo comando
-//     recebeu exatamente este `_code=600`.
-$offlineQueued = ($iothubCode === 0) && (int)($envio['device_code'] ?? 0) === 600;
+//  2. **"será entregue na reconexão" agora É confirmável, não mais suposição.**
+//     O teste decisivo do §2 do documento (09/09/2026) mostrou que o hub
+//     cacheia o comando offline SEM precisar de `offlineFlag` — a fila vazia
+//     medida em 07/09 era de comandos ANTIGOS cuja janela de validade
+//     (`_time_out`) já tinha expirado, não comandos nunca cacheados. Quem
+//     quiser a confirmação real usa `iothub_query_offline_instruct()`
+//     (includes/iothub_command.php) — `scripts/offline_instruct_poll.php` faz
+//     isso periodicamente e grava em `commands.hub_queue_status`.
+$offlineQueued = ($iothubCode === 0) && in_array((int)($envio['device_code'] ?? 0), [300, 600], true);
 
 echo json_encode([
     'code'           => ($dbStatus === 'sent') ? 0 : $iothubCode,

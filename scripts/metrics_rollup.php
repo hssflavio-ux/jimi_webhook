@@ -97,13 +97,29 @@ foreach ($customers as $cust) {
     $metrics['occurrences_30d']       = $o['d30'] ?? 0;
 
     // Speed distribution (last 30 min, ignition=1)
+    //
+    // 🔴 Corrigido (v4.17.28): a query contava LINHAS de `gps_data` (pontos de
+    // GPS), não veículos — um único ocioso reportando a cada 30s-1min por 30
+    // minutos sozinho produzia dezenas de "parados", e é como "35 parados" saía
+    // do widget com uma frota de poucas dezenas de veículos. `COUNT(DISTINCT
+    // g.imei)` por faixa é o mesmo padrão que o widget-irmão `idle` (ver
+    // dashboard_widgets.php) já usava corretamente na tabela ao lado. Também
+    // faltava excluir equipamento desativado (`d.is_active`) — sem o JOIN,
+    // um ponto de antes da desativação, ainda dentro dos 30 min, contava.
+    //
+    // ⚠️ Um veículo que mudou de faixa de velocidade dentro da janela (ex.:
+    // andando e depois parado) pode contar em mais de uma faixa — é o mesmo
+    // comportamento aceito no `idle`, e é honesto: a alternativa (só o ÚLTIMO
+    // ponto) exigiria outra consulta, e nem por isso reduziria "N veículos
+    // tocaram este estado nos últimos 30 min" a uma partição exata.
     $spd = $db->prepare("
         SELECT
-            SUM(CASE WHEN speed = 0 THEN 1 ELSE 0 END) as parados,
-            SUM(CASE WHEN speed > 0 AND speed <= 20 THEN 1 ELSE 0 END) as ate20,
-            SUM(CASE WHEN speed > 20 AND speed <= 60 THEN 1 ELSE 0 END) as ate60,
-            SUM(CASE WHEN speed > 60 THEN 1 ELSE 0 END) as acima60
+            COUNT(DISTINCT CASE WHEN speed = 0 THEN g.imei END) as parados,
+            COUNT(DISTINCT CASE WHEN speed > 0 AND speed <= 20 THEN g.imei END) as ate20,
+            COUNT(DISTINCT CASE WHEN speed > 20 AND speed <= 60 THEN g.imei END) as ate60,
+            COUNT(DISTINCT CASE WHEN speed > 60 THEN g.imei END) as acima60
         FROM gps_data g
+        JOIN devices d ON d.imei = g.imei AND d.is_active = 1
         WHERE g.customer_id = :cid
           AND g.gps_time >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
           AND g.acc = 1

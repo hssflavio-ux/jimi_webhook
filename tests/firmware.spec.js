@@ -32,13 +32,11 @@ test.describe('Firmware — UPDATE e cadastro de URLs', () => {
         expect(upd, 'UPDATE precisa estar no catálogo').toBeTruthy();
         expect(upd.u, 'UPDATE não pode travar a seleção por modelo').toBe(true);
         expect(upd.m.sort()).toEqual(['JC181', 'JC182', 'JC371', 'JC400AD', 'JC400D', 'JC450']);
-        // P1 em branco deixava na tela um campo sem dizer o que espera.
-        expect(upd.p[0].d).toMatch(/URL/i);
     });
 
     test('com UPDATE escolhido, nenhuma CÂMERA fica desabilitada', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
-        await authedPage.selectOption('#cmd-sel', 'T:UPDATE,P1#');
+        await authedPage.selectOption('#cmd-sel', 'T:UPDATE');
 
         // v4.16.0 — a asserção era "equipamento nenhum", e valia enquanto a
         // frota inteira era câmera. O `UPDATE` é universal para a linha JC (é a
@@ -60,8 +58,8 @@ test.describe('Firmware — UPDATE e cadastro de URLs', () => {
             rows => [...new Set(rows.map(r => r.dataset.modelo))]);
         test.skip(modelos.length < 2, 'este cliente não tem dois modelos para exercitar a guarda');
 
-        await authedPage.selectOption('#cmd-sel', 'T:UPDATE,P1#');
-        await authedPage.locator('.p-in').first().fill('https://ota.exemplo.com/x.bin');
+        await authedPage.selectOption('#cmd-sel', 'T:UPDATE');
+        await authedPage.fill('#p-params-livre', 'https://ota.exemplo.com/x.bin');
 
         // Um equipamento de cada um dos dois primeiros modelos.
         for (const m of modelos.slice(0, 2)) {

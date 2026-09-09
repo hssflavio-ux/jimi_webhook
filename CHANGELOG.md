@@ -5,6 +5,37 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.18.0
+
+**Fila offline de comandos: consulta real ao hub (§2.21 `queryOfflineInstruct`) em vez de só supor que o comando "será entregue na reconexão".**
+
+- 🔴 **Corrigido** — a hipótese registrada em 07/09/2026 (`docs/FILA_OFFLINE_COMANDOS.md`) de que faltava `offlineFlag` no envio foi **derrubada** por um teste decisivo em produção (09/09/2026, equipamento offline há 19 dias): o hub cacheia o comando offline mesmo sem `offlineFlag` — a fila vazia medida antes era de comandos cuja janela de validade já tinha expirado, não de comandos nunca cacheados. `iothub_send_instruct()` continua sem `offlineFlag`, de propósito: sem efeito observável medido, não vale correr de novo o risco de mudar o comportamento do hub.
+- **Adicionado** `iothub_query_offline_instruct()` (`includes/iothub_command.php`, só leitura) e o cron `scripts/offline_instruct_poll.php` (10 min, `scripts/crontab-setup.sh`), que consulta a fila para comandos pendentes (`status='sent'`) e grava o resultado em `commands.hub_queue_status`/`hub_queue_checked_at` (migração `v4.18.0`).
+- **Alterado** `handlers/sendcommand.php`: `_code=300` (device offline) passou a receber o mesmo rótulo `offline_queued` que só `_code=600` (timeout) recebia — 21 respostas em 30 dias ficavam de fora.
+- **Alterado** `/comandos` e `/commandstatus`: o histórico mostra "na fila (confirmado)" / "saiu da fila" / "na fila (a confirmar)" a partir do estado real gravado pelo cron. As duas telas leem as colunas novas com fallback (`try/catch`) para o intervalo entre o deploy que traz o código e o que aplica a migração.
+- Ver `docs/FILA_OFFLINE_COMANDOS.md` para a medição completa.
+
+## [Unreleased] — 4.17.29
+
+**Painel/Resumo: o gráfico "Velocidade da Frota" contava pontos de GPS, não veículos — corrigido nos dois lugares onde a query estava duplicada.**
+
+Reportado pelo dono do produto: o gráfico mostrava "35 parados" numa frota que nunca teve esse volume de veículos.
+
+- 🔴 **Corrigido** `includes/dashboard_widgets.php` (`/painel`), `handlers/resumo.php` (`/resumo`, a home `/`) e `scripts/metrics_rollup.php` (cron que pré-computa o cache lido pelas duas telas): a query somava **linhas** de `gps_data` (pontos de posição) em vez de `COUNT(DISTINCT g.imei)` — um único veículo ocioso reportando a cada 30s–1min durante 30 minutos sozinho produzia dezenas de "parados". Também faltava `JOIN devices ... is_active` nas três, deixando entrar ponto de equipamento já desativado. O padrão correto já existia ao lado, no widget-irmão "Ociosidade" (`dashboard_render_idle()`), que só não tinha o filtro de `is_active` — corrigido também.
+- **Corrigido** 9 fallbacks `?? 1` em `handlers/resumo.php` (GPS, velocidade, ociosidade, status por modelo, séries de alarmes/ocorrências, top placas, faceid, top motoristas): sessão sem `customer_id` resolvido passava a ler/mostrar dados do cliente de id 1 — mesma classe do bug histórico do `/equipamentos` (v4.9.26). Cada bloco agora só roda com `$customerId` resolvido; sem ele, fica vazio/zerado.
+
+## [Unreleased] — 4.17.28
+
+**`/comandos`: lista única por nome de comando, parametrização livre e fim da trava por modelo — mesma linha do redesenho do `/comandos-sms` (v4.17.25).**
+
+Pedido do dono do produto: quem usa esta tela conhece a sintaxe de cada modelo e não precisa de campos estruturados nem de trava para escolher certo.
+
+- 🔴 **Alterado** o catálogo exibido: passou a ser **unificado por nome** (`command_catalog_merge_by_name()`, extraído para `includes/functions.php` e agora compartilhado com `/comandos-sms`), com **1 campo de texto livre** para os parâmetros em vez de campos estruturados por posição. `window.CATALOGO` perdeu `.s`/`.p`/`.t` por entrada — o que sobrou é `.c` (nome, único), `.m`/`.f` (modelos/famílias) e `.e` (exemplos).
+- **Removida** a trava de modelo: nenhum equipamento fica desabilitado ao escolher um comando, e a lista de comandos não é mais filtrada pelos equipamentos marcados. O aviso de incompatibilidade (`#lock-note`) virou informativo — nunca bloqueia o envio.
+- **Removido** o toggle "Editar manualmente (modo livre)" — redundante agora que a parametrização já é sempre livre. Comandos JT/T estruturados (JSON) ganharam campo próprio (`#p-json-wrap`), sempre visível quando selecionados.
+- **Adicionado** `command_catalog_examples_by_family()` (`includes/functions.php`): no máximo 1 exemplo de sintaxe por família de equipamento (câmera/rastreador) por comando, em vez de listar o exemplo de toda variante mesclada — evita repetir a mesma sintaxe várias vezes quando ela não muda entre modelos.
+- `tests/comandos.spec.js` reescrito e `tests/firmware.spec.js`/`tests/rastreador_vl.spec.js` atualizados para o novo formato do catálogo e a ausência de trava.
+
 ## [Unreleased] — 4.17.27
 
 **`/comandos-sms`: a caixa "Texto que será enviado por SMS" ganhou o mesmo tratamento visual de `.cmd-preview` (terminal escuro, mono) já usado em `/comandos`.**
