@@ -173,9 +173,13 @@ test.describe('Rastreadores JM-VL — cadastro e trava por família', () => {
     test('🔴 comando destrutivo da VL não ganha botão de consulta', async ({ authedPage }) => {
         await authedPage.goto('/comandos');
 
+        // 🔴 'RESET' virou 'REBOOT' na lista (09/09/2026 — REBOOT#/RESET#/RESTART#
+        // consolidados numa entrada só, ver includes/command_catalog.php). Checar
+        // pelo nome antigo aqui seria vacuidade: o filtro não acharia nada e o
+        // teste passaria sem provar que REBOOT continua sem botão de consulta.
         const comConsulta = await authedPage.evaluate(() =>
             (window.CATALOGO || [])
-                .filter((c) => ['OUT2', 'FACTORY', 'RELAY', 'RESET'].includes(c.c) && c.q)
+                .filter((c) => ['OUT2', 'FACTORY', 'RELAY', 'REBOOT'].includes(c.c) && c.q)
                 .map((c) => c.c));
 
         // A wiki da Jimi documenta `OUT2#`, `RELAY#` e `FACTORY` como consulta.

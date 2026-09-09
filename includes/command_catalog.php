@@ -99,8 +99,9 @@
  *
  * `fonte` guarda a linha de origem na planilha (A007, G014…).
  *
- * Total: 237 entradas / 168 comandos distintos (16 universais), 100 com consulta.
- * Por categoria: alarme=68, audio=4, energia=1, ia=15, manutencao=25, outros=26, posicao=34, rede=27, video=37.
+ * Total: 235 entradas / 166 comandos distintos (16 universais), 100 com consulta.
+ * Por categoria: alarme=68, audio=4, energia=1, ia=15, manutencao=23, outros=26, posicao=34, rede=27, video=37.
+ * (09/09/2026: REBOOT#/RESET#/RESTART# consolidados numa entrada só — ver comentário na entrada REBOOT#.)
  *
  * ⚠️ Estes números eram 219/143/video=29 e estavam ERRADOS desde a v4.9.27 — o
  * arquivo já tinha 220/144/video=30 antes da v4.9.32. Contagem em comentário
@@ -2673,6 +2674,19 @@ return [
       ],
     ],
   ],
+  // 🔴 Consolidado (09/09/2026, decisão do dono do produto) — REBOOT#/RESET#/
+  // RESTART# eram TRÊS entradas separadas para a mesma ação, cada uma
+  // coberta por um subconjunto de modelos (a doc do JC371 já dizia que os
+  // três são sinônimos nele). Com a parametrização livre (v4.17.28+), manter
+  // três itens na lista para "reiniciar" só é ruído — o operador escolhe
+  // um e o catálogo não trava mais por aridade nem por modelo. `modelos`
+  // aqui é a UNIÃO dos três: JC371/JC450/JC182/JC400D/JC400AD vinham do
+  // REBOOT#, JM-VL01/JM-VL02 do RESET# (medido: resposta "OK!"), e JC181
+  // some ausente das três — foi adicionado porque a Alarm Reference dele
+  // (linha A005) só documenta `RESET`, não `REBOOT`. ⚠️ Risco aceito
+  // conscientemente: JC181 pode ignorar o literal `REBOOT#` se o firmware
+  // não tratar os dois como sinônimo como o JC371 trata — sem tela para
+  // testar isso, é a mesma classe de incerteza do resto do catálogo.
   'REBOOT#' => [
     'cmd' => 'REBOOT',
     'nome' => 'Reiniciar',
@@ -2684,6 +2698,9 @@ return [
       2 => 'JC182',
       3 => 'JC400D',
       4 => 'JC400AD',
+      5 => 'JM-VL01',
+      6 => 'JM-VL02',
+      7 => 'JC181',
     ],
     'universal' => true,
     'template' => false,
@@ -2863,45 +2880,8 @@ return [
       ],
     ],
   ],
-  'RESET#' => [
-    'cmd' => 'RESET',
-    'nome' => 'Reiniciar (RESET)',
-    'desc' => '🔴 Reinicia o equipamento. Equivalente a REBOOT# e RESTART#.',
-    'categoria' => 'manutencao',
-    // v4.16.0: a linha VL documenta `RESET#` idêntico (resposta "OK!").
-    'modelos' => [
-      0 => 'JC371',
-      1 => 'JM-VL01',
-      2 => 'JM-VL02',
-    ],
-    'universal' => false,
-    'template' => false,
-    'consulta' => NULL,
-    'consulta_modelos' => [],
-    'consulta_ref' => NULL,
-    'params' => [
-    ],
-    'exemplos' => [
-    ],
-  ],
-  'RESTART#' => [
-    'cmd' => 'RESTART',
-    'nome' => 'Reiniciar (RESTART)',
-    'desc' => '🔴 Reinicia o equipamento. Equivalente a REBOOT# e RESET#.',
-    'categoria' => 'manutencao',
-    'modelos' => [
-      0 => 'JC371',
-    ],
-    'universal' => false,
-    'template' => false,
-    'consulta' => NULL,
-    'consulta_modelos' => [],
-    'consulta_ref' => NULL,
-    'params' => [
-    ],
-    'exemplos' => [
-    ],
-  ],
+  // RESET# e RESTART# foram REMOVIDAS daqui (09/09/2026) — consolidadas em
+  // REBOOT#, acima. Ver o comentário lá para o raciocínio completo.
   'RESTORE#' => [
     'cmd' => 'RESTORE',
     'nome' => 'Restaurar',
@@ -3163,10 +3143,16 @@ return [
     // v4.16.0: o JM-VL01 documenta os MESMOS dois campos (ON/OFF + forma de
     // aviso). O JM-VL02 tem um terceiro (atraso do disparo) e por isso ganhou
     // entrada própria, `SOSALM,P1,P2,P3#`.
+    // 🔴 JC181/JC182 adicionados a `modelos` (09/09/2026) — já estavam em
+    // `consulta_modelos` (a consulta funciona neles, medido), mas faltavam
+    // aqui por descuido. Auditoria de compatibilidade encontrou a
+    // inconsistência.
     'modelos' => [
       0 => 'JC400D',
       1 => 'JC400AD',
       2 => 'JM-VL01',
+      3 => 'JC181',
+      4 => 'JC182',
     ],
     'universal' => false,
     'template' => true,
@@ -5466,6 +5452,9 @@ return [
       ],
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx
+  // documenta EXBATALM com 6 campos, não 2 como aqui. Com a parametrização
+  // livre (v4.17.28+) a aridade não trava mais o envio.
   'EXBATALM,A,B#' => [
     'cmd' => 'EXBATALM',
     'nome' => 'Subtensão da bateria do veículo',
@@ -5474,6 +5463,7 @@ return [
     'modelos' => [
       0 => 'JC400AD',
       1 => 'JC400D',
+      2 => 'JC181',
     ],
     'universal' => false,
     'template' => true,
@@ -6780,7 +6770,7 @@ return [
   // 🔴 SÓ ENTRA AQUI O QUE MUDA. Comando que a VL compartilha com a linha JC
   // na MESMA aridade e com o MESMO significado não ganha entrada nova — ganha
   // o modelo na lista de `modelos` da entrada que já existe (`STATUS#`,
-  // `VERSION#`, `RESET#`, `TIMER,A,B#`, `RELAY,P1#`, `MILEAGE,A,B#`,
+  // `VERSION#`, `REBOOT#`, `TIMER,A,B#`, `RELAY,P1#`, `MILEAGE,A,B#`,
   // `GPSDUP,A#`, `ASETAPN,P1#`, `SOSALM,A,B#`, `SWERVE,…`, `SPEEDCHECK,…`).
   // Duplicar a entrada só porque o modelo é outro encheria a tela de linhas
   // idênticas; o que precisa ser sensível ao modelo é a QUANTIDADE e o FORMATO
@@ -7283,12 +7273,17 @@ return [
       ['cmd' => 'ACCALM,ON,0,5,0#', 'desc' => 'exemplo literal da wiki'],
     ],
   ],
+  // 🔴 JC181 adicionado (09/09/2026) — docs/JC181_Command_List_V1.0.7_20250811.xlsx
+  // documenta POWERALM com 5 campos, não 4 como aqui. Com a parametrização
+  // livre (v4.17.28+) isso deixou de travar o envio: o operador escreve os
+  // valores certos para o modelo que estiver mandando. `modelos` aqui é só
+  // informativo, não trava mais aridade nem sintaxe.
   'POWERALM,P1,P2,P3,P4#' => [
     'cmd' => 'POWERALM',
     'nome' => 'Alarme de corte de alimentação',
     'desc' => 'Avisa quando a alimentação externa some — é o alarme 2 (corte de alimentação).',
     'categoria' => 'alarme',
-    'modelos' => ['JM-VL01', 'JM-VL02'],
+    'modelos' => ['JM-VL01', 'JM-VL02', 'JC181'],
     'universal' => false,
     'template' => true,
     'consulta' => 'POWERALM#',

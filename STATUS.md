@@ -57,9 +57,15 @@
 > exemplo (tinham a frase de ACELERAÇÃO copiada por engano — eles são
 > frenagem/curva). **Pendente, registrado e não implementado**: JC181 tem
 > `FATIGUE`/`POWERALM`/`SENALM`/`SOSALM`/`EXBATALM`/`SERVER` com aridade
-> própria (exige cadastro novo, não só ajuste de `modelos`), e o reboot usa
-> token diferente por modelo (`REBOOT`/`RESET`/`RESTART`) — não unificado por
-> ser comando destrutivo.
+> própria — mas o dono do produto corrigiu a premissa: **com parametrização
+> livre, aridade não trava nada**, então bastava incluir o modelo em
+> `modelos`. Reexaminado: `FATIGUE`/`SENALM`/`SERVER` já tinham JC181 (a
+> auditoria comparou com a variante errada); `POWERALM`/`EXBATALM` de fato
+> faltavam, corrigidos; `SOSALM` tinha JC181/JC182 só em `consulta_modelos`,
+> inconsistência corrigida. **`REBOOT#`/`RESET#`/`RESTART#` consolidados
+> numa entrada só** (mesma lógica — três itens pra mesma ação viraram ruído):
+> `REBOOT#` fica com a união dos modelos das três. Catálogo: 237→235
+> entradas, 168→166 comandos distintos.
 
 > ### 📍 v4.17.24 — resposta do equipamento por SMS: o webhook nunca entregou, a busca periódica sim
 >
