@@ -458,7 +458,7 @@ $extra_head = '<style>
 .resumo-chip { display:inline-flex; align-items:center; gap:5px; text-decoration:none; color:inherit;
                padding:2px 8px; border-radius:100px; border:1px solid transparent; }
 .resumo-chip:hover { border-color:var(--hairline); background:var(--canvas-soft); }
-.resumo-chip.ativo { border-color:var(--brand); color:var(--brand); }
+.resumo-chip.ativo { border-color:var(--primary); color:var(--primary); }
 .dev-list { max-height:230px; overflow-y:auto; border:1px solid var(--hairline); border-radius:var(--radius-sm); }
 .dev-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border-bottom:1px solid var(--hairline-soft); font-size:13px; cursor:pointer; }
 .dev-row:last-child { border-bottom:0; }
@@ -478,10 +478,10 @@ $extra_head = '<style>
 .cmd-item { padding:7px 10px; border-bottom:1px solid var(--hairline-soft); cursor:pointer; }
 .cmd-item:last-child { border-bottom:0; }
 .cmd-item:hover { background:var(--canvas-soft); }
-.cmd-item.sel { background:#e8f0ff; box-shadow:inset 3px 0 0 var(--brand); }
+.cmd-item.sel { background:var(--primary-soft); box-shadow:inset 3px 0 0 var(--primary); }
 .cmd-item-top { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
 .cmd-item-nome { font-size:13px; color:var(--ink); font-weight:500; }
-.cmd-item-syn { font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--brand); }
+.cmd-item-syn { font-family:"JetBrains Mono",monospace; font-size:11px; color:var(--primary); }
 .cmd-item-desc { font-size:11px; color:var(--muted); margin-top:2px; line-height:1.45;
                  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .hist-paginacao { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:10px; font-size:12px; }
@@ -489,7 +489,7 @@ $extra_head = '<style>
 .lock-note.free { background:#f0faf5; border-color:#d4f0e2; color:#0a7a52; }
 .cmd-preview { font-family:"JetBrains Mono",monospace; font-size:13px; background:#0a0b0d; color:#7fe3a8; padding:10px 12px; border-radius:var(--radius-sm); word-break:break-all; }
 .ex-chip { display:inline-block; font-family:"JetBrains Mono",monospace; font-size:11px; background:var(--canvas-soft); border:1px solid var(--hairline); border-radius:100px; padding:3px 10px; margin:3px 4px 3px 0; cursor:pointer; }
-.ex-chip:hover { border-color:var(--brand); color:var(--brand); }
+.ex-chip:hover { border-color:var(--primary); color:var(--primary); }
 .res-row { display:flex; gap:8px; align-items:flex-start; padding:6px 0; font-size:12px; border-bottom:1px solid var(--hairline-soft); }
 /* .res-dot, .dot-* e .res-msg vivem no layout_base.php — são compartilhados
    com a aba de comandos do ativo. Duplicar aqui faria as duas telas divergirem
@@ -500,7 +500,7 @@ $extra_head = '<style>
 .res-raw { font-family:"JetBrains Mono",monospace; font-size:11px; line-height:1.5;
            background:#0a0b0d; color:#9fb3c8; padding:10px; border-radius:var(--radius-sm);
            max-height:200px; overflow:auto; white-space:pre-wrap; word-break:break-all; margin-top:6px; }
-tr.cmd-row:focus-visible { outline:2px solid var(--brand); outline-offset:-2px; }
+tr.cmd-row:focus-visible { outline:2px solid var(--primary); outline-offset:-2px; }
 </style>';
 
 include __DIR__ . '/../web/layout_base.php';
@@ -576,7 +576,7 @@ include __DIR__ . '/../web/layout_base.php';
 
     <!-- 3. Painel do comando -->
     <div id="cmd-painel" style="display:none">
-      <div style="padding:10px;border-left:3px solid var(--brand);background:var(--canvas-soft);border-radius:var(--radius-sm);margin-bottom:12px">
+      <div style="padding:10px;border-left:3px solid var(--primary);background:var(--canvas-soft);border-radius:var(--radius-sm);margin-bottom:12px">
         <div id="p-nome" style="font-size:13px;font-weight:600;color:var(--ink)"></div>
         <div id="p-desc" style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5"></div>
         <div id="p-modelos" style="font-size:11px;margin-top:6px"></div>
@@ -622,7 +622,7 @@ include __DIR__ . '/../web/layout_base.php';
       <div id="p-cons-wrap" style="display:none;margin-bottom:12px">
         <label style="display:block;margin-bottom:4px">Ler o valor atual</label>
         <div>
-          <span class="ex-chip" id="p-cons-chip" style="border-color:var(--brand);color:var(--brand)"></span>
+          <span class="ex-chip" id="p-cons-chip" style="border-color:var(--primary);color:var(--primary)"></span>
           <span id="p-cons-ref" style="font-size:11px;color:var(--muted);margin-left:6px"></span>
         </div>
       </div>

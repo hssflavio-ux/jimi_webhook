@@ -1073,7 +1073,7 @@ body.sidebar-locked { overflow: hidden; }
     min-width: 17px; height: 17px; padding: 0 4px;
     border-radius: 9px; background: var(--error); color: #fff;
     font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
-    font-family: var(--font-mono, monospace);
+    font-family: 'JetBrains Mono', monospace;
     display: none;
 }
 .notif-badge.show { display: block; }
@@ -1082,7 +1082,7 @@ body.sidebar-locked { overflow: hidden; }
     width: 380px; max-width: calc(100vw - 32px);
     max-height: 460px; overflow-y: auto;
     background: var(--surface); border: 1px solid var(--hairline);
-    border-radius: var(--radius); box-shadow: 0 8px 28px rgba(10,11,13,.14);
+    border-radius: var(--radius-lg); box-shadow: 0 8px 28px rgba(10,11,13,.14);
     z-index: 1200; display: none;
 }
 .notif-panel.open { display: block; }
@@ -1108,7 +1108,7 @@ body.sidebar-locked { overflow: hidden; }
 .notif-item.sev-warning  { border-left-color: #a97a00; }
 .notif-item-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
 .notif-item-body  { font-size: 12px; color: var(--muted); line-height: 1.45; }
-.notif-item-when  { font-size: 11px; color: var(--muted); margin-top: 5px; font-family: var(--font-mono, monospace); }
+.notif-item-when  { font-size: 11px; color: var(--muted); margin-top: 5px; font-family: 'JetBrains Mono', monospace; }
 .notif-empty { padding: 36px 16px; text-align: center; color: var(--muted); font-size: 13px; }
 
 /* Toasts em tempo real (empilhados no canto) */

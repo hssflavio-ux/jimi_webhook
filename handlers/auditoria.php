@@ -134,7 +134,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <div class="mb-16" style="display:flex;gap:4px;border-bottom:1px solid var(--hairline);">
     <a href="/auditoria" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
-       color:var(--brand);border-bottom:2px solid var(--brand);margin-bottom:-1px;">Tudo</a>
+       color:var(--primary);border-bottom:2px solid var(--primary);margin-bottom:-1px;">Tudo</a>
     <a href="/auditoria/negados" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
        color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;">Acessos Negados</a>
     <a href="/auditoria/cadastro" style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
@@ -276,7 +276,7 @@ require_once __DIR__ . '/../web/layout_base.php';
             $active = $p === $page;
         ?>
             <a href="?<?= htmlspecialchars(http_build_query($qs)) ?>"
-               style="padding:4px 8px;<?= $active ? 'font-weight:600;color:var(--brand);' : 'color:var(--muted);' ?>">
+               style="padding:4px 8px;<?= $active ? 'font-weight:600;color:var(--primary);' : 'color:var(--muted);' ?>">
                <?= $p ?>
             </a>
         <?php endfor; ?>

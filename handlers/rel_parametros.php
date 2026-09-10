@@ -136,7 +136,7 @@ include __DIR__ . '/../web/layout_base.php';
 
 <?php if ($achados): ?>
 <div class="card" style="margin-bottom:16px">
-    <h4 style="font-size:13px;font-weight:600;color:var(--danger);margin-bottom:12px">
+    <h4 style="font-size:13px;font-weight:600;color:var(--error);margin-bottom:12px">
         Achados de operação (<?= count($achados) ?>)
     </h4>
     <p style="font-size:11px;color:var(--muted);margin:-6px 0 12px">

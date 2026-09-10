@@ -166,7 +166,7 @@ include __DIR__ . '/../web/layout_base.php';
     "Aplicar" vai recusar o envio até a correção.
 </div>
 
-<?php if ($erro): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--danger);margin:0;font-size:13px"><?= htmlspecialchars($erro) ?></p></div><?php endif; ?>
+<?php if ($erro): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--error);margin:0;font-size:13px"><?= htmlspecialchars($erro) ?></p></div><?php endif; ?>
 <?php if ($ok): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--success);margin:0;font-size:13px"><?= htmlspecialchars($ok) ?></p></div><?php endif; ?>
 
 <div class="card" style="margin-bottom:16px">
@@ -234,7 +234,7 @@ include __DIR__ . '/../web/layout_base.php';
                 <td class="mono" style="color:var(--muted)"><?= $no ?></td>
                 <td><?= htmlspecialchars(param_label($catalogo, $no)) ?>
                     <?php if (!empty($catalogo[$no]['is_network'])): ?>
-                        <span style="font-size:10px;color:var(--danger)">· rede — volta só por SMS</span>
+                        <span style="font-size:10px;color:var(--error)">· rede — volta só por SMS</span>
                     <?php endif; ?>
                 </td>
                 <td class="mono"><?= htmlspecialchars($v['value']) ?></td>

@@ -1046,7 +1046,7 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 
 <?php if ($paramErro): ?>
 <div class="card">
-    <p style="color:var(--danger);font-size:13px;margin:0"><?= htmlspecialchars($paramErro) ?></p>
+    <p style="color:var(--error);font-size:13px;margin:0"><?= htmlspecialchars($paramErro) ?></p>
 </div>
 <?php elseif (!$paramRows && !$paramCanais): ?>
 <div class="card">
@@ -1062,9 +1062,9 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 /* Quadro de parâmetros (v4.9.15). `auto-fill` com mínimo de 320px resolve
    sozinho o "2 ou 3 colunas": 3 no monitor, 2 no notebook, 1 no celular —
    sem media query e sem escolher um número que estaria errado na outra tela. */
-.param-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:12px; }
-.param-cell { border:1px solid var(--line,#e5e7eb); border-radius:10px; padding:12px 14px; background:var(--surface,#fff); }
-.param-cell:hover { box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.param-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:16px; }
+.param-cell { border:1px solid var(--hairline); border-radius:var(--radius-lg); padding:16px 18px; background:var(--surface); transition:box-shadow .15s; }
+.param-cell:hover { box-shadow:var(--shadow-soft); }
 .param-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
 .param-name { font-size:12px; font-weight:600; color:var(--ink); line-height:1.3; }
 .param-no { font-size:10px; color:var(--muted); flex-shrink:0; }
@@ -1072,7 +1072,8 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 .param-hint { font-size:10px; color:var(--muted); line-height:1.35; }
 .param-acts { display:flex; gap:6px; justify-content:flex-end; margin-top:10px; }
 .param-edit { margin-top:8px; display:none; }
-.param-edit input { width:100%; padding:6px 8px; border:1px solid var(--line,#e5e7eb); border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:12px; }
+.param-edit input { width:100%; padding:8px 10px; border:1px solid var(--hairline); border-radius:var(--radius-md); font-family:'JetBrains Mono',monospace; font-size:12px; transition:border-color .15s,box-shadow .15s; }
+.param-edit input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 1px var(--primary); }
 </style>
 
 <?php foreach ($paramRows as $grupo => $linhas): ?>
@@ -1192,10 +1193,10 @@ function lerParametros() {
         var ok = d && d.code === 0;
         el.innerHTML = ok
             ? '<span style="color:var(--success)">Leitura solicitada. Atualizando a página…</span>'
-            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao solicitar leitura') + '</span>';
+            : '<span style="color:var(--error)">' + ((d && d.msg) || 'Falha ao solicitar leitura') + '</span>';
         if (ok) setTimeout(function() { location.reload(); }, 1500);
     }).catch(function(e) {
-        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+        el.innerHTML = '<span style="color:var(--error)">Erro de rede: ' + e + '</span>';
     });
 }
 
@@ -1219,10 +1220,10 @@ function relerParam(no) {
         var ok = d && d.code === 0;
         el.innerHTML = ok
             ? '<span style="color:var(--success)">Leitura do nº ' + no + ' solicitada. Atualizando…</span>'
-            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao solicitar') + '</span>';
+            : '<span style="color:var(--error)">' + ((d && d.msg) || 'Falha ao solicitar') + '</span>';
         if (ok) setTimeout(function() { location.reload(); }, 2000);
     }).catch(function(e) {
-        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+        el.innerHTML = '<span style="color:var(--error)">Erro de rede: ' + e + '</span>';
     });
 }
 
@@ -1280,10 +1281,10 @@ function enviarParam(no, ehRede, rotulo, atual, padrao) {
         el.innerHTML = ok
             ? '<span style="color:var(--success)">Alteração enviada. O valor exibido só muda '
               + 'depois de <strong>reler</strong> — o equipamento confirma o recebimento, não o efeito.</span>'
-            : '<span style="color:var(--danger)">' + ((d && d.msg) || 'Falha ao enviar') + '</span>';
+            : '<span style="color:var(--error)">' + ((d && d.msg) || 'Falha ao enviar') + '</span>';
         if (ok) setTimeout(function() { location.reload(); }, 2500);
     }).catch(function(e) {
-        el.innerHTML = '<span style="color:var(--danger)">Erro de rede: ' + e + '</span>';
+        el.innerHTML = '<span style="color:var(--error)">Erro de rede: ' + e + '</span>';
     });
 }
 </script>

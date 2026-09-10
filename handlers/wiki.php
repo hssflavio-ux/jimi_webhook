@@ -133,7 +133,7 @@ $extra_head = <<<'HEAD'
 .mockup {
     background: #fff;
     border: 1px solid var(--hairline);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     overflow: hidden;
     margin: 16px 0 24px 0;
     box-shadow: 0 1px 4px rgba(0,0,0,.04);
@@ -168,7 +168,7 @@ $extra_head = <<<'HEAD'
 .kpi-box {
     background: #f8f9fb;
     border: 1px solid var(--hairline-soft);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     padding: 14px 18px;
 }
 .kpi-box .kpi-label {
@@ -222,7 +222,7 @@ $extra_head = <<<'HEAD'
     display: flex; gap: 10px; align-items: center;
     padding: 12px 18px; background: #fafbfc;
     border: 1px solid var(--hairline-soft);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     margin-bottom: 16px;
     flex-wrap: wrap;
 }
@@ -265,7 +265,7 @@ $extra_head = <<<'HEAD'
 .map-mock {
     background: linear-gradient(135deg, #e8edf2 0%, #dce3e9 50%, #e2e7ed 100%);
     border: 1px solid var(--hairline);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     height: 200px;
     display: flex; align-items: center; justify-content: center;
     position: relative;
@@ -304,7 +304,7 @@ $extra_head = <<<'HEAD'
 .chart-mock {
     background: #fafbfc;
     border: 1px solid var(--hairline-soft);
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     height: 180px;
     display: flex; align-items: flex-end; gap: 8px;
     padding: 16px 20px 24px;
@@ -342,7 +342,7 @@ $extra_head = <<<'HEAD'
 /* ── Note callout ──────────────────────────────────── */
 .callout {
     padding: 12px 16px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     font-size: 13px;
     line-height: 1.6;
     margin: 16px 0;
@@ -353,10 +353,10 @@ $extra_head = <<<'HEAD'
 .callout.tip   { background: #e6f4ea; border-color: #098551; color: #0d4d2d; }
 /* ── Sidebar Mockup (compact) ──────────────────────── */
 .sidebar-mock {
-    background: var(--sidebar-bg);
+    background: var(--surface-dark);
     color: #fff;
     padding: 16px 12px;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     font-size: 12px;
     min-width: 180px;
     flex-shrink: 0;
@@ -377,7 +377,7 @@ $extra_head = <<<'HEAD'
 /* ── Video player mockup ───────────────────────────── */
 .video-mock {
     background: #000;
-    border-radius: var(--radius);
+    border-radius: var(--radius-lg);
     height: 220px;
     display: flex; align-items: center; justify-content: center;
     color: rgba(255,255,255,.4);
@@ -680,7 +680,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <span class="btn-mock">Gerar</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius-lg);padding:16px;text-align:center">
             <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Alarmes por Tipo (Barras)</div>
             <div class="chart-mock" style="height:140px">
                 <div class="chart-bar blue" style="height:30%"></div><div class="chart-bar blue" style="height:55%"></div>
@@ -688,11 +688,11 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
                 <div class="chart-bar blue" style="height:60%"></div>
             </div>
         </div>
-        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius-lg);padding:16px;text-align:center">
             <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Distribuição (Pizza)</div>
             <div style="width:100px;height:100px;border-radius:50%;background:conic-gradient(var(--primary) 0% 45%, #098551 45% 70%, #c83532 70% 100%);margin:10px auto"></div>
         </div>
-        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:16px;text-align:center">
+        <div style="background:#fafbfc;border:1px solid var(--hairline-soft);border-radius:var(--radius-lg);padding:16px;text-align:center">
             <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Tendência (Linha)</div>
             <svg width="160" height="100" viewBox="0 0 160 100" style="margin-top:8px">
                 <polyline fill="none" stroke="var(--primary)" stroke-width="2" points="5,80 30,60 55,70 80,30 105,40 130,20 155,35"/>
@@ -727,7 +727,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <div class="kpi-box" style="background:#fafbfc"><div class="kpi-label">Total (Mês)</div><div class="kpi-val">87</div></div>
     </div>
     <!-- Risk Bar -->
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:#fafbfc;border-radius:var(--radius)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:10px 16px;background:#fafbfc;border-radius:var(--radius-lg)">
         <div style="font-size:12px;font-weight:600;color:var(--muted)">Distribuição de Risco:</div>
         <div style="flex:1;height:8px;background:#eee;border-radius:4px;display:flex;overflow:hidden">
             <div style="width:45%;background:#098551"></div>
@@ -795,7 +795,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
             <span style="position:absolute;top:-6px;right:-8px;background:#cf202f;color:#fff;font-size:10px;font-weight:600;padding:1px 5px;border-radius:100px">3</span>
         </div>
     </div>
-    <div style="max-width:340px;margin-left:auto;border:1px solid var(--hairline);border-radius:var(--radius);overflow:hidden">
+    <div style="max-width:340px;margin-left:auto;border:1px solid var(--hairline);border-radius:var(--radius-lg);overflow:hidden">
         <div style="padding:10px 14px;background:#f5f6f8;border-bottom:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:12px;font-weight:600">Notificações</span>
             <span style="font-size:11px;color:var(--primary)">Marcar todas como lidas</span>
@@ -904,7 +904,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
         <div class="filter-mock dim">Período: dd/mm/aaaa - dd/mm/aaaa</div>
         <span class="btn-mock">Requisitar Gravações</span>
     </div>
-    <div style="border:1px solid var(--hairline-soft);border-radius:var(--radius);padding:16px">
+    <div style="border:1px solid var(--hairline-soft);border-radius:var(--radius-lg);padding:16px">
         <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:10px">157 gravações encontradas</div>
         <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto">
             <div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:#f8f9fb;border-radius:var(--radius-sm);font-size:13px">

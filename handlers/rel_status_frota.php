@@ -269,7 +269,7 @@ $cardBase = http_build_query($cardQ);
         $pct = $totalDevices > 0 ? ($n / $totalDevices * 100) : 0;
         $active = $filterState === $sk;
     ?>
-    <a href="?<?= $cardBase ?><?= $cardBase ? '&' : '' ?>state=<?= $sk ?>" class="card" style="padding:14px 18px;text-decoration:none;display:block;border-left:3px solid <?= fleet_state_color($sk) ?>;<?= $active ? 'box-shadow:0 0 0 2px var(--brand);' : '' ?>">
+    <a href="?<?= $cardBase ?><?= $cardBase ? '&' : '' ?>state=<?= $sk ?>" class="card" style="padding:14px 18px;text-decoration:none;display:block;border-left:3px solid <?= fleet_state_color($sk) ?>;<?= $active ? 'box-shadow:0 0 0 2px var(--primary);' : '' ?>">
         <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);"><?= htmlspecialchars($sl) ?></div>
         <div class="text-mono" style="font-size:26px;font-weight:500;color:var(--ink);margin-top:4px;"><?= $n ?></div>
         <div class="text-mono text-muted" style="font-size:11px;"><?= number_format($pct, 1, ',', '.') ?>% da frota</div>

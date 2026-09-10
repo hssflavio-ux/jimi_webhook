@@ -1,5 +1,88 @@
-# STATUS.md — Jimi Webhook System v4.18.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.18.2 (YUV Parity)
 
+> ### 📍 v4.18.2 — `/configuracoes-ia`: textos, tokens de design, grade sem buracos, perfil de leitura completa
+>
+> Pedido do dono do produto, 5 itens, mais uma varredura pedida antes do
+> commit único desta sessão.
+>
+> **1-3. Textos e quadros.** Os dois estados vazios trocados ("Selecione o
+> equipamento para verificar e configurar sua IA." / "O modelo não tem
+> configuração disponível."). 🔴 **`.ia-cell`/`.ia-param input` divergiam do
+> design system** — `border-radius:10px` fixo em vez de `var(--radius-lg)`,
+> sombra de hover `0 1px 3px rgba(0,0,0,.08)` em vez do token único
+> `var(--shadow-soft)`, input sem foco azul. Mesma divergência achada — e
+> corrigida na mesma sessão, a pedido do dono do produto — no `.param-cell`
+> legado de `/ativos/{imei}?tab=parametros`, de onde esta tela tinha copiado
+> o padrão original (inclusive `var(--line,#e5e7eb)`, variável que nem existe
+> em `:root` — sempre caía no fallback). `.ia-grid` ganhou
+> `grid-auto-flow: dense`: os quadros combinados EVENTSET+EVENTALERT
+> (`grid-column: span 2`) deixavam buraco na linha anterior quando não
+> cabiam inteiros — auto-placement sem `dense` não preenche células vazias
+> com itens menores que vêm depois na ordem. Só a última linha pode ficar
+> incompleta agora.
+>
+> **5. Perfil de leitura completa** (`device_ia_config_snapshots`, migração
+> `v4.18.2` — **precisa do segundo deploy/`.sql` manual**, ver CLAUDE.md). Ao
+> fim de "Ler tudo agora", cada resposta de consulta é convertida de volta em
+> comando de escrita — medido em `includes/ia_config_catalog.php`: a câmera
+> ecoa a própria consulta e anexa o valor (`EVENTSET,ALDW#` →
+> `EVENTSET,ALDW#,60`), então a extração pega os últimos N tokens separados
+> por vírgula e monta `EVENTSET,ALDW,60#`. **Decisões do dono do produto**
+> (não a opção "mais segura" que eu tinha sugerido): o perfil usa TODOS os
+> comandos lidos, não só os aplicados manualmente; "aplicar em outras
+> câmeras do mesmo modelo" envia AO VIVO (com prévia da lista + confirmação),
+> não só gera texto pra copiar; o TXT se chama **`writeconfig.txt`** —
+> **confirmado pelo dono do produto: é recurso real da câmera, que lê o
+> cartão SD e aplica a configuração sozinha, uma configuração por linha** —
+> por isso o conteúdo é só os comandos empilhados, um por linha, sem
+> comentário nenhum. A tela mostra "Última leitura completa em DD/MM/AAAA
+> HH:MM — N de M comando(s)" quando o equipamento é selecionado, com botões
+> pra baixar o TXT e abrir o painel de exportação (que lista os comandos
+> ANTES de enviar — a extração é heurística, não um parser medido comando a
+> comando, o operador confere).
+>
+> **6. Varredura de "tela fora do padrão"** (pedido do dono do produto, antes
+> de commitar tudo de uma vez): o `.param-cell` corrigido no item 1-3 usava
+> `var(--line,#e5e7eb)` — variável que não existe em `:root`, sempre caindo
+> no fallback — e isso fez procurar a MESMA classe de bug (`var(--x)` sem `x`
+> definido em `:root`) em TODO o app: `grep` de todo `var(--...)` usado contra
+> a lista real de tokens de `web/layout_base.php`. 🔴 **7 variáveis fantasma,
+> em 11 arquivos, todas do tempo da paleta Cursor/pré-rename** — resolviam
+> pra nada (propriedade CSS inteira ignorada pelo navegador), não pro valor
+> errado, por isso nunca apareceram como "cor errada" — simplesmente não
+> tinham cor/raio nenhum:
+> - `var(--brand)` (era o antigo nome de `--primary`) — aba ativa invisível em
+>   **`/auditoria`, `/auditoria/negados`, `/auditoria/cadastro`,
+>   `/auditoria/login`**; realce de comando selecionado, chip de exemplo,
+>   anel de foco por teclado e chip "ativo" invisíveis em **`/comandos`**; anel
+>   do card de filtro ativo invisível em **`/relatorios/status-frota`**.
+> - `var(--danger)` (era o antigo nome de `--error`) — mensagem de erro sem
+>   vermelho nenhum em **`/ativos/{imei}` (aba Parâmetros), `/parametros`,
+>   `/configuracoes/parametros`, `/relatorios/parametros`**.
+> - `var(--accent)` — link sem azul em **`/geocercas`**.
+> - `var(--radius)` (era o antigo nome antes da família `--radius-sm/md/lg/xl`)
+>   — **13 caixas de mockup em `/wiki` com cantos QUADRADOS** (`.mockup`,
+>   `.kpi-box`, `.filter-bar-mock`, `.map-mock`, `.chart-mock`, `.callout`,
+>   `.sidebar-mock`, `.video-mock`) e o **painel de notificações** (sino no
+>   header, presente em TODA tela) também com cantos quadrados.
+> - `var(--sidebar-bg)` — mockup de sidebar em `/wiki` sem fundo escuro.
+> - `var(--surface-2)` — linha bloqueada sem destaque em `/comandos-sms`.
+> - `var(--font-mono, monospace)` — o badge de contagem e o carimbo de hora
+>   do painel de notificações (global) caíam em monospace genérico do
+>   navegador em vez de JetBrains Mono (tinha fallback, por isso só é
+>   inconsistência tipográfica, não campo vazio).
+>
+> Todas resolvidas para o token real (`--primary`, `--error`, `--radius-lg`,
+> `--surface-dark`, `--canvas-soft`, ou a fonte literal `'JetBrains Mono',
+> monospace` — mesma convenção do resto do app). De quebra, `.cmd-item.sel`
+> em `/comandos` trocou `#e8f0ff` fixo por `var(--primary-soft)` (o token já
+> existe e é quase idêntico — `#eaf0ff` —, era só um valor digitado à mão).
+> **Método**: `grep` de todo `var(--...)` usado no app inteiro contra a lista
+> real de `--variáveis` definidas em `web/layout_base.php` — sobrou só
+> `--surface-soft` (as 3 telas de pré-login têm `:root` PRÓPRIO com essa
+> variável, não é bug) e um falso-positivo de comentário PHPDoc. `php -l`
+> completo (`handlers config core includes web`) limpo depois da correção.
+>
 > ### 📍 v4.17.28–v4.18.1 — `/comandos` sem trava de modelo, painel sem "35 parados" fantasma, fila offline confirmada no hub
 >
 > Sessão única cobrindo 5 pedidos do dono do produto sobre `/comandos` e o painel.
@@ -138,40 +221,7 @@
 > resposta real assim que ela existir, de qualquer equipamento, sem precisar
 > de novo deploy.
 
-> ### 📍 v4.17.23 — filtrar `webhook_payloads` por equipamento não achava os SMS
->
-> Pedido do dono do produto: *"precisamos ter a possibilidade do filtro, não é
-> cosmético"*.
->
-> **🔴 O payload da Allcance NÃO TEM IMEI.** `webhook_capture_raw()` preenche a
-> coluna com `webhook_raw_sniff_imei()`, que procura `deviceImei`/`imei` no
-> corpo — chaves que o provedor de SMS nunca manda. Medido: **8 de 8** chamadas
-> de `pushsms` com `imei` NULL, `item_count` 0 e `payload_hash` NULL. O corpo
-> cru estava lá o tempo todo; faltava a chave para achá-lo.
->
-> O vínculo existe e é indexado: `referencia_numero` → `sms_commands.referencia`
-> (UNIQUE) → `imei`. `sms_imei_do_lote()` resolve numa consulta **por lote**.
-> `migration_v4.17.23.sql` conserta o histórico.
->
-> ⚠️ O extrator da migração é `IF(JSON_VALID(body), …, NULL)` e não
-> `JSON_EXTRACT` direto: corpo truncado ou vazio faria o `JSON_EXTRACT`
-> **abortar o script inteiro**, e a captura grava corpo vazio de propósito.
->
-> **`payload_hash` deixou de ser decoração:** aqui ele não é anti-replay, e sim
-> o que IDENTIFICA O REENVIO DO PROVEDOR. Medido — a Allcance mandou o mesmo
-> evento **duas vezes, a 1 s de distância, byte a byte igual** (hash
-> `13574cc7…`). O código já previa ("*o provedor reenvia*", teto de 50 eventos);
-> esta é a primeira captura como prova.
->
-> Verificado: `WHERE imei = '868120246598152'` passou de **nada** para
-> **6 chamadas**.
->
-> ⚠️ **A entrega do 2º teste (comando #15) NÃO chegou** — 10 min de
-> monitoramento, só os dois `enviado`. O mesmo equipamento confirmou em 9 s no
-> teste anterior. Intermitência da operadora/aparelho, não nossa: `casados: 1`
-> nas duas chamadas, sem WARNING.
-
-> Entradas anteriores a 09/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a 08/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

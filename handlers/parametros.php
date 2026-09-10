@@ -88,7 +88,7 @@ include __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($erro): ?>
-<div class="card"><p style="color:var(--danger);font-size:13px;margin:0"><?= htmlspecialchars($erro) ?></p></div>
+<div class="card"><p style="color:var(--error);font-size:13px;margin:0"><?= htmlspecialchars($erro) ?></p></div>
 <?php else: ?>
 
 <!-- Atalhos para as outras duas funções da área -->

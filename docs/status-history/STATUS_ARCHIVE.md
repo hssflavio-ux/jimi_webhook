@@ -2,6 +2,39 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 v4.17.23 — filtrar `webhook_payloads` por equipamento não achava os SMS
+>
+> Pedido do dono do produto: *"precisamos ter a possibilidade do filtro, não é
+> cosmético"*.
+>
+> **🔴 O payload da Allcance NÃO TEM IMEI.** `webhook_capture_raw()` preenche a
+> coluna com `webhook_raw_sniff_imei()`, que procura `deviceImei`/`imei` no
+> corpo — chaves que o provedor de SMS nunca manda. Medido: **8 de 8** chamadas
+> de `pushsms` com `imei` NULL, `item_count` 0 e `payload_hash` NULL. O corpo
+> cru estava lá o tempo todo; faltava a chave para achá-lo.
+>
+> O vínculo existe e é indexado: `referencia_numero` → `sms_commands.referencia`
+> (UNIQUE) → `imei`. `sms_imei_do_lote()` resolve numa consulta **por lote**.
+> `migration_v4.17.23.sql` conserta o histórico.
+>
+> ⚠️ O extrator da migração é `IF(JSON_VALID(body), …, NULL)` e não
+> `JSON_EXTRACT` direto: corpo truncado ou vazio faria o `JSON_EXTRACT`
+> **abortar o script inteiro**, e a captura grava corpo vazio de propósito.
+>
+> **`payload_hash` deixou de ser decoração:** aqui ele não é anti-replay, e sim
+> o que IDENTIFICA O REENVIO DO PROVEDOR. Medido — a Allcance mandou o mesmo
+> evento **duas vezes, a 1 s de distância, byte a byte igual** (hash
+> `13574cc7…`). O código já previa ("*o provedor reenvia*", teto de 50 eventos);
+> esta é a primeira captura como prova.
+>
+> Verificado: `WHERE imei = '868120246598152'` passou de **nada** para
+> **6 chamadas**.
+>
+> ⚠️ **A entrega do 2º teste (comando #15) NÃO chegou** — 10 min de
+> monitoramento, só os dois `enviado`. O mesmo equipamento confirmou em 9 s no
+> teste anterior. Intermitência da operadora/aparelho, não nossa: `casados: 1`
+> nas duas chamadas, sem WARNING.
+
 > ### 📍 v4.17.22 — duas migrações fora da lista do deploy
 >
 > Achado ao responder a uma pergunta sobre o log do webhook de SMS.

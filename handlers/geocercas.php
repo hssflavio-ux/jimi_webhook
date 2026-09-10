@@ -630,7 +630,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Geocercas</h2>
         <p class="text-muted" style="font-size:12px;margin-top:4px;">
             Áreas monitoradas. Cada entrada e saída vira evento no
-            <a href="/relatorios/geocercas" style="color:var(--accent);">relatório de geocercas</a>.
+            <a href="/relatorios/geocercas" style="color:var(--primary);">relatório de geocercas</a>.
         </p>
     </div>
     <?php if (!$tableMissing): ?>

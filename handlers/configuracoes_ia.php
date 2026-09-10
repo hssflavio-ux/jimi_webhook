@@ -32,6 +32,85 @@ $scopeCust = report_customer_scope($filtroCust, $isAdmin, $customerId);
 $scopeSql = $scopeCust !== null ? ' AND d.customer_id = :cid' : '';
 $scopeParams = $scopeCust !== null ? [':cid' => $scopeCust] : [];
 
+require_once __DIR__ . '/../includes/ia_config_snapshot.php';
+
+/**
+ * Confere se o IMEI está no escopo deste usuário e devolve o modelo — mesma
+ * trava de `$scopeSql`/`$scopeParams` usados na lista de equipamentos abaixo,
+ * repetida aqui porque as duas ações a seguir respondem ANTES do HTML e não
+ * dependem de montar `$devices` inteiro.
+ */
+function ia_device_no_escopo(PDO $db, string $imei, string $scopeSql, array $scopeParams): ?array
+{
+    $st = $db->prepare("
+        SELECT d.imei, COALESCE(NULLIF(dm.model_name,''), NULLIF(d.device_model,''), '-') AS model_display
+          FROM devices d
+          LEFT JOIN device_models dm ON d.device_model_id = dm.id
+         WHERE d.imei = :imei AND d.is_active = 1 {$scopeSql}
+    ");
+    $st->execute(array_merge([':imei' => $imei], $scopeParams));
+    $row = $st->fetch(PDO::FETCH_ASSOC);
+    return $row ?: null;
+}
+
+// ── Ação: salvar o perfil de leitura completa ("Ler tudo agora" terminou) ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json; charset=utf-8');
+    csrf_verify(); // responde 403 + exit sozinho se inválido
+
+    $body = json_decode(file_get_contents('php://input') ?: '', true) ?: [];
+    if (($body['action'] ?? '') !== 'save_snapshot') {
+        http_response_code(400);
+        echo json_encode(['code' => 400, 'message' => 'Ação desconhecida.']);
+        exit;
+    }
+
+    $imei = trim((string)($body['imei'] ?? ''));
+    $commandsText = trim((string)($body['commands_text'] ?? ''));
+    $totalCatalogo = max(0, (int)($body['total_catalogo'] ?? 0));
+    $totalCapturado = max(0, (int)($body['total_capturado'] ?? 0));
+
+    $dev = $imei !== '' ? ia_device_no_escopo($db, $imei, $scopeSql, $scopeParams) : null;
+    if (!$dev || $commandsText === '') {
+        http_response_code(422);
+        echo json_encode(['code' => 422, 'message' => 'Equipamento fora de escopo ou nenhum comando capturado na leitura.']);
+        exit;
+    }
+
+    try {
+        $capturedAtUtc = gmdate('Y-m-d H:i:s');
+        ia_snapshot_save(
+            $db, $imei, $dev['model_display'], $commandsText,
+            $totalCatalogo, $totalCapturado, $capturedAtUtc,
+            $user['id'] ?? null, $scopeCust
+        );
+        echo json_encode(['code' => 0, 'captured_at' => fmt_brt($capturedAtUtc)]);
+    } catch (Throwable $e) {
+        Logger::error('configuracoes-ia: falha ao salvar perfil de IA', ['imei' => $imei, 'erro' => $e->getMessage()]);
+        http_response_code(500);
+        echo json_encode(['code' => 500, 'message' => 'Falha ao salvar o perfil — tente novamente.']);
+    }
+    exit;
+}
+
+// ── Ação: baixar writeconfig.txt (só leitura, GET) ─────────────────────────
+if (($_GET['action'] ?? '') === 'baixar-txt') {
+    $imei = trim((string)($_GET['imei'] ?? ''));
+    $dev = $imei !== '' ? ia_device_no_escopo($db, $imei, $scopeSql, $scopeParams) : null;
+    if (!$dev) { http_response_code(404); exit('Equipamento não encontrado neste cliente.'); }
+
+    $snap = ia_snapshot_get($db, $imei);
+    if (!$snap) { http_response_code(404); exit('Nenhuma leitura completa salva para este equipamento ainda — use "Ler tudo agora" primeiro.'); }
+
+    header('Content-Type: text/plain; charset=utf-8');
+    header('Content-Disposition: attachment; filename="writeconfig.txt"');
+    header('Content-Length: ' . strlen($snap['commands_text']));
+    header('Cache-Control: private, no-store');
+    header('X-Content-Type-Options: nosniff');
+    echo $snap['commands_text'];
+    exit;
+}
+
 // ── Equipamentos ────────────────────────────────────────────────────────────
 // Sem filtro de protocolo: proNo 128 é canal do IoT Hub (a mesma via de
 // STATUS#/CHECK#/UPDATE), funciona em câmera JT/T e JIMI igual — não é o
@@ -102,23 +181,53 @@ if ($devices) {
     }
 }
 
+// ── Perfil de leitura completa por equipamento (device_ia_config_snapshots) ─
+// Mesmo espírito do bloco acima: carregado para toda a frota do escopo de
+// uma vez. `commands_text` vai junto (não só o resumo) porque é o que a tela
+// usa para "Aplicar em outras câmeras" e para montar o link de download —
+// sem outro round-trip ao servidor.
+$snapshots = [];
+if ($devices) {
+    try {
+        $imeis = array_column($devices, 'imei');
+        $ph = implode(',', array_fill(0, count($imeis), '?'));
+        $st = $db->prepare("SELECT imei, model_display, captured_at, total_catalogo, total_capturado, commands_text
+                               FROM device_ia_config_snapshots WHERE imei IN ($ph)");
+        $st->execute($imeis);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $snapshots[$r['imei']] = [
+                'modelo' => $r['model_display'],
+                'em' => fmt_brt($r['captured_at']),
+                'totCat' => (int)$r['total_catalogo'],
+                'totCap' => (int)$r['total_capturado'],
+                'texto' => $r['commands_text'],
+            ];
+        }
+    } catch (Throwable $e) {
+        // Migração v4.18.2 não aplicada ainda — a tela funciona sem perfil
+        // salvo, só sem "última leitura completa"/exportação/TXT.
+        Logger::warning('configuracoes-ia: device_ia_config_snapshots indisponível', ['erro' => $e->getMessage()]);
+    }
+}
+
 $page_title = 'Configurações IA';
 $current_route = 'configuracoes-ia';
 $extra_head = '<style>
-.ia-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;}
-.ia-cell{border:1px solid var(--hairline,#e5e7eb);border-radius:10px;padding:14px 16px;background:var(--surface,#fff);}
-.ia-cell:hover{box-shadow:0 1px 3px rgba(0,0,0,.08);}
+.ia-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;grid-auto-flow:dense;}
+.ia-cell{border:1px solid var(--hairline);border-radius:var(--radius-lg);padding:16px 18px;background:var(--surface);transition:box-shadow .15s;}
+.ia-cell:hover{box-shadow:var(--shadow-soft);}
 .ia-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:2px;}
 .ia-name{font-size:13px;font-weight:600;color:var(--ink);line-height:1.3;}
 .ia-syn{font-size:10px;color:var(--muted);font-family:"JetBrains Mono",monospace;flex-shrink:0;}
 .ia-desc{font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.4;}
-.ia-known{font-size:11px;background:var(--canvas-soft,#f4f5f7);border-radius:6px;padding:6px 8px;margin-bottom:8px;}
+.ia-known{font-size:11px;background:var(--canvas-soft);border-radius:var(--radius-sm);padding:6px 8px;margin-bottom:8px;}
 .ia-known .mono{font-family:"JetBrains Mono",monospace;word-break:break-all;}
 .ia-param{margin-bottom:8px;}
 .ia-param-top{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
-.ia-tag{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:#fff;background:var(--primary,#0052ff);border-radius:4px;padding:1px 6px;}
+.ia-tag{font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:600;color:#fff;background:var(--primary);border-radius:4px;padding:1px 6px;}
 .ia-param-desc{font-size:11px;color:var(--ink);}
-.ia-param input{width:100%;padding:6px 8px;border:1px solid var(--hairline,#e5e7eb);border-radius:6px;font-family:"JetBrains Mono",monospace;font-size:12px;}
+.ia-param input{width:100%;padding:8px 10px;border:1px solid var(--hairline);border-radius:var(--radius-md);font-family:"JetBrains Mono",monospace;font-size:12px;transition:border-color .15s,box-shadow .15s;}
+.ia-param input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 1px var(--primary);}
 .ia-mask{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.35;}
 .ia-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:10px;}
 .ia-preview{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all;}
@@ -126,12 +235,24 @@ $extra_head = '<style>
 .ia-cell-par{grid-column:span 2;}
 .ia-par-body{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;}
 .ia-sub-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;}
-.ia-sub-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--primary,#0052ff);}
-.ia-sub:last-child{border-left:1px solid var(--hairline,#e5e7eb);padding-left:24px;}
+.ia-sub-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--primary);}
+.ia-sub:last-child{border-left:1px solid var(--hairline);padding-left:24px;}
 @media (max-width:700px){
     .ia-par-body{grid-template-columns:1fr;}
-    .ia-sub:last-child{border-left:none;padding-left:0;border-top:1px solid var(--hairline,#e5e7eb);padding-top:14px;margin-top:14px;}
+    .ia-sub:last-child{border-left:none;padding-left:0;border-top:1px solid var(--hairline);padding-top:14px;margin-top:14px;}
 }
+.ia-perfil{border:1px solid var(--hairline);border-radius:var(--radius-lg);background:var(--primary-soft);padding:14px 18px;margin-bottom:16px;display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ia-perfil-info{font-size:12px;color:var(--ink);}
+.ia-perfil-info strong{font-weight:600;}
+.ia-perfil-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.ia-export{border:1px solid var(--hairline);border-radius:var(--radius-lg);background:var(--surface);padding:16px 18px;margin-bottom:16px;display:none;}
+.ia-export-title{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;}
+.ia-export-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;margin-bottom:12px;padding:4px 0;}
+.ia-export-list label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);}
+.ia-export-preview{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted);background:var(--canvas-soft);border-radius:var(--radius-sm);padding:8px 10px;max-height:140px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin-bottom:12px;}
+.ia-export-status{font-size:11px;color:var(--muted);margin-top:8px;}
+.ia-export-log-line{font-size:11px;color:var(--muted);border-top:1px solid var(--hairline-soft);padding-top:4px;}
+.ia-export-log-line .mono{font-family:"JetBrains Mono",monospace;}
 </style>';
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
@@ -163,11 +284,32 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div id="ia-ler-tudo-status" style="font-size:11px;color:var(--muted);margin-top:8px;display:none;"></div>
 </div>
 
+<div id="ia-perfil" class="ia-perfil">
+    <div class="ia-perfil-info" id="ia-perfil-info"></div>
+    <div class="ia-perfil-acts">
+        <a id="ia-perfil-baixar" class="btn btn-outline btn-sm" href="#" download="writeconfig.txt">Baixar writeconfig.txt</a>
+        <button id="ia-perfil-exportar-btn" class="btn btn-outline btn-sm" onclick="iaAbrirExport()">Aplicar em outras câmeras deste modelo</button>
+    </div>
+</div>
+
+<div id="ia-export" class="ia-export">
+    <div class="ia-export-title">Aplicar perfil em outras câmeras <span id="ia-export-modelo" style="color:var(--muted);font-weight:400;"></span></div>
+    <div class="ia-export-list" id="ia-export-list"></div>
+    <div class="ia-export-title" style="margin-top:4px;">Comandos que serão enviados (<span id="ia-export-total"></span>)</div>
+    <div class="ia-export-preview" id="ia-export-preview"></div>
+    <div class="ia-acts" style="justify-content:flex-start;">
+        <button class="btn btn-outline btn-sm" onclick="iaFecharExport()">Cancelar</button>
+        <button id="ia-export-enviar-btn" class="btn btn-primary btn-sm" onclick="iaEnviarExport()">Enviar para as câmeras selecionadas</button>
+    </div>
+    <div class="ia-export-status" id="ia-export-status"></div>
+    <div id="ia-export-log" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;"></div>
+</div>
+
 <div id="ia-vazio" class="card" style="padding:32px;text-align:center;color:var(--muted);">
-    Selecione um equipamento para ver os comandos de IA do modelo dele.
+    Selecione o equipamento para verificar e configurar sua IA.
 </div>
 <div id="ia-sem-comando" class="card" style="padding:32px;text-align:center;color:var(--muted);display:none;">
-    O catálogo não documenta comando de ADAS/DMS/velocidade para este modelo.
+    O modelo não tem configuração disponível.
 </div>
 
 <div id="ia-grid" class="ia-grid"></div>
@@ -175,6 +317,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <script>
 var CATALOGO_IA = <?= json_encode($catJs, JSON_UNESCAPED_UNICODE) ?>;
 var ESTADO_IA = <?= json_encode($estado, JSON_UNESCAPED_UNICODE) ?>;
+var SNAPSHOTS_IA = <?= json_encode($snapshots, JSON_UNESCAPED_UNICODE) ?>; // perfil de leitura completa por imei
 
 var iaCartoesAtuais = [];   // [{x, cel, result}] do equipamento selecionado agora
 
@@ -188,6 +331,8 @@ function iaMontarGrade() {
     document.getElementById('ia-sem-comando').style.display = 'none';
     document.getElementById('ia-ler-tudo-btn').style.display = 'none';
     document.getElementById('ia-ler-tudo-status').style.display = 'none';
+    document.getElementById('ia-export').style.display = 'none';
+    iaRenderPerfil(imei);
     if (!imei) return;
 
     var modelo = sel.selectedOptions[0].dataset.modelo;
@@ -237,6 +382,23 @@ function iaMontarGrade() {
     document.getElementById('ia-ler-tudo-btn').style.display = comConsulta.length ? '' : 'none';
 }
 
+/**
+ * Mostra (ou esconde) a faixa "Última leitura completa" acima da grade — lê
+ * SNAPSHOTS_IA, que já veio pronto do servidor e é atualizado em memória
+ * assim que uma nova leitura completa termina (ver iaSalvarPerfil()), sem
+ * precisar recarregar a página.
+ */
+function iaRenderPerfil(imei) {
+    var box = document.getElementById('ia-perfil');
+    var snap = imei ? SNAPSHOTS_IA[imei] : null;
+    if (!snap) { box.style.display = 'none'; return; }
+    document.getElementById('ia-perfil-info').innerHTML =
+        'Última leitura completa em <strong>' + iaEsc(snap.em) + '</strong> — ' +
+        snap.totCap + ' de ' + snap.totCat + ' comando(s) capturado(s).';
+    document.getElementById('ia-perfil-baixar').href = '/configuracoes-ia?action=baixar-txt&imei=' + encodeURIComponent(imei);
+    box.style.display = 'flex';
+}
+
 /** Código do evento embutido na sintaxe do catálogo (ex.: "EVENTSET,ALDW,P1#"
  *  → "ALDW"), só para EVENTSET/EVENTALERT — é a chave de pareamento. */
 function iaCodigoEvento(x) {
@@ -267,11 +429,16 @@ function iaRotuloEvento(x) {
  * dispara um comando por consulta do catálogo de uma vez, então ficar sem
  * saber que a câmera está offline até ver cada cartão preso em "na fila" é
  * pior aqui do que num envio único. Avisa e deixa o operador decidir.
+ *
+ * Ao fim — depois que TODA resposta chegou ou desistiu (não quando o último
+ * comando é só DISPARADO, que acontece bem antes) — v4.18.2 monta o perfil de
+ * configuração desta leitura completa e salva (ver iaSalvarPerfil()).
  */
 function iaLerTudo() {
     var sel = document.getElementById('ia-device');
     var imei = sel.value;
     if (!imei) return;
+    var modelo = sel.selectedOptions[0].dataset.modelo;
     var fila = iaCartoesAtuais.filter(function (c) { return c.x.q; });
     if (!fila.length) return;
 
@@ -288,17 +455,223 @@ function iaLerTudo() {
     btn.disabled = true;
     status.style.display = 'block';
 
+    var respostas = {};       // x.s (chave do catálogo) -> resposta bruta da câmera, ou null
+    var pendentes = fila.length;
+    var perfilSalvo = false;
+
+    function talvezSalvarPerfil() {
+        if (pendentes > 0 || perfilSalvo) return;
+        perfilSalvo = true;
+        iaSalvarPerfil(imei, modelo, fila, respostas, status);
+    }
+
     var i = 0;
     var CADENCIA_MS = 2500;
     var passo = function () {
         if (i >= fila.length) {
-            status.textContent = 'Concluído — ' + fila.length + ' comando(s) disparado(s). As respostas continuam chegando nos cartões.';
+            status.textContent = 'Concluído — ' + fila.length + ' comando(s) disparado(s). Aguardando as últimas respostas para salvar o perfil…';
             btn.disabled = false;
             return;
         }
         var c = fila[i];
         status.textContent = 'Lendo ' + (i + 1) + ' de ' + fila.length + ': ' + c.x.n + ' (' + c.x.q + ')…';
-        iaEnviar(imei, c.x.q, c.result);
+        iaEnviar(imei, c.x.q, c.result, function (resp) {
+            respostas[c.x.s] = resp;
+            pendentes--;
+            talvezSalvarPerfil();
+        });
+        i++;
+        setTimeout(passo, CADENCIA_MS);
+    };
+    passo();
+}
+
+/**
+ * Extrai os N valores de parâmetro da resposta bruta da câmera a uma
+ * consulta. Medido em campo (ver cabeçalho de includes/ia_config_catalog.php,
+ * 25/08/2026): a câmera responde ecoando a própria consulta e anexando o(s)
+ * valor(es) ao final, separados por vírgula — consulta "EVENTSET,ALDW#" →
+ * resposta "EVENTSET,ALDW#,60". Por isso a extração pega os ÚLTIMOS N tokens
+ * separados por vírgula e tira '#'/espaço de cada um — é uma heurística
+ * única para toda a tela (não há parser por comando); falha (devolve null,
+ * e o comando fica de fora do perfil) se sobrar token vazio ou faltar token.
+ */
+function iaExtrairValores(resp, n) {
+    if (!n) return [];
+    if (!resp) return null;
+    var toks = String(resp).split(',');
+    if (toks.length < n) return null;
+    var valores = toks.slice(toks.length - n).map(function (t) { return t.replace(/#/g, '').trim(); });
+    if (valores.some(function (v) { return v === ''; })) return null;
+    return valores;
+}
+
+/** Mesmo que iaMontarComando(), mas a partir de um array de valores prontos
+ *  (não de <input> do DOM) — usado para montar o perfil de leitura completa
+ *  e para reaplicar um perfil salvo em outra câmera. */
+function iaMontarComandoValores(syn, valores) {
+    var corpo = syn.replace(/#$/, '');
+    var toks = corpo.split(',');
+    var idx = 0;
+    var faltou = false;
+    var saida = toks.map(function (t) {
+        if (!/^P\d+$/.test(t)) return t;
+        var v = valores[idx] !== undefined ? String(valores[idx]).trim() : '';
+        idx++;
+        if (v === '') { faltou = true; }
+        return v === '' ? t : v;
+    });
+    if (faltou) return null;
+    return saida.join(',') + '#';
+}
+
+/**
+ * Ao final de "Ler tudo agora": para cada comando lido com sucesso, monta o
+ * comando de ESCRITA equivalente a partir da resposta da câmera (mesma
+ * sintaxe do catálogo, valor já substituído) e salva o conjunto — "um por
+ * linha, sem comentário" — como o perfil desta leitura completa. É esse
+ * texto que a faixa "Última leitura completa" usa para exibir a data, para
+ * reenviar a outras câmeras do mesmo modelo e para o writeconfig.txt.
+ */
+function iaSalvarPerfil(imei, modelo, fila, respostas, statusEl) {
+    var linhas = [];
+    fila.forEach(function (c) {
+        var valores = iaExtrairValores(respostas[c.x.s], c.x.p.length);
+        if (!valores) return;
+        var cmd = iaMontarComandoValores(c.x.s, valores);
+        if (cmd) linhas.push(cmd);
+    });
+
+    if (!linhas.length) {
+        statusEl.textContent = 'Concluído — nenhuma resposta pôde virar comando de configuração; o perfil não foi salvo.';
+        return;
+    }
+
+    var payload = {
+        action: 'save_snapshot', imei: imei,
+        commands_text: linhas.join('\n'),
+        total_catalogo: fila.length,
+        total_capturado: linhas.length,
+    };
+    fetch('/configuracoes-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: JSON.stringify(payload)
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+        if (j && j.code === 0) {
+            SNAPSHOTS_IA[imei] = { modelo: modelo, em: j.captured_at, totCat: fila.length, totCap: linhas.length, texto: payload.commands_text };
+            var sel = document.getElementById('ia-device');
+            if (sel.value === imei) iaRenderPerfil(imei);
+            statusEl.textContent = 'Concluído — perfil salvo (' + linhas.length + ' de ' + fila.length + ' comando(s)), leitura completa em ' + j.captured_at + '.';
+        } else {
+            statusEl.textContent = 'Concluído — leitura terminou, mas o perfil não pôde ser salvo (' + ((j && j.message) || 'erro') + ').';
+        }
+    })
+    .catch(function () {
+        statusEl.textContent = 'Concluído — leitura terminou, mas o perfil não pôde ser salvo (erro de rede).';
+    });
+}
+
+/** Abre o painel de exportação do perfil salvo para outras câmeras do MESMO
+ *  modelo (mesmo cliente/escopo — a lista vem só das opções já carregadas em
+ *  #ia-device). Mostra a lista de comandos ANTES de enviar, de propósito:
+ *  a extração de valor em iaExtrairValores() é uma heurística, não um parser
+ *  medido comando a comando — o operador confere antes de disparar. */
+function iaAbrirExport() {
+    var sel = document.getElementById('ia-device');
+    var imei = sel.value;
+    var snap = imei ? SNAPSHOTS_IA[imei] : null;
+    if (!snap) return;
+    var modelo = sel.selectedOptions[0].dataset.modelo;
+    var linhas = snap.texto.split('\n').filter(function (l) { return l.trim() !== ''; });
+
+    document.getElementById('ia-export-modelo').textContent = '— ' + modelo;
+    document.getElementById('ia-export-total').textContent = linhas.length;
+    document.getElementById('ia-export-preview').textContent = linhas.join('\n');
+
+    var list = document.getElementById('ia-export-list');
+    list.innerHTML = '';
+    var opcoes = Array.prototype.filter.call(sel.options, function (o) {
+        return o.value && o.value !== imei && o.dataset.modelo === modelo;
+    });
+    if (!opcoes.length) {
+        list.innerHTML = '<span style="font-size:12px;color:var(--muted);">Nenhuma outra câmera deste modelo neste cliente.</span>';
+    } else {
+        opcoes.forEach(function (o) {
+            var lbl = document.createElement('label');
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = o.value;
+            cb.className = 'ia-export-check';
+            lbl.appendChild(cb);
+            lbl.appendChild(document.createTextNode(' ' + o.textContent.trim()));
+            list.appendChild(lbl);
+        });
+    }
+    document.getElementById('ia-export-status').textContent = '';
+    document.getElementById('ia-export-enviar-btn').disabled = false;
+    document.getElementById('ia-export').style.display = 'block';
+    document.getElementById('ia-export').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function iaFecharExport() {
+    document.getElementById('ia-export').style.display = 'none';
+}
+
+/** Envia, em cadência (mesmo espaçamento de iaLerTudo), cada linha do perfil
+ *  salvo para cada câmera-destino marcada — "aplicar ao vivo, com
+ *  confirmação" (decisão do dono do produto). Cada envio passa por
+ *  iaEnviar()/sendcommand.php normalmente, então fica registrado em
+ *  device_ia_config_state do equipamento de destino como qualquer outro
+ *  comando aplicado pela tela. */
+function iaEnviarExport() {
+    var sel = document.getElementById('ia-device');
+    var imei = sel.value;
+    var snap = imei ? SNAPSHOTS_IA[imei] : null;
+    if (!snap) return;
+
+    var alvos = Array.prototype.filter.call(document.querySelectorAll('.ia-export-check'), function (cb) { return cb.checked; })
+        .map(function (cb) { return cb.value; });
+    if (!alvos.length) { alert('Selecione ao menos uma câmera de destino.'); return; }
+
+    var linhas = snap.texto.split('\n').filter(function (l) { return l.trim() !== ''; });
+    if (!confirm('Isso vai enviar ' + linhas.length + ' comando(s) para ' + alvos.length + ' câmera(s) selecionada(s), SOBRESCREVENDO a configuração de IA atual delas.\n\nContinuar?')) return;
+
+    var status = document.getElementById('ia-export-status');
+    var log = document.getElementById('ia-export-log');
+    log.innerHTML = '';
+    var btn = document.getElementById('ia-export-enviar-btn');
+    btn.disabled = true;
+
+    var fila = [];
+    alvos.forEach(function (alvoImei) {
+        linhas.forEach(function (linha) { fila.push({ imei: alvoImei, cmd: linha }); });
+    });
+
+    var i = 0;
+    var CADENCIA_MS = 2000;
+    var passo = function () {
+        if (i >= fila.length) {
+            status.textContent = 'Concluído — ' + fila.length + ' comando(s) disparado(s) para ' + alvos.length + ' câmera(s). Detalhe de cada envio abaixo.';
+            btn.disabled = false;
+            return;
+        }
+        var item = fila[i];
+        status.textContent = 'Enviando ' + (i + 1) + ' de ' + fila.length + ' — ' + item.imei + ': ' + item.cmd;
+
+        var linha = document.createElement('div');
+        linha.className = 'ia-export-log-line';
+        var rotulo = document.createElement('span');
+        rotulo.className = 'mono';
+        rotulo.textContent = item.imei + ': ' + item.cmd + ' — ';
+        var resultSpan = document.createElement('span');
+        linha.appendChild(rotulo);
+        linha.appendChild(resultSpan);
+        log.appendChild(linha);
+
+        iaEnviar(item.imei, item.cmd, resultSpan);
         i++;
         setTimeout(passo, CADENCIA_MS);
     };
@@ -500,8 +873,14 @@ function iaAtualizarPreview(preview, syn, inputs) {
  *  device_ia_config_state acontece no SERVIDOR (pushinstructresponse.php),
  *  não aqui — assim a leitura enfileirada (equipamento offline) também fica
  *  registrada quando a resposta chegar, mesmo com esta aba já fechada.
+ *
+ *  `onResp(respostaBruta)` é opcional — chamado exatamente uma vez, quando o
+ *  ciclo termina (resposta chegou, desistiu, ou falhou), com a resposta
+ *  bruta da câmera ou `null` se não chegou nenhuma. iaLerTudo() usa isso para
+ *  saber quando TODAS as leituras da cadência realmente terminaram (não só
+ *  foram disparadas) e montar o perfil (v4.18.2).
  */
-function iaEnviar(imei, conteudo, result) {
+function iaEnviar(imei, conteudo, result, onResp) {
     result.innerHTML = '<span style="color:var(--muted)">enviando…</span>';
     fetch('/sendcommand', {
         method: 'POST',
@@ -513,17 +892,19 @@ function iaEnviar(imei, conteudo, result) {
         var ok = j && (j.code === 0 || j.code === 200);
         if (ok && j.command_id) {
             result.innerHTML = '<span style="color:var(--muted)">enfileirado #' + j.command_id + ' — aguardando…</span>';
-            iaAcompanhar(j.command_id, result);
+            iaAcompanhar(j.command_id, result, onResp);
         } else {
             result.innerHTML = '<span style="color:var(--error)">' + iaEsc((j && j.msg) || 'falhou') + '</span>';
+            if (onResp) onResp(null);
         }
     })
     .catch(function () {
         result.innerHTML = '<span style="color:var(--error)">erro de rede</span>';
+        if (onResp) onResp(null);
     });
 }
 
-function iaAcompanhar(id, result) {
+function iaAcompanhar(id, result, onResp) {
     var t = 0;
     var tick = function () {
         fetch('/commandstatus?command_id=' + id)
@@ -534,13 +915,15 @@ function iaAcompanhar(id, result) {
                     var cor = c.nivel === 'ok' ? 'var(--success)' : (c.nivel === 'erro' ? 'var(--error)' : 'var(--muted)');
                     result.innerHTML = '<span style="color:' + cor + '">' + iaEsc(c.titulo || '') + '</span>' +
                         (c.response ? '<div class="mono" style="word-break:break-all;">' + iaEsc(c.response) + '</div>' : '');
-                    if (c.nivel !== 'aguardando') return;
+                    if (c.nivel !== 'aguardando') { if (onResp) onResp(c.response || null); return; }
                 }
                 if (++t < 12) { setTimeout(tick, t < 8 ? 3000 : 10000); return; }
                 result.innerHTML = '<span style="color:var(--muted)">na fila — a resposta aparece quando o equipamento reconectar (recarregue a tela mais tarde)</span>';
+                if (onResp) onResp(null);
             })
             .catch(function () {
-                if (++t < 12) setTimeout(tick, 3000);
+                if (++t < 12) { setTimeout(tick, 3000); return; }
+                if (onResp) onResp(null);
             });
     };
     tick();

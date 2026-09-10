@@ -669,7 +669,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <style>
 .linha-bloqueada { opacity:.55; }
-.linha-bloqueada td { background:var(--surface-2); }
+.linha-bloqueada td { background:var(--canvas-soft); }
 tr.modelo-travado { opacity:.35; }
 tr.modelo-travado input { pointer-events:none; }
 /* Caixa de preview do comando bruto — MESMO tratamento visual de `.cmd-preview`
