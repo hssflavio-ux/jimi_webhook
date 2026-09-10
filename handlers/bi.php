@@ -215,11 +215,8 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/cha
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div class="flex-between mb-16">
-    <div>
-        <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Business Intelligence</h2>
-        <p class="text-muted" style="font-size:12px;margin-top:4px;">Gerador de análises sob demanda com filtros configuráveis</p>
-    </div>
+<div class="page-header">
+    <p class="page-sub">Gerador de análises sob demanda com filtros configuráveis.</p>
 </div>
 
 <div class="card mb-24" style="padding:16px 20px;">
@@ -280,7 +277,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($rangeClamped): ?>
-<div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
 </div>
 <?php endif; ?>
@@ -292,7 +289,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php endif; ?>
 
 <?php if ($generated): ?>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="grid-cols-2" style="margin-bottom:24px;">
     <!-- Eventos por Tipo -->
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px;">Top 10 Eventos</h4>

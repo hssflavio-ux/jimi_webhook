@@ -277,7 +277,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($rangeClamped): ?>
-<div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias:
     <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
 </div>

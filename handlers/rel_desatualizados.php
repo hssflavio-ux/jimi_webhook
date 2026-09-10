@@ -132,8 +132,21 @@ if (!$detailBucket && in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 // invertida, e o usuário pensa em "há quantos dias", não em "desde quando".
 // `last_gps_time IS NULL` (nunca posicionou) vai para o extremo de MAIS tempo,
 // que é onde pertence — nunca transmitir é o pior caso, não a ausência de caso.
+$page = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 25;
 $totalRows = [];
+$totalFrota = 0;
+$totalFrotaPages = 1;
 try {
+    $countStmt = $db->prepare("
+        SELECT COUNT(*) FROM devices d
+        LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        " . ($where ?: ''));
+    $countStmt->execute($params);
+    $totalFrota = (int)$countStmt->fetchColumn();
+    $totalFrotaPages = max(1, (int)ceil($totalFrota / $perPage));
+    $offset = ($page - 1) * $perPage;
+
     $tStmt = $db->prepare("
         SELECT d.imei, d.device_name, ds.last_gps_time, ds.last_latitude, ds.last_longitude,
                ds.last_acc_status,
@@ -145,7 +158,7 @@ try {
         " . ($where ?: '') . "
         ORDER BY ds.last_gps_time IS NULL " . ($order === 'ASC' ? 'ASC' : 'DESC') . ",
                  ds.last_gps_time " . ($order === 'ASC' ? 'DESC' : 'ASC') . "
-        LIMIT 1000");
+        LIMIT $perPage OFFSET $offset");
     $tStmt->execute($params);
     $totalRows = $tStmt->fetchAll();
 } catch (Throwable $e) {}
@@ -168,10 +181,23 @@ function tempo_sem_transmitir(?int $mins): string
 }
 
 $detailRows = [];
+$dpage = max(1, (int)($_GET['dpage'] ?? 1));
+$totalDetail = 0;
+$totalDetailPages = 1;
 if ($detailBucket && isset($buckets[$detailBucket])) {
     try {
         $b = $buckets[$detailBucket];
         $full = $where ? "$where AND {$b['cond']}" : "WHERE {$b['cond']}";
+
+        $countDetail = $db->prepare("
+            SELECT COUNT(*) FROM devices d
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            $full");
+        $countDetail->execute($params);
+        $totalDetail = (int)$countDetail->fetchColumn();
+        $totalDetailPages = max(1, (int)ceil($totalDetail / $perPage));
+        $doffset = ($dpage - 1) * $perPage;
+
         $stmt = $db->prepare("
             SELECT d.imei, d.device_name, ds.last_gps_time AS last_position_at, d.last_communication,
                    COALESCE(c.name, '—') as customer_name,
@@ -183,7 +209,7 @@ if ($detailBucket && isset($buckets[$detailBucket])) {
             LEFT JOIN device_statistics ds ON ds.imei = d.imei
             $full
             $detailOrderBy
-            LIMIT 200
+            LIMIT $perPage OFFSET $doffset
         ");
         $stmt->execute($params);
         $detailRows = $stmt->fetchAll();
@@ -276,8 +302,8 @@ $expBaseFrota = http_build_query($expQ);
 <div class="card mb-24" style="padding:12px 16px;">
     <form method="GET" style="display:flex;align-items:flex-end;gap:10px;">
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
+            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= $filterCust==$c['id']?'selected':'' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -323,7 +349,7 @@ $expBaseFrota = http_build_query($expQ);
 <div class="flex-between mb-12">
     <h3 style="font-size:15px;font-weight:600;color:var(--ink);">
         Frota completa
-        <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= count($totalRows) ?>)</span>
+        <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= $totalFrota ?>)</span>
     </h3>
     <?php if ($mapPoints): ?>
     <button type="button" class="btn btn-outline btn-sm" onclick="toggleMap()">Ver no Mapa</button>
@@ -349,7 +375,7 @@ $expBaseFrota = http_build_query($expQ);
         </thead>
         <tbody>
             <?php if (empty($totalRows)): ?>
-            <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);">Nenhum equipamento encontrado</td></tr>
+            <tr><td colspan="7"><div class="empty-state"><p>Nenhum equipamento encontrado.</p></div></td></tr>
             <?php else: foreach ($totalRows as $r):
                 $mins = $r['last_gps_time'] === null ? null : (int)$r['mins_since'];
                 $temCoord = !empty($r['last_latitude']) && (float)$r['last_latitude'] != 0.0;
@@ -359,7 +385,7 @@ $expBaseFrota = http_build_query($expQ);
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name'] ?: $r['imei']) ?></td>
                 <td><?= $mins === null
-                        ? '<span class="badge" style="color:var(--error);">Nunca transmitiu</span>'
+                        ? '<span class="badge badge-error">Nunca transmitiu</span>'
                         : htmlspecialchars(tempo_sem_transmitir($mins)) ?></td>
                 <td class="text-mono"><?= $r['last_gps_time'] ? fmt_brt($r['last_gps_time'], 'd/m/Y H:i:s') : '—' ?></td>
                 <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoTotal, $r['last_latitude'], $r['last_longitude'])) ?></td>
@@ -378,12 +404,13 @@ $expBaseFrota = http_build_query($expQ);
         </tbody>
     </table>
 </div>
+<?= report_pagination($page, $totalFrotaPages, $totalFrota, 'equipamentos') ?>
 
 <?php if ($detailBucket): ?>
 <div class="flex-between mb-12">
     <h3 style="font-size:15px;font-weight:600;color:var(--ink);">
         Detalhes: <?= $buckets[$detailBucket]['label'] ?>
-        <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= count($detailRows) ?>)</span>
+        <span style="font-size:12px;color:var(--muted);font-weight:400;">(<?= $totalDetail ?>)</span>
     </h3>
     <div style="display:flex;gap:8px;">
         <?php $expQ = $_GET; unset($expQ['export']); $expBase = http_build_query($expQ); ?>
@@ -398,7 +425,7 @@ $expBaseFrota = http_build_query($expQ);
         <thead><tr><th>IMEI</th><th>Nome</th><th>Modelo</th><th>Cliente</th><th><?= report_sort_link('last_gps_time', 'Última Posição', $sort, $order) ?></th><th>Horas Desde</th></tr></thead>
         <tbody>
             <?php if (empty($detailRows)): ?>
-            <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted);">Nenhum dispositivo nesta faixa</td></tr>
+            <tr><td colspan="6"><div class="empty-state"><p>Nenhum dispositivo nesta faixa.</p></div></td></tr>
             <?php else: foreach ($detailRows as $d): ?>
             <tr>
                 <td><span class="text-mono"><?= htmlspecialchars($d['imei']) ?></span></td>
@@ -412,6 +439,7 @@ $expBaseFrota = http_build_query($expQ);
         </tbody>
     </table>
 </div>
+<?= report_pagination($dpage, $totalDetailPages, $totalDetail, 'dispositivos', 2, 'dpage') ?>
 <?php endif; ?>
 
 <?php if ($mapPoints): ?>

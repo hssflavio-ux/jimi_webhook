@@ -176,7 +176,7 @@ include __DIR__ . '/../web/layout_base.php';
 <?php endif; ?>
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
-<div style="display:grid;grid-template-columns:1fr 400px;gap:16px">
+<div class="list-with-panel" style="--panel-w:400px">
     <div>
     <div class="flex-between mb-12" style="gap:8px;flex-wrap:wrap;">
         <form method="GET" style="display:flex;gap:6px;">

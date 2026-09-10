@@ -257,8 +257,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <?php if ($isAdmin): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -267,12 +267,12 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <label for="flt-imei" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
             <?= report_device_select($devices, (string)($filterImei ?? '')) ?>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo</label>
-            <select name="alarm_type" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-alarm_type" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo</label>
+            <select id="flt-alarm_type" name="alarm_type" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <?php foreach ($alarmTypes as $t): ?>
                 <option value="<?= htmlspecialchars($t['alarm_type']) ?>" <?= $filterType === $t['alarm_type'] ? 'selected' : '' ?>><?= htmlspecialchars($t['alarm_type']) ?></option>
@@ -280,8 +280,8 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>
-            <select name="status" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-status" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>
+            <select id="flt-status" name="status" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <option value="aguardando" <?= $filterStatus === 'aguardando' ? 'selected' : '' ?>>Aguardando</option>
                 <option value="em_tratativa" <?= $filterStatus === 'em_tratativa' ? 'selected' : '' ?>>Em Tratativa</option>
@@ -290,8 +290,8 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Risco</label>
-            <select name="risk" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-risk" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Risco</label>
+            <select id="flt-risk" name="risk" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <option value="baixo" <?= $filterRisk === 'baixo' ? 'selected' : '' ?>>Baixo</option>
                 <option value="medio" <?= $filterRisk === 'medio' ? 'selected' : '' ?>>Médio</option>
@@ -299,8 +299,8 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Falso Positivo</label>
-            <select name="false_positive" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-false_positive" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Falso Positivo</label>
+            <select id="flt-false_positive" name="false_positive" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <option value="1" <?= $filterFP === '1' ? 'selected' : '' ?>>Sim</option>
                 <option value="0" <?= $filterFP === '0' ? 'selected' : '' ?>>Não</option>
@@ -308,8 +308,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php if ($driverList): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Motorista</label>
-            <select name="driver_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-driver_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Motorista</label>
+            <select id="flt-driver_id" name="driver_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="">Todos</option>
                 <?php foreach ($driverList as $d): ?>
                 <option value="<?= $d['id'] ?>" <?= $filterDriver == $d['id'] ? 'selected' : '' ?>><?= htmlspecialchars($d['name']) ?></option>
@@ -318,9 +318,9 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <label for="flt-date_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
-                <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
                 <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
             </div>
         </div>
@@ -329,7 +329,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($rangeClamped): ?>
-<div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
 </div>
 <?php endif; ?>
@@ -352,7 +352,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--muted);">Nenhuma ocorrência encontrada</td></tr>
+            <tr><td colspan="10"><div class="empty-state"><p>Nenhuma ocorrência encontrada.</p></div></td></tr>
             <?php else: ?>
             <?php
             $riskBadges = ['baixo'=>'badge-primary','medio'=>'badge-warning','alto'=>'badge-error'];

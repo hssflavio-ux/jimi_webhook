@@ -37,7 +37,7 @@ $current_route = 'config-dispositivos';
 include __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div class="grid-cols-2">
     <!-- Consultar -->
     <div class="card">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Consultar Dispositivo</h4>

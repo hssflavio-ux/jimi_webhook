@@ -263,7 +263,7 @@ include __DIR__ . '/../web/layout_base.php';
         $editReminder = $stmt->fetch(PDO::FETCH_ASSOC);
     }
 ?>
-<div style="display:grid;grid-template-columns:1fr 380px;gap:16px">
+<div class="list-with-panel">
     <div>
     <div class="table-wrap">
         <table>

@@ -100,15 +100,14 @@ require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
 <?php if ($msg): ?>
-<div class="alert alert-<?= $msgType ?>" style="margin-bottom:16px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;<?= $msgType==='success'?'background:#e8f5e9;color:#05b169;border:1px solid #a5d6a7;':'background:#fdecea;color:#cf202f;border:1px solid #f5c6cb;' ?>">
+<div class="card mb-16" style="<?= $msgType==='success' ? 'border-color:#d4f0e2;background:#f0faf5;color:var(--success);' : 'border-color:#fce4eb;background:#fef2f5;color:var(--error);' ?>font-size:13px">
     <?= $msg ?>
 </div>
 <?php endif; ?>
 
 <div class="flex-between mb-16">
     <div>
-        <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Exportar Relatórios</h2>
-        <p class="text-muted" style="font-size:12px;margin-top:4px;">
+        <p class="page-sub">
             Geração assíncrona de relatórios. Os arquivos ficam disponíveis para download quando concluídos.
         </p>
     </div>

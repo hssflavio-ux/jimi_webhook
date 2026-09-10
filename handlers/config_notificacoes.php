@@ -319,11 +319,11 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php endif; ?>
 
 <?php if (!$smtpOk): ?>
-<div class="card mb-16" style="border-left:3px solid #a97a00;background:#fdf9ec;">
-    <div style="font-size:13px;color:#7a5a00;">
+<div class="card mb-16" style="border-left:3px solid var(--warning-text);background:var(--warning-bg-soft);">
+    <div style="font-size:13px;color:var(--warning-text-strong);">
         <strong>Servidor de e-mail não cadastrado.</strong> As notificações de sino, pop-up e som funcionam
         normalmente, mas o envio por e-mail vai falhar até que as credenciais sejam preenchidas em
-        <a href="/config-smtp" style="color:#7a5a00;text-decoration:underline;">Cadastros &rsaquo; Servidor de E-mail</a>.
+        <a href="/config-smtp" style="color:var(--warning-text-strong);text-decoration:underline;">Cadastros &rsaquo; Servidor de E-mail</a>.
     </div>
 </div>
 <?php endif; ?>

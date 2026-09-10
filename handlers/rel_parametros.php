@@ -118,7 +118,7 @@ include __DIR__ . '/../web/layout_base.php';
 ?>
 
 <!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php. -->
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
     não funcionam no firmware atual do fabricante. Este comparativo segue exibindo a última
     leitura conhecida de cada câmera; ela não fica mais atualizada até a correção.
@@ -143,19 +143,21 @@ include __DIR__ . '/../web/layout_base.php';
         Estes não dependem de comparação — estariam errados mesmo que a frota inteira
         estivesse assim.
     </p>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th>Equipamento</th><th style="width:60px">Nº</th><th>Parâmetro</th><th>O que foi encontrado</th></tr></thead>
         <tbody>
         <?php foreach ($achados as [$im, $no, $texto]): ?>
             <tr>
                 <td><a href="/ativos/<?= urlencode($im) ?>?tab=parametros"><?= htmlspecialchars($porImei[$im]['rotulo']) ?></a></td>
-                <td class="mono" style="color:var(--muted)"><?= $no ?></td>
+                <td class="text-mono" style="color:var(--muted)"><?= $no ?></td>
                 <td><?= htmlspecialchars(param_label($catalogo, $no)) ?></td>
                 <td><?= htmlspecialchars($texto) ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -164,22 +166,23 @@ include __DIR__ . '/../web/layout_base.php';
     <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:12px">
         <?= htmlspecialchars($modelo) ?> — <?= count($itens) ?> parâmetro(s) fora do padrão
     </h4>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr>
             <th style="width:60px">Nº</th><th>Parâmetro</th><th>Padrão do modelo</th><th>Fora do padrão</th>
         </tr></thead>
         <tbody>
         <?php foreach ($itens as $d): ?>
             <tr>
-                <td class="mono" style="color:var(--muted)"><?= $d['param_no'] ?><?= $d['channel'] ? '/c' . $d['channel'] : '' ?></td>
+                <td class="text-mono" style="color:var(--muted)"><?= $d['param_no'] ?><?= $d['channel'] ? '/c' . $d['channel'] : '' ?></td>
                 <td><?= htmlspecialchars(param_label($catalogo, $d['param_no'])) ?></td>
-                <td class="mono"><?= htmlspecialchars(param_format($catalogo, $d['param_no'], $d['padrao'], $ehAdminEstrito)) ?>
+                <td class="text-mono"><?= htmlspecialchars(param_format($catalogo, $d['param_no'], $d['padrao'], $ehAdminEstrito)) ?>
                     <span style="font-size:10px;color:var(--muted)">(<?= $d['n_padrao'] ?> de <?= $d['total'] ?>)</span></td>
                 <td>
                     <?php foreach ($d['fora'] as $im => $v): ?>
                         <div style="font-size:12px">
                             <a href="/ativos/<?= urlencode($im) ?>?tab=parametros"><?= htmlspecialchars($porImei[$im]['rotulo']) ?></a>:
-                            <span class="mono"><?= htmlspecialchars(param_format($catalogo, $d['param_no'], (string)$v, $ehAdminEstrito)) ?></span>
+                            <span class="text-mono"><?= htmlspecialchars(param_format($catalogo, $d['param_no'], (string)$v, $ehAdminEstrito)) ?></span>
                         </div>
                     <?php endforeach; ?>
                 </td>
@@ -187,6 +190,7 @@ include __DIR__ . '/../web/layout_base.php';
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endforeach; else: ?>
 <div class="card" style="margin-bottom:16px">
@@ -203,7 +207,8 @@ include __DIR__ . '/../web/layout_base.php';
         Modelos com <strong>um único</strong> equipamento lido. Não há padrão a comparar —
         e dizer "tudo certo" aqui seria aprovar sem ter comparado nada.
     </p>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th>Modelo</th><th>Equipamento</th></tr></thead>
         <tbody>
         <?php foreach ($semBase as $modelo => $ims): foreach ($ims as $im): ?>
@@ -214,6 +219,7 @@ include __DIR__ . '/../web/layout_base.php';
         <?php endforeach; endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -227,19 +233,21 @@ include __DIR__ . '/../web/layout_base.php';
         comando em fila e responde quando reconecta — a coluna de tentativas mostra
         onde o backoff está.
     </p>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th>Equipamento</th><th>Modelo</th><th>Tentativas</th><th>Próxima tentativa</th></tr></thead>
         <tbody>
         <?php foreach ($naoLidos as $e): ?>
             <tr>
                 <td><a href="/ativos/<?= urlencode($e['imei']) ?>?tab=parametros"><?= htmlspecialchars($e['rotulo']) ?></a></td>
                 <td><?= htmlspecialchars($e['model_name']) ?></td>
-                <td class="mono"><?= (int)$e['params_sync_tries'] ?></td>
-                <td class="mono" style="font-size:11px"><?= $e['params_sync_next'] ? fmt_brt($e['params_sync_next']) : '—' ?></td>
+                <td class="text-mono"><?= (int)$e['params_sync_tries'] ?></td>
+                <td class="text-mono" style="font-size:11px"><?= $e['params_sync_next'] ? fmt_brt($e['params_sync_next']) : '—' ?></td>
             </tr>
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>
 

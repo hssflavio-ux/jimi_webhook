@@ -257,12 +257,6 @@ $extra_head = '<style>
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div class="page-header">
-    <div>
-        <h1 class="page-title">Configurações IA</h1>
-    </div>
-</div>
-
 <div class="card mb-16" style="padding:16px 20px;">
     <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
         <div>

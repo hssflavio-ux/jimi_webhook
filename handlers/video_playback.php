@@ -348,7 +348,7 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mp
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div style="display:grid;grid-template-columns:1fr 340px;gap:16px;">
+<div class="list-with-panel" style="--panel-w:340px">
     <!-- Player / Preview -->
     <div>
         <div class="vid-bg" id="vid-container">

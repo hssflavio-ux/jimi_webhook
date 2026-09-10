@@ -400,7 +400,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <!-- ═══════ Velocidade + Desatualizados ═══════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="grid-cols-2" style="margin-bottom:24px;">
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">Velocidade da Frota</h4>
         <?php
@@ -455,7 +455,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <!-- ═══════ Operação em Tempo Real: Ociosidade + Status por Modelo ═══════ -->
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;margin-bottom:24px;">
+<div class="grid-cols-2" style="--col-b:2fr;margin-bottom:24px;">
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">Ociosidade</h4>
         <div class="kpi-item-value" id="kpi-idle" style="font-size:28px;"><?= $idleCount ?></div>
@@ -524,7 +524,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="?periodo=mes" class="btn btn-sm <?= $periodo==='mes'?'btn-primary':'btn-outline' ?>" style="border-radius:0 var(--radius-pill) var(--radius-pill) 0;">Último mês</a>
     </div>
 </div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+<div class="grid-cols-2" style="margin-bottom:24px;">
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);">Alarmes — <?= $periodLabel ?>
             <span class="text-mono" style="font-size:22px;font-weight:600;display:block;margin-top:2px;"><?= $alarmsTotal ?></span>
@@ -540,7 +540,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <!-- ═══════ Alarmes por placa e motoristas ═══════ -->
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+<div class="grid-cols-2">
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:10px;">Top 3 placas com mais alarmes</h4>
         <?php if (empty($topPlates)): ?>

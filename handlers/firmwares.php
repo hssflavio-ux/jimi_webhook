@@ -237,13 +237,10 @@ include __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div class="page-header">
-    <div>
-        <h1 class="page-title">Firmware</h1>
-        <p class="page-sub">
-            A versão que cada equipamento reporta e as URLs de atualização por modelo.
-            O comando <code>UPDATE</code> é o mesmo em toda a linha JC — o que muda é o pacote.
-        </p>
-    </div>
+    <p class="page-sub">
+        A versão que cada equipamento reporta e as URLs de atualização por modelo.
+        O comando <code>UPDATE</code> é o mesmo em toda a linha JC — o que muda é o pacote.
+    </p>
 </div>
 
 <?php if ($erro): ?><div class="card" style="margin-bottom:16px"><p style="color:var(--error);margin:0;font-size:13px"><?= htmlspecialchars($erro) ?></p></div><?php endif; ?>

@@ -68,10 +68,7 @@ include __DIR__ . '/../web/layout_base.php';
 ?>
 
 <div class="page-header">
-    <div>
-        <h1 class="page-title">Parâmetros</h1>
-        <p class="page-sub">Configuração das câmeras JT/T — leitura, comparação com o perfil do modelo e escrita.</p>
-    </div>
+    <p class="page-sub">Configuração das câmeras JT/T — leitura, comparação com o perfil do modelo e escrita.</p>
 </div>
 
 <!-- v4.13.0 — pausa temporária: os comandos JT/T 33027 (escrita) e 33028/33030
@@ -79,7 +76,7 @@ include __DIR__ . '/../web/layout_base.php';
      apagado — código, rotas e as três tabelas continuam intactos; é reversível
      assim que o fabricante corrigir. Comandos de ADAS/DMS/velocidade (proNo
      128) saíram desta área — ver /configuracoes-ia. -->
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     ⚠️ <strong>Parametrização JT/T pausada</strong> — os comandos 33027 (escrita) e 33028/33030
     (leitura) não estão funcionando no firmware atual do fabricante. A tela continua aqui
     para consulta do que já foi lido antes, mas leitura e escrita novas ficam suspensas até
@@ -113,9 +110,9 @@ include __DIR__ . '/../web/layout_base.php';
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px">
         <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin:0">Equipamentos JT/T</h4>
         <span style="font-size:12px;color:var(--muted)">
-            <span class="mono"><?= $totais['devices'] ?></span> equipamento(s) ·
-            <span class="mono"><?= $totais['lidos'] ?></span> com configuração lida ·
-            <span class="mono"><?= $totais['nunca'] ?></span> nunca lido(s)
+            <span class="text-mono"><?= $totais['devices'] ?></span> equipamento(s) ·
+            <span class="text-mono"><?= $totais['lidos'] ?></span> com configuração lida ·
+            <span class="text-mono"><?= $totais['nunca'] ?></span> nunca lido(s)
         </span>
     </div>
 
@@ -125,7 +122,8 @@ include __DIR__ . '/../web/layout_base.php';
             os comandos de parâmetro são do protocolo JT/T e elas não os entendem.
         </p>
     <?php else: ?>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr>
             <th>Equipamento</th><th style="width:90px">Modelo</th><th style="width:150px">IMEI</th>
             <th style="width:110px">Parâmetros</th><th style="width:160px">Última leitura</th>
@@ -136,8 +134,8 @@ include __DIR__ . '/../web/layout_base.php';
             <tr>
                 <td><?= htmlspecialchars($e['device_name'] ?: '—') ?></td>
                 <td><span class="badge" style="background:#eef4fa;color:#5a7fa8"><?= htmlspecialchars($e['model_name']) ?></span></td>
-                <td class="mono" style="font-size:11px"><?= htmlspecialchars($e['imei']) ?></td>
-                <td class="mono">
+                <td class="text-mono" style="font-size:11px"><?= htmlspecialchars($e['imei']) ?></td>
+                <td class="text-mono">
                     <?php if ((int)$e['params'] > 0): ?>
                         <?= (int)$e['params'] ?>
                     <?php else: ?>
@@ -154,6 +152,7 @@ include __DIR__ . '/../web/layout_base.php';
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
     <p style="font-size:11px;color:var(--muted);margin:12px 0 0">
         Cada modelo devolve um conjunto próprio — o JC371 reporta 45 parâmetros exibíveis
         e o JC181, 6. Quantidade diferente é firmware, não falha de leitura.

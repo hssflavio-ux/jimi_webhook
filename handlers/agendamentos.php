@@ -296,7 +296,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php endif; ?>
 
 <?php if (!$smtpOk): ?>
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);">
     <div style="font-size:13px;color:var(--muted);">
         <strong>Nenhum servidor de e-mail cadastrado para este cliente.</strong>
         Os agendamentos serão criados e o arquivo será gerado, mas o envio vai falhar até que
@@ -482,12 +482,12 @@ syncFreq();
                     <?php endif; ?>
                 </td>
                 <td style="text-align:right;white-space:nowrap;">
-                    <a href="?action=editar&id=<?= (int)$s['id'] ?>" class="badge badge-primary">Editar</a>
+                    <a href="?action=editar&id=<?= (int)$s['id'] ?>" class="btn btn-outline btn-sm">Editar</a>
                     <form method="POST" style="display:inline;">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="toggle">
                         <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                        <button type="submit" class="badge" style="border:none;cursor:pointer;font:inherit;">
+                        <button type="submit" class="btn btn-outline btn-sm">
                             <?= (int)$s['is_active'] === 1 ? 'Desativar' : 'Ativar' ?>
                         </button>
                     </form>
@@ -496,7 +496,7 @@ syncFreq();
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="id" value="<?= (int)$s['id'] ?>">
-                        <button type="submit" class="badge badge-error" style="border:none;cursor:pointer;font:inherit;">Excluir</button>
+                        <button type="submit" class="btn btn-outline btn-sm" style="color:var(--error)">Excluir</button>
                     </form>
                 </td>
             </tr>

@@ -172,7 +172,7 @@ $extra_head = '<script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.m
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div style="display:grid;grid-template-columns:1fr 300px;gap:16px;">
+<div class="list-with-panel" style="--panel-w:300px">
     <!-- Player(es) -->
     <div>
         <?php /* 🔴 UM PLAYER POR CANAL (v4.17.14). A JC400AD e as JT/T de mais

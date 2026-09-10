@@ -1090,7 +1090,7 @@ function report_device_options(PDO $db, ?int $scopeCust = null, int $limit = 200
  * @returns string HTML do <select>
  */
 function report_device_select(array $devices, string $selected = '', string $allLabel = 'Todas', string $name = 'imei'): string {
-    $html = '<select name="' . htmlspecialchars($name, ENT_QUOTES) . '"'
+    $html = '<select id="flt-' . htmlspecialchars($name, ENT_QUOTES) . '" name="' . htmlspecialchars($name, ENT_QUOTES) . '"'
           . ' style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">'
           . '<option value="">' . htmlspecialchars($allLabel) . '</option>';
     foreach ($devices as $d) {
@@ -1323,16 +1323,21 @@ function report_period_label(string $dateFrom, string $dateTo, string $timeFrom 
  * @param int    $totalRows  Total de registros (rótulo)
  * @param string $unit       Unidade no rótulo (ex.: 'posições', 'viagens')
  * @param int    $window     Páginas exibidas de cada lado da atual
+ * @param string $paramName  Nome do parâmetro de página na URL — o padrão
+ *                            'page' serve quase toda tela; uma tela com DUAS
+ *                            grades paginadas na mesma página (ex.:
+ *                            rel_desatualizados.php) precisa de um segundo
+ *                            nome para não colidir com a primeira.
  * @returns string HTML da paginação ('' quando há só uma página)
  */
-function report_pagination(int $page, int $totalPages, int $totalRows, string $unit = 'registros', int $window = 2): string {
+function report_pagination(int $page, int $totalPages, int $totalRows, string $unit = 'registros', int $window = 2, string $paramName = 'page'): string {
     if ($totalPages <= 1) return '';
 
     $q = $_GET;
-    unset($q['page'], $q['export']);
+    unset($q[$paramName], $q['export']);
     $base = http_build_query($q);
-    $href = function (int $n) use ($base) {
-        return htmlspecialchars('?' . ($base !== '' ? $base . '&' : '') . 'page=' . $n, ENT_QUOTES);
+    $href = function (int $n) use ($base, $paramName) {
+        return htmlspecialchars('?' . ($base !== '' ? $base . '&' : '') . $paramName . '=' . $n, ENT_QUOTES);
     };
 
     // Primeira, última e as vizinhas da atual

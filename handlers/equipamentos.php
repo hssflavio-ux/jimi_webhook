@@ -735,7 +735,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
         <a href="?action=novo" class="btn btn-primary btn-sm">+ Cadastrar</a>
-        <button class="btn btn-outline btn-sm" onclick="showFirmwareModal()">Atualizar Firmware</button>
+        <a href="/firmwares" class="btn btn-outline btn-sm">Atualizar Firmware</a>
         <button class="btn btn-outline btn-sm" onclick="showImportModal()">Importar em Lote</button>
     </div>
 </div>

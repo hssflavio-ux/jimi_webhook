@@ -412,7 +412,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <div style="text-align:right;font-size:12px;color:var(--muted);line-height:1.7;">
             <div><strong style="color:var(--ink);"><?= count($devices) ?></strong> equipamentos no escopo</div>
             <?php if ($semNumero > 0): ?>
-            <div style="color:#a97a00;">
+            <div style="color:var(--warning-text);">
                 <strong><?= $semNumero ?></strong> sem número de chip —
                 <a href="/chips">corrigir</a>
             </div>
@@ -494,7 +494,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php if ($d['msisdn_ok'] !== null): ?>
                         <span class="text-mono" style="font-size:12px;"><?= htmlspecialchars($d['msisdn_ok']) ?></span>
                     <?php else: ?>
-                        <span style="font-size:12px;color:#a97a00;">
+                        <span style="font-size:12px;color:var(--warning-text);">
                             <?= htmlspecialchars($d['motivo_bloqueio']) ?> —
                             <a href="/chips">cadastrar</a>
                         </span>

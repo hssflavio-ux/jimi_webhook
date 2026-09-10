@@ -210,7 +210,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <button type="submit" class="btn btn-primary">Filtrar</button>
     </form>
     <?php if (!empty($rangeClamped)): ?>
-        <div style="font-size:12px;color:#a97a00;margin-top:8px;">Período ajustado — teto de 31 dias por consulta.</div>
+        <div style="font-size:12px;color:var(--warning-text);margin-top:8px;">Período ajustado — teto de 31 dias por consulta.</div>
     <?php endif; ?>
 </div>
 

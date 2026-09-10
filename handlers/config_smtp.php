@@ -255,8 +255,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 <?php elseif ($keySource === 'webhook_token'): ?>
-<div class="card mb-16" style="border-left:3px solid #a97a00;background:#fdf9ec;">
-    <div style="font-size:13px;color:#7a5a00;">
+<div class="card mb-16" style="border-left:3px solid var(--warning-text);background:var(--warning-bg-soft);">
+    <div style="font-size:13px;color:var(--warning-text-strong);">
         <strong>A senha será cifrada com o <code>WEBHOOK_TOKEN</code></strong> (não há <code>APP_KEY</code> definida).
         Funciona, mas se o token do webhook for rotacionado a senha gravada deixa de abrir e precisa ser recadastrada.
         Definir um <code>APP_KEY</code> próprio evita esse acoplamento.

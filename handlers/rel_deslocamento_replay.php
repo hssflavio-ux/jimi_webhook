@@ -153,6 +153,7 @@ $extra_head = BC_MAP_ASSETS_HTML . '
 .rp-kpi-label{font-size:10px;font-weight:600;text-transform:uppercase;color:var(--muted);}
 .rp-vehicle-pin{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);background:#0052ff;}
+.leaflet-div-icon.vehicle-pin-wrap{background:transparent;border:none;}
 #rp-controls{display:flex;align-items:center;gap:10px;padding:10px 14px;}
 #rp-controls select{padding:6px 8px;font-size:12px;border:1px solid var(--hairline);border-radius:var(--radius-sm);}
 #rp-timeline-wrap{position:relative;padding:0 14px 12px;}

@@ -395,7 +395,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <input type="hidden" name="center_lng" id="centerLng" value="<?= htmlspecialchars((string)($editFence['center_lng'] ?? '')) ?>">
     <input type="hidden" name="polygon"    id="polygonJson" value="<?= htmlspecialchars($fPolygon ? json_encode($fPolygon) : '') ?>">
 
-    <div style="display:grid;grid-template-columns:minmax(320px,380px) 1fr;gap:20px;align-items:start;">
+    <div class="list-with-panel reverse" style="--panel-w:minmax(320px,380px);gap:20px;align-items:start;">
 
         <div class="card" style="padding:20px;">
             <div class="form-group">

@@ -160,7 +160,7 @@ include __DIR__ . '/../web/layout_base.php';
 <!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php.
      O bloqueio de verdade é em handlers/sendcommand.php (33027/33028/33030) —
      este aviso só explica por que "Aplicar" vai recusar. -->
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
     não funcionam no firmware atual do fabricante. Perfis continuam editáveis aqui, mas
     "Aplicar" vai recusar o envio até a correção.
@@ -182,7 +182,8 @@ include __DIR__ . '/../web/layout_base.php';
 
 <div class="card" style="margin-bottom:16px">
     <h4 style="font-size:13px;font-weight:600;margin-bottom:12px">Perfis</h4>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th>Modelo</th><th>Nome</th><th>Escopo</th><th>Parâmetros</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($perfis as $p): ?>
@@ -190,13 +191,14 @@ include __DIR__ . '/../web/layout_base.php';
                 <td><?= htmlspecialchars($p['model_name']) ?></td>
                 <td><?= htmlspecialchars($p['name']) ?></td>
                 <td><?= $p['customer_id'] === null ? 'padrão do modelo' : htmlspecialchars($p['customer_name'] ?? 'cliente') ?></td>
-                <td class="mono"><?= (int)$p['n_valores'] ?></td>
+                <td class="text-mono"><?= (int)$p['n_valores'] ?></td>
                 <td><a href="/config-parametros?perfil=<?= (int)$p['id'] ?>">abrir</a></td>
             </tr>
         <?php endforeach; ?>
         <?php if (!$perfis): ?><tr><td colspan="5" style="color:var(--muted);font-size:13px">Nenhum perfil.</td></tr><?php endif; ?>
         </tbody>
     </table>
+    </div>
 
     <form method="post" style="margin-top:16px;display:flex;gap:8px;align-items:end;flex-wrap:wrap">
         <?= csrf_field() ?>
@@ -226,18 +228,19 @@ include __DIR__ . '/../web/layout_base.php';
     <h4 style="font-size:13px;font-weight:600;margin-bottom:12px">
         <?= htmlspecialchars($perfilAberto['name']) ?> — <?= htmlspecialchars($perfilAberto['model_name']) ?>
     </h4>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th style="width:60px">Nº</th><th>Parâmetro</th><th>Valor desejado</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($valoresPerfil as $v): $no = (int)$v['param_no']; ?>
             <tr>
-                <td class="mono" style="color:var(--muted)"><?= $no ?></td>
+                <td class="text-mono" style="color:var(--muted)"><?= $no ?></td>
                 <td><?= htmlspecialchars(param_label($catalogo, $no)) ?>
                     <?php if (!empty($catalogo[$no]['is_network'])): ?>
                         <span style="font-size:10px;color:var(--error)">· rede — volta só por SMS</span>
                     <?php endif; ?>
                 </td>
-                <td class="mono"><?= htmlspecialchars($v['value']) ?></td>
+                <td class="text-mono"><?= htmlspecialchars($v['value']) ?></td>
                 <td>
                     <form method="post" style="display:inline" onsubmit="return confirm('Remover do perfil?')">
                         <?= csrf_field() ?>
@@ -251,6 +254,7 @@ include __DIR__ . '/../web/layout_base.php';
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 
     <form method="post" style="margin-top:16px;display:flex;gap:8px;align-items:end;flex-wrap:wrap">
         <?= csrf_field() ?>
@@ -276,20 +280,21 @@ include __DIR__ . '/../web/layout_base.php';
         de "apertar e ver" — a aplicação é feita equipamento a equipamento, pela aba
         <strong>Parâmetros</strong> do ativo.
     </p>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr><th>Equipamento</th><th>Já iguais</th><th>Mudariam</th><th>Sem leitura</th></tr></thead>
         <tbody>
         <?php foreach ($impacto as $im => $i): ?>
             <tr>
                 <td><a href="/ativos/<?= urlencode($im) ?>?tab=parametros"><?= htmlspecialchars($i['rotulo']) ?></a></td>
-                <td class="mono"><?= (int)$i['iguais'] ?></td>
+                <td class="text-mono"><?= (int)$i['iguais'] ?></td>
                 <td>
                     <?php if (!$i['alterar']): ?><span style="color:var(--muted)">—</span><?php endif; ?>
                     <?php foreach ($i['alterar'] as $a): ?>
                         <div style="font-size:12px">
-                            <span class="mono"><?= $a['param_no'] ?></span>
+                            <span class="text-mono"><?= $a['param_no'] ?></span>
                             <?= htmlspecialchars(param_label($catalogo, $a['param_no'])) ?>:
-                            <span class="mono"><?= htmlspecialchars($a['de']) ?> → <?= htmlspecialchars($a['para']) ?></span>
+                            <span class="text-mono"><?= htmlspecialchars($a['de']) ?> → <?= htmlspecialchars($a['para']) ?></span>
                         </div>
                     <?php endforeach; ?>
                 </td>
@@ -301,6 +306,7 @@ include __DIR__ . '/../web/layout_base.php';
         <?php if (!$impacto): ?><tr><td colspan="4" style="color:var(--muted);font-size:13px">Nenhum equipamento deste modelo neste cliente.</td></tr><?php endif; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>
 

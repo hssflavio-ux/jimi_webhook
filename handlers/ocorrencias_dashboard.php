@@ -243,7 +243,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="<?= htmlspecialchars($returnUrl) ?>" class="btn btn-outline btn-sm">Fechar</a>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <div class="grid-cols-2" style="gap:20px;">
         <!-- Info + Alarmes Agrupados + Tratativa (coluna estreita — o mapa fica na outra metade, abaixo dos vídeos) -->
         <div>
             <table style="font-size:13px;">
@@ -336,7 +336,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         <!-- Mídia + Mapa -->
         <div>
             <?php if ($detailChannels): // ── Player duplo (26/08/2026) — ver §9.9 ── ?>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            <div class="grid-cols-2" style="gap:12px;">
                 <?php foreach ([1, 2] as $canal): $item = $detailChannels[$canal] ?? null; ?>
                 <div>
                     <span style="display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:4px;">CANAL <?= $canal ?></span>
@@ -471,9 +471,8 @@ require_once __DIR__ . '/../web/layout_base.php';
 <!-- ═══════════ DASHBOARD PRINCIPAL ═══════════ -->
 <div class="flex-between mb-16">
     <div>
-        <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Dashboard de Ocorrências</h2>
-        <p class="text-muted" style="font-size:12px;margin-top:4px;">
-            Gestão de eventos DMS em tempo real
+        <p class="page-sub">
+            Gestão de eventos DMS em tempo real.
         </p>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">

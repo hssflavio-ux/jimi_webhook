@@ -212,8 +212,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <input type="hidden" name="gerar" value="1">
         <?php if ($isAdmin): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -222,8 +222,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
-            <select name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
+            <label for="flt-imei" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <select id="flt-imei" name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
                 <option value="">— Selecione —</option>
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= $d['imei'] ?>" <?= $selImei===$d['imei']?'selected':'' ?>><?= htmlspecialchars($d['device_name']??$d['imei']) ?></option>
@@ -231,23 +231,23 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Intervalo</label>
-            <select name="interval" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-interval" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Intervalo</label>
+            <select id="flt-interval" name="interval" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                 <option value="all" <?= $interval==='all'?'selected':'' ?>>Todas as posições</option>
                 <option value="sampled" <?= $interval==='sampled'?'selected':'' ?>>Amostrado (1:10)</option>
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <label for="flt-date_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
-                <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
                 <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
             </div>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Faixa horária (opcional)</label>
+            <label for="flt-time_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Faixa horária (opcional)</label>
             <div style="display:flex;gap:4px;">
-                <input type="time" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
+                <input type="time" id="flt-time_from" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
                 <input type="time" name="time_to" value="<?= htmlspecialchars($timeTo) ?>" title="Hora final (BRT) — vazio = 23:59" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
                 <select name="time_mode" title="Como aplicar a faixa horária ao período" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:190px;">
                     <option value="continua" <?= $timeMode==='continua'?'selected':'' ?>>Contínua (início → fim)</option>
@@ -260,7 +260,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($generated && $rangeClamped): ?>
-<div class="card mb-16" style="padding:10px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
 </div>
 <?php endif; ?>
@@ -272,7 +272,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="8" style="text-align:center;padding:32px;color:var(--muted);"><?= $generated ? 'Nenhuma posição encontrada' : 'Selecione uma placa e clique em Gerar' ?></td></tr>
+            <tr><td colspan="8"><div class="empty-state"><p><?= $generated ? 'Nenhuma posição encontrada.' : 'Selecione uma placa e clique em Gerar.' ?></p></div></td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r): ?>
             <tr>

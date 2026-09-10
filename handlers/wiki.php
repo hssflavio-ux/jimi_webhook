@@ -340,17 +340,7 @@ $extra_head = <<<'HEAD'
     border-radius: 100px; margin: 0 4px 8px 0;
 }
 /* ── Note callout ──────────────────────────────────── */
-.callout {
-    padding: 12px 16px;
-    border-radius: var(--radius-lg);
-    font-size: 13px;
-    line-height: 1.6;
-    margin: 16px 0;
-    border-left: 3px solid;
-}
-.callout.info  { background: #e8f0fe; border-color: var(--primary); color: #1a3a6b; }
-.callout.warn  { background: #fef3e1; border-color: #f0a020; color: #6b3a00; }
-.callout.tip   { background: #e6f4ea; border-color: #098551; color: #0d4d2d; }
+/* .callout agora é global — ver web/layout_base.php */
 /* ── Sidebar Mockup (compact) ──────────────────────── */
 .sidebar-mock {
     background: var(--surface-dark);

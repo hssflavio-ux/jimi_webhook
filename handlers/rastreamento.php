@@ -168,7 +168,7 @@ $extra_head = BC_MAP_ASSETS_HTML . '
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div style="display:grid;grid-template-columns:300px 1fr;gap:0;height:calc(100vh - 110px);">
+<div class="list-with-panel reverse" style="--panel-w:300px;gap:0;height:calc(100vh - 110px);">
     <!-- Navegação: Cliente em cima, Ativos embaixo, na MESMA coluna -->
     <div class="left-panel" style="border-right:1px solid var(--hairline);padding:8px;">
 

@@ -222,7 +222,7 @@ $cardBase = http_build_query($cardQ);
 </div>
 
 <?php if ($tableMissing): ?>
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);">
     <div style="font-size:13px;color:var(--muted);">
         <strong>Tabela de segmentos indisponível</strong> — a frota está sendo classificada apenas
         pelo silêncio de comunicação. Aplique a migração <code>v4.6.0</code> e rode

@@ -698,8 +698,13 @@ case 'video':
             </div>
         </div>
         <div class="flex flex-gap">
-            <button class="btn btn-primary btn-sm" disabled>Transmissão ao Vivo</button>
-            <button class="btn btn-outline btn-sm" disabled>Playback Histórico</button>
+            <?php if ($hasCamera): ?>
+            <a href="/video/aovivo?imei=<?= urlencode($imei) ?>" class="btn btn-primary btn-sm">Transmissão ao Vivo</a>
+            <a href="/video/playback?imei=<?= urlencode($imei) ?>" class="btn btn-outline btn-sm">Playback Histórico</a>
+            <?php else: ?>
+            <button class="btn btn-primary btn-sm" disabled title="Instale uma câmera neste veículo para transmitir">Transmissão ao Vivo</button>
+            <button class="btn btn-outline btn-sm" disabled title="Instale uma câmera neste veículo para playback">Playback Histórico</button>
+            <?php endif; ?>
         </div>
     </div>
     <div class="card">
@@ -999,7 +1004,7 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 <!-- v4.13.0 — pausa temporária: ver a mesma nota em handlers/parametros.php.
      O botão "Ler agora"/"Alterar" continua visível (o bloqueio de verdade é
      em handlers/sendcommand.php), mas vai recusar até o fabricante corrigir. -->
-<div class="card mb-16" style="padding:12px 16px;border-left:3px solid #f5a623;font-size:13px;color:var(--muted);">
+<div class="card mb-16" style="padding:12px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
     ⚠️ <strong>Parametrização JT/T pausada</strong> — 33027 (escrita) e 33028/33030 (leitura)
     não funcionam no firmware atual do fabricante. "Ler agora" e "Alterar" vão recusar até
     a correção. Configuração de ADAS/DMS/velocidade agora mora em
@@ -1011,7 +1016,7 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
             <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin:0 0 4px">
                 Configuração do equipamento
                 <span style="font-weight:400;color:var(--muted)">·</span>
-                <span class="mono" style="font-size:12px"><?= htmlspecialchars($asset['model_display']) ?></span>
+                <span class="text-mono" style="font-size:12px"><?= htmlspecialchars($asset['model_display']) ?></span>
             </h4>
             <p style="font-size:11px;color:var(--muted);margin:0 0 4px">
                 Cada modelo devolve um conjunto próprio — o JC371 reporta 49 parâmetros e o
@@ -1020,9 +1025,9 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
             <p style="font-size:12px;color:var(--muted);margin:0">
                 <?php if ($paramSnapshot): ?>
                     Última leitura em <strong><?= fmt_brt_dt($paramSnapshot['created_at']) ?></strong>
-                    · comando <span class="mono"><?= (int)$paramSnapshot['pro_no'] ?></span>
-                    · <span class="mono"><?= (int)$paramSnapshot['parsed_count'] ?></span> parâmetros
-                    em <span class="mono"><?= (int)$paramSnapshot['bytes'] ?></span> bytes
+                    · comando <span class="text-mono"><?= (int)$paramSnapshot['pro_no'] ?></span>
+                    · <span class="text-mono"><?= (int)$paramSnapshot['parsed_count'] ?></span> parâmetros
+                    em <span class="text-mono"><?= (int)$paramSnapshot['bytes'] ?></span> bytes
                 <?php else: ?>
                     Nenhuma leitura registrada ainda.
                 <?php endif; ?>
@@ -1107,8 +1112,8 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 
             <?php if ($pend): ?>
                 <div style="font-size:10px;color:var(--warning,#b45309);margin-top:6px">
-                    Pedido <span class="mono"><?= htmlspecialchars((string)$p['desired_value']) ?></span>
-                    (antes <span class="mono"><?= htmlspecialchars((string)($p['previous_value'] ?? '—')) ?></span>)
+                    Pedido <span class="text-mono"><?= htmlspecialchars((string)$p['desired_value']) ?></span>
+                    (antes <span class="text-mono"><?= htmlspecialchars((string)($p['previous_value'] ?? '—')) ?></span>)
                     — só confirma relendo.
                 </div>
             <?php endif; ?>
@@ -1144,10 +1149,11 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 <div class="card" style="margin-bottom:16px">
     <h4 style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px">Vídeo por canal</h4>
     <p style="font-size:11px;color:var(--muted);margin:0 0 12px">
-        Chega num bloco <span class="mono">channel_N</span> — não na chave
-        <span class="mono">119</span> que a documentação descreve.
+        Chega num bloco <span class="text-mono">channel_N</span> — não na chave
+        <span class="text-mono">119</span> que a documentação descreve.
     </p>
-    <table class="tbl" style="width:100%">
+    <div class="table-wrap">
+    <table style="width:100%">
         <thead><tr>
             <th style="width:70px">Canal</th><th>Ao vivo</th><th>Gravação</th><th>Legenda (OSD)</th>
         </tr></thead>
@@ -1155,9 +1161,9 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
         <?php foreach ($paramCanais as $c):
             $j = $c['value_json'] ? json_decode($c['value_json'], true) : null; ?>
             <tr>
-                <td class="mono"><?= (int)$c['channel'] ?></td>
-                <td class="mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j)) ?></td>
-                <td class="mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j ? [
+                <td class="text-mono"><?= (int)$c['channel'] ?></td>
+                <td class="text-mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j)) ?></td>
+                <td class="text-mono" style="font-size:11px"><?= htmlspecialchars(param_video_resumo($j ? [
                         'rt_resolucao' => $j['gv_resolucao'] ?? null, 'rt_encoding' => $j['gv_encoding'] ?? null,
                         'rt_fps' => $j['gv_fps'] ?? null, 'rt_bitrate' => $j['gv_bitrate'] ?? null] : null)) ?></td>
                 <td style="font-size:11px"><?= htmlspecialchars(param_osd_labels($j['osd'] ?? null)) ?></td>
@@ -1165,6 +1171,7 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
         <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -1172,7 +1179,7 @@ $podeEscrever = function_exists('can') ? can('ativos', 'edit') : $ehAdmin;
 <p style="font-size:11px;color:var(--muted);margin:0 0 16px">
     <?= count($paramOcultos) ?> parâmetro(s) lido(s) do equipamento não estão na
     tela porque ainda não sabemos o que significam
-    (nº <span class="mono"><?= htmlspecialchars(implode(', ', $paramOcultos)) ?></span>).
+    (nº <span class="text-mono"><?= htmlspecialchars(implode(', ', $paramOcultos)) ?></span>).
     O valor continua guardado — quando a identificação aparecer, ele volta sem nova leitura.
 </p>
 <?php endif; ?>

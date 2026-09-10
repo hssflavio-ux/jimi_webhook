@@ -268,6 +268,9 @@ function yuvTableFilter(input, wrapId) {
     --error: #cf202f;              /* semantic-down (só texto/borda) */
     --success: #05b169;            /* semantic-up */
     --warning: #f4b000;            /* accent-yellow (ilustrativo) */
+    --warning-text: #a97a00;       /* semantic-down amarelo, seguro pra texto (≈ .badge-warning) */
+    --warning-text-strong: #7a5a00; /* corpo de texto sobre --warning-bg-soft, mais contraste */
+    --warning-bg-soft: #fdf9ec;    /* fundo de card de aviso, mesmo tom de --warning-text */
     --info: #0052ff;
     --accent-yellow: #f4b000;
     /* aliases legados (compat) mapeados para a paleta Coinbase */
@@ -482,6 +485,11 @@ body {
     flex: 1;
     padding: 28px;
 }
+
+/* Subtítulo descritivo sob o título fixo do header (que já mostra $page_title) —
+   nunca repetir o título aqui, só o texto de apoio que ele não carrega. */
+.page-header { margin-bottom: 20px; }
+.page-sub { font-size: 13px; color: var(--muted); margin: 0; max-width: 720px; line-height: 1.5; }
 
 /* ── When asset detail sidebar is shown ──────────────── */
 /* O seletor apontava para `.main-content-inner`, elemento que NÃO existe em
@@ -768,6 +776,25 @@ tbody tr:hover { background: var(--canvas-soft); }
     gap: 16px;
 }
 
+/* Grid "lista + painel lateral" — cada tela define a largura do painel via
+   --panel-w (padrão 380px, o valor mais comum). .reverse inverte a ordem
+   (painel primeiro), caso do mapa em /rastreamento. Sem isto cada tela
+   inventava o próprio grid inline, sem @media — estourava em celular. */
+.list-with-panel {
+    display: grid;
+    grid-template-columns: 1fr var(--panel-w, 380px);
+    gap: 16px;
+}
+.list-with-panel.reverse { grid-template-columns: var(--panel-w, 380px) 1fr; }
+
+/* Grid de duas colunas simples — cada lado ajustável via --col-a/--col-b
+   (padrão 1fr 1fr). Mesmo motivo do .list-with-panel: grid inline sem @media. */
+.grid-cols-2 {
+    display: grid;
+    grid-template-columns: var(--col-a, 1fr) var(--col-b, 1fr);
+    gap: 16px;
+}
+
 /* ── Empty State ─────────────────────────────────────── */
 .empty-state {
     text-align: center;
@@ -777,6 +804,19 @@ tbody tr:hover { background: var(--canvas-soft); }
 .empty-state-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
 .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
 .empty-state p { font-size: 13px; }
+
+/* ── Callout ─────────────────────────────────────────── */
+.callout {
+    padding: 12px 16px;
+    border-radius: var(--radius-lg);
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 16px 0;
+    border-left: 3px solid;
+}
+.callout.info  { background: #e8f0fe; border-color: var(--primary); color: #1a3a6b; }
+.callout.warn  { background: #fef3e1; border-color: #f0a020; color: #6b3a00; }
+.callout.tip   { background: #e6f4ea; border-color: #098551; color: #0d4d2d; }
 
 /* ── Utilities ───────────────────────────────────────── */
 .text-muted { color: var(--muted); }
@@ -1020,6 +1060,7 @@ body.sidebar-locked { overflow: hidden; }
     /* Tabelas: scroll horizontal no container, nunca na página */
     thead th, tbody td { white-space: nowrap; }
     .form-row { grid-template-columns: 1fr; }
+    .list-with-panel, .list-with-panel.reverse, .grid-cols-2 { grid-template-columns: 1fr; }
     .kpi-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
     .kpi-item { padding: 14px; }
     .kpi-item-value { font-size: 22px; }

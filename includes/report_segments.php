@@ -246,8 +246,8 @@ function render_segment_report(array $cfg): void
         <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
             <?php if ($isAdmin): ?>
             <div>
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-                <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
+                <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                     <option value="">Todos</option>
                     <?php foreach ($customers as $c): ?>
                     <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -256,21 +256,21 @@ function render_segment_report(array $cfg): void
             </div>
             <?php endif; ?>
             <div>
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+                <label for="flt-imei" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
                 <?= report_device_select($devices, $filterImei) ?>
             </div>
             <div>
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Duração mínima</label>
-                <select name="min_minutes" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+                <label for="flt-min_minutes" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Duração mínima</label>
+                <select id="flt-min_minutes" name="min_minutes" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                     <?php foreach ([0 => 'Qualquer', 5 => '5 min', 15 => '15 min', 30 => '30 min', 60 => '1 h', 240 => '4 h'] as $mv => $ml): ?>
                     <option value="<?= $mv ?>" <?= $minMinutes === $mv ? 'selected' : '' ?>><?= $ml ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <div>
-                <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+                <label for="flt-date_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
                 <div style="display:flex;gap:4px;">
-                    <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                    <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
                     <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
                 </div>
             </div>

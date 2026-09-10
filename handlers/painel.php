@@ -54,8 +54,7 @@ $extra_head = BC_MAP_ASSETS_HTML . '
 require_once __DIR__ . '/../web/layout_base.php';
 ?>
 
-<div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Painel</h2>
+<div class="flex-between mb-16" style="justify-content:flex-end;">
     <div style="display:flex;align-items:center;gap:8px;">
         <?php if (!$editMode): ?>
         <div class="flex" style="gap:0;">

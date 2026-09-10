@@ -286,7 +286,7 @@ include __DIR__ . '/../web/layout_base.php';
     </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 400px;gap:16px">
+<div class="list-with-panel" style="--panel-w:400px">
     <!-- Lista -->
     <div class="table-wrap">
         <table>

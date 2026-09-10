@@ -55,7 +55,7 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:800px">
+<div class="grid-cols-2" style="max-width:800px">
     <!-- Dados pessoais -->
     <div class="card">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Dados Pessoais</h4>

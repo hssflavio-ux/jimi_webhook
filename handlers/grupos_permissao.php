@@ -200,7 +200,7 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="card mb-16" style="border-color:#d4f0e2;background:#f0faf5;color:var(--success);font-size:13px"><?= htmlspecialchars($success) ?></div>
 <?php endif; ?>
 
-<div style="display:grid;grid-template-columns:1fr 540px;gap:16px">
+<div class="list-with-panel" style="--panel-w:540px">
     <div>
     <div class="mb-12">
         <input type="text" placeholder="Pesquisar grupo..." oninput="yuvTableFilter(this, 'pg-table')"

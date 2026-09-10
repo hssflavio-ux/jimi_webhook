@@ -182,21 +182,21 @@ require_once __DIR__ . '/../web/layout_base.php';
                 $req = $item['is_required'] ? 'required' : '';
                 switch ($item['value_type']):
                     case 'boolean': ?>
-                    <label style="display:flex;gap:20px;font-size:13px;">
+                    <div style="display:flex;gap:20px;font-size:13px;">
                         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
                             <input type="radio" name="<?= $name ?>" value="1" <?= $req ?> style="width:auto;"> Sim
                         </label>
                         <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
                             <input type="radio" name="<?= $name ?>" value="0" <?= $req ?> style="width:auto;"> Não
                         </label>
-                    </label>
+                    </div>
                     <?php break;
                     case 'text': ?>
                     <input type="text" name="<?= $name ?>" <?= $req ?> placeholder="Resposta..." style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
                     <?php break;
                     case 'photo': ?>
-                    <input type="file" name="<?= $name ?>" accept="image/*" <?= $req ?> style="font-size:13px;">
-                    <span style="font-size:10px;color:var(--muted);">Upload de foto (será implementado em versão futura)</span>
+                    <input type="file" name="<?= $name ?>" accept="image/*" disabled style="font-size:13px;">
+                    <span style="font-size:10px;color:var(--muted);">Upload de foto ainda não é gravado nesta versão — não é preciso anexar nada aqui.</span>
                     <?php break;
                     case 'number': ?>
                     <input type="number" name="<?= $name ?>" <?= $req ?> placeholder="Valor numérico..." style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:200px;">
