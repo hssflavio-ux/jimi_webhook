@@ -72,7 +72,7 @@ foreach ($devices as $dev) {
     // A ignição fica na coluna `acc` de gps_data (pushgps grava acc/accStatus).
     // Aliasamos para `ignition` para manter a lógica de detecção legível.
     $points = $db->prepare("
-        SELECT id, latitude, longitude, speed, gps_time, acc AS ignition
+        SELECT id, latitude, longitude, speed, gps_time, acc AS ignition, driver_id
         FROM gps_data
         WHERE imei = :imei AND gps_time > :from
         ORDER BY gps_time ASC
@@ -195,6 +195,11 @@ function finalizeTrip($db, array $trip, int $endIdx): int {
     $trip['distance_km'] = calcDistance($pts);
     $trip['points']      = $pts;
     $trip['alarm_count'] = countAlarms($db, $trip['imei'], $trip['started_at'], $trip['ended_at']);
+    // v4.19.0 — motorista mais frequente (moda) entre os pontos da viagem.
+    // `gps_data.driver_id` agora vem da sessão de reconhecimento facial
+    // (ver pushgps.php), então a maioria das viagens tem um valor dominante
+    // único; o resto (nenhum motorista reconhecido) fica NULL, como antes.
+    $trip['driver_id'] = modeDriverId($pts);
 
     if (!isRealTrip($trip)) return 0;
     saveTrip($db, $trip);
@@ -245,11 +250,33 @@ function countAlarms($db, string $imei, string $from, string $to): int {
     return (int)$stmt->fetchColumn();
 }
 
+/**
+ * Motorista mais frequente entre os pontos da viagem (moda), ignorando
+ * pontos sem motorista resolvido. Critério simples de propósito: a viagem
+ * já é um recorte contínuo de movimento (ver isRealTrip()), então trocar de
+ * motorista NO MEIO dela é o caso raro, não o normal — não vale a
+ * complexidade de fatiar a viagem por motorista aqui.
+ *
+ * @param array $points Pontos da viagem, cada um com 'driver_id' (pode ser null)
+ * @returns int|null drivers.id mais frequente, ou null se nenhum ponto tem motorista
+ */
+function modeDriverId(array $points): ?int {
+    $counts = [];
+    foreach ($points as $p) {
+        if (!empty($p['driver_id'])) {
+            $counts[$p['driver_id']] = ($counts[$p['driver_id']] ?? 0) + 1;
+        }
+    }
+    if (!$counts) return null;
+    arsort($counts);
+    return (int)array_key_first($counts);
+}
+
 function saveTrip($db, array $trip): void {
     $stmt = $db->prepare("
         INSERT INTO trips (customer_id, imei, started_at, start_lat, start_lng,
-            ended_at, end_lat, end_lng, duration_s, max_speed, distance_km, alarm_count)
-        VALUES (:cid, :imei, :st, :sla, :slg, :et, :ela, :elg, :dur, :ms, :dist, :ac)
+            ended_at, end_lat, end_lng, duration_s, max_speed, distance_km, alarm_count, driver_id)
+        VALUES (:cid, :imei, :st, :sla, :slg, :et, :ela, :elg, :dur, :ms, :dist, :ac, :did)
     ");
     $stmt->execute([
         ':cid'  => $trip['customer_id'],
@@ -264,5 +291,6 @@ function saveTrip($db, array $trip): void {
         ':ms'   => $trip['max_speed'],
         ':dist' => $trip['distance_km'],
         ':ac'   => $trip['alarm_count'],
+        ':did'  => $trip['driver_id'] ?? null,
     ]);
 }

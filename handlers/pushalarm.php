@@ -112,7 +112,7 @@ class PushAlarmHandler extends WebhookHandler {
         $fatigueLevel   = null;
         $alertValue     = $msg['alertValue'] ?? '0';
         $fenceId        = $msg['fenceId'] ?? $msg['fence_id'] ?? null;
-        $driverId       = $msg['driverId'] ?? $msg['driver_id'] ?? null;
+        $driverIdRaw    = $msg['driverId'] ?? $msg['driver_id'] ?? null;
         $driverName     = $msg['driverName'] ?? $msg['driver_name'] ?? null;
 
         // Campos de vídeo JTT
@@ -137,6 +137,43 @@ class PushAlarmHandler extends WebhookHandler {
         $alarmTime   = $msg['alarmTime'] ?? gmdate('Y-m-d H:i:s');
         $gpsTime     = $item['gps_time'] ?? $msg['gpsTime'] ?? null;
         $gatewayTime = $item['gateway_time'] ?? $item['gateTime'] ?? null;
+
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei(). Subiu
+        // pra cá (v4.19.0) porque a resolução de motorista abaixo precisa de
+        // `vehicle_id`; o INSERT mais abaixo reusa esta mesma variável.
+        $ownership = resolve_installation_for_imei($this->db, $imei);
+
+        // v4.19.0 — Motorista via reconhecimento facial (JT/T). `driverId` é
+        // o identifier configurado NA CÂMERA, resolvido contra
+        // `drivers.identifier` pelo MESMO ponto único que `pushgps.php` usa
+        // — nunca a string crua: era isso que fazia `occurrences.driver_id`
+        // (FK de verdade) estourar em silêncio sempre que o valor bruto não
+        // batia com um `drivers.id` (o caso normal, já que é um identifier,
+        // não um id). A string bruta não se perde — continua em `raw_data`.
+        $driverId = resolve_driver_by_identifier($this->db, $driverIdRaw, $driverName);
+
+        // AFIS de sucesso (alertType 6) com motorista cadastrado: abre,
+        // confirma ou troca a sessão CORRENTE do veículo — ponto único de
+        // escrita em `driver_sessions`. `alertType 5` (falha de
+        // reconhecimento) e qualquer outro alarme sem `driverId` próprio NÃO
+        // grava na sessão — só herda o motorista corrente para exibição,
+        // porque falha de reconhecimento não é "outro motorista reconhecido"
+        // nem ignição desligada, as duas únicas coisas que encerram a
+        // sessão.
+        $isAfisSuccess = ($msgClass == 1 && !$isRemoval && (string)$mainType === '6');
+        if ($isAfisSuccess && $driverId !== null && $ownership['vehicle_id'] !== null) {
+            try {
+                driver_session_recognize($this->db, $ownership['vehicle_id'], $ownership['customer_id'], $imei, $driverId, $alarmTime);
+            } catch (Throwable $e) {
+                Logger::error('driver_session_recognize falhou', ['source' => $this->handlerName, 'imei' => $imei, 'error' => $e->getMessage()]);
+            }
+        } elseif ($driverId === null && $ownership['vehicle_id'] !== null) {
+            try {
+                $session = get_open_driver_session_for_vehicle($this->db, $ownership['vehicle_id']);
+                if ($session !== null) $driverId = (int)$session['driver_id'];
+            } catch (Throwable $e) {}
+        }
 
         // GPS
         $lat   = $msg['lat'] ?? $msg['latitude'] ?? null;
@@ -216,10 +253,6 @@ class PushAlarmHandler extends WebhookHandler {
         // 5. PERSISTÊNCIA COMPLETA (TODAS as 45 colunas)
         // =====================================================================
         try {
-            // Snapshot do dono no momento do evento (Fase 2 do fluxo
-            // chip→câmera→veículo) — ver resolve_installation_for_imei().
-            $ownership = resolve_installation_for_imei($this->db, $imei);
-
             $sql = "INSERT INTO alarms (
                         imei, customer_id, vehicle_id, alarm_type, alert_type, alarm_subtype,
                         standard_alarm_bitmask, alarm_name, alert_value,

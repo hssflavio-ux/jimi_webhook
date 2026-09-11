@@ -5,6 +5,25 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.19.0
+
+**Motorista corrente do veículo por reconhecimento facial (AFIS, JT/T alertType 6): persiste até a câmera reconhecer outro motorista ou a ignição desligar, e passa a aparecer em todo ponto do sistema que lista motorista.**
+
+Pedido do dono do produto: a câmera já manda reconhecimento facial logo após a ignição ligar e periodicamente durante a viagem — precisava de uma regra de permanência (o motorista fica "corrente" até trocar ou até ACC OFF) e propagação pros relatórios.
+
+- **Adicionado** tabela `driver_sessions` (migração `v4.19.0`) — mesmo padrão de `device_installations`: uma linha aberta (`ended_at IS NULL`) por veículo, invariante garantida em PHP com `SELECT...FOR UPDATE` dentro da transação de lote que o `WebhookHandler` já mantém (não é transação nova).
+- **Adicionado** 5 funções compartilhadas em `includes/functions.php`: `resolve_driver_by_identifier()` (extraída de `pushgps.php`, agora ponto único também usado por `pushalarm.php`), `get_open_driver_session_for_vehicle()`, `driver_session_recognize()`, `driver_session_close_on_ign_off()`, `driver_session_handle_acc_reading()`.
+- **Alterado** `pushalarm.php`: `alertType 6` (AFIS de sucesso) com motorista cadastrado abre/confirma/troca a sessão corrente do veículo. `alertType 5` (falha de reconhecimento) e alarmes sem `driverId` próprio herdam a sessão corrente só para exibição, sem gravar nela.
+- 🔴 **Corrigido** — `alarms.driver_id` (e, por tabela, `occurrences.driver_id`) recebiam a string bruta do `driverId` do device, nunca resolvida contra `drivers.identifier`. Como `occurrences.driver_id` é FK de verdade, isso estourava em silêncio sempre que o valor não batia com um `drivers.id` (o caso normal) — a ocorrência simplesmente não era criada. Corrigido resolvendo o motorista ANTES do INSERT; a string crua não se perde, continua em `alarms.raw_data`. Coluna continua `VARCHAR(50)` de propósito — mudar pra `BIGINT` exigiria `ALTER MODIFY` numa tabela viva com valores legados não-numéricos.
+- **Alterado** `pushgps.php`: quando o payload não traz `driverId` próprio (o caso normal desta família de câmera — o GPS nunca manda), herda o motorista da sessão corrente do veículo. `gps_data.driver_id` (existe desde v4.8.0) sai do NULL permanente.
+- **Adicionado** gancho de transição ACC 1→0 em `pushgps.php`/`pushhb.php` (`driver_session_handle_acc_reading()`, chamado ANTES das stored procedures `update_device_stats_after_{gps,heartbeat}`, que sobrescrevem `last_acc_status`) — replica a MESMA guarda de frescor que essas procedures já usam (`mysql/migration_v4.17.8.sql`), pra não fechar uma sessão por causa de pacote atrasado/reenviado.
+- **Corrigido** `uninstall_device_from_vehicle()` (`includes/functions.php`) fecha a sessão de motorista aberta (se houver) ao desinstalar a câmera — sem isso, a sessão ficaria aberta para sempre, porque nenhum ACC-OFF daquele veículo chega mais por aquela câmera.
+- **Adicionado** motorista corrente em `/rastreamento` (lista + balão do mapa + refresh de 30s) e `/ativos/{id}` (aba Visão Geral) — duas telas que hoje não mostravam motorista nenhum.
+- **Adicionado** coluna Motorista em `/relatorios/alarmes` (grade e export).
+- **Corrigido** (Fase B) `trips.driver_id` (coluna existe desde v4.0.0, nunca foi escrita) — `scripts/trip_builder.php` agora calcula o motorista mais frequente entre os pontos da viagem. A coluna Motorista do Relatório de Deslocamento, sempre vazia até aqui, passa a ter dado.
+- **Adicionado** `scripts/backfill_driver_sessions.php` — reconstrói `driver_sessions` a partir dos alarmes AFIS já gravados antes desta versão (aproximação documentada, usa `device_state_segments` como proxy de ACC OFF histórico). Roda manualmente, uma vez, depois do segundo deploy; idempotente.
+- **Adicionado** `tests/driver_sessions.spec.js` (Playwright) + seed de veículo/instalação/2 motoristas em `scripts/test_e2e.sh`.
+
 ## [Unreleased] — 4.18.4
 
 **3 códigos JT/T sem nome no catálogo (`alertType` 4/5/6) + correção do bitmask de 32 bits do Alarme Padrão JT/T (256), que estava errado desde os bits 12+.**

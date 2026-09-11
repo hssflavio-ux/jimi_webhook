@@ -2,6 +2,71 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 10/09/2026 (correção) — Varredura de design system: Fases 1-2 implementadas
+>
+> Pedido do dono do produto: proceder com as correções catalogadas na varredura abaixo
+> (mesma data) que tinham ficado pendentes. `php -l` completo (`handlers config core
+> includes web`) limpo depois de todas.
+>
+> **Causas-raiz sistêmicas (itens 1, 2 e 5 da varredura).** Classes órfãs viraram reais em
+> `web/layout_base.php`: `.page-header`/`.page-sub` (o `<h1>`/`<h2>` que duplicava o título
+> fixo saiu de `configuracoes_ia`, `firmwares`, `parametros`, `bi`, `exportar`,
+> `ocorrencias_dashboard`, `painel` — ficou só o subtítulo, onde havia um); `.tbl` trocado
+> por `<table>` puro + `.table-wrap` (9 tabelas, 4 arquivos — `table`/`thead`/`tbody` já têm
+> estilo global, a classe não existia pra nada); `.mono`→`.text-mono` em 4 arquivos
+> (`configuracoes_ia.php`/`wiki.php` ficaram de fora — já usam a classe escopada
+> corretamente, conferido); `.callout` promovida de `wiki.php` (onde só ela a definia) pra
+> global; `.alert` de `exportar.php` (só "funcionava" por `style=` inline) trocado pelo
+> padrão real que `ativos.php` já usa (`.card` + `var(--success)`/`var(--error)`).
+> `.list-with-panel`/`.grid-cols-2` (novas) com `@media(max-width:768px)` embutido, nos 15
+> grids inline em px sem breakpoint: `chips`, `manutencoes`, `motoristas`, `geocercas`,
+> `clientes`, `usuarios`, `grupos_permissao`, `video_aovivo`, `video_playback`,
+> `rastreamento`, `config_dispositivos`, `resumo` (×4), `bi`, `ocorrencias_dashboard` (×2),
+> `perfil`. ⚠️ `rastreamento.php` (o mapa ao vivo, a tela mais crítica) verificado com
+> cuidado extra antes de tocar: painel e mapa já têm altura própria
+> (`calc(100vh - 140px)`/`140px`), independente do grid — colapsar pra 1 coluna empilha,
+> não estoura. `#f5a623` cru → `var(--warning)` (14 arquivos, o aviso de "período
+> ajustado"); `#a97a00`/`#7a5a00`/`#fdf9ec` → três tokens novos (`--warning-text`,
+> `--warning-text-strong`, `--warning-bg-soft`) com o MESMO valor — zero mudança visual,
+> só para de estar solto em 8 arquivos.
+>
+> **Bugs funcionais.** `equipamentos.php`: botão morto "Atualizar Firmware"
+> (`showFirmwareModal()` não existe) agora linka `/firmwares`, que já faz isso.
+> `ativo_detalhe.php` aba Vídeo: os dois botões (Ao Vivo/Playback), `disabled` pra sempre,
+> passam a linkar `/video/aovivo`/`/video/playback?imei=` quando há câmera instalada;
+> continuam desabilitados (com o motivo no `title`) quando não há. `checklist_inspection.php`:
+> campo de foto (nunca lido pelo backend — o `answers` do POST não tem tratamento de
+> `$_FILES`) deixou de ser `required` e virou `disabled`, com aviso de que nada é gravado
+> nesta versão — antes obrigava escolher um arquivo pra depois descartá-lo em silêncio;
+> `<label>` aninhado do radio Sim/Não (HTML inválido) trocado por `<div>`. `agendamentos.php`:
+> as 3 ações de linha (Editar/Ativar-Desativar/Excluir) eram `<button class="badge">` —
+> Excluir, destrutiva, parecia selo clicável por acaso; as 3 passaram a
+> `.btn btn-outline btn-sm`, Excluir com `color:var(--error)`, mesmo padrão de `ativos.php`.
+>
+> **Grupo relatórios de rota/posição.** `rel_deslocamento_replay.php`: faltava a regra
+> `.leaflet-div-icon.vehicle-pin-wrap` que as telas-irmãs têm (pino do replay tinha caixa
+> branca atrás, diferente). `rel_desatualizados.php`: as duas grades ("Frota completa" e
+> "Detalhes") ganharam paginação real via `report_pagination()` — que passou a aceitar um
+> `$paramName` opcional (`page`/`dpage`) porque as duas grades coexistem na mesma página e
+> um só `page` colidiria; badge "Nunca transmitiu" tinha texto vermelho sem o fundo rosa,
+> corrigido para `.badge-error`. `.empty-state` real no lugar do `<td>` cru em 8 pontos
+> (`rel_alarmes`, `rel_posicoes`, `rel_deslocamento`, `rel_ocorrencias`, `rel_geocercas`×2,
+> `rel_desatualizados`×2). `<label for=>`/`id=` associando os campos de filtro nos 7
+> relatórios com formulário (`rel_posicoes`, `rel_deslocamento`, `rel_desatualizados`,
+> `rel_alarmes`, `rel_ocorrencias`, `rel_geocercas`, `report_segments.php`/`rel_paradas`),
+> inclusive no helper compartilhado `report_device_select()`. `rel_deslocamento.php`: filtro
+> de Placa "Todos"→"Todas" (concordância com as telas-irmãs e o próprio helper).
+>
+> **Catalogado e deliberadamente NÃO tocado — é decisão de produto, não correção** (a
+> varredura abaixo já separava isto na Fase 3, e dois achados adicionais da mesma classe):
+> duas gerações de UI (abas antigas de `ativo_detalhe.php` vs `/comandos`/
+> `/configuracoes-ia`) e o que fazer com elas; busca/paginação em `/manutencoes`;
+> `.filtro-campo`/`.filtro-rotulo` ignoradas por quase toda tela — re-skin visual de
+> dezenas de campos em ~12 arquivos, arriscado aplicar em massa sem conferir num navegador
+> nesta sessão; feedback assíncrono inconsistente (`alert()` nativo em `painel.php`/
+> `config_dispositivos.php`) — troca de padrão de UX, não bug pontual.
+
+
 > ### 📍 10/09/2026 — Varredura de fidelidade ao design system em ~47 telas — LEVANTAMENTO, nada corrigido ainda
 >
 > Pedido do dono do produto, a partir de um caso concreto ("já vi que a tela

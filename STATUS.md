@@ -1,4 +1,82 @@
-# STATUS.md — Jimi Webhook System v4.18.4 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.19.0 (YUV Parity)
+
+> ### 📍 11/09/2026 (motorista) — Sessão de motorista por reconhecimento facial (AFIS): persiste até trocar ou ACC OFF
+>
+> Pedido do dono do produto: a câmera já manda reconhecimento facial (AFIS,
+> JT/T `alertType 6`, catalogado na v4.18.4) logo após a ignição ligar e
+> periodicamente durante a viagem, com dados chegando desde ontem. Faltava a
+> regra de permanência ("o motorista fica valendo até a câmera reconhecer
+> outro OU até a ignição desligar, entendeu?") e propagar esse motorista pra
+> todo ponto do sistema que lista motorista — principalmente relatórios.
+>
+> **Investigação prévia (agentes de pesquisa + leitura direta) confirmou**: já
+> existiam `gps_data.driver_id`/`driver_name` (v4.8.0) e `alarms.driver_id`/
+> `driver_name`, mas SEM MEMÓRIA — cada evento resolvia (ou não) o motorista
+> isoladamente, nada fazia um reconhecimento "valer" pros pontos seguintes.
+> 🔴 **Bug real encontrado no caminho**: `occurrences.driver_id` (FK de
+> verdade para `drivers.id`) recebia a STRING BRUTA de `alarms.driver_id`
+> (o `driverId` que o device manda, que é o `identifier` configurado, não um
+> `drivers.id`) — a FK estourava em silêncio sempre que não batia (o caso
+> normal), e a ocorrência simplesmente não era criada. O precedente
+> arquitetural mais próximo do pedido já existia no código pra OUTRA coisa:
+> `device_installations` (câmera↔veículo) — linha aberta com
+> `removed_at IS NULL`, travada com `SELECT...FOR UPDATE`, com toda tabela de
+> evento gravando um SNAPSHOT do dono no momento do evento — nunca
+> re-resolvendo ao vivo na leitura.
+>
+> **Implementado** (mesmo padrão do achado acima, ver `mysql/migration_v4.19.0.sql`
+> e `includes/functions.php`): tabela nova `driver_sessions` (uma sessão
+> aberta por veículo) + 5 funções compartilhadas
+> (`resolve_driver_by_identifier()` — extraída de `pushgps.php`, agora ponto
+> único também usado por `pushalarm.php` — `get_open_driver_session_for_vehicle()`,
+> `driver_session_recognize()`, `driver_session_close_on_ign_off()`,
+> `driver_session_handle_acc_reading()`). `pushalarm.php` abre/confirma/troca
+> a sessão no AFIS de sucesso (6); `alertType 5`, falha de reconhecimento, e
+> qualquer alarme sem `driverId` próprio só HERDAM a sessão pra exibição, sem
+> gravar nela. De quebra, o bug de `occurrences.driver_id` acima ficou
+> corrigido de graça: o mesmo ajuste que resolve o motorista ANTES do
+> `INSERT` em `alarms` alimenta as duas tabelas.
+>
+> 🔴 **ACC-OFF não tinha gancho de tempo real em lugar nenhum do sistema** —
+> tudo que reagia a isso era um cron de 15 em 15 min
+> (`scripts/state_builder.php`), lido depois via janela SQL
+> (`rel_ignicao.php`). Implementado `driver_session_handle_acc_reading()` em
+> `pushgps.php`/`pushhb.php`, chamado ANTES das stored procedures
+> `update_device_stats_after_{gps,heartbeat}` (que sobrescrevem
+> `last_acc_status`) — replica a MESMA guarda de frescor que essas
+> procedures já usam (`p_time >= GREATEST(last_gps_time, last_heartbeat_time)`,
+> `mysql/migration_v4.17.8.sql`) pra não fechar uma sessão por causa de um
+> pacote atrasado ou reenviado. ⚠️ **Achado no caminho, também corrigido**:
+> `uninstall_device_from_vehicle()` não fechava a sessão de motorista aberta
+> ao desinstalar a câmera — sem isso, nenhum ACC-OFF daquele veículo chegaria
+> mais por aquela câmera, e a sessão ficaria aberta PARA SEMPRE.
+>
+> **Telas atualizadas**: `/rastreamento` (lista + balão do mapa + refresh de
+> 30s — tela que não mostrava motorista nenhum) e `/ativos/{id}` (Visão
+> Geral — idem) passaram a ler a sessão aberta AO VIVO, mesmo padrão de
+> exceção que `get_open_installation_for_vehicle()` já é. `/relatorios/alarmes`
+> ganhou coluna Motorista (grade + export) — tinha os dados desde sempre, só
+> nunca exibia.
+>
+> **Fase B (mesma entrega, a pedido do dono do produto)**: `trips.driver_id`
+> existe desde a v4.0.0 e nunca tinha sido escrita — a coluna Motorista do
+> Relatório de Deslocamento estava SEMPRE vazia. `scripts/trip_builder.php`
+> agora calcula o motorista mais frequente (moda) entre os pontos de cada
+> viagem, já alimentados pela sessão via `gps_data.driver_id`.
+>
+> **Backfill** (a pedido do dono do produto, pra não esperar o próximo
+> reconhecimento pós-deploy): `scripts/backfill_driver_sessions.php`
+> reconstrói `driver_sessions` a partir dos alarmes AFIS já gravados desde
+> ontem, usando `device_state_segments` (`state='parado'`, já calculado pelo
+> cron) como proxy de ACC-OFF histórico — documentado como APROXIMAÇÃO,
+> idempotente, roda manualmente uma vez depois do segundo deploy.
+>
+> **Verificação**: `php -l` completo (`handlers config core includes web
+> scripts`) limpo; 3 spec novos em `tests/driver_sessions.spec.js`
+> (reconhecimento, troca de motorista, ACC-OFF limpa a sessão) + seed de
+> veículo/instalação/2 motoristas em `scripts/test_e2e.sh`. Não rodado
+> contra banco real nesta sessão — pendente de ambiente de teste com
+> `TEST_IMEI`/`TEST_EMAIL`/`TEST_PASSWORD` configurados.
 
 > ### 📍 11/09/2026 — 3 códigos JT/T sem nome (4/5/6) + bitmask do Alarme Padrão 256 estava errado desde o bit 12
 >
@@ -119,70 +197,6 @@
 > **Verificação**: `php -l` completo (`handlers config core includes web`) limpo; as 4
 > mudanças conferidas visualmente em navegador contra banco de dev local (MySQL portátil +
 > `php -S`, sessão injetada direto na tabela `sessions`, removida ao final).
-
-> ### 📍 10/09/2026 (correção) — Varredura de design system: Fases 1-2 implementadas
->
-> Pedido do dono do produto: proceder com as correções catalogadas na varredura abaixo
-> (mesma data) que tinham ficado pendentes. `php -l` completo (`handlers config core
-> includes web`) limpo depois de todas.
->
-> **Causas-raiz sistêmicas (itens 1, 2 e 5 da varredura).** Classes órfãs viraram reais em
-> `web/layout_base.php`: `.page-header`/`.page-sub` (o `<h1>`/`<h2>` que duplicava o título
-> fixo saiu de `configuracoes_ia`, `firmwares`, `parametros`, `bi`, `exportar`,
-> `ocorrencias_dashboard`, `painel` — ficou só o subtítulo, onde havia um); `.tbl` trocado
-> por `<table>` puro + `.table-wrap` (9 tabelas, 4 arquivos — `table`/`thead`/`tbody` já têm
-> estilo global, a classe não existia pra nada); `.mono`→`.text-mono` em 4 arquivos
-> (`configuracoes_ia.php`/`wiki.php` ficaram de fora — já usam a classe escopada
-> corretamente, conferido); `.callout` promovida de `wiki.php` (onde só ela a definia) pra
-> global; `.alert` de `exportar.php` (só "funcionava" por `style=` inline) trocado pelo
-> padrão real que `ativos.php` já usa (`.card` + `var(--success)`/`var(--error)`).
-> `.list-with-panel`/`.grid-cols-2` (novas) com `@media(max-width:768px)` embutido, nos 15
-> grids inline em px sem breakpoint: `chips`, `manutencoes`, `motoristas`, `geocercas`,
-> `clientes`, `usuarios`, `grupos_permissao`, `video_aovivo`, `video_playback`,
-> `rastreamento`, `config_dispositivos`, `resumo` (×4), `bi`, `ocorrencias_dashboard` (×2),
-> `perfil`. ⚠️ `rastreamento.php` (o mapa ao vivo, a tela mais crítica) verificado com
-> cuidado extra antes de tocar: painel e mapa já têm altura própria
-> (`calc(100vh - 140px)`/`140px`), independente do grid — colapsar pra 1 coluna empilha,
-> não estoura. `#f5a623` cru → `var(--warning)` (14 arquivos, o aviso de "período
-> ajustado"); `#a97a00`/`#7a5a00`/`#fdf9ec` → três tokens novos (`--warning-text`,
-> `--warning-text-strong`, `--warning-bg-soft`) com o MESMO valor — zero mudança visual,
-> só para de estar solto em 8 arquivos.
->
-> **Bugs funcionais.** `equipamentos.php`: botão morto "Atualizar Firmware"
-> (`showFirmwareModal()` não existe) agora linka `/firmwares`, que já faz isso.
-> `ativo_detalhe.php` aba Vídeo: os dois botões (Ao Vivo/Playback), `disabled` pra sempre,
-> passam a linkar `/video/aovivo`/`/video/playback?imei=` quando há câmera instalada;
-> continuam desabilitados (com o motivo no `title`) quando não há. `checklist_inspection.php`:
-> campo de foto (nunca lido pelo backend — o `answers` do POST não tem tratamento de
-> `$_FILES`) deixou de ser `required` e virou `disabled`, com aviso de que nada é gravado
-> nesta versão — antes obrigava escolher um arquivo pra depois descartá-lo em silêncio;
-> `<label>` aninhado do radio Sim/Não (HTML inválido) trocado por `<div>`. `agendamentos.php`:
-> as 3 ações de linha (Editar/Ativar-Desativar/Excluir) eram `<button class="badge">` —
-> Excluir, destrutiva, parecia selo clicável por acaso; as 3 passaram a
-> `.btn btn-outline btn-sm`, Excluir com `color:var(--error)`, mesmo padrão de `ativos.php`.
->
-> **Grupo relatórios de rota/posição.** `rel_deslocamento_replay.php`: faltava a regra
-> `.leaflet-div-icon.vehicle-pin-wrap` que as telas-irmãs têm (pino do replay tinha caixa
-> branca atrás, diferente). `rel_desatualizados.php`: as duas grades ("Frota completa" e
-> "Detalhes") ganharam paginação real via `report_pagination()` — que passou a aceitar um
-> `$paramName` opcional (`page`/`dpage`) porque as duas grades coexistem na mesma página e
-> um só `page` colidiria; badge "Nunca transmitiu" tinha texto vermelho sem o fundo rosa,
-> corrigido para `.badge-error`. `.empty-state` real no lugar do `<td>` cru em 8 pontos
-> (`rel_alarmes`, `rel_posicoes`, `rel_deslocamento`, `rel_ocorrencias`, `rel_geocercas`×2,
-> `rel_desatualizados`×2). `<label for=>`/`id=` associando os campos de filtro nos 7
-> relatórios com formulário (`rel_posicoes`, `rel_deslocamento`, `rel_desatualizados`,
-> `rel_alarmes`, `rel_ocorrencias`, `rel_geocercas`, `report_segments.php`/`rel_paradas`),
-> inclusive no helper compartilhado `report_device_select()`. `rel_deslocamento.php`: filtro
-> de Placa "Todos"→"Todas" (concordância com as telas-irmãs e o próprio helper).
->
-> **Catalogado e deliberadamente NÃO tocado — é decisão de produto, não correção** (a
-> varredura abaixo já separava isto na Fase 3, e dois achados adicionais da mesma classe):
-> duas gerações de UI (abas antigas de `ativo_detalhe.php` vs `/comandos`/
-> `/configuracoes-ia`) e o que fazer com elas; busca/paginação em `/manutencoes`;
-> `.filtro-campo`/`.filtro-rotulo` ignoradas por quase toda tela — re-skin visual de
-> dezenas de campos em ~12 arquivos, arriscado aplicar em massa sem conferir num navegador
-> nesta sessão; feedback assíncrono inconsistente (`alert()` nativo em `painel.php`/
-> `config_dispositivos.php`) — troca de padrão de UX, não bug pontual.
 
 > Entradas anteriores a 11/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 

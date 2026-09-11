@@ -751,9 +751,38 @@ function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserI
 {
     // v4.15.0 — "antes" lido ANTES do UPDATE que fecha a instalação: depois
     // dele `removed_at` já não é mais NULL e a linha não casaria de novo.
-    $before = $db->prepare("SELECT device_id FROM device_installations WHERE vehicle_id = ? AND removed_at IS NULL");
+    // v4.19.0 — `imei` junto: precisa pra fechar a sessão de motorista logo
+    // abaixo, e depois do UPDATE o JOIN com `device_installations` também já
+    // não casaria mais.
+    $before = $db->prepare("
+        SELECT di.device_id, d.imei
+        FROM device_installations di
+        JOIN devices d ON d.id = di.device_id
+        WHERE di.vehicle_id = ? AND di.removed_at IS NULL
+    ");
     $before->execute([$vehicleId]);
-    $deviceId = $before->fetchColumn();
+    $before = $before->fetch(PDO::FETCH_ASSOC);
+    $deviceId = $before['device_id'] ?? null;
+    $deviceImei = $before['imei'] ?? null;
+
+    // v4.19.0 — ANTES do UPDATE abaixo, de propósito: `driver_session_close_
+    // on_ign_off()` resolve o veículo a partir do IMEI via
+    // `resolve_installation_for_imei()`, que só acha a instalação enquanto
+    // `removed_at` ainda é NULL. Chamar depois do UPDATE seria um no-op
+    // silencioso — a mesma classe de bug que a v4.12.1 já corrigiu uma vez
+    // neste arquivo (efeito colateral lido por cima do estado errado).
+    //
+    // Sem isso, uma sessão de motorista aberta por esta câmera ficaria aberta
+    // PARA SEMPRE: nenhum ACC-OFF deste veículo chega por ela nunca mais
+    // depois da desinstalação, e "motorista atual" mostraria um nome
+    // congelado em toda tela que lê a sessão ao vivo.
+    if ($deviceImei !== null) {
+        try {
+            driver_session_close_on_ign_off($db, $deviceImei, gmdate('Y-m-d H:i:s'), 'device_uninstalled');
+        } catch (Throwable $e) {
+            Logger::error('driver_session_close_on_ign_off (uninstall) falhou', ['imei' => $deviceImei, 'error' => $e->getMessage()]);
+        }
+    }
 
     $stmt = $db->prepare("
         UPDATE device_installations
@@ -764,6 +793,7 @@ function uninstall_device_from_vehicle(PDO $db, int $vehicleId, ?int $actorUserI
     if ($stmt->rowCount() === 0) {
         return 'Este veículo não tem câmera instalada.';
     }
+
     if (function_exists('audit_log')) {
         audit_log('device.uninstall', 'vehicle', $vehicleId, ['device_id' => $deviceId], null);
     }
@@ -798,6 +828,213 @@ function resolve_installation_for_imei(PDO $db, string $imei): array
         'customer_id' => $row['customer_id'] ?? null,
         'vehicle_id'  => $row['vehicle_id'] ?? null,
     ];
+}
+
+/**
+ * Casa o identificador de motorista enviado pelo equipamento (FaceID/RFID) com
+ * o cadastro local (`drivers.identifier`). Ponto ÚNICO de resolução — extraída
+ * da `resolveDriverId()` que só existia em `pushgps.php` (v4.8.0) para que
+ * `pushalarm.php` (v4.19.0, motorista via reconhecimento facial) use a MESMA
+ * regra em vez de gravar a string crua do device (era o que causava a FK de
+ * `occurrences.driver_id` estourar em silêncio — ver migração v4.19.0).
+ *
+ * ⚠️ NÃO cria motorista. Um cadastro criado sozinho a partir de um webhook
+ * entraria sem cliente, sem CNH e sem filial — e a tela de Motoristas
+ * passaria a ter registros-fantasma que ninguém sabe de onde vieram. Se o
+ * identificador não bate com nada, devolve null — quem chama decide o que
+ * fazer com o nome cru (normalmente: guardar só para exibição, sem FK).
+ *
+ * `'0'` é tratado como "sem motorista" de propósito: é o valor que a câmera
+ * manda quando não há ninguém identificado, não um `drivers.identifier` real.
+ *
+ * @param PDO             $db
+ * @param string|int|null $identificador Valor de driverId vindo do device
+ * @param string|null     $nome          Valor de driverName (só para log)
+ * @returns int|null drivers.id, ou null se não houver correspondência
+ */
+function resolve_driver_by_identifier(PDO $db, $identificador, ?string $nome = null): ?int
+{
+    $ident = is_string($identificador) ? trim($identificador) : $identificador;
+    if ($ident === null || $ident === '' || $ident === '0') {
+        return null;
+    }
+    try {
+        $stmt = $db->prepare("SELECT id FROM drivers WHERE identifier = :i AND is_active = 1 LIMIT 1");
+        $stmt->execute([':i' => (string)$ident]);
+        $found = $stmt->fetchColumn();
+        $id = $found !== false ? (int)$found : null;
+    } catch (Throwable $e) {
+        $id = null;
+    }
+    if ($id === null) {
+        Logger::debug('resolve_driver_by_identifier: motorista sem cadastro local', [
+            'identifier' => (string)$ident, 'nome' => $nome,
+        ]);
+    }
+    return $id;
+}
+
+/**
+ * Sessão de motorista ABERTA (`ended_at IS NULL`) de um veículo, se houver —
+ * espelha `get_open_installation_for_vehicle()`. Usada tanto na ingestão
+ * (fallback quando o evento não traz motorista próprio: o ponto/alarme herda
+ * o motorista corrente) quanto nas telas que mostram "quem está dirigindo
+ * agora" (`/rastreamento`, `/ativos/{id}`).
+ *
+ * @param PDO $db
+ * @param int $vehicleId
+ * @returns array|null Linha de `driver_sessions` + `drivers.name`, ou null se não há sessão aberta
+ */
+function get_open_driver_session_for_vehicle(PDO $db, int $vehicleId): ?array
+{
+    try {
+        $stmt = $db->prepare("
+            SELECT ds.*, dr.name AS driver_name
+            FROM driver_sessions ds
+            JOIN drivers dr ON dr.id = ds.driver_id
+            WHERE ds.vehicle_id = ? AND ds.ended_at IS NULL
+            LIMIT 1
+        ");
+        $stmt->execute([$vehicleId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    } catch (Throwable $e) {
+        // Tabela ausente (migração v4.19.0 ainda não aplicada neste banco) não
+        // pode derrubar a tela nem a ingestão — mesmo raciocínio dos outros
+        // helpers de leitura best-effort deste arquivo.
+        return null;
+    }
+}
+
+/**
+ * Registra um reconhecimento facial bem-sucedido (AFIS, JT/T alertType 6)
+ * como o motorista CORRENTE do veículo — ponto único de escrita em
+ * `driver_sessions`, chamado só por `pushalarm.php`.
+ *
+ * Mesma disciplina de `install_device_on_vehicle()`: MySQL não tem índice
+ * único parcial, então a invariante "no máximo uma sessão aberta por
+ * veículo" é garantida travando a linha aberta com `FOR UPDATE` antes de
+ * decidir. Diferente daquela função, NÃO abre transação própria — roda
+ * dentro da transação de lote que o `WebhookHandler::handle()` já mantém
+ * para o `data_list` inteiro (ver `config/WebhookHandler.php`), então um
+ * `beginTransaction()` aqui seria transação aninhada.
+ *
+ * Mesmo motorista já reconhecido → só atualiza `last_confirmed_at` (a sessão
+ * continua a mesma). Motorista diferente (ou nenhuma sessão aberta) → fecha a
+ * anterior com `end_reason='driver_changed'` e abre uma nova.
+ *
+ * @param PDO    $db
+ * @param int    $vehicleId
+ * @param int    $customerId
+ * @param string $imei         Câmera que reconheceu (auditoria)
+ * @param int    $driverId     drivers.id já resolvido — chamador garante isso
+ * @param string $eventTimeUtc Horário do reconhecimento (UTC, 'Y-m-d H:i:s')
+ * @returns void
+ */
+function driver_session_recognize(PDO $db, int $vehicleId, int $customerId, string $imei, int $driverId, string $eventTimeUtc): void
+{
+    if ($vehicleId <= 0) return; // defensivo — chamador já confere isso
+
+    $stmt = $db->prepare("SELECT id, driver_id FROM driver_sessions WHERE vehicle_id = ? AND ended_at IS NULL FOR UPDATE");
+    $stmt->execute([$vehicleId]);
+    $open = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if ($open && (int)$open['driver_id'] === $driverId) {
+        $db->prepare("UPDATE driver_sessions SET last_confirmed_at = ? WHERE id = ?")
+           ->execute([$eventTimeUtc, $open['id']]);
+        return;
+    }
+
+    if ($open) {
+        $db->prepare("UPDATE driver_sessions SET ended_at = ?, end_reason = 'driver_changed' WHERE id = ?")
+           ->execute([$eventTimeUtc, $open['id']]);
+    }
+
+    $db->prepare("
+        INSERT INTO driver_sessions (vehicle_id, customer_id, driver_id, imei, started_at, last_confirmed_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ")->execute([$vehicleId, $customerId, $driverId, $imei, $eventTimeUtc, $eventTimeUtc]);
+}
+
+/**
+ * Fecha a sessão de motorista aberta de um veículo, se houver — chamada tanto
+ * pela transição de ignição (`driver_session_handle_acc_reading()`, com
+ * `$reason='ign_off'`) quanto por `uninstall_device_from_vehicle()` (com
+ * `$reason='device_uninstalled'`, para a sessão não ficar aberta para sempre
+ * quando a câmera que a criou sai do veículo e nenhum ACC-OFF daquele veículo
+ * chega por ela nunca mais).
+ *
+ * Resolve o veículo a partir do IMEI na hora — mesma regra de
+ * `resolve_installation_for_imei()`: câmera sem instalação aberta (bancada,
+ * estoque) devolve `vehicle_id` null, e aqui isso é NO-OP de propósito, não
+ * erro (mesma decisão do dono do produto documentada no CLAUDE.md para
+ * `customer_id`/`vehicle_id` NULL nessas tabelas).
+ *
+ * @param PDO    $db
+ * @param string $imei
+ * @param string $eventTimeUtc
+ * @param string $reason 'ign_off' ou 'device_uninstalled'
+ * @returns void
+ */
+function driver_session_close_on_ign_off(PDO $db, string $imei, string $eventTimeUtc, string $reason = 'ign_off'): void
+{
+    $veh = resolve_installation_for_imei($db, $imei);
+    if ($veh['vehicle_id'] === null) return;
+
+    $stmt = $db->prepare("SELECT id FROM driver_sessions WHERE vehicle_id = ? AND ended_at IS NULL FOR UPDATE");
+    $stmt->execute([$veh['vehicle_id']]);
+    $open = $stmt->fetchColumn();
+    if ($open) {
+        $db->prepare("UPDATE driver_sessions SET ended_at = ?, end_reason = ? WHERE id = ?")
+           ->execute([$eventTimeUtc, $reason, $open]);
+    }
+}
+
+/**
+ * Detecta a transição ACC 1→0 (ignição desligou) a partir de uma leitura NOVA
+ * de `acc`, e fecha a sessão de motorista do veículo quando ela acontece.
+ * Chamada por `pushgps.php` e `pushhb.php`, ANTES de `update_device_stats_after_gps`/
+ * `_heartbeat` — precisa ler `last_acc_status` ANTIGO antes da stored
+ * procedure sobrescrever.
+ *
+ * Só faz alguma coisa quando a leitura nova é `acc=0`: a esmagadora maioria
+ * dos pushes (em movimento, acc=1) sai daqui sem tocar no banco.
+ *
+ * 🔴 Replica a MESMA guarda de frescor que `update_device_stats_after_gps`/
+ * `_heartbeat` usam (`mysql/migration_v4.17.8.sql`) — `p_time >=
+ * GREATEST(last_gps_time, last_heartbeat_time)` — para não fechar uma sessão
+ * por causa de um pacote atrasado ou reenviado (replay) cujo `acc=0` já foi
+ * superado por uma leitura mais nova dizendo `acc=1`. Sem essa guarda, dois
+ * pushes fora de ordem (comum em retry de rede) fechariam uma sessão que
+ * devia continuar aberta.
+ *
+ * @param PDO         $db
+ * @param string      $imei
+ * @param string      $eventTimeUtc Horário do PONTO (gps_time/heartbeat_time), não de agora
+ * @param string|int|null $newAccRaw Valor de acc/accStatus da leitura que está chegando
+ * @returns void
+ */
+function driver_session_handle_acc_reading(PDO $db, string $imei, string $eventTimeUtc, $newAccRaw): void
+{
+    $newAcc = ($newAccRaw === null || $newAccRaw === '') ? null : (int)$newAccRaw;
+    if ($newAcc !== 0) return;
+
+    try {
+        $stmt = $db->prepare("
+            SELECT last_acc_status,
+                   (:t >= GREATEST(COALESCE(last_gps_time, '2000-01-01 00:00:00'),
+                                    COALESCE(last_heartbeat_time, '2000-01-01 00:00:00'))) AS is_fresh
+            FROM device_statistics WHERE imei = :imei FOR UPDATE
+        ");
+        $stmt->execute([':t' => $eventTimeUtc, ':imei' => $imei]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$row || (int)$row['is_fresh'] !== 1) return;               // sem leitura anterior, ou pacote atrasado
+        if ((int)($row['last_acc_status'] ?? -1) !== 1) return;         // não estava ligado — não é transição
+
+        driver_session_close_on_ign_off($db, $imei, $eventTimeUtc, 'ign_off');
+    } catch (Throwable $e) {
+        Logger::error('driver_session_handle_acc_reading falhou', ['imei' => $imei, 'error' => $e->getMessage()]);
+    }
 }
 
 /**

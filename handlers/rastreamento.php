@@ -65,10 +65,14 @@ try {
         SELECT d.imei, d.device_name, d.vehicle_type, d.last_communication,
                dm.model_name,
                ds.last_gps_time, ds.last_acc_status AS ignition, ds.last_speed AS speed,
-               ds.last_latitude, ds.last_longitude
+               ds.last_latitude, ds.last_longitude,
+               drv.name AS driver_name
         FROM devices d
         LEFT JOIN device_models dm ON d.device_model_id = dm.id
         LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+        LEFT JOIN driver_sessions dsess ON dsess.vehicle_id = di.vehicle_id AND dsess.ended_at IS NULL
+        LEFT JOIN drivers drv ON drv.id = dsess.driver_id
         WHERE d.is_active = 1" . $custSql . "
         ORDER BY d.device_name ASC
     ");
@@ -96,10 +100,14 @@ try {
                d.last_communication,
                c.default_speed_limit_kmh,
                ds.last_latitude AS latitude, ds.last_longitude AS longitude, ds.last_speed AS speed,
-               ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition
+               ds.last_gps_time AS gps_time, ds.last_acc_status AS ignition,
+               drv.name AS driver_name
         FROM devices d
         LEFT JOIN customers c ON c.id = d.customer_id
         LEFT JOIN device_statistics ds ON ds.imei = d.imei
+        LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+        LEFT JOIN driver_sessions dsess ON dsess.vehicle_id = di.vehicle_id AND dsess.ended_at IS NULL
+        LEFT JOIN drivers drv ON drv.id = dsess.driver_id
         WHERE d.is_active = 1" . $custSql . "
     ");
     $posStmt->execute($custParams);
@@ -123,6 +131,7 @@ if (!empty($_GET['ajax'])) {
         return ['imei' => $p['imei'], 'lat' => (float)$p['latitude'], 'lng' => (float)$p['longitude'],
                 'name' => $p['device_name'], 'speed' => (float)$p['speed'], 'ignition' => $p['ignition'],
                 'state' => $p['state'], 'vehicleType' => $p['vehicle_type'],
+                'driver' => $p['driver_name'],
                 'online' => $p['state'] !== 'offline', 'time' => fmt_brt($p['gps_time'], 'd/m/Y H:i:s', ''),
                 // Campo à parte, e de OUTRA FONTE, não uma troca de formato do
                 // `time`: o balão do mapa fala do PONTO (hora do fix, data cheia
@@ -253,6 +262,20 @@ require_once __DIR__ . '/../web/layout_base.php';
                         IGN: <span class="ign-val" style="<?= $ign === 'ON' ? 'color:var(--ink);font-weight:600;' : '' ?>"><?= $ign ?></span>
                         · <span class="last-seen"><?= htmlspecialchars(fmt_brt($d['last_communication'], 'd/m H:i', '—')) ?></span>
                     </div>
+                    <?php /* Motorista corrente (v4.19.0) — reconhecimento facial
+                            (AFIS, JT/T alertType 6), persiste até a câmera
+                            reconhecer outro motorista ou a ignição desligar
+                            (driver_sessions). Renderizada sempre (mesmo vazia) e
+                            escondida por CSS, não por `if` em PHP: o refresh de
+                            30s (atualizarLinha()) precisa do elemento no DOM pra
+                            atualizar/esconder ao vivo — se a sessão nascesse ou
+                            morresse entre polls, um `<div>` que só existe quando
+                            carregado com motorista não teria como aparecer nem
+                            sumir sozinho. */ ?>
+                    <div class="device-meta driver-name" style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;<?= empty($d['driver_name']) ? 'display:none;' : '' ?>"
+                         title="Motorista identificado por reconhecimento facial">
+                        <i class="bi bi-person"></i> <span class="driver-name-text"><?= htmlspecialchars($d['driver_name'] ?? '') ?></span>
+                    </div>
                 </div>
             </div>
             <?php endforeach; ?>
@@ -303,7 +326,8 @@ var bounds = [];
 function popupHtml(p) {
     var stateLabel = FLEET_STATE_LABELS[p.state] || '';
     return '<b>Placa: ' + (p.name || p.imei) + '</b><br>Estado: ' + stateLabel +
-           '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') + '<br>' + (p.time||'');
+           '<br>Vel: ' + (p.speed||0) + ' km/h<br>Ignição: ' + (p.ignition==1?'Ligada':'Desligada') +
+           (p.driver ? '<br>Motorista: ' + p.driver : '') + '<br>' + (p.time||'');
 }
 
 // Pin = círculo colorido por estado (FLEET_STATE_COLORS) + ícone branco do
@@ -477,6 +501,17 @@ function atualizarLinha(p) {
 
     var dot = el.querySelector('.device-dot');
     if (dot) { dot.classList.toggle('online', !!p.online); dot.classList.toggle('offline', !p.online); }
+
+    // Motorista corrente (v4.19.0) — some/aparece sozinho conforme a sessão
+    // de reconhecimento facial abre ou fecha entre um poll e outro.
+    // `.textContent`, não `.innerHTML`: o nome vem do cadastro do motorista,
+    // não é literal HTML confiável.
+    var drv = el.querySelector('.driver-name');
+    if (drv) {
+        drv.style.display = p.driver ? '' : 'none';
+        var drvText = drv.querySelector('.driver-name-text');
+        if (drvText) drvText.textContent = p.driver || '';
+    }
 
     // Ativo que ganhou posição depois da carga da página: sem isto a linha
     // passaria a exibir IGN e horário frescos ao lado de uma caixa ainda

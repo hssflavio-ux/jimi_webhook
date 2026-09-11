@@ -133,9 +133,11 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
     $expStmt = $db->prepare("
         SELECT a.imei, $alarmNameExpr AS alarm_label, a.alarm_time, a.status,
                a.speed, a.latitude, a.longitude,
-               COALESCE(d.device_name, a.imei) AS device_name
+               COALESCE(d.device_name, a.imei) AS device_name,
+               COALESCE(drv.name, a.driver_name) AS driver_label
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
+        LEFT JOIN drivers drv ON drv.id = a.driver_id
         $alarmNameJoins
         $where
         ORDER BY $orderBy
@@ -154,6 +156,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
             $r['alarm_label'] ?: '—',
             $statusLabels[$r['status']] ?? $r['status'],
             $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
+            $r['driver_label'] ?: '—',
             geocode_cell($geo, $r['latitude'], $r['longitude']),
             export_map_link($r['latitude'], $r['longitude']),
         ];
@@ -166,12 +169,12 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         $placaSel = 'Placa: ' . ($ps->fetchColumn() ?: $filterImei);
     }
     stream_export($export, 'relatorio_alarmes',
-        ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Endereço', 'Mapa'],
+        ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Motorista', 'Endereço', 'Mapa'],
         $expRows, 'Relatório de Alarmes',
         "$placaSel  |  " . report_period_label($dateFrom, $dateTo),
         // Endereço e nome do alarme são as duas colunas longas; as demais são
-        // curtas e fixas (placa, data, status, velocidade, rótulo do mapa).
-        [1.0, 1.35, 2.4, 0.8, 0.9, 3.2, 0.6]);
+        // curtas e fixas (placa, data, status, velocidade, motorista, rótulo do mapa).
+        [1.0, 1.35, 2.4, 0.8, 0.9, 1.3, 3.2, 0.6]);
 }
 
 // Count
@@ -191,9 +194,11 @@ $dataStmt = $db->prepare("
     SELECT a.id, a.imei, $alarmNameExpr AS alarm_label, a.alarm_time,
            a.status, a.speed, a.latitude, a.longitude,
            a.file_url, a.file_type,
-           COALESCE(d.device_name, a.imei) AS device_name
+           COALESCE(d.device_name, a.imei) AS device_name,
+           COALESCE(drv.name, a.driver_name) AS driver_label
     FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
+    LEFT JOIN drivers drv ON drv.id = a.driver_id
     $alarmNameJoins
     $where
     ORDER BY $orderBy
@@ -372,6 +377,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th><?= report_sort_link('alarm_name', 'Nome do Alarme', $sort, $order) ?></th>
                 <th>Status</th>
                 <th>Velocidade</th>
+                <th>Motorista</th>
                 <th>Endereço</th>
                 <th>Mapa</th>
                 <th>Vídeo</th>
@@ -379,7 +385,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="8"><div class="empty-state"><p>Nenhum alarme encontrado.</p></div></td></tr>
+            <tr><td colspan="9"><div class="empty-state"><p>Nenhum alarme encontrado.</p></div></td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
@@ -449,6 +455,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php endif; ?>
                 </td>
                 <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
+                <td><?= $r['driver_label'] ? htmlspecialchars($r['driver_label']) : '—' ?></td>
                 <td class="cell-endereco"><?= htmlspecialchars(geocode_cell($geoPagina, $r['latitude'], $r['longitude'])) ?></td>
                 <td>
                     <?php if ($hasCoords): ?>

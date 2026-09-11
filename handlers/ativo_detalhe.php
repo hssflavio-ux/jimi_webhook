@@ -94,6 +94,11 @@ $installation = get_open_installation_for_vehicle($db, $vehicleId);
 $imei = $installation['imei'] ?? null;
 $hasCamera = $imei !== null;
 
+// v4.19.0 — motorista corrente (reconhecimento facial, JT/T alertType 6),
+// mesma leitura AO VIVO que /rastreamento usa — mostra o AGORA, não histórico
+// (ver get_open_driver_session_for_vehicle() em includes/functions.php).
+$currentDriverSession = get_open_driver_session_for_vehicle($db, $vehicleId);
+
 // v4.18.3 — 'comandos'/'configuracoes' eram a UI antiga (proNo/serverFlagId/
 // JSON cru); a função foi modernizada em /comandos (campo único, catálogo
 // curado) e /parametros (área dedicada de parametrização JT/T — não
@@ -456,6 +461,25 @@ case 'visao-geral':
     <?php endif; ?>
     <?php endif; ?>
 </div>
+
+<?php if ($currentDriverSession): ?>
+<?php /* v4.19.0 — motorista corrente (reconhecimento facial, JT/T alertType
+        6): persiste até a câmera reconhecer outro motorista ou a ignição
+        desligar. Some sozinho (o card não aparece) quando não há sessão
+        aberta — não é campo de cadastro, é estado ao vivo. */ ?>
+<div class="card mb-16">
+    <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Motorista atual</h4>
+    <div style="display:flex;align-items:center;gap:10px">
+        <i class="bi bi-person-circle" style="font-size:22px;color:var(--muted)"></i>
+        <div>
+            <div style="font-size:13px;color:var(--ink);font-weight:500"><?= htmlspecialchars($currentDriverSession['driver_name']) ?></div>
+            <div style="color:var(--muted);font-size:12px">
+                Reconhecido às <?= fmt_brt_dt($currentDriverSession['last_confirmed_at']) ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <?php
     // Histórico de instalações — o coração da Fase 1: mostra o reuso

@@ -81,6 +81,11 @@ class PushHeartbeatHandler extends WebhookHandler {
         // idade do último PONTO, não a da última leitura. Medido em produção:
         // `heartbeats.acc` 100% preenchido (6806/6806 em 2 dias) e a ignição do
         // `400D` atrasada 382 minutos com o valor certo chegando o tempo todo.
+        // v4.19.0 — ANTES da procedure de propósito: precisa ler o
+        // `last_acc_status` ANTIGO (a procedure abaixo sobrescreve) pra
+        // detectar a transição 1→0 e fechar a sessão de motorista do veículo.
+        driver_session_handle_acc_reading($this->db, $imei, $heartbeatTime, $acc);
+
         $this->callProcedure('update_device_stats_after_heartbeat', [
             $imei, $heartbeatTime, $battery, $gsmSignal, $acc
         ]);

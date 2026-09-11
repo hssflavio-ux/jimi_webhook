@@ -94,6 +94,52 @@ if [ "$SKIP_DB" != "1" ] && command -v mysql >/dev/null 2>&1; then
                   SELECT '$TEST_IMEI', 'Device E2E Test', id, 1, NOW() FROM customers ORDER BY id LIMIT 1;" >/dev/null
 fi
 
+# ── 0c. Garante veículo + câmera instalada + motorista de teste (v4.19.0) ──
+# `resolve_installation_for_imei()` (includes/functions.php) só resolve
+# `vehicle_id` com uma instalação ABERTA — sem isto, todo o mecanismo de
+# driver_sessions (pushgps/pushhb/pushalarm) fica no-op pra este IMEI, porque
+# a regra "câmera sem veículo não abre/fecha sessão" é intencional (mesma
+# nota do CLAUDE.md sobre customer_id/vehicle_id NULL). Usado pelo Playwright
+# tests/driver_sessions.spec.js — este script só semeia, não afirma nada
+# sobre sessão de motorista.
+TEST_DRIVER_IDENTIFIER="${TEST_DRIVER_IDENTIFIER:-E2E_DRIVER_1}"
+if [ "$SKIP_DB" != "1" ] && command -v mysql >/dev/null 2>&1; then
+    CUST_ID="$(mysql_scalar "SELECT customer_id FROM devices WHERE imei='$TEST_IMEI' LIMIT 1;")"
+    DEV_ID="$(mysql_scalar "SELECT id FROM devices WHERE imei='$TEST_IMEI' LIMIT 1;")"
+    if [ -n "$CUST_ID" ] && [ -n "$DEV_ID" ]; then
+        VEH_ID="$(mysql_scalar "SELECT id FROM vehicles WHERE customer_id=$CUST_ID AND plate='E2E TEST VEHICLE' LIMIT 1;")"
+        if [ -z "$VEH_ID" ]; then
+            mysql_scalar "INSERT INTO vehicles (customer_id, plate, is_active) VALUES ($CUST_ID, 'E2E TEST VEHICLE', 1);" >/dev/null
+            VEH_ID="$(mysql_scalar "SELECT id FROM vehicles WHERE customer_id=$CUST_ID AND plate='E2E TEST VEHICLE' ORDER BY id DESC LIMIT 1;")"
+        fi
+
+        # Fecha qualquer instalação aberta que não seja esta ($DEV_ID <-> $VEH_ID)
+        # — a invariante é "no máximo 1 aberta por device_id E por vehicle_id".
+        mysql_scalar "UPDATE device_installations SET removed_at=NOW()
+                      WHERE device_id=$DEV_ID AND vehicle_id<>$VEH_ID AND removed_at IS NULL;" >/dev/null
+        mysql_scalar "UPDATE device_installations SET removed_at=NOW()
+                      WHERE vehicle_id=$VEH_ID AND device_id<>$DEV_ID AND removed_at IS NULL;" >/dev/null
+        OPEN_INST="$(mysql_scalar "SELECT id FROM device_installations WHERE device_id=$DEV_ID AND vehicle_id=$VEH_ID AND removed_at IS NULL LIMIT 1;")"
+        if [ -z "$OPEN_INST" ]; then
+            mysql_scalar "INSERT INTO device_installations (device_id, vehicle_id, customer_id, installed_at)
+                          VALUES ($DEV_ID, $VEH_ID, $CUST_ID, NOW());" >/dev/null
+        fi
+
+        DRIVER_ID="$(mysql_scalar "SELECT id FROM drivers WHERE identifier='$TEST_DRIVER_IDENTIFIER' LIMIT 1;")"
+        if [ -z "$DRIVER_ID" ]; then
+            mysql_scalar "INSERT INTO drivers (customer_id, name, identifier, is_active)
+                          VALUES ($CUST_ID, 'Motorista E2E 1', '$TEST_DRIVER_IDENTIFIER', 1);" >/dev/null
+        fi
+        # Segundo motorista — o spec de troca de motorista precisa de dois
+        # identifiers distintos pra provar que a sessão TROCA, não só grava.
+        DRIVER_ID_2="$(mysql_scalar "SELECT id FROM drivers WHERE identifier='${TEST_DRIVER_IDENTIFIER}_2' LIMIT 1;")"
+        if [ -z "$DRIVER_ID_2" ]; then
+            mysql_scalar "INSERT INTO drivers (customer_id, name, identifier, is_active)
+                          VALUES ($CUST_ID, 'Motorista E2E 2', '${TEST_DRIVER_IDENTIFIER}_2', 1);" >/dev/null
+        fi
+    fi
+fi
+
 # ── 2. pushgps ───────────────────────────────────────────────
 echo "[2/5] /pushgps"
 GPS_PAYLOAD=$(cat <<EOF

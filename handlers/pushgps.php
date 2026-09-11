@@ -21,13 +21,10 @@ class PushGPSHandler extends WebhookHandler {
 
     /**
      * Casa o identificador de motorista enviado pelo equipamento com o cadastro
-     * local (`drivers.identifier`).
-     *
-     * ⚠️ NÃO cria motorista. Um cadastro criado sozinho a partir de um webhook
-     * entraria sem cliente, sem CNH e sem filial — e a tela de Motoristas
-     * passaria a ter registros-fantasma que ninguém sabe de onde vieram. Se o
-     * identificador não bate com nada, `driver_name` guarda o texto cru e o
-     * vínculo fica nulo: o dado não se perde e o cadastro não se suja.
+     * local (`drivers.identifier`). A resolução em si mora em
+     * `resolve_driver_by_identifier()` (`includes/functions.php`, v4.19.0) —
+     * ponto único compartilhado com `pushalarm.php`; este wrapper só mantém o
+     * cache por request (evita reconsultar o mesmo motorista a cada item do lote).
      *
      * @param string|int|null $identificador Valor de driverId vindo do device
      * @param string|null     $nome          Valor de driverName (só para log)
@@ -35,33 +32,11 @@ class PushGPSHandler extends WebhookHandler {
      */
     private function resolveDriverId($identificador, ?string $nome): ?int
     {
-        $ident = is_string($identificador) ? trim($identificador) : $identificador;
-        if ($ident === null || $ident === '' || $ident === '0') {
-            return null;
-        }
-        $chave = (string)$ident;
+        $chave = is_string($identificador) ? trim($identificador) : (string)($identificador ?? '');
         if (array_key_exists($chave, $this->driverCache)) {
             return $this->driverCache[$chave];
         }
-
-        $id = null;
-        try {
-            $stmt = $this->db->prepare(
-                "SELECT id FROM drivers WHERE identifier = :i AND is_active = 1 LIMIT 1"
-            );
-            $stmt->execute([':i' => $chave]);
-            $found = $stmt->fetchColumn();
-            $id = $found !== false ? (int)$found : null;
-        } catch (Throwable $e) {
-            // Coluna/tabela ausente não pode derrubar a ingestão de posição
-            $id = null;
-        }
-
-        if ($id === null) {
-            Logger::debug('pushgps: motorista sem cadastro local', [
-                'identifier' => $chave, 'nome' => $nome,
-            ]);
-        }
+        $id = resolve_driver_by_identifier($this->db, $identificador, $nome);
         $this->driverCache[$chave] = $id;
         return $id;
     }
@@ -94,16 +69,35 @@ class PushGPSHandler extends WebhookHandler {
         $driverLicenseStatus = $item['driverLicenseStatus'] ?? null;
         $driverLicense  = $item['driverLicense'] ?? null;
 
+        // Snapshot do dono no momento do evento (Fase 2 do fluxo
+        // chip→câmera→veículo) — ver resolve_installation_for_imei(). A
+        // LEITURA nunca reconsulta isto; lê a coluna gravada aqui. Subiu pra
+        // antes do bloco de motorista (v4.19.0) porque o fallback de sessão
+        // logo abaixo precisa de `vehicle_id`.
+        $ownership = resolve_installation_for_imei($this->db, $imei);
+
         // ── Motorista junto com a posição (v4.8.0) ──────────────
         // A doc oficial da Jimi confirma `driverId`/`driverName` viajando ao
         // lado das coordenadas nos dois protocolos, e o pushalarm.php já os
         // consome. Aqui o caminho fica PRÉ-PROGRAMADO: se o equipamento mandar,
-        // grava; se não mandar, as colunas ficam nulas e o Relatório de
-        // Posições segue resolvendo o condutor pela viagem que contém o ponto.
-        // Nada depende de o campo existir — é adição, não requisito.
+        // grava.
         $driverIdRaw = $item['driverId']   ?? $item['driver_id']   ?? null;
         $driverName  = $item['driverName'] ?? $item['driver_name'] ?? null;
         $driverId    = $this->resolveDriverId($driverIdRaw, $driverName);
+
+        // v4.19.0 — na prática esta família de câmera NUNCA manda driverId no
+        // GPS (só no alarme de reconhecimento facial, alertType 6 do JT/T).
+        // Sem isto, `gps_data.driver_id` ficava sempre NULL e o nível 1 do
+        // COALESCE de rel_posicoes.php nunca resolvia nada de verdade. Herda o
+        // motorista da SESSÃO corrente do veículo — a mesma que o
+        // reconhecimento mantém aberta até trocar de motorista ou a ignição
+        // desligar. `driver_name` continua null neste caminho: não é o que o
+        // device mandou.
+        if ($driverId === null && $ownership['vehicle_id'] !== null) {
+            $session = get_open_driver_session_for_vehicle($this->db, $ownership['vehicle_id']);
+            if ($session !== null) $driverId = (int)$session['driver_id'];
+        }
+
         $buzzerAlarmStatus  = $item['buzzerAlarmStatus']  ?? null;
         $creditCardStatus   = $item['creditCardStatus']   ?? null;
         $doorStatus     = $item['doorStatus']     ?? null;
@@ -128,11 +122,6 @@ class PushGPSHandler extends WebhookHandler {
         
         // Calcular distância desde último ponto GPS
         $distance = $this->calculateDistance($imei, $latitude, $longitude);
-
-        // Snapshot do dono no momento do evento (Fase 2 do fluxo
-        // chip→câmera→veículo) — ver resolve_installation_for_imei(). A
-        // LEITURA nunca reconsulta isto; lê a coluna gravada aqui.
-        $ownership = resolve_installation_for_imei($this->db, $imei);
 
         // Inserir GPS no banco
         $stmt = $this->db->prepare("
@@ -186,6 +175,11 @@ class PushGPSHandler extends WebhookHandler {
             ':raw_data' => json_encode($item, JSON_UNESCAPED_UNICODE)
         ]);
         
+        // v4.19.0 — ANTES da procedure de propósito: precisa ler o
+        // `last_acc_status` ANTIGO (a procedure abaixo sobrescreve) pra
+        // detectar a transição 1→0 e fechar a sessão de motorista do veículo.
+        driver_session_handle_acc_reading($this->db, $imei, $gpsTime, $acc);
+
         $this->callProcedure('update_device_stats_after_gps', [
             $imei, $gpsTime, $latitude, $longitude,
             $speed, $distance, $gsm, $acc
