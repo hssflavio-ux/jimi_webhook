@@ -2,6 +2,178 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 10/09/2026 — Varredura de fidelidade ao design system em ~47 telas — LEVANTAMENTO, nada corrigido ainda
+>
+> Pedido do dono do produto, a partir de um caso concreto ("já vi que a tela
+> de manutenção está fora do padrão"): auditar as telas do dashboard contra
+> `DESIGN.md`/`web/layout_base.php` e contra padrões modernos de UI/UX. 5
+> sub-agentes leram todos os ~47 handlers de tela na íntegra (grupos:
+> relatórios/rota, relatórios/config, cadastros, operação/vídeo,
+> dashboards/misc). Cada achado abaixo foi reconferido por grep antes de
+> entrar aqui — a primeira tentativa do lote de relatórios de rota/posição
+> (`rel_posicoes`, `rel_deslocamento*`, `rel_desatualizados`, `rel_alarmes`,
+> `rel_ocorrencias`, `rel_geocercas`, `rel_paradas`) inventou conteúdo (uma
+> "decisão do dono do produto" que nunca existiu e uma classe CSS,
+> `.toast-warning`, que não existe em lugar nenhum do código) e foi
+> descartada inteira; refeita do zero com um agente sem esse contexto
+> herdado, e essa segunda leva SIM foi reconferida achado a achado (ver
+> seção própria abaixo). **Nenhum código foi alterado nesta sessão** — fica
+> para quando o dono do
+> produto decidir o escopo do fix.
+>
+> **Bugs funcionais reais (não é só estética):**
+> - `equipamentos.php:738` — botão "Atualizar Firmware" chama
+>   `showFirmwareModal()`, função que não existe no arquivo. Botão morto.
+> - `checklist_inspection.php:198` — item de foto (`<input type="file"
+>   required>`) nunca é lido pelo backend (`processItem`/POST só lê
+>   `$_POST['answers']`, linha 32) — usuário anexa foto obrigatória, ela é
+>   descartada em silêncio, sem erro.
+> - `checklist_inspection.php:185-192` — `<label>` aninhado dentro de
+>   outro `<label>` no radio Sim/Não — HTML inválido, comportamento
+>   imprevisível em leitor de tela.
+> - `ativo_detalhe.php:701-702` — aba **Vídeo**: os dois botões
+>   ("Transmissão ao Vivo"/"Playback Histórico") são `disabled`
+>   **permanentemente** — placeholder morto, redundante com `/video/aovivo`
+>   e `/video/playback`, que funcionam.
+>
+> **Causas-raiz sistêmicas (uma correção resolve dezenas de telas):**
+> 1. 🔴 **Classes CSS órfãs** — mesma família do bug de `var(--x)` fantasma
+>    já corrigido na v4.18.2, um nível acima: aqui é a CLASSE inteira sem
+>    NENHUMA regra em `web/layout_base.php` nem em `<style>` nenhum do
+>    repo (confirmado por grep, uma a uma):
+>    - `.page-header`/`.page-title`/`.page-sub` — `configuracoes_ia.php`
+>      (origem provável), `firmwares.php`, `parametros.php`. Renderiza
+>      `<h1>` cru do navegador (bold, ~2em) duplicando o título que o
+>      header fixo (`.main-header-title`) já mostra.
+>    - `.tbl` — `ativo_detalhe.php`, `config_parametros.php`,
+>      `parametros.php`, `rel_parametros.php`, `wiki.php`. Sem
+>      `.table-wrap`, tabela sem scroll horizontal — estoura em mobile.
+>    - `.mono` (≠ `.text-mono`) — usada em dezenas de arquivos; só existe de
+>      verdade, ESCOPADA, em `configuracoes_ia.php`
+>      (`.ia-known .mono`/`.ia-export-log-line .mono`) e `wiki.php`
+>      (`.tbl-mock td .mono`). Em todo resto — inclusive 11+ vezes na aba
+>      Parâmetros de `ativo_detalhe.php` — os números saem em Inter, não
+>      JetBrains Mono.
+>    - `.callout` (`ativo_detalhe.php:1038`, `class="callout info"`) — só
+>      definida dentro do `<style>` local de `wiki.php`.
+>    - `.alert`/`.alert-success`/`.alert-error` (`exportar.php`) — só têm
+>      regra real nas 3 telas de pré-login (`setup.php`, `login_template.php`,
+>      `auth_card_template.php`); em `exportar.php` "funciona" só por um
+>      `style=` inline redundante por baixo.
+> 2. 🔴 **Grid inline "lista + painel" com largura fixa em px, sem `@media`
+>    próprio — estoura em celular.** O breakpoint global de 768px de
+>    `layout_base.php` cobre `.form-row`/`.kpi-grid`, nunca esses grids —
+>    cada tela inventou o próprio valor: `chips.php`/`manutencoes.php`/
+>    `motoristas.php` (1fr 380px), `geocercas.php` (minmax(320px,380px)
+>    1fr), `clientes.php`/`usuarios.php` (1fr 400px),
+>    `grupos_permissao.php` (1fr 540px), `video_aovivo.php` (1fr 300px),
+>    `video_playback.php` (1fr 340px), **`rastreamento.php`** (300px 1fr —
+>    o mapa ao vivo, a tela mais crítica), `config_dispositivos.php` (1fr
+>    1fr → 4 colunas efetivas). Mais um grupo com `1fr 1fr` simples também
+>    sem `@media`: `resumo.php` (4×), `bi.php`, `ocorrencias_dashboard.php`
+>    (2×), `perfil.php`.
+> 3. Duas gerações de UI para a mesma ação, no mesmo produto: as abas
+>    **Comandos**/**Configurações** de `ativo_detalhe.php` expõem
+>    `proNo`/`serverFlagId`/`paramId`/JSON cru — a versão que `/comandos` e
+>    `/configuracoes-ia` já modernizaram (campo único, catálogo curado).
+> 4. Ação de linha (editar/excluir) em 3 padrões diferentes conforme a
+>    tela: painel lateral (motoristas/chips/clientes/usuarios/
+>    grupos-permissão), edição inline na linha (`ativos.php`), ou —
+>    `agendamentos.php` — `<a class="badge">`/`<button
+>    class="badge">` em vez de `.btn` para **Excluir** (ação destrutiva
+>    parecendo selo clicável por acaso).
+> 5. ⚠️ Paleta de aviso fragmentada: além de `var(--warning)` (#f4b000),
+>    `#f5a623` cru é usado no aviso de "período ajustado"/range clamped de
+>    **11 relatórios** (`rel_ignicao`, `rel_velocidade`, `rel_status_frota`,
+>    `rel_parametros`, `rel_posicoes`, `rel_deslocamento`, `rel_alarmes`,
+>    `rel_ocorrencias`, `rel_geocercas`, `config_parametros`, `bi.php`) — é
+>    literalmente todo relatório com filtro de data que tem esse aviso, e
+>    nenhum usa a variável. Mais `#a97a00`/`#fdf9ec` (`config_notificacoes`/
+>    `config_smtp`) coexistindo. Efeito real: em `resumo.php` as faixas
+>    ">7d" e ">30d" do mesmo gráfico usam a cor EXATA — ficam
+>    indistinguíveis. `bi.php`: gráfico "Top 10 Eventos" usa paleta
+>    arco-íris de 10 cores fora do sistema, enquanto o gráfico vizinho no
+>    MESMO arquivo usa a paleta certa.
+> 6. ⚠️ `.filtro-campo` (criada na v4.9.38 exatamente pra "listas suspensas
+>    fora do padrão") é ignorada por quase todo mundo: `equipamentos.php`,
+>    `geocercas.php`, `rastreamento.php`, `config_ocorrencias.php`,
+>    `config_notificacoes.php`, `clientes.php`, e **todos os 8 `rel_*.php`
+>    com filtro de formulário** (inclusive o helper compartilhado
+>    `report_device_select()` em `includes/functions.php:1092-1103`, usado
+>    por vários deles) — e até
+>    `motoristas.php`, a própria referência de "busca correta", não usa a
+>    classe.
+> 7. ⚠️ Feedback assíncrono inconsistente: `painel.php`/
+>    `config_dispositivos.php` usam `alert()` nativo (único lugar do app
+>    que faz isso); `ocorrencias_dashboard.php` tem indicador de
+>    "atualizando" no polling de 30s, `resumo.php`/`rastreamento.php`
+>    (mesmo polling) não têm.
+> 8. `resumo.php`, `bi.php`, `ocorrencias_dashboard.php`, `painel.php`,
+>    `exportar.php` desenham `<h2>` próprio repetindo o título que o
+>    header fixo já mostra (às vezes com texto diferente do menu — `bi.php`
+>    diz "Business Intelligence", o menu diz "BI").
+>
+> **Grupo relatórios de rota/posição (9 telas, reconferido achado a
+> achado nesta sessão — ver nota acima sobre a tentativa descartada):**
+> - 🔴 `rel_deslocamento_replay.php` — o pino do veículo usa
+>   `className:'vehicle-pin-wrap'` (mesmo catálogo JS de ícones de
+>   `rastreamento.php`/`ocorrencias_dashboard.php`), mas a regra que
+>   neutraliza a caixa branca padrão do Leaflet
+>   (`.leaflet-div-icon.vehicle-pin-wrap{background:transparent;border:none}`)
+>   só existe no `<style>` das outras duas telas — falta neste arquivo
+>   (confirmado por grep). O pino do replay deve renderizar com uma caixa
+>   branca atrás do círculo azul, diferente das telas-irmãs que usam o
+>   mesmo ícone.
+> - `rel_desatualizados.php:148,186` — as duas grades ("Frota completa"
+>   `LIMIT 1000`, "Detalhes" `LIMIT 200`) não chamam `report_pagination()`
+>   (confirmado: zero ocorrências no arquivo) — pode renderizar até 1000
+>   linhas numa tabela só, diferente de todo relatório-irmão do grupo, que
+>   pagina.
+> - `rel_desatualizados.php:362` vs `:408` — a mesma semântica ("nunca
+>   transmitiu"/"nunca posicionou") sai como `<span class="badge"
+>   style="color:var(--error)">` numa linha (sem o fundo rosa que
+>   `.badge-error` define) e `<span class="badge badge-error">` (correto)
+>   na outra — dois badges visualmente diferentes para o mesmo estado, no
+>   mesmo arquivo.
+> - Nenhum `<label>` de filtro em nenhum dos 8 relatórios com formulário
+>   tem `for=`/`id` associando ao campo (zero ocorrências de `for=`
+>   confirmado por grep nos 8 arquivos).
+> - Nenhum dos 8 usa `.empty-state` para "sem resultado" — todos usam
+>   `<tr><td colspan=N style="text-align:center;padding:32px">texto</td></tr>`
+>   cru, visualmente parecido mas sem o componente real.
+> - `rel_deslocamento.php:317` — filtro de Placa usa `<option
+>   value="">Todos</option>`; `rel_alarmes.php` e o helper
+>   `report_device_select()` (usado por `rel_ocorrencias`/`rel_geocercas`)
+>   usam "Todas" para o mesmo filtro — concordância de gênero inconsistente
+>   entre telas-irmãs.
+> - `rel_paradas.php` não tem achado próprio: é um wrapper de ~30 linhas
+>   que delega tudo a `render_segment_report()`
+>   (`includes/report_segments.php`) — auditar essa função é o que
+>   realmente cobriria a tela.
+> - Checado e SEM achado (ao contrário de outras partes do app): nenhuma
+>   classe `class="mono"` solta nos 9 arquivos (todos usam `.text-mono`
+>   corretamente); `rel_alarmes.php` tem `@media` próprio funcionando no
+>   grid do modal de vídeo; `rel_geocercas.php` usa `auto-fit`/`minmax` no
+>   grid de KPIs (reflui sozinho, não precisa de `@media`).
+>
+> **`/manutencoes`, o caso que originou a varredura**: confirmado — é a
+> única tela do grupo Cadastros com o padrão "lista + painel lateral" (item
+> 2 acima) SEM a busca + paginação que `motoristas.php`/`chips.php`/
+> `ativos.php` têm para a mesma função; campos do formulário em `style=`
+> inline em vez de puro `.form-group`. Não é a tela mais quebrada do
+> levantamento (isso é `equipamentos.php`, pelo botão morto, ou
+> `ativo_detalhe.php`, pela divergência de gerações de UI) — mas está, sim,
+> fora do padrão de listagem do resto do grupo.
+>
+> **Proposta de ataque, por risco/retorno (não decidida ainda):** Fase 1 —
+> baixo risco, resolve dezenas de telas de uma vez: classes CSS reais no
+> lugar das órfãs (item 1), uma classe `.list-with-panel` com `@media`
+> embutido pro grid quebrado (item 2, ~15 telas), unificar os
+> amarelos/vermelhos nos tokens reais (item 5). Fase 2 — bugs funcionais
+> isolados (botão morto, upload de foto, badges-como-botão). Fase 3 —
+> decisão de produto: busca/paginação em `/manutencoes`; futuro das abas
+> antigas de `ativo_detalhe.php` (Comandos/Configurações/Vídeo).
+
 > ### 📍 v4.18.2 — `/configuracoes-ia`: textos, tokens de design, grade sem buracos, perfil de leitura completa
 >
 > Pedido do dono do produto, 5 itens, mais uma varredura pedida antes do

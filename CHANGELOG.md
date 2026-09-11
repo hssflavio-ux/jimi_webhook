@@ -5,6 +5,16 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.18.4
+
+**3 códigos JT/T sem nome no catálogo (`alertType` 4/5/6) + correção do bitmask de 32 bits do Alarme Padrão JT/T (256), que estava errado desde os bits 12+.**
+
+Pedido do dono do produto: a câmera do veículo "Telecom" subiu códigos 4, 6 e o bit 8192 do alarme padrão sem nome. Verificado em produção (últimas 48h do IMEI + 30 dias da frota).
+
+- **Adicionado** — `alarm_types` ganhou os códigos JT/T `4` (Cinto de Segurança Afivelado), `5` (Falha no Reconhecimento Facial) e `6` (Reconhecimento Facial Bem-sucedido), da seção **2.7 "Other Alarms"** da doc oficial (`docs.jimicloud.com/integration/integration.html`) — não da tabela OBD (§3.45), que por coincidência numérica também usa 4/5/6 mas pertence a um endpoint (`/pushobd`) que este projeto não implementa; o payload real (`alarmLabel`/`driverId`/`driverName`) confirmou §2.7. Migração `v4.18.4`.
+- 🔴 **Corrigido** — `decodeStandardAlarm()` (`handlers/pushalarm.php`) tinha os bits 12+ do bitmask do alarme `256` **errados**, não só incompletos: o mapa antigo escalonava os bits 15/18-29 fora de posição (ex.: bit 28 dizia "Pré-aviso de Capotamento", que a doc oficial marca no bit **30**). Bit 13 (valor **8192**, o caso relatado) estava simplesmente ausente. Levantamento de 30 dias na frota inteira: só os bits 1, 11 e 13 ocorreram de verdade em produção — os demais bits corrigidos não têm histórico ainda, mas o mapa estava errado desde sempre. Tabela completa (0-31) reconferida contra a doc oficial §2.1.
+- **Registrado, não corrigido** — `alertType 1049` (JTT) tem 252 ocorrências em 30 dias na frota e não consta em nenhuma seção da doc oficial (mesma situação do `1047` antes da v4.9.10, resolvido só com informação do fornecedor). Falta essa fonte para batizar.
+
 ## [Unreleased] — 4.18.3
 
 **Fase 3 da varredura de design system: UI duplicada em `/ativos/{id}` removida, busca/paginação em `/manutencoes`, `.filtro-campo` aplicada em ~20 arquivos, feedback assíncrono sem `alert()` nativo.**

@@ -495,7 +495,22 @@ class PushAlarmHandler extends WebhookHandler {
 
     // ==========================================================================
     // DECODIFICAÇÃO BITMASK JT/T 808 STANDARD ALARM (32 bits completos)
-    // CORREÇÃO v7.0: Expandido de 6 para 30 bits
+    // CORREÇÃO v4.18.4: bits 12+ estavam ERRADOS (não só incompletos) — o mapa
+    // anterior (herdado sem checar contra a fonte) tinha os bits 15/18-29
+    // escalonados fora de posição (ex.: bit 28 dizia "Pré-aviso de
+    // Capotamento", que a doc oficial marca no bit 30; bit 18 dizia "Pré-aviso
+    // de Velocidade", que é o bit 13). Medido 10-11/09/2026: o bit 13 (valor
+    // 8192, a câmera do veículo "Telecom") caía no fallback "Alarme Standard
+    // (Bits: N)" por estar simplesmente AUSENTE do mapa. Levantamento na frota
+    // inteira (30 dias) achou só os bits 1, 11 e 13 em uso real — os demais
+    // bits abaixo nunca ocorreram em produção até esta data, mas o mapa
+    // errado já tinha influenciado uma decisão anterior (a nota de
+    // cadastro do alarme JTT 1047 "Capotamento" cita "bit 28" como
+    // corroboração; pela doc oficial é o bit 30 — não invalida o
+    // cadastro, cuja fonte primária foi informação do fornecedor, mas a
+    // corroboração por bit estava calculando o bit errado).
+    // Fonte: docs.jimicloud.com/integration/integration.html §2.1 Standard
+    // Alarm — conferido linha a linha, bits 0-31.
     // ==========================================================================
     /**
      * Decodifica o bitmask de 32 bits do alarme padrão JT/T 808.
@@ -507,8 +522,8 @@ class PushAlarmHandler extends WebhookHandler {
      */
     private function decodeStandardAlarm($val) {
         $val = intval($val);
-        
-        // Mapa completo de bits JT/T 808-2019 Standard Alarm
+
+        // Mapa completo de bits JT/T 808-2019 Standard Alarm (§2.1 da doc oficial)
         $bitMap = [
             0  => 'Emergência / SOS',
             1  => 'Excesso de Velocidade',
@@ -522,19 +537,24 @@ class PushAlarmHandler extends WebhookHandler {
             9  => 'Falha Display LCD',
             10 => 'Falha Módulo TTS',
             11 => 'Falha de Câmera',
-            15 => 'Condução Acumulada Excedida (Dia)',
-            18 => 'Pré-aviso de Velocidade',
-            19 => 'Entrada/Saída de Geocerca',
-            20 => 'Desvio de Rota',
-            21 => 'Tempo de Condução em Via Excedido',
-            22 => 'Falha VSS do Veículo',
-            23 => 'Anomalia de Combustível',
-            24 => 'Furto de Veículo',
-            25 => 'Ignição Não Autorizada',
-            26 => 'Deslocamento Não Autorizado',
-            27 => 'Pré-aviso de Colisão',
-            28 => 'Pré-aviso de Capotamento',
-            29 => 'Abertura Irregular de Porta',
+            12 => 'Falha do Módulo de Cartão IC (Certificado de Transporte)',
+            13 => 'Pré-aviso de Excesso de Velocidade',
+            14 => 'Pré-aviso de Fadiga de Condução',
+            // 15-17: reservados na doc oficial — sem conteúdo definido.
+            18 => 'Condução Acumulada Excedida (Dia)',
+            19 => 'Estacionamento Além do Tempo Permitido',
+            20 => 'Entrada/Saída de Área',
+            21 => 'Entrada/Saída de Rota',
+            22 => 'Tempo de Condução no Trecho Insuficiente/Excedido',
+            23 => 'Desvio de Rota',
+            24 => 'Falha VSS do Veículo',
+            25 => 'Nível de Óleo do Veículo Anormal',
+            26 => 'Furto de Veículo (com Antifurto)',
+            27 => 'Ignição Ilegal do Veículo',
+            28 => 'Deslocamento Ilegal do Veículo',
+            29 => 'Pré-aviso de Colisão',
+            30 => 'Pré-aviso de Capotamento',
+            31 => 'Abertura Irregular de Porta',
         ];
 
         // Decodificar todos os bits ativos
