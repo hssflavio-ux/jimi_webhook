@@ -302,8 +302,8 @@ $expBaseFrota = http_build_query($expQ);
 <div class="card mb-24" style="padding:12px 16px;">
     <form method="GET" style="display:flex;align-items:flex-end;gap:10px;">
         <div>
-            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
+            <label for="flt-customer_id" class="filtro-rotulo">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" class="filtro-campo" style="min-width:180px;">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= $filterCust==$c['id']?'selected':'' ?>><?= htmlspecialchars($c['name']) ?></option>

@@ -100,6 +100,7 @@ include __DIR__ . '/../web/layout_base.php';
             <button class="btn btn-outline btn-sm" onclick="resetDevice()">Reiniciar Terminal (33029)</button>
             <button class="btn btn-outline btn-sm" onclick="queryDeviceInfo()">Info Terminal (33031)</button>
         </div>
+        <div id="cfg-reset-result" style="margin-top:12px;font-size:13px"></div>
     </div>
 </div>
 
@@ -129,7 +130,10 @@ function queryDevice() {
         content = '';
     } else if (proNo === 33030) {
         var ids = document.getElementById('cfg-param-ids').value.trim();
-        if (!ids) { alert('Informe os IDs dos parâmetros.'); return; }
+        if (!ids) {
+            document.getElementById('cfg-query-result').innerHTML = '<span style="color:var(--error)">Informe os IDs dos parâmetros.</span>';
+            return;
+        }
         var mapa = {};
         ids.split(',').forEach(function(s) {
             var n = parseInt(s.trim(), 10);
@@ -149,7 +153,10 @@ function setParam() {
     var imei = getSetImei();
     var id = parseInt(document.getElementById('cfg-set-param-id').value);
     var val = document.getElementById('cfg-set-param-value').value;
-    if (!id) { alert('Informe o ID do parâmetro.'); return; }
+    if (!id) {
+        document.getElementById('cfg-set-result').innerHTML = '<span style="color:var(--error)">Informe o ID do parâmetro.</span>';
+        return;
+    }
     var el = document.getElementById('cfg-set-result');
     el.innerHTML = '<span style="color:var(--muted)">Enviando...</span>';
     // Mapa numero→valor, que é o que o device aceita. O formato antigo
@@ -164,8 +171,11 @@ function setParam() {
 function resetDevice() {
     if (!confirm('Confirmar reinicialização do terminal?')) return;
     var imei = getQueryImei();
+    var el = document.getElementById('cfg-reset-result');
+    el.innerHTML = '<span style="color:var(--muted)">Enviando...</span>';
     sendCfg(imei, 33029, '{}').then(function(d) {
-        alert(JSON.stringify(d.msg || d));
+        el.innerHTML = '<pre style="font-family:JetBrains Mono,monospace;font-size:11px;background:var(--canvas);padding:10px;border-radius:var(--radius-sm);white-space:pre-wrap">' +
+            JSON.stringify(d.msg || d, null, 2) + '</pre>';
     });
 }
 

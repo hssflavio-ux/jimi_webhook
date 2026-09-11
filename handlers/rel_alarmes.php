@@ -283,8 +283,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <?php if ($isAdmin): ?>
         <div>
-            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-customer_id" class="filtro-rotulo">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" class="filtro-campo">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= $c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -293,8 +293,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label for="flt-imei" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
-            <select id="flt-imei" name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:160px;">
+            <label for="flt-imei" class="filtro-rotulo">Placa</label>
+            <select id="flt-imei" name="imei" class="filtro-campo" style="min-width:160px;">
                 <option value="">Todas</option>
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $filterImei === $d['imei'] ? 'selected' : '' ?>>
@@ -314,18 +314,18 @@ require_once __DIR__ . '/../web/layout_base.php';
             ?>
         </div>
         <div>
-            <label for="flt-alarm_status" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>
-            <select id="flt-alarm_status" name="alarm_status" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-alarm_status" class="filtro-rotulo">Status</label>
+            <select id="flt-alarm_status" name="alarm_status" class="filtro-campo">
                 <option value="">Todos</option>
                 <option value="active" <?= $filterStatus === 'active' ? 'selected' : '' ?>>Ativo</option>
                 <option value="resolved" <?= $filterStatus === 'resolved' ? 'selected' : '' ?>>Resolvido</option>
             </select>
         </div>
         <div>
-            <label for="flt-date_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <label for="flt-date_from" class="filtro-rotulo">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
-                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
-                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" class="filtro-campo" style="width:130px;">
+                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" class="filtro-campo" style="width:130px;">
             </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>

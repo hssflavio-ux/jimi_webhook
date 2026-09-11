@@ -745,8 +745,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;">
         <?php if ($isAdmin): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:6px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Cliente</label>
+            <select name="customer_id" class="filtro-campo">
                 <option value="">Todos</option>
                 <option value="none" <?= $filterCust === 'none' ? 'selected' : '' ?>>— Sem cliente (órfãos) —</option>
                 <?php foreach ($customers as $c): ?>
@@ -756,8 +756,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Modelo</label>
-            <select name="model_id" style="padding:6px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Modelo</label>
+            <select name="model_id" class="filtro-campo">
                 <option value="">Todos</option>
                 <?php foreach ($models as $m): ?>
                 <option value="<?= $m['id'] ?>" <?= $filterModel == $m['id'] ? 'selected' : '' ?>><?= htmlspecialchars($m['model_name']) ?></option>
@@ -765,25 +765,25 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Situação</label>
-            <select name="filter_online" style="padding:6px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Situação</label>
+            <select name="filter_online" class="filtro-campo">
                 <option value="">Todos</option>
                 <option value="1" <?= $filterOnline==='1'?'selected':'' ?>>Online</option>
                 <option value="0" <?= $filterOnline==='0'?'selected':'' ?>>Offline</option>
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Status</label>
-            <select name="filter_status" style="padding:6px 8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Status</label>
+            <select name="filter_status" class="filtro-campo">
                 <option value="">Todos</option>
                 <option value="1" <?= $filterStatus==='1'?'selected':'' ?>>Ativo</option>
                 <option value="0" <?= $filterStatus==='0'?'selected':'' ?>>Inativo</option>
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Busca</label>
+            <label class="filtro-rotulo">Busca</label>
             <input type="text" name="search" value="<?= htmlspecialchars($filterSearch ?? '') ?>" placeholder="IMEI ou nome..."
-                   style="padding:6px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:160px;">
+                   class="filtro-campo" style="width:160px;">
         </div>
         <button type="submit" class="btn btn-outline btn-sm">Filtrar</button>
         <a href="/equipamentos" class="btn btn-outline btn-sm" style="color:var(--muted);">Limpar</a>

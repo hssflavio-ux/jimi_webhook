@@ -174,8 +174,8 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <?php if ($isAdmin): ?>
         <div class="panel-label">Cliente</div>
-        <select id="customer-select" onchange="selectCustomer(this.value)"
-                style="width:100%;padding:7px 8px;font-size:12px;border:1px solid var(--hairline);border-radius:var(--radius-sm);margin-bottom:14px;background:var(--canvas);color:var(--ink);">
+        <select id="customer-select" onchange="selectCustomer(this.value)" class="filtro-campo"
+                style="width:100%;margin-bottom:14px;">
             <option value="">Todos os clientes</option>
             <?php foreach ($customers as $c): ?>
             <option value="<?= (int)$c['id'] ?>" <?= (string)$filterCust === (string)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -188,6 +188,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 rótulo, quebrava "Ativos no mapa" no meio. */ ?>
         <div class="panel-label" style="padding-bottom:2px;">Ativos no mapa</div>
         <div id="visible-count" style="font-size:11px;color:var(--muted);padding:0 4px 6px;"></div>
+        <div id="refresh-indicator" style="font-size:10px;color:var(--muted);padding:0 4px 6px;display:none;"></div>
 
         <?php /* A lista É o filtro do mapa: a caixa decide se o pino aparece,
                 e o resto da linha continua centralizando o mapa no veículo. */ ?>
@@ -523,6 +524,8 @@ setInterval(function() {
             }
         });
         aplicarVisibilidade(false);
+        var ind = document.getElementById('refresh-indicator');
+        if (ind) { ind.style.display = 'block'; ind.textContent = 'Atualizado ' + new Date().toLocaleTimeString('pt-BR'); setTimeout(function(){ind.style.display='none';},2000); }
     }).catch(function() {});
 }, 30000);
 </script>

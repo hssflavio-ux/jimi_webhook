@@ -237,8 +237,8 @@ $cardBase = http_build_query($cardQ);
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <?php if ($isAdmin): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Cliente</label>
+            <select name="customer_id" class="filtro-campo">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -247,12 +247,12 @@ $cardBase = http_build_query($cardQ);
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <label class="filtro-rotulo">Placa</label>
             <?= report_device_select($devices, $filterImei) ?>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Estado</label>
-            <select name="state" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Estado</label>
+            <select name="state" class="filtro-campo">
                 <option value="">Todos</option>
                 <?php foreach (FLEET_STATE_LABELS as $sk => $sl): ?>
                 <option value="<?= $sk ?>" <?= $filterState === $sk ? 'selected' : '' ?>><?= htmlspecialchars($sl) ?></option>

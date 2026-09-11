@@ -169,7 +169,7 @@ include __DIR__ . '/../web/layout_base.php';
 <div class="flex-between mb-24" style="gap:8px;flex-wrap:wrap;">
     <form method="GET" style="display:flex;gap:6px;">
         <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar placa ou IMEI da câmera..."
-               style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:260px;">
+               class="filtro-campo" style="width:260px;">
         <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
     </form>
     <div style="display:flex;gap:6px;align-items:center;">

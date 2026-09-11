@@ -212,8 +212,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <input type="hidden" name="gerar" value="1">
         <?php if ($isAdmin): ?>
         <div>
-            <label for="flt-customer_id" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select id="flt-customer_id" name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">
+            <label for="flt-customer_id" class="filtro-rotulo">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" class="filtro-campo" style="min-width:170px;">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -222,8 +222,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label for="flt-imei" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
-            <select id="flt-imei" name="imei" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:180px;">
+            <label for="flt-imei" class="filtro-rotulo">Placa</label>
+            <select id="flt-imei" name="imei" class="filtro-campo" style="min-width:180px;">
                 <option value="">— Selecione —</option>
                 <?php foreach ($devices as $d): ?>
                 <option value="<?= $d['imei'] ?>" <?= $selImei===$d['imei']?'selected':'' ?>><?= htmlspecialchars($d['device_name']??$d['imei']) ?></option>
@@ -231,25 +231,25 @@ require_once __DIR__ . '/../web/layout_base.php';
             </select>
         </div>
         <div>
-            <label for="flt-interval" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Intervalo</label>
-            <select id="flt-interval" name="interval" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label for="flt-interval" class="filtro-rotulo">Intervalo</label>
+            <select id="flt-interval" name="interval" class="filtro-campo">
                 <option value="all" <?= $interval==='all'?'selected':'' ?>>Todas as posições</option>
                 <option value="sampled" <?= $interval==='sampled'?'selected':'' ?>>Amostrado (1:10)</option>
             </select>
         </div>
         <div>
-            <label for="flt-date_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <label for="flt-date_from" class="filtro-rotulo">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
-                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
-                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" class="filtro-campo" style="width:130px;">
+                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" class="filtro-campo" style="width:130px;">
             </div>
         </div>
         <div>
-            <label for="flt-time_from" style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Faixa horária (opcional)</label>
+            <label for="flt-time_from" class="filtro-rotulo">Faixa horária (opcional)</label>
             <div style="display:flex;gap:4px;">
-                <input type="time" id="flt-time_from" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
-                <input type="time" name="time_to" value="<?= htmlspecialchars($timeTo) ?>" title="Hora final (BRT) — vazio = 23:59" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:100px;">
-                <select name="time_mode" title="Como aplicar a faixa horária ao período" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:190px;">
+                <input type="time" id="flt-time_from" name="time_from" value="<?= htmlspecialchars($timeFrom) ?>" title="Hora inicial (BRT) — vazio = 00:00" class="filtro-campo" style="width:100px;">
+                <input type="time" name="time_to" value="<?= htmlspecialchars($timeTo) ?>" title="Hora final (BRT) — vazio = 23:59" class="filtro-campo" style="width:100px;">
+                <select name="time_mode" title="Como aplicar a faixa horária ao período" class="filtro-campo" style="min-width:190px;">
                     <option value="continua" <?= $timeMode==='continua'?'selected':'' ?>>Contínua (início → fim)</option>
                     <option value="diaria" <?= $timeMode==='diaria'?'selected':'' ?>>Em cada dia do período</option>
                 </select>

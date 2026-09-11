@@ -207,8 +207,8 @@ require_once __DIR__ . '/../web/layout_base.php';
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
         <?php if ($isAdmin): ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Cliente</label>
-            <select name="customer_id" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Cliente</label>
+            <select name="customer_id" class="filtro-campo">
                 <option value="">Todos</option>
                 <?php foreach ($customers as $c): ?>
                 <option value="<?= (int)$c['id'] ?>" <?= $filterCust == $c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
@@ -217,22 +217,22 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?php endif; ?>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Placa</label>
+            <label class="filtro-rotulo">Placa</label>
             <?= report_device_select($devices, $filterImei) ?>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Excedente mínimo</label>
-            <select name="min_over" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
+            <label class="filtro-rotulo">Excedente mínimo</label>
+            <select name="min_over" class="filtro-campo">
                 <?php foreach ([0 => 'Qualquer', 5 => '+5 km/h', 10 => '+10 km/h', 20 => '+20 km/h', 30 => '+30 km/h'] as $ov => $ol): ?>
                 <option value="<?= $ov ?>" <?= $minOver === $ov ? 'selected' : '' ?>><?= $ol ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
         <div>
-            <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <label class="filtro-rotulo">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
-                <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
-                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:130px;">
+                <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" class="filtro-campo" style="width:130px;">
+                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" class="filtro-campo" style="width:130px;">
             </div>
         </div>
         <button type="submit" class="btn btn-primary btn-sm">Gerar</button>

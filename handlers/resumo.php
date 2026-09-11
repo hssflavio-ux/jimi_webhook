@@ -368,6 +368,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <!-- ═══════ KPIs (auto-refresh 30s via ?ajax=kpis) ═══════ -->
 <div class="flex-between mb-8">
     <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;">Tempo real</span>
+    <span id="refresh-indicator" style="font-size:11px;color:var(--muted);display:none;"></span>
 </div>
 <div class="kpi-grid">
     <div class="kpi-item">
@@ -646,6 +647,8 @@ setInterval(function() {
         set('kpi-occ', k.occ); set('kpi-occ-w', k.occ_waiting);
         set('kpi-out', k.out); set('kpi-out7', k.out_gt7d); set('kpi-outn', k.out_never);
         set('kpi-idle', k.idle);
+        var ind = document.getElementById('refresh-indicator');
+        if (ind) { ind.style.display = 'inline'; ind.textContent = new Date().toLocaleTimeString('pt-BR'); setTimeout(function(){ind.style.display='none';},2000); }
     }).catch(function() {});
 }, 30000);
 </script>

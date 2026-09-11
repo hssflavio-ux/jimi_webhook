@@ -2,6 +2,228 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 v4.18.2 — `/configuracoes-ia`: textos, tokens de design, grade sem buracos, perfil de leitura completa
+>
+> Pedido do dono do produto, 5 itens, mais uma varredura pedida antes do
+> commit único desta sessão.
+>
+> **1-3. Textos e quadros.** Os dois estados vazios trocados ("Selecione o
+> equipamento para verificar e configurar sua IA." / "O modelo não tem
+> configuração disponível."). 🔴 **`.ia-cell`/`.ia-param input` divergiam do
+> design system** — `border-radius:10px` fixo em vez de `var(--radius-lg)`,
+> sombra de hover `0 1px 3px rgba(0,0,0,.08)` em vez do token único
+> `var(--shadow-soft)`, input sem foco azul. Mesma divergência achada — e
+> corrigida na mesma sessão, a pedido do dono do produto — no `.param-cell`
+> legado de `/ativos/{imei}?tab=parametros`, de onde esta tela tinha copiado
+> o padrão original (inclusive `var(--line,#e5e7eb)`, variável que nem existe
+> em `:root` — sempre caía no fallback). `.ia-grid` ganhou
+> `grid-auto-flow: dense`: os quadros combinados EVENTSET+EVENTALERT
+> (`grid-column: span 2`) deixavam buraco na linha anterior quando não
+> cabiam inteiros — auto-placement sem `dense` não preenche células vazias
+> com itens menores que vêm depois na ordem. Só a última linha pode ficar
+> incompleta agora.
+>
+> **5. Perfil de leitura completa** (`device_ia_config_snapshots`, migração
+> `v4.18.2` — **precisa do segundo deploy/`.sql` manual**, ver CLAUDE.md). Ao
+> fim de "Ler tudo agora", cada resposta de consulta é convertida de volta em
+> comando de escrita — medido em `includes/ia_config_catalog.php`: a câmera
+> ecoa a própria consulta e anexa o valor (`EVENTSET,ALDW#` →
+> `EVENTSET,ALDW#,60`), então a extração pega os últimos N tokens separados
+> por vírgula e monta `EVENTSET,ALDW,60#`. **Decisões do dono do produto**
+> (não a opção "mais segura" que eu tinha sugerido): o perfil usa TODOS os
+> comandos lidos, não só os aplicados manualmente; "aplicar em outras
+> câmeras do mesmo modelo" envia AO VIVO (com prévia da lista + confirmação),
+> não só gera texto pra copiar; o TXT se chama **`writeconfig.txt`** —
+> **confirmado pelo dono do produto: é recurso real da câmera, que lê o
+> cartão SD e aplica a configuração sozinha, uma configuração por linha** —
+> por isso o conteúdo é só os comandos empilhados, um por linha, sem
+> comentário nenhum. A tela mostra "Última leitura completa em DD/MM/AAAA
+> HH:MM — N de M comando(s)" quando o equipamento é selecionado, com botões
+> pra baixar o TXT e abrir o painel de exportação (que lista os comandos
+> ANTES de enviar — a extração é heurística, não um parser medido comando a
+> comando, o operador confere).
+>
+> **6. Varredura de "tela fora do padrão"** (pedido do dono do produto, antes
+> de commitar tudo de uma vez): o `.param-cell` corrigido no item 1-3 usava
+> `var(--line,#e5e7eb)` — variável que não existe em `:root`, sempre caindo
+> no fallback — e isso fez procurar a MESMA classe de bug (`var(--x)` sem `x`
+> definido em `:root`) em TODO o app: `grep` de todo `var(--...)` usado contra
+> a lista real de tokens de `web/layout_base.php`. 🔴 **7 variáveis fantasma,
+> em 11 arquivos, todas do tempo da paleta Cursor/pré-rename** — resolviam
+> pra nada (propriedade CSS inteira ignorada pelo navegador), não pro valor
+> errado, por isso nunca apareceram como "cor errada" — simplesmente não
+> tinham cor/raio nenhum:
+> - `var(--brand)` (era o antigo nome de `--primary`) — aba ativa invisível em
+>   **`/auditoria`, `/auditoria/negados`, `/auditoria/cadastro`,
+>   `/auditoria/login`**; realce de comando selecionado, chip de exemplo,
+>   anel de foco por teclado e chip "ativo" invisíveis em **`/comandos`**; anel
+>   do card de filtro ativo invisível em **`/relatorios/status-frota`**.
+> - `var(--danger)` (era o antigo nome de `--error`) — mensagem de erro sem
+>   vermelho nenhum em **`/ativos/{imei}` (aba Parâmetros), `/parametros`,
+>   `/configuracoes/parametros`, `/relatorios/parametros`**.
+> - `var(--accent)` — link sem azul em **`/geocercas`**.
+> - `var(--radius)` (era o antigo nome antes da família `--radius-sm/md/lg/xl`)
+>   — **13 caixas de mockup em `/wiki` com cantos QUADRADOS** (`.mockup`,
+>   `.kpi-box`, `.filter-bar-mock`, `.map-mock`, `.chart-mock`, `.callout`,
+>   `.sidebar-mock`, `.video-mock`) e o **painel de notificações** (sino no
+>   header, presente em TODA tela) também com cantos quadrados.
+> - `var(--sidebar-bg)` — mockup de sidebar em `/wiki` sem fundo escuro.
+> - `var(--surface-2)` — linha bloqueada sem destaque em `/comandos-sms`.
+> - `var(--font-mono, monospace)` — o badge de contagem e o carimbo de hora
+>   do painel de notificações (global) caíam em monospace genérico do
+>   navegador em vez de JetBrains Mono (tinha fallback, por isso só é
+>   inconsistência tipográfica, não campo vazio).
+>
+> Todas resolvidas para o token real (`--primary`, `--error`, `--radius-lg`,
+> `--surface-dark`, `--canvas-soft`, ou a fonte literal `'JetBrains Mono',
+> monospace` — mesma convenção do resto do app). De quebra, `.cmd-item.sel`
+> em `/comandos` trocou `#e8f0ff` fixo por `var(--primary-soft)` (o token já
+> existe e é quase idêntico — `#eaf0ff` —, era só um valor digitado à mão).
+> **Método**: `grep` de todo `var(--...)` usado no app inteiro contra a lista
+> real de `--variáveis` definidas em `web/layout_base.php` — sobrou só
+> `--surface-soft` (as 3 telas de pré-login têm `:root` PRÓPRIO com essa
+> variável, não é bug) e um falso-positivo de comentário PHPDoc. `php -l`
+> completo (`handlers config core includes web`) limpo depois da correção.
+>
+> ### 📍 v4.17.28–v4.18.1 — `/comandos` sem trava de modelo, painel sem "35 parados" fantasma, fila offline confirmada no hub
+>
+> Sessão única cobrindo 5 pedidos do dono do produto sobre `/comandos` e o painel.
+>
+> **1-3. `/comandos` ganhou o mesmo redesenho do `/comandos-sms` (v4.17.25):**
+> lista única por NOME de comando (`command_catalog_merge_by_name()`, extraído
+> para `includes/functions.php` e agora compartilhado pelas duas telas), 1
+> campo de texto livre para parâmetros, e a trava de modelo **removida** —
+> nenhum equipamento fica desabilitado ao escolher um comando; o aviso de
+> incompatibilidade virou informativo. Toggle "modo livre" removido
+> (redundante). Exemplos: no máximo 1 por família de equipamento
+> (`command_catalog_examples_by_family()`), para não repetir a mesma sintaxe
+> quando ela não muda entre modelos. `tests/comandos.spec.js` reescrito;
+> `tests/firmware.spec.js`/`tests/rastreador_vl.spec.js` atualizados.
+>
+> **4. Fila offline de comandos — a hipótese de ontem (07/09) estava errada.**
+> `docs/FILA_OFFLINE_COMANDOS.md` registrava "não mandamos `offlineFlag`, é
+> por isso que a fila aparece vazia" como decisão do dono do produto de só
+> **registrar, não corrigir**. 🔴 **O teste decisivo (produção, equipamento
+> offline há 19 dias) derrubou isso**: o comando apareceu na fila do hub
+> IMEDIATAMENTE após o envio, SEM `offlineFlag` — mandar o flag depois não
+> mudou nada observável. A fila vazia de 07/09 era de comandos cuja janela de
+> validade já tinha expirado, não de comandos nunca cacheados. Implementado:
+> `iothub_query_offline_instruct()` (só leitura) + cron
+> `scripts/offline_instruct_poll.php` (10 min) gravando o estado real em
+> `commands.hub_queue_status`/`hub_queue_checked_at` (migração v4.18.0,
+> **precisa do segundo deploy/`.sql` manual** — ver CLAUDE.md); `/comandos` e
+> `/commandstatus` leem essas colunas com fallback `try/catch` para o
+> intervalo até isso acontecer. `sendcommand.php`: `_code=300` passou a valer
+> como `_code=600` no rótulo `offline_queued`. `iothub_send_instruct()`
+> continua **sem** `offlineFlag` — sem efeito medido, não vale reintroduzir o
+> risco que a cautela original apontava.
+>
+> **5. Painel "Velocidade da Frota" com "35 parados" fantasma — bug real,
+> confirmado.** A query contava LINHAS de `gps_data` (pontos de GPS), não
+> veículos — `COUNT(DISTINCT g.imei)` corrigido em `includes/dashboard_widgets.php`
+> (`/painel`), `handlers/resumo.php` (`/resumo`, a home) e
+> `scripts/metrics_rollup.php` (cron do cache lido pelas duas telas), com
+> `JOIN devices ... is_active` que faltava nas três (e no widget-irmão
+> `idle`, que já tinha o `COUNT(DISTINCT)` certo). De quebra: 9 fallbacks
+> `?? 1` em `handlers/resumo.php` (mesma classe do bug histórico do
+> `/equipamentos` v4.9.26) — sessão sem `customer_id` resolvido via dados do
+> cliente de id 1 em vez de tela vazia.
+>
+> **6. Retorno do dono do produto (09/09/2026) — três correções na mesma sessão:**
+> a máscara do campo de parâmetros mostrava o mesmo texto genérico para
+> qualquer comando (`atualizarMascaraParams()` corrigiu, tirando a máscara do
+> exemplo catalogado do comando escolhido); auditoria de compatibilidade de
+> modelo contra as 4 planilhas oficiais achou 9 comandos com JC181/JC450
+> faltando no `modelos` (`BCD`, `CAMERA`, `MILE`, `GMT`, `ASETGMT`, `CENTER`,
+> `MILEAGE`, `WIFIAP`, `CAR`) — o caso citado como exemplo (`FENCE` só
+> VL01/VL02) já estava certo, o JC181 tem cerca sob outro nome (`GFENCE`) já
+> cadastrado; e ~85 descrições em inglês no catálogo (bloco JC400/JC261)
+> traduzidas para PT-BR, incluindo `RAPIDDEC`/`RAPIDTURN,A#` citados como
+> exemplo (tinham a frase de ACELERAÇÃO copiada por engano — eles são
+> frenagem/curva). **Pendente, registrado e não implementado**: JC181 tem
+> `FATIGUE`/`POWERALM`/`SENALM`/`SOSALM`/`EXBATALM`/`SERVER` com aridade
+> própria — mas o dono do produto corrigiu a premissa: **com parametrização
+> livre, aridade não trava nada**, então bastava incluir o modelo em
+> `modelos`. Reexaminado: `FATIGUE`/`SENALM`/`SERVER` já tinham JC181 (a
+> auditoria comparou com a variante errada); `POWERALM`/`EXBATALM` de fato
+> faltavam, corrigidos; `SOSALM` tinha JC181/JC182 só em `consulta_modelos`,
+> inconsistência corrigida. **`REBOOT#`/`RESET#`/`RESTART#` consolidados
+> numa entrada só** (mesma lógica — três itens pra mesma ação viraram ruído):
+> `REBOOT#` fica com a união dos modelos das três. Catálogo: 237→235
+> entradas, 168→166 comandos distintos.
+
+> ### 📍 v4.17.24 — resposta do equipamento por SMS: o webhook nunca entregou, a busca periódica sim
+>
+> Pedido do dono do produto, a partir de um relato: *"não estou reconhecendo o
+> dado raw no log da resposta enviada pela Allcance SMS como resposta e status
+> dos comandos que enviamos via SMS"*, com a doc oficial (Postman) como
+> referência.
+>
+> **Comparação byte a byte contra a doc não achou bug nenhum no parser.** Os 20
+> payloads crus de `/pushsms` capturados e os 29 `sms_commands` de teste batem
+> campo a campo com o formato documentado — `status_entrega` grava certinho
+> (`enviado` → `entregue celular`). **O que nunca chegou é o evento de
+> resposta**: `status:"recebido"` COM `mensagem` — 0 de 29 comandos com
+> `resposta_texto`, 0 payloads com o campo `mensagem`.
+>
+> 🔴 **A causa está na própria doc, numa seção diferente da que o webhook usa.**
+> "Consulta Respostas (Método Pull)" — `GET
+> /v2/api/relatorios/campanhas/respostas/sms` — é um endpoint SEPARADO,
+> específico para quando "sua aplicação não consegue receber interações via
+> webhook". O exemplo de resposta dele já mostra texto real
+> (`"resposta":"OK 1"`) que o webhook nunca recebeu nesta conta.
+>
+> ⚠️ **Os nomes dos campos vêm com a ordem das palavras trocada** entre os dois
+> formatos: `numero_referencia`/`campanha_referencia` no Pull, contra
+> `referencia_numero`/`referencia_campanha` no webhook — e o texto da resposta
+> é `resposta`, nunca `mensagem`. Reusar `sms_classificar_item()` (a função do
+> webhook) no payload do Pull descarta tudo como "sem referência" — travado em
+> teste (`sms_classificar_item() NO FORMATO PULL não acha a referência`).
+>
+> **Implementado**: `scripts/sms_respostas_pull.php` (cron a cada 2 min,
+> `sms_pull_classificar_item()` em `includes/sms_inbound.php`) e
+> `sms_settings.respostas_metodo` (`migration_v4.17.24.sql`) — toggle em
+> `/config-sms` entre `webhook` e `pull`, as duas vias tratadas como
+> **redundância uma da outra, nunca simultâneas por padrão** (pedido do dono do
+> produto: opção de ligar uma ou outra conforme a necessidade). Começa em
+> `pull`, a única via já comprovada. `sms_grava_evento_raw()`
+> (`includes/sms_gateway.php`) virou ponto único do registro em
+> `eventos_raw`, compartilhado por `/pushsms` e pelo poller — antes era uma
+> closure local só do webhook.
+>
+> **Teste de ponta a ponta contra a Allcance real (08/09/2026, dois equipamentos
+> online, comandos #30 e #31):** o pedaço que dependia da API de verdade —
+> autenticar, montar o "lote avançado", enviar `STATUS#`, e a Allcance
+> devolver `status_entrega` pelo webhook — funcionou nos dois: comando #31
+> (`864993060429173`, JC400AD) foi de "enviado" a "entregue celular" em
+> **poucos segundos**, batendo com o padrão já visto em produção. O comando
+> #30 (JC371) demorou mais que o normal para confirmar entrega — variação da
+> operadora, não do código.
+>
+> ⚠️ **Nenhum dos dois produziu uma resposta de TEXTO via SMS**, nem pelo
+> webhook nem pelo Pull, em ~15 min de acompanhamento. 🔴 **Correção do dono do
+> produto sobre a hipótese inicial desta entrada**: *"os equipamentos respondem
+> SMS mesmo estando conectados no TCP"* — a teoria de que o equipamento
+> responderia só pela sessão TCP por estar online está **descartada**. A causa
+> de nenhuma resposta ter chegado continua **em aberto**. Hipóteses ainda não
+> checadas: o equipamento levar mais que ~15 min para responder por SMS; a
+> resposta ter saído do device e não ter chegado ao número de recebimento da
+> conta Allcance (só o painel deles mostraria isso — próximo passo é olhar lá
+> pelas referências `e4253a7c30e460b83a0c9112f30f10de` (#30) e
+> `4c89101490d370c52ea6c60d9e71c76c` (#31)); ou algo específico do comando
+> `STATUS#` nesses dois modelos. **Não foi possível, nesta sessão, observar uma
+> resposta de SMS real** — só a doc e o formato sintético dela, cobertos em
+> teste automatizado.
+>
+> O que FICA provado contra produção: autenticação, envio, `status_entrega`
+> via webhook, e a API do Pull respondendo (`HTTP 404` com
+> `{"message":"sem novas mensagens"}` quando não há interação nova — descoberta
+> nesta sessão, tratada explicitamente no script). O poller está no cron de
+> produção (`*/2 * * * *`, `logs/sms_pull.log`) e vai capturar a primeira
+> resposta real assim que ela existir, de qualquer equipamento, sem precisar
+> de novo deploy.
+
+
 > ### 📍 v4.17.23 — filtrar `webhook_payloads` por equipamento não achava os SMS
 >
 > Pedido do dono do produto: *"precisamos ter a possibilidade do filtro, não é

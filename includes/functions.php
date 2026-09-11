@@ -1091,7 +1091,7 @@ function report_device_options(PDO $db, ?int $scopeCust = null, int $limit = 200
  */
 function report_device_select(array $devices, string $selected = '', string $allLabel = 'Todas', string $name = 'imei'): string {
     $html = '<select id="flt-' . htmlspecialchars($name, ENT_QUOTES) . '" name="' . htmlspecialchars($name, ENT_QUOTES) . '"'
-          . ' style="padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);min-width:170px;">'
+          . ' class="filtro-campo" style="min-width:170px;">'
           . '<option value="">' . htmlspecialchars($allLabel) . '</option>';
     foreach ($devices as $d) {
         $imei = (string)($d['imei'] ?? '');

@@ -3,17 +3,21 @@
  * JIMI Webhook System — Detalhe do Ativo (Veículo) v4.11.0
  * Endpoint: /ativos/{vehicle_id}
  *
- * 9 abas com sidebar lateral: Visão Geral, Ao Vivo, Trajetos,
- * Alertas, Log, Relatórios, Vídeo, Comandos, Configurações — todas
- * IMEI-cêntricas por baixo (telemetria/comandos são por câmera, não por
- * veículo). O que mudou na v4.11.0: a URL e a identidade da página são do
- * VEÍCULO — o IMEI usado nas abas é resolvido pela instalação ABERTA
- * (device_installations), e pode não existir (veículo sem câmera).
+ * 7 abas com sidebar lateral: Visão Geral, Ao Vivo, Trajetos, Alertas, Log,
+ * Relatórios, Vídeo (+ Parâmetros, só JT/T/admin) — todas IMEI-cêntricas por
+ * baixo (telemetria é por câmera, não por veículo). O que mudou na v4.11.0: a
+ * URL e a identidade da página são do VEÍCULO — o IMEI usado nas abas é
+ * resolvido pela instalação ABERTA (device_installations), e pode não existir
+ * (veículo sem câmera).
+ *
+ * v4.18.3 — "Comandos"/"Configurações" deixaram de ser abas locais (UI antiga
+ * com proNo/serverFlagId/JSON cru) e viram links de saída, na sidebar, para
+ * /comandos e /parametros — que já modernizaram a mesma função. `?tab=comandos`
+ * /`?tab=configuracoes` redirecionam para lá (compatibilidade com link antigo).
  */
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/csrf.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
-require_once __DIR__ . '/../includes/command_response.php'; // leitura única da resposta de comando
 require_once __DIR__ . '/../includes/maintenance.php'; // latest_odometer()
 require_login();
 
@@ -89,6 +93,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $installation = get_open_installation_for_vehicle($db, $vehicleId);
 $imei = $installation['imei'] ?? null;
 $hasCamera = $imei !== null;
+
+// v4.18.3 — 'comandos'/'configuracoes' eram a UI antiga (proNo/serverFlagId/
+// JSON cru); a função foi modernizada em /comandos (campo único, catálogo
+// curado) e /parametros (área dedicada de parametrização JT/T — não
+// /configuracoes-ia, que é proNo 128 só-JIMI, protocolo diferente do 33027-
+// 33031 que esta aba mandava). Redireciona ANTES de qualquer HTML (layout_base
+// abaixo já teria mandado saída) e só quando há câmera — sem câmera, o
+// empty-state de $liveOnlyTabs abaixo continua explicando por quê.
+if ($hasCamera && in_array($tab, ['comandos', 'configuracoes'], true)) {
+    $destino = $tab === 'comandos' ? '/comandos?imei=' . urlencode($imei) : '/parametros';
+    header('Location: ' . $destino);
+    exit;
+}
 
 // Carregar dados da câmera instalada, se houver
 $asset = null;
@@ -239,14 +256,6 @@ if ($tab === 'log') {
     ");
     $logStmt->execute([$vehicleId, $vehicleId, $vehicleId]);
     $logs = $logStmt->fetchAll(PDO::FETCH_ASSOC);
-}
-
-// aba: comandos (dados)
-$commands = [];
-if ($tab === 'comandos') {
-    $cmdStmt = $db->prepare("SELECT id, command_content, status, response_payload, created_at FROM commands WHERE imei = ? ORDER BY created_at DESC LIMIT 30");
-    $cmdStmt->execute([$imei]);
-    $commands = $cmdStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 // aba: video (media files)
@@ -729,263 +738,12 @@ case 'video':
 </div>
 <?php break; ?>
 
-<?php // ═══ COMANDOS ═══════════════════════════════════════════
-case 'comandos':
-    $jimiPresets = [
-        '' => 'Selecione um comando...',
-        'STATUS' => 'STATUS — Status do dispositivo',
-        'VERSION#' => 'VERSION# — Versão do firmware',
-        'IMEI' => 'IMEI — Consultar IMEI',
-        'GPSON' => 'GPSON — Ligar GPS',
-        'GPSOFF' => 'GPSOFF — Desligar GPS',
-        'RTMP,ON,OUT' => 'RTMP,ON,OUT — Stream saída',
-        'RTMP,OFF' => 'RTMP,OFF — Desligar stream',
-        'RESET' => 'RESET — Reiniciar dispositivo',
-    ];
-    $jttPresets = [
-        '' => 'Selecione um comando...',
-        'streaming' => 'Streaming de Vídeo (ch1/ch2/ch12)',
-        'video_upload' => 'Upload de Vídeo (VIDEOUPLOAD)',
-        'resources' => 'Listar Recursos A/V',
-        'playback' => 'Playback Histórico',
-        'alarm_attach' => 'Anexo de Alarme (vídeo do evento)',
-        'ftp_upload' => 'Upload FTP',
-        'alarm_ack' => 'Confirmação de Alarme',
-        'tts' => 'TTS — Aviso por Voz',
-        'photo' => 'Captura de Foto',
-        'query_params' => 'Consultar Parâmetros',
-        'set_param' => 'Definir Parâmetro',
-        'device_info' => 'Informações do Dispositivo',
-    ];
-?>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card">
-        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:16px">Enviar Comando</h4>
-        <form id="cmd-form">
-            <input type="hidden" name="imei" value="<?= htmlspecialchars($imei) ?>">
-            <input type="hidden" name="token" value="<?= htmlspecialchars($dashToken) ?>">
-            <input type="hidden" id="cmd-protocol" name="protocol" value="<?= $asset['protocol'] ?>">
-
-            <div class="form-group">
-                <label>Protocolo</label>
-                <div style="font-size:13px;color:var(--ink)"><?= $asset['protocol'] ?: 'Desconhecido' ?></div>
-            </div>
-
-            <?php if ($asset['protocol'] === 'JIMI'): ?>
-            <div class="form-group">
-                <label>Comando Predefinido</label>
-                <select id="jimi-preset" onchange="document.getElementById('cmd-content').value = this.value">
-                    <?php foreach ($jimiPresets as $val => $label): ?>
-                    <option value="<?= $val ?>"><?= htmlspecialchars($label) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Conteúdo do Comando</label>
-                <textarea id="cmd-content" name="content" rows="3" placeholder="Ex: STATUS"></textarea>
-            </div>
-            <input type="hidden" name="proNo" value="128">
-            <input type="hidden" name="serverFlagId" value="1">
-
-            <?php elseif ($asset['protocol'] === 'JTT'): ?>
-            <div class="form-group">
-                <label>Comando Predefinido</label>
-                <select id="jtt-preset" onchange="fillJttPreset(this.value)">
-                    <?php foreach ($jttPresets as $val => $label): ?>
-                    <option value="<?= $val ?>"><?= htmlspecialchars($label) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>proNo</label>
-                <input type="number" id="cmd-proNo" name="proNo" value="37121">
-            </div>
-            <div class="form-group">
-                <label>Parâmetros (JSON)</label>
-                <textarea id="cmd-content-jtt" name="content" rows="4" placeholder='{"channelId":1,"mediaType":0}'></textarea>
-            </div>
-            <input type="hidden" name="serverFlagId" value="0">
-            <?php else: ?>
-            <div class="form-group">
-                <label>Conteúdo do Comando</label>
-                <textarea name="content" rows="3" placeholder="Conteúdo do comando..."></textarea>
-            </div>
-            <div class="form-group">
-                <label>proNo</label>
-                <input type="number" name="proNo" value="128">
-            </div>
-            <div class="form-group">
-                <label>serverFlagId (1=JIMI, 0=JT/T)</label>
-                <input type="number" name="serverFlagId" value="1" min="0" max="1">
-            </div>
-            <?php endif; ?>
-
-            <div id="cmd-feedback" style="font-size:13px;margin:8px 0"></div>
-            <button type="submit" class="btn btn-primary">Enviar Comando</button>
-        </form>
-    </div>
-    <div>
-        <div class="card" style="margin-bottom:16px">
-            <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Histórico de Comandos</h4>
-            <div style="max-height:400px;overflow-y:auto">
-                <table style="font-size:12px">
-                    <?php /* Coluna "Desfecho" no lugar de "Status": esta aba
-                             lia `response_payload` do banco e não mostrava NADA
-                             dele — só o status de envio, que nem desfecho é
-                             (há linhas `executed` cuja resposta é
-                             `request timeout`). Mesma leitura da tela de
-                             comandos, pelo mesmo ponto único. */ ?>
-                    <thead><tr><th>Data</th><th>Comando</th><th>Desfecho</th></tr></thead>
-                    <tbody>
-                        <?php foreach ($commands as $c):
-                            $cEnv  = command_response_extract($c['response_payload']);
-                            $cDesf = command_response_interpret($cEnv['texto'], $cEnv['codigo'], $cEnv['conteudo']);
-                        ?>
-                        <tr>
-                            <td style="white-space:nowrap"><?= fmt_brt_dt($c['created_at']) ?></td>
-                            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'JetBrains Mono',monospace;font-size:11px"><?= htmlspecialchars($c['command_content']) ?></td>
-                            <td>
-                                <div style="display:flex;gap:6px;align-items:flex-start">
-                                    <span class="res-dot dot-<?= htmlspecialchars($cDesf['nivel']) ?>"></span>
-                                    <span><?= htmlspecialchars($cDesf['titulo']) ?></span>
-                                </div>
-                                <?php if ($cDesf['detalhe'] !== ''): ?>
-                                <div class="res-msg" title="<?= htmlspecialchars($cDesf['detalhe']) ?>"><?= htmlspecialchars($cDesf['detalhe']) ?></div>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                        <?php if (empty($commands)): ?>
-                        <tr><td colspan="3"><div class="empty-state"><p>Nenhum comando enviado.</p></div></td></tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-<script>
 <?php
-// Endereços que o DEVICE alcança (streams e upload) — mesmos presets de comandos.php
-$vsc = video_stream_config();
-$fsUrl  = getenv('FILE_STORAGE_URL') ?: 'http://localhost:23010/download/';
-$fsHost = parse_url($fsUrl, PHP_URL_HOST) ?: 'localhost';
-$fsPort = parse_url($fsUrl, PHP_URL_PORT) ?: 23010;
-?>
-var jttPresets = {
-    // 37121 (0x9101): device publica o RTP no media server do IoTHub — IP/porta do .env
-    'streaming':     { proNo: 37121, content: <?= json_encode(json_encode([
-                           'dataType' => 0, 'codeStreamType' => 0, 'channel' => '1',
-                           'videoIP' => $vsc['ingest_ip'], 'videoTCPPort' => $vsc['ingest_port'], 'videoUDPPort' => 0,
-                       ], JSON_UNESCAPED_SLASHES)) ?> },
-    'video_upload':  { proNo: 128,   content: <?= json_encode('VIDEOUPLOAD,' . $fsHost . ',' . $fsPort . ',ALARM_LABEL,1-2-3') ?> },
-    // 37381 (0x9205): lista gravações do cartão — janela GMT-0 compacta que NÃO pode cruzar o dia
-    'resources':     { proNo: 37381, content: <?= json_encode(json_encode([
-                           'channel' => 1, 'channelId' => 1,
-                           'beginTime' => gmdate('ymd') . '000000', 'endTime' => gmdate('ymd') . '235959',
-                           'alarmFlag' => 0, 'resourceType' => 0, 'codeType' => 0, 'storageType' => 0,
-                           'instructionID' => 'manual_' . time(),
-                       ], JSON_UNESCAPED_SLASHES)) ?> },
-    'playback':      { proNo: 37377, content: <?= json_encode(json_encode([
-                           'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
-                           'tcpPort' => (int)$vsc['playback_port'], 'udpPort' => 0, 'channel' => 1,
-                           'resourceType' => 0, 'codeType' => 0, 'storageType' => 0,
-                           'playMethod' => 0, 'forwardRewind' => 0,
-                           'beginTime' => '', 'endTime' => '', 'instructionID' => '',
-                       ], JSON_UNESCAPED_SLASHES)) ?> },
-    'alarm_attach':  { proNo: 37384, content: <?= json_encode(json_encode([
-                           'serverLen' => strlen($vsc['ingest_ip']), 'serverAddress' => $vsc['ingest_ip'],
-                           'tcpPort' => (int)(getenv('ATTACH_UPLOAD_PORT') ?: 21188), 'udpPort' => 0,
-                           'alarmLabel' => 'ALARM_LABEL', 'alarmNumber' => 'ALARM_NUMBER',
-                       ], JSON_UNESCAPED_SLASHES)) ?> },
-    'ftp_upload':    { proNo: 37382, content: '{"serverAddress":"","ftpPort":21,"userName":"","password":"","fileUploadPath":"/","channel":1,"beginTime":"","endTime":"","alarmFlag":0,"resourceType":0,"codeType":0,"storageType":0,"condition":7,"instructionID":""}' },
-    'alarm_ack':     { proNo: 33283, content: '{"alarmSerialNo":0}' },
-    'tts':           { proNo: 33536, content: '{"text":"","volume":5}' },
-    'photo':         { proNo: 34817, content: '{"channelId":1,"photoType":0}' },
-    'query_params':  { proNo: 33028, content: '' },
-    'set_param':     { proNo: 33027, content: '{"1":"60"}' },
-    'device_info':   { proNo: 33031, content: '{}' }
-};
-function fillJttPreset(key) {
-    var p = jttPresets[key];
-    if (p) {
-        document.getElementById('cmd-proNo').value = p.proNo;
-        // p.content já é uma string JSON — stringify direto geraria string quotada
-        var pretty;
-        try { pretty = JSON.stringify(JSON.parse(p.content), null, 2); }
-        catch (e) { pretty = p.content; }
-        document.getElementById('cmd-content-jtt').value = pretty;
-    }
-}
-</script>
-<?php break; ?>
+// 'comandos'/'configuracoes' removidas na v4.18.3 — eram a UI antiga
+// (proNo/serverFlagId/JSON cru), redirecionada para /comandos e /parametros
+// logo no topo deste arquivo (case inalcançável quando há câmera; sem
+// câmera, o bloco de $liveOnlyTabs acima já intercepta antes do switch).
 
-<?php // ═══ CONFIGURAÇÕES ═══════════════════════════════════════
-case 'configuracoes':
-?>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-    <div class="card">
-        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Consultar Parâmetros</h4>
-        <div class="form-group">
-            <label>Tipo de Consulta</label>
-            <select id="query-type">
-                <option value="33031">Informações do Dispositivo</option>
-                <option value="33028">Todos os Parâmetros</option>
-                <option value="33030">Parâmetros Específicos</option>
-            </select>
-        </div>
-        <div class="form-group" id="specific-params" style="display:none">
-            <label>IDs dos Parâmetros (separados por vírgula)</label>
-            <input type="text" id="param-ids" placeholder="Ex: 1,2,3">
-        </div>
-        <button class="btn btn-outline" onclick="queryParams()">Consultar</button>
-        <div id="query-result" style="margin-top:12px;font-size:13px"></div>
-    </div>
-    <div class="card">
-        <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:12px">Definir Parâmetro</h4>
-        <div class="form-group">
-            <label>ID do Parâmetro</label>
-            <input type="number" id="set-param-id" placeholder="Ex: 1">
-        </div>
-        <div class="form-group">
-            <label>Valor</label>
-            <input type="text" id="set-param-value" placeholder="Valor do parâmetro">
-        </div>
-        <button class="btn btn-outline" onclick="setParam()">Definir</button>
-        <div id="set-result" style="margin-top:12px;font-size:13px"></div>
-    </div>
-</div>
-<script>
-function queryParams() {
-    var proNo = document.getElementById('query-type').value;
-    var content = '{}';
-    if (proNo === '33030') {
-        var ids = document.getElementById('param-ids').value;
-        content = JSON.stringify({ paramIds: ids.split(',').map(Number) });
-    }
-    sendConfigCmd(proNo, content);
-}
-function setParam() {
-    var id = document.getElementById('set-param-id').value;
-    var val = document.getElementById('set-param-value').value;
-    sendConfigCmd(33027, JSON.stringify({ paramId: parseInt(id), paramValue: val }));
-}
-function sendConfigCmd(proNo, content) {
-    fetch('/sendcommand', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Dashboard-Token': '<?= $dashToken ?>', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
-        body: JSON.stringify({ imei: '<?= $imei ?>', proNo: proNo, content: content, serverFlagId: 0 })
-    }).then(r => r.json()).then(d => {
-        document.getElementById('query-result').innerHTML = '<pre style="font-size:11px">' + JSON.stringify(d, null, 2) + '</pre>';
-    });
-}
-document.getElementById('query-type').addEventListener('change', function() {
-    document.getElementById('specific-params').style.display = this.value === '33030' ? 'block' : 'none';
-});
-</script>
-<?php break; ?>
-
-<?php
 // ═══ PARÂMETROS (v4.9.12) ══════════════════════════════
 // Configuração real da câmera JT/T, lida por 33028/33030 e guardada em
 // `device_params`. Ver PROJETO_PARAMETROS.md.

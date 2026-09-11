@@ -23,8 +23,18 @@ $tabs = [
     ['id' => 'log',            'label' => 'Log'],
     ['id' => 'relatorios',     'label' => 'Relatórios'],
     ['id' => 'video',          'label' => 'Vídeo'],
-    ['id' => 'comandos',       'label' => 'Comandos'],
-    ['id' => 'configuracoes',  'label' => 'Configurações'],
+];
+
+// v4.18.3 — "Comandos"/"Configurações" pararam de ser abas locais (a UI antiga
+// com proNo/serverFlagId/JSON cru) e viram links diretos para as telas que já
+// modernizaram a mesma função — /comandos (catálogo curado, cobre JIMI e
+// JT/T) e /parametros (área dedicada de parametrização JT/T; NÃO
+// /configuracoes-ia, que é proNo 128 só-JIMI, protocolo diferente do que essa
+// aba mandava). `ativo_detalhe.php` já redireciona ?tab=comandos/configuracoes
+// para cá, então o link evita até o salto extra.
+$externalTabs = [
+    ['href' => '/comandos' . (!empty($asset['imei']) ? '?imei=' . urlencode($asset['imei']) : ''), 'label' => 'Comandos'],
+    ['href' => '/parametros', 'label' => 'Configurações'],
 ];
 
 // v4.16.0 — RASTREADOR (linha JM-VL, `camera_count = 0`) não tem vídeo: as
@@ -48,10 +58,14 @@ if (!empty($asset['is_tracker'])) {
 // parametrização para um menu próprio. Deixar a aba aberta aqui tornaria a
 // restrição do menu decorativa: é a mesma informação, pelo mesmo caminho de
 // escrita, a um clique de distância.
-if (($asset['protocol'] ?? '') === 'JTT'
-    && (get_jimi_user()['role'] ?? '') === 'admin') {
-    $tabs[] = ['id' => 'parametros', 'label' => 'Parâmetros'];
-}
+//
+// Fica FORA de $externalTabs (mesmo indo pra /parametros como a "Configurações"
+// de cima): esta é a aba curada por canal desta câmera (?tab=parametros, ainda
+// dentro do switch), não o link genérico da área — por isso continua com
+// destaque de "ativa" quando for a aba corrente.
+$paramTab = (($asset['protocol'] ?? '') === 'JTT' && (get_jimi_user()['role'] ?? '') === 'admin')
+    ? ['id' => 'parametros', 'label' => 'Parâmetros']
+    : null;
 
 ?>
 <div class="asset-sidebar">
@@ -80,6 +94,14 @@ if (($asset['protocol'] ?? '') === 'JTT'
             <?= $abaItem['label'] ?>
         </a>
         <?php endforeach; ?>
+        <?php foreach ($externalTabs as $extItem): ?>
+        <a href="<?= htmlspecialchars($extItem['href']) ?>"><?= $extItem['label'] ?></a>
+        <?php endforeach; ?>
+        <?php if ($paramTab): ?>
+        <a href="<?= $asset_base_url ?>?tab=<?= $paramTab['id'] ?>" class="<?= $current_tab === $paramTab['id'] ? 'active' : '' ?>">
+            <?= $paramTab['label'] ?>
+        </a>
+        <?php endif; ?>
     </nav>
 </div>
 <div class="asset-content">

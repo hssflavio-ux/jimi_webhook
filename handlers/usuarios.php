@@ -277,7 +277,7 @@ include __DIR__ . '/../web/layout_base.php';
         <form method="GET" style="display:flex;gap:6px;">
             <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
             <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar nome ou e-mail..."
-                   style="padding:8px 10px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);width:220px;">
+                   class="filtro-campo" style="width:220px;">
             <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
         </form>
         <?php $expQ = $_GET; unset($expQ['export']); $expBase = http_build_query($expQ); ?>

@@ -103,7 +103,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         </li>
         <?php endforeach; ?>
     </ul>
-    <div class="mt-16" style="text-align:right;">
+    <div class="mt-16" style="display:flex;justify-content:flex-end;align-items:center;gap:10px;">
+        <span id="wp-save-msg" style="font-size:12px;color:var(--error);"></span>
         <button type="button" class="btn btn-primary btn-sm" id="wp-save">Salvar layout</button>
     </div>
 </div>
@@ -149,9 +150,9 @@ document.getElementById('wp-save').addEventListener('click', function () {
         if (resp && resp.code === 0) {
             location.href = '/painel?edit=1&periodo=<?= $periodo ?>&saved=1';
         } else {
-            alert('Não foi possível salvar: ' + (resp && resp.msg ? resp.msg : 'erro desconhecido'));
+            document.getElementById('wp-save-msg').textContent = 'Não foi possível salvar: ' + (resp && resp.msg ? resp.msg : 'erro desconhecido');
         }
-    }).catch(function () { alert('Não foi possível salvar (falha de rede).'); });
+    }).catch(function () { document.getElementById('wp-save-msg').textContent = 'Não foi possível salvar (falha de rede).'; });
 });
 </script>
 <?php endif; ?>

@@ -243,8 +243,30 @@ include __DIR__ . '/../web/layout_base.php';
 </div>
 
 <?php if ($tab === 'manutencao'):
+    // Busca + paginação (mesmo padrão CRUD de motoristas.php/chips.php/ativos.php
+    // — única tela do grupo Cadastros com lista+painel que ainda não tinha isso).
+    $q = trim($_GET['q'] ?? '');
+    $page = max(1, (int)($_GET['page'] ?? 1));
+    $perPage = 25;
+
     $where = $is_admin ? '1=1' : 'r.customer_id = :cid';
     $params = $is_admin ? [] : [':cid' => $customer_id];
+    if ($q !== '') {
+        $where .= " AND (r.name LIKE :q1 OR d.device_name LIKE :q2 OR dr.name LIKE :q3)";
+        foreach (['q1', 'q2', 'q3'] as $k) $params[":$k"] = "%$q%";
+    }
+
+    $countStmt = $db->prepare("
+        SELECT COUNT(*) FROM maintenance_reminders r
+        LEFT JOIN devices d ON d.imei = r.imei
+        LEFT JOIN drivers dr ON dr.id = r.driver_id
+        WHERE $where
+    ");
+    $countStmt->execute($params);
+    $totalRows = (int)$countStmt->fetchColumn();
+    $totalPages = max(1, (int)ceil($totalRows / $perPage));
+    $offset = ($page - 1) * $perPage;
+
     $stmt = $db->prepare("
         SELECT r.*, d.device_name, dr.name AS driver_name
         FROM maintenance_reminders r
@@ -252,6 +274,7 @@ include __DIR__ . '/../web/layout_base.php';
         LEFT JOIN drivers dr ON dr.id = r.driver_id
         WHERE $where
         ORDER BY r.is_active DESC, r.name
+        LIMIT $perPage OFFSET $offset
     ");
     $stmt->execute($params);
     $reminders = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -265,6 +288,14 @@ include __DIR__ . '/../web/layout_base.php';
 ?>
 <div class="list-with-panel">
     <div>
+    <div class="flex-between mb-12" style="gap:8px;flex-wrap:wrap;">
+        <form method="GET" style="display:flex;gap:6px;">
+            <input type="hidden" name="tab" value="manutencao">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Pesquisar nome, veículo, motorista..."
+                   class="filtro-campo" style="width:280px;">
+            <button type="submit" class="btn btn-outline btn-sm">Pesquisar</button>
+        </form>
+    </div>
     <div class="table-wrap">
         <table>
             <thead><tr><th>Nome</th><th>Vínculo</th><th>Métrica</th><th>Atual</th><th>Vencimento</th><th>Status</th><th></th></tr></thead>
@@ -286,7 +317,7 @@ include __DIR__ . '/../web/layout_base.php';
                         </span>
                     </td>
                     <td style="white-space:nowrap;">
-                        <a href="?tab=manutencao&edit=<?= $r['id'] ?>" class="btn btn-outline btn-sm">Editar</a>
+                        <a href="?tab=manutencao&q=<?= urlencode($q) ?>&page=<?= $page ?>&edit=<?= $r['id'] ?>" class="btn btn-outline btn-sm">Editar</a>
                         <form method="post" style="display:inline">
                             <?= csrf_field() ?>
                             <input type="hidden" name="action" value="complete_reminder">
@@ -303,11 +334,20 @@ include __DIR__ . '/../web/layout_base.php';
                 </tr>
                 <?php endforeach; ?>
                 <?php if (empty($reminders)): ?>
-                <tr><td colspan="7"><div class="empty-state"><h3>Nenhum lembrete</h3><p>Cadastre o primeiro lembrete de manutenção.</p></div></td></tr>
+                <tr><td colspan="7"><div class="empty-state"><h3>Nenhum lembrete</h3><p><?= $q !== '' ? 'Nenhum resultado para a busca.' : 'Cadastre o primeiro lembrete de manutenção.' ?></p></div></td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
     </div>
+    <?php if ($totalPages > 1): ?>
+    <div class="flex-between mt-12" style="font-size:13px;color:var(--muted);">
+        <span>Página <?= $page ?> de <?= $totalPages ?> (<?= $totalRows ?> lembrete<?= $totalRows === 1 ? '' : 's' ?>)</span>
+        <div style="display:flex;gap:4px;">
+            <?php if ($page > 1): ?><a href="?tab=manutencao&q=<?= urlencode($q) ?>&page=<?= $page-1 ?>" class="btn btn-outline btn-sm">&laquo;</a><?php endif; ?>
+            <?php if ($page < $totalPages): ?><a href="?tab=manutencao&q=<?= urlencode($q) ?>&page=<?= $page+1 ?>" class="btn btn-outline btn-sm">&raquo;</a><?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
     </div>
 
     <div class="card">
@@ -391,7 +431,7 @@ include __DIR__ . '/../web/layout_base.php';
             </div>
             <div class="flex-between mt-16">
                 <?php if ($editReminder): ?>
-                <a href="?tab=manutencao" class="btn btn-outline btn-sm">Cancelar</a>
+                <a href="?tab=manutencao&q=<?= urlencode($q) ?>&page=<?= $page ?>" class="btn btn-outline btn-sm">Cancelar</a>
                 <?php endif; ?>
                 <button type="submit" class="btn btn-primary"><?= $editReminder ? 'Salvar' : 'Criar Lembrete' ?></button>
             </div>
