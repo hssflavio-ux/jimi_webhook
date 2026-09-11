@@ -77,6 +77,35 @@
 > veículo/instalação/2 motoristas em `scripts/test_e2e.sh`. Não rodado
 > contra banco real nesta sessão — pendente de ambiente de teste com
 > `TEST_IMEI`/`TEST_EMAIL`/`TEST_PASSWORD` configurados.
+>
+> 🔴 **Addendum (mesmo dia) — o backfill quebrou em produção, e o motivo não é
+> bug de dado, é lacuna de cadastro.** Rodado após o segundo deploy,
+> `scripts/backfill_driver_sessions.php` estourou `PDOException` (FK
+> `fk_ds_driver`) na primeira inserção. Causa raiz medida: **a tabela
+> `drivers` está com ZERO linhas em produção** — a câmera do veículo
+> "Telecom" já reconhece e manda `driverId`/`driverName` (`"1"`→"Flavio",
+> `"4"`→"Thamara", confirmado nos alarmes AFIS reais), mas ninguém cadastrou
+> esses motoristas em `/motoristas` com `identifier` batendo. Isso não é só o
+> backfill: **o mecanismo em tempo real também está mudo** desde o deploy —
+> `resolve_driver_by_identifier()` devolve `null` pra tudo, por design (não
+> cria motorista sozinho, mesma regra de `pushgps.php` desde a v4.8.0), então
+> nenhuma sessão jamais abriu.
+>
+> Bug real corrigido no `backfill_driver_sessions.php`: o script assumia que
+> `alarms.driver_id` já era um `drivers.id` válido (verdade só para alarmes
+> gravados DEPOIS do fix em `pushalarm.php`) — não resolvia o identifier
+> bruto contra `drivers.identifier` antes de tentar o INSERT, então qualquer
+> identifier sem motorista cadastrado (o caso de 100% dos alarmes até agora,
+> já que a tabela está vazia) estourava a FK em vez de ser ignorado. Corrigido
+> chamando `resolve_driver_by_identifier()` (a MESMA função do caminho em
+> tempo real) antes de cada inserção — identifier sem correspondência é
+> contado e pulado, nunca crasha.
+>
+> **Ação pendente, do dono do produto**: cadastrar os motoristas em
+> `/motoristas` com `identifier` = o valor bruto que a câmera manda (`"1"` =
+> Flavio, `"4"` = Thamara, pelo menos — outras câmeras/clientes podem ter
+> outros). Só depois disso o mecanismo em tempo real E o backfill (re-rodado)
+> passam a criar sessão de verdade.
 
 > ### 📍 11/09/2026 — 3 códigos JT/T sem nome (4/5/6) + bitmask do Alarme Padrão 256 estava errado desde o bit 12
 >

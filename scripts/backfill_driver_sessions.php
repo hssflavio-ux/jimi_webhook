@@ -45,6 +45,7 @@
  */
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../includes/functions.php'; // resolve_driver_by_identifier()
 
 $db = Database::getInstance()->getConnection();
 $db->exec("SET time_zone='+00:00'");
@@ -68,20 +69,48 @@ $vehicles = $vehicles->fetchAll(PDO::FETCH_ASSOC);
 
 $sessionsCreated = 0;
 $vehiclesProcessed = 0;
+$alarmsSkipped = 0;
 
 foreach ($vehicles as $v) {
     $vehicleId = (int)$v['vehicle_id'];
     $imei = $v['imei'];
 
+    // 🔴 `alarms.driver_id` NÃO é garantidamente um `drivers.id` válido: é o
+    // que a câmera mandou, cru, no momento em que o alarme chegou — pode ser
+    // de ANTES desta versão existir (string do `identifier`, nunca resolvida)
+    // ou de DEPOIS (já resolvido por pushalarm.php). As duas formas convivem
+    // na mesma coluna VARCHAR sem distinção visível. Resolver aqui, com a
+    // MESMA função que o caminho em tempo real usa, é o que evita o que
+    // aconteceu na primeira tentativa: inserir um `driver_id` que não bate
+    // com nenhum `drivers.id` e estourar a FK de `driver_sessions`.
     $alarmStmt = $db->prepare("
-        SELECT driver_id, alarm_time, customer_id
+        SELECT driver_id AS identifier_raw, driver_name, alarm_time, customer_id
         FROM alarms
         WHERE vehicle_id = ? AND msg_class = 1 AND alarm_type = '6'
-          AND driver_id IS NOT NULL AND alarm_time >= ?
+          AND driver_id IS NOT NULL AND driver_id <> '' AND alarm_time >= ?
         ORDER BY alarm_time ASC
     ");
     $alarmStmt->execute([$vehicleId, $since]);
-    $rows = $alarmStmt->fetchAll(PDO::FETCH_ASSOC);
+    $rawRows = $alarmStmt->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rawRows) continue;
+
+    $driverCache = []; // identifier bruto => drivers.id resolvido (ou null)
+    $rows = [];
+    foreach ($rawRows as $rr) {
+        $raw = $rr['identifier_raw'];
+        if (!array_key_exists($raw, $driverCache)) {
+            $driverCache[$raw] = resolve_driver_by_identifier($db, $raw, $rr['driver_name']);
+        }
+        $resolved = $driverCache[$raw];
+        if ($resolved === null) {
+            // Sem cadastro em /motoristas com este identifier — não é erro
+            // deste script, é o mesmo "não cria motorista sozinho" de
+            // resolve_driver_by_identifier(). Conta e segue.
+            $alarmsSkipped++;
+            continue;
+        }
+        $rows[] = ['driver_id' => $resolved, 'alarm_time' => $rr['alarm_time'], 'customer_id' => $rr['customer_id']];
+    }
     if (!$rows) continue;
 
     $stopStmt = $db->prepare("
@@ -166,6 +195,9 @@ foreach ($vehicles as $v) {
 }
 
 echo "Backfill concluído: $sessionsCreated sessão(ões) criada(s) para $vehiclesProcessed veículo(s).\n";
+if ($alarmsSkipped > 0) {
+    echo "$alarmsSkipped alarme(s) AFIS ignorado(s) — identifier sem motorista cadastrado em /motoristas (ver STATUS.md).\n";
+}
 
 function insertSession(PDO $db, int $vehicleId, int $customerId, int $driverId, string $imei,
                         string $startedAt, string $lastConfirmedAt, ?string $endedAt, ?string $reason): void {
