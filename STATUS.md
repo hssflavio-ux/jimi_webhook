@@ -29,15 +29,29 @@
 > `risk_day_state`, `scripts/risk_builder.php` (cron 15 min), `includes/risk_map.php` (regras
 > puras) e `/mapa-risco` (Onde · Quando · Jornada · Quem · Tendência, com export da aba).
 >
-> **Verificação nesta máquina (sem MySQL)**: `php -l` limpo em tudo que mudou;
-> `tests/helpers/risk_map.test.php` e `migracoes_no_deploy.test.php` passando; sintaxe dos
-> specs conferida com `node --check`. **Não rodado contra banco**: `risk_builder`, a tela, o
-> `state_builder` alterado, `tests/mapa_risco.spec.js` e os passos novos do
-> `scripts/test_e2e.sh` — pendentes de ambiente com MySQL.
+> **Verificação local (sem MySQL)**: `php -l` nos 165 arquivos PHP; `risk_map.test.php` 77/77;
+> `migracoes_no_deploy.test.php` OK; `node --check` nos specs.
 >
-> **Pendente para produção**: commit + dois deploys; `php scripts/state_builder.php 30 --rebuild`;
-> `php scripts/risk_builder.php --desde=2026-06-10`; `bash scripts/crontab-setup.sh --install`;
-> conferir `risk_events` contra a medição e a jornada de 2 alertas contra os pontos de `gps_data`.
+> **Produção (14/09/2026)**: deploy aplicado — commit `87160fc` no ar, banco e `/ping` em 4.20.0,
+> 0 tipos ADAS/DMS sem `risk_group`, índices novos presentes. (O `sudo` com senha foi barrado
+> pelo classificador de permissões desta sessão; os deploys não passaram por ela.)
+> - `state_builder.php 30 --rebuild`: 11 equipamentos, 36.854 pontos, 4 s.
+> - `risk_builder.php --desde=2026-06-10`: 302 veículo-dias, 1.293 alertas, 10.260 baldes de
+>   exposição, 0 falhas, 5,5 s.
+> - **Alertas esperados × gravados: 1.293 = 1.293** (1.558 brutos − 109 sem veículo − 156 excluídos).
+> - **Jornada de 2 alertas reais recalculada a partir do GPS bruto: bate** (4.657 s e 2.948 s).
+> - Horas em movimento: 334,8 h no mapa × 336,0 h nos segmentos. O ocioso diverge (379,9 × 224,9 h)
+>   só pelo segmento ocioso ABERTO dos rastreadores JM-VL01/VL02 (ignição ligada, parados há dias;
+>   segmento aberto não tem `duration_s`) — sem câmera, sem alerta, sem efeito no mapa.
+> - `scripts/test_e2e.sh` em produção: passos novos 6, 7 e 8 todos OK. As 2 falhas do passo 5
+>   eram da CONSULTA do teste, que procurava a ocorrência pelo nome anterior à v4.8.3 — a
+>   ocorrência (#409) nasceu com a mídia vinculada. Consulta corrigida para ir pelo
+>   `occurrence_events` do próprio alarme. Dados de teste criados: ocorrências #409 e #410 no
+>   cliente 1 (veículo "E2E TEST VEHICLE").
+> - Cron do `risk_builder` instalado; `/mapa-risco` responde (302 para o login); nada no log.
+>
+> **Pendente**: a tela com login não foi exercitada — o servidor não tem Node, e
+> `tests/mapa_risco.spec.js` precisa de `TEST_EMAIL`/`TEST_PASSWORD` para rodar daqui contra produção.
 
 > ### 📍 11/09/2026 (motorista) — Sessão de motorista por reconhecimento facial (AFIS): persiste até trocar ou ACC OFF
 >

@@ -193,8 +193,13 @@ else
     N="$(mysql_scalar "SELECT COUNT(*) FROM alarms WHERE imei='$TEST_IMEI' AND alarm_type='143' AND alarm_time='$NOW_UTC';")"
     [ "${N:-0}" -ge 1 ]; check "alarme 143 gravado em alarms" $?
 
-    OCC_ID="$(mysql_scalar "SELECT id FROM occurrences WHERE imei='$TEST_IMEI' AND alarm_type='Distração do Motorista' AND last_alarm_at='$NOW_UTC' ORDER BY id DESC LIMIT 1;")"
-    [ -n "$OCC_ID" ]; check "ocorrência criada (id=${OCC_ID:-nenhuma}) — requer migration v4.1.0" $?
+    # Pelo vínculo do PRÓPRIO alarme, não pelo nome: a v4.8.3 renomeou o 143
+    # para "DMS: Distração do Motorista" e a consulta por nome antigo acusou
+    # falha com a ocorrência criada (medido em produção, 14/09/2026).
+    OCC_ID="$(mysql_scalar "SELECT oe.occurrence_id FROM occurrence_events oe JOIN alarms a ON a.id = oe.alarm_id
+                            WHERE a.imei='$TEST_IMEI' AND a.alarm_type='143' AND a.alarm_time='$NOW_UTC' AND a.status='active'
+                            ORDER BY oe.occurrence_id DESC LIMIT 1;")"
+    [ -n "$OCC_ID" ]; check "ocorrência criada (id=${OCC_ID:-nenhuma})" $?
 
     MEDIA_ID="$(mysql_scalar "SELECT id FROM media_files WHERE imei='$TEST_IMEI' AND file_name='$FILE_NAME' AND download_status='disponivel' LIMIT 1;")"
     [ -n "$MEDIA_ID" ]; check "mídia gravada em media_files (id=${MEDIA_ID:-nenhuma})" $?

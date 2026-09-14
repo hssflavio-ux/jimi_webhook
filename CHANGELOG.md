@@ -22,6 +22,7 @@ Pedido do dono do produto: mapeamento de risco completo a partir dos alertas ADA
 - 🔴 **Fim de alarme fica fora da conta.** `pushalarm.php` grava o `removeAlarmType` como linha própria, com o código base, `status='resolved'` e nome "Fim de Alarme: …"; contá-la dobraria o alerta.
 - 🔴 **O item de menu precisou de `$permRouteMap`** (`web/layout_base.php`): a sidebar usa a ROTA como chave de permissão, e `mapa_risco` não existe na matriz — sem o mapeamento para `bi`, o item sumiria de todo grupo com matriz explícita, com a tela abrindo pela URL.
 - **Registrado, não corrigido** — `get_occurrence_param()` (`includes/occurrence_engine.php:161`) escolhe com `LIMIT 1` sem `ORDER BY`, não filtra protocolo e aceita parâmetro por categoria: com mais de um parâmetro casando, o risco da ocorrência não é determinístico. O mapa usa resolvedor próprio.
+- **Corrigido** `scripts/test_e2e.sh`, passo 5: procurava a ocorrência do JIMI 143 pelo nome anterior à v4.8.3 ("Distração do Motorista") e acusava falha com a ocorrência criada. Passa a achá-la pelo `occurrence_events` do próprio alarme, que não depende de nome. Achado rodando o e2e em produção (14/09/2026), onde os passos novos 6, 7 e 8 passaram e a contagem do mapa bateu com os alertas brutos (1.293 = 1.293).
 - **Limitações conhecidas**: o dono do dado é resolvido na chegada (posição reenviada depois de uma troca de câmera cai no veículo novo); GPS anterior à v4.12.0 não tem `vehicle_id` e fica de fora; motorista identificado em só 0,4% dos alertas de hoje (2 motoristas cadastrados).
 
 ## [Unreleased] — 4.19.2
