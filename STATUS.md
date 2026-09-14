@@ -46,8 +46,11 @@
 > - `scripts/test_e2e.sh` em produção: passos novos 6, 7 e 8 todos OK. As 2 falhas do passo 5
 >   eram da CONSULTA do teste, que procurava a ocorrência pelo nome anterior à v4.8.3 — a
 >   ocorrência (#409) nasceu com a mídia vinculada. Consulta corrigida para ir pelo
->   `occurrence_events` do próprio alarme. Dados de teste criados: ocorrências #409 e #410 no
->   cliente 1 (veículo "E2E TEST VEHICLE").
+>   `occurrence_events` do próprio alarme (commit `64aab11`, em produção) e **e2e rodado de novo:
+>   18 ok, 0 falhas**. Na segunda rodada a direção contínua do alarme de teste saiu com 22.632 s,
+>   e está certo pela regra: os pontos da primeira rodada tinham ignição ligada e não houve
+>   desligamento entre as duas. Dados de teste criados: ocorrências #409 a #412 no cliente 1
+>   (veículo "E2E TEST VEHICLE").
 > - Cron do `risk_builder` instalado; `/mapa-risco` responde (302 para o login); nada no log.
 >
 > **Pendente**: a tela com login não foi exercitada — o servidor não tem Node, e
