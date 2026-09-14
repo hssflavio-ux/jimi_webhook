@@ -2,6 +2,61 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 10/09/2026 (Fase 3) — UI duplicada removida, `/manutencoes` com busca, `.filtro-campo` em ~20 arquivos, sem `alert()` nativo
+>
+> Retomada dos 4 itens que a varredura de design system (mesma data, ver entrada seguinte)
+> tinha catalogado como "decisão de produto, não implementada" — as 4 perguntas feitas ao
+> dono do produto vieram todas como "sim, fazer".
+>
+> **1. UI duplicada em `/ativos/{id}`.** As abas **Comandos** e **Configurações**
+> (`handlers/ativo_detalhe.php`) — proNo/serverFlagId/JSON cru — saíram do switch; a
+> tela redireciona `?tab=comandos`/`?tab=configuracoes` (com `header('Location:')`, antes
+> de qualquer HTML, e só quando há câmera instalada — sem câmera o empty-state de
+> `$liveOnlyTabs` continua valendo) para `/comandos?imei=` e `/parametros`. A sidebar
+> (`web/layout_ativo_sidebar.php`) troca as duas abas por links diretos pra lá.
+> 🔴 **Correção ao que a varredura tinha registrado**: o destino de "Configurações" NÃO é
+> `/configuracoes-ia`, como o texto original sugeria — medido no código: essa tela é
+> proNo 128 **só JIMI** (ADAS/DMS/velocidade), protocolo diferente do `33027`-`33031`
+> **JT/T** que a aba antiga mandava. O destino certo, verificado, é `/parametros` — que
+> aliás avisa, na própria tela, que a leitura/escrita 33027-33030 está **pausada** no
+> firmware atual do fabricante (motivo a mais pra não duplicar em duas telas uma
+> funcionalidade que nem funciona hoje). Verificado em navegador (dev local): os dois
+> redirects levam ao lugar certo e `/parametros` renderiza normalmente.
+>
+> **2. Busca + paginação em `/manutencoes`** (aba Manutenção), mesmo padrão de
+> `motoristas.php`/`chips.php`/`ativos.php` — única tela do grupo Cadastros com
+> lista+painel que ainda não tinha.
+>
+> **3. `.filtro-campo`/`.filtro-rotulo`** (v4.9.38, ignoradas desde então) aplicadas nos
+> campos de filtro/busca REAIS de `equipamentos.php`, `rastreamento.php`, `motoristas.php`,
+> `clientes.php`, `chips.php`, `ativos.php`, `usuarios.php`, `manutencoes.php`, nos 9
+> `rel_*.php` com filtro de formulário (`rel_posicoes`, `rel_deslocamento`,
+> `rel_desatualizados`, `rel_alarmes`, `rel_ocorrencias`, `rel_geocercas`, `rel_ignicao`,
+> `rel_velocidade`, `rel_status_frota`), no helper `report_device_select()`
+> (`includes/functions.php`) e em `includes/report_segments.php` (cobre `rel_paradas`/
+> `rel_ociosidade`). ⚠️ **Dois falsos-positivos da varredura, descartados após conferência
+> do código**: `geocercas.php` e `config_ocorrencias.php`/`config_notificacoes.php` não
+> têm barra de filtro nenhuma — os `<select>` que a varredura pegou são campo de
+> FORMULÁRIO DE CADASTRO (`.form-group`, `method="POST"`), não filtro de listagem, e
+> `.filtro-campo` não é a classe certa pra eles (aplicar teria sido a mesma classe de erro
+> que este item existe pra corrigir, só que ao contrário). Verificado em navegador: a
+> barra de `/relatorios/posicoes` renderiza com bordas/padding uniformes, sem regressão.
+>
+> **4. Feedback assíncrono sem `alert()` nativo.** `painel.php` (erro ao salvar layout de
+> widgets) e `config_dispositivos.php` (validação de ID de parâmetro, resultado do
+> reinício de terminal) — as duas únicas telas do app que usavam `alert()` — passaram a
+> escrever a mensagem inline, junto da ação, no mesmo padrão que essas telas já usam pra
+> outros resultados (`cfg-query-result`/`cfg-set-result`). Verificado em navegador: clicar
+> "Definir" sem preencher o ID mostra "Informe o ID do parâmetro." em vermelho, inline,
+> sem popup bloqueando a tela. De quebra, `resumo.php` e `rastreamento.php` ganharam o
+> indicador de "atualizado HH:MM:SS" que `ocorrencias_dashboard.php` já tinha no polling
+> de 30s — eram as duas únicas telas do mesmo padrão sem indicação de quando os dados
+> foram atualizados pela última vez.
+>
+> **Verificação**: `php -l` completo (`handlers config core includes web`) limpo; as 4
+> mudanças conferidas visualmente em navegador contra banco de dev local (MySQL portátil +
+> `php -S`, sessão injetada direto na tabela `sessions`, removida ao final).
+
 > ### 📍 10/09/2026 (correção) — Varredura de design system: Fases 1-2 implementadas
 >
 > Pedido do dono do produto: proceder com as correções catalogadas na varredura abaixo

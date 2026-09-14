@@ -40,6 +40,8 @@ $navPrincipal = [
     ['route' => 'painel',        'label' => 'Painel',        'icon' => 'layout-dashboard', 'href' => '/painel'],
     ['route' => 'rastreamento',  'label' => 'Rastreamento',  'icon' => 'map',      'href' => '/rastreamento'],
     ['route' => 'bi',            'label' => 'BI',            'icon' => 'chart',    'href' => '/bi'],
+    // v4.20.0 — logo abaixo do BI, com a permissão dele (ver $permRouteMap).
+    ['route' => 'mapa_risco',    'label' => 'Mapa de Risco', 'icon' => 'map',      'href' => '/mapa-risco'],
     ['route' => 'ocorrencias',   'label' => 'Dashboard',     'icon' => 'alert',    'href' => '/ocorrencias/dashboard'],
     // v4.10.1 — item 3 do PLANO_IMPLEMENTACAO_v4.10.md. Fica em $navPrincipal
     // (não em $navBottom, reservado a telas que mandam instrução ao
@@ -144,7 +146,10 @@ $navBottom = [
 // ── RBAC (v4.2.0 — Fase B2): esconde itens de nav sem permissão 'view' ──
 // Mapa rota-de-nav → chave de tela da matriz (grupos_permissao.php);
 // relatórios compartilham a chave única 'relatorios'.
-$permRouteMap = ['ocorrencias' => 'ocorrencias_dashboard'];
+// v4.20.0 — o Mapa de Risco usa a permissão do BI; sem esta linha o item
+// consultaria a chave `mapa_risco`, que não existe na matriz, e sumiria do
+// menu de todo grupo com matriz explícita — com a tela abrindo pela URL.
+$permRouteMap = ['ocorrencias' => 'ocorrencias_dashboard', 'mapa_risco' => 'bi'];
 $navCanView = function ($route) use ($permRouteMap) {
     $screen = $permRouteMap[$route] ?? (strpos($route, 'rel_') === 0 ? 'relatorios' : $route);
     return can($screen, 'view');

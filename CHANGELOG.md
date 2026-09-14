@@ -5,6 +5,39 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.20.0
+
+**Mapa de Risco (`/mapa-risco`): onde, quando, em que ponto da jornada e com quem os comportamentos ADAS/DMS acontecem — medido por taxa de exposição, não por contagem.**
+
+Pedido do dono do produto: mapeamento de risco completo a partir dos alertas ADAS/DMS, tratando horário, local, faixa do dia, tempo de direção contínua e os locais com mais alertas. Decisões de 13/09/2026: o público é o gestor de frota do cliente, e risco é **pontos por hora dirigida** (Σ pesos ÷ horas em movimento) — a contagem bruta aponta onde a frota mais anda, não onde é mais perigoso.
+
+- **Adicionado** `alarm_types.risk_group` (migração `v4.20.0`): o comportamento de cada um dos 45 tipos ADAS/DMS, por **protocolo + código**, nunca por nome. Soma o mesmo ato nos dois protocolos (uso de celular = JIMI 151 + JT/T 265-2 + 265-13). `excluido` = equipamento ou condição de leitura (Óculos Escuros — o 5º tipo mais frequente em 90 dias —, Falha de Comunicação da Câmera, Câmera Obstruída, Erro de Alinhamento Facial, Falha de Autenticação do Motorista) e severidade `info`. `is_diagnostic` não servia para separar: é 0 nos 45. Tipo novo sem classificação fica fora do mapa com WARNING no log.
+- **Adicionado** `risk_events`, `risk_exposure` e `risk_day_state`, alimentadas pelo cron `scripts/risk_builder.php` (15 min). Marca-d'água por `id` (`worker_watermarks`), porque 11% das posições e dos alertas chegam horas ou dias depois do evento (máximo medido: 6,8 dias). Recalcula por veículo-dia e propaga a jornada aos dias seguintes enquanto o estado de fim de dia mudar. Histórico: `php scripts/risk_builder.php --desde=2026-06-10`.
+- **Adicionado** `includes/risk_map.php`, regras puras testadas sem banco em `tests/helpers/risk_map.test.php` (77 verificações):
+  - peso pelo perfil de ocorrências **atual** do cliente (baixo 1 · médio 3 · alto 5; tipo sem parâmetro = 3), com prioridade fixa de casamento (nome PT → nome EN → código composto → código base → categoria);
+  - direção contínua soma todo intervalo com ignição ligada, **inclusive lacunas sem sinal** (a câmera guarda e descarrega depois), e zera só com ignição desligada por 30 min ou mais; faixas ≤30 min · 30 min–1 h · 1–2 h · 2–4 h · >4 h, iguais para todo veículo;
+  - exposição só conta intervalos de até 30 min: tempo sem sinal soma na jornada, mas não dilui o índice;
+  - grade de 1 km com a largura corrigida pela latitude (largura fixa em graus daria células 20% maiores no Sul).
+- **Adicionado** a tela `/mapa-risco`, logo abaixo do BI e com a mesma permissão (`bi`). Indicadores com variação contra o período anterior de mesma duração e cinco abas: **Onde** (quadrados de 1 km coloridos pelo índice + locais mais críticos), **Quando** (faixa do dia, dia da semana, grade hora × dia), **Jornada** (direção contínua e velocidade no alerta), **Quem** (veículos, tipo de veículo, motoristas com a cobertura de identificação, comportamentos, reincidência) e **Tendência** (12 semanas, 12 meses e mês atual × anterior nos mesmos dias corridos). Período de até 90 dias. Ranking só com exposição mínima (célula: 30 min e 3 alertas; veículo/motorista: 5 h). Exportação PDF/XLSX/CSV da aba, lida da mesma estrutura de tabelas da tela.
+- 🔴 **Fim de alarme fica fora da conta.** `pushalarm.php` grava o `removeAlarmType` como linha própria, com o código base, `status='resolved'` e nome "Fim de Alarme: …"; contá-la dobraria o alerta.
+- 🔴 **O item de menu precisou de `$permRouteMap`** (`web/layout_base.php`): a sidebar usa a ROTA como chave de permissão, e `mapa_risco` não existe na matriz — sem o mapeamento para `bi`, o item sumiria de todo grupo com matriz explícita, com a tela abrindo pela URL.
+- **Registrado, não corrigido** — `get_occurrence_param()` (`includes/occurrence_engine.php:161`) escolhe com `LIMIT 1` sem `ORDER BY`, não filtra protocolo e aceita parâmetro por categoria: com mais de um parâmetro casando, o risco da ocorrência não é determinístico. O mapa usa resolvedor próprio.
+- **Limitações conhecidas**: o dono do dado é resolvido na chegada (posição reenviada depois de uma troca de câmera cai no veículo novo); GPS anterior à v4.12.0 não tem `vehicle_id` e fica de fora; motorista identificado em só 0,4% dos alertas de hoje (2 motoristas cadastrados).
+
+## [Unreleased] — 4.19.2
+
+**`state_builder` deixava de fora para sempre a posição que chegava atrasada — Paradas, Ociosidade e Ignição liam o vão como "offline".**
+
+- 🔴 **Corrigido** — a leitura retomava pelo `gps_time` do último segmento, e a câmera descarrega as posições guardadas sem sinal com o horário original: 11% dos pontos, com mediana de 6,3 h de atraso e máximo de 6,8 dias. Medido em produção em 13/09/2026: 11 dos 2.810 segmentos "offline" de 30 dias continham 108 pontos que chegaram depois de o segmento ser gravado.
+- **Adicionado** `worker_watermarks` (migração `v4.19.2`): marca por `id` de `gps_data`, que cresce na ordem de chegada. Ponto novo com horário anterior ao ponto de retomada faz o equipamento ser apagado e reconstruído a partir do início do último segmento de estado que começou até aquele instante (`rebuild_boundaries()`) — o que reproduz o primeiro segmento e deixa o anterior intacto, fechado exatamente na fronteira.
+- **Adicionado** `GET_LOCK` (duas rodadas não reconstroem o mesmo equipamento ao mesmo tempo) e `--rebuild` (`php scripts/state_builder.php 30 --rebuild`), para limpar uma vez o histórico já afetado. A marca só avança numa rodada da frota inteira sem falha; rodada de um IMEI só não a move.
+
+## [Unreleased] — 4.19.1
+
+**Celular do JT/T (`265-2`, "DMS: Chamada Telefônica") não gerava ocorrência desde a v4.8.3.**
+
+- 🔴 **Corrigido** (migração `v4.19.1`) — a v4.8.3 renomeou o `265-2` e nenhum perfil ganhou parâmetro com o nome novo: os perfis têm "DMS: Motorista ao Telefone" (casa só com o JIMI 151) e "DMS: Uso de Celular" (265-13). Medido em produção: 28 alertas de celular do JT/T em 90 dias, nenhum com ocorrência, sem nada no log. Todo perfil que tem o parâmetro do JIMI ganha o do JT/T com os mesmos valores (`INSERT IGNORE`: quem já cadastrou à mão fica como está). É a mesma armadilha do CLAUDE.md que a v4.8.6 corrigiu para outros 21 parâmetros — este caso escapou porque não havia nome antigo a remapear.
+
 ## [Unreleased] — 4.19.0
 
 **Motorista corrente do veículo por reconhecimento facial (AFIS, JT/T alertType 6): persiste até a câmera reconhecer outro motorista ou a ignição desligar, e passa a aparecer em todo ponto do sistema que lista motorista.**

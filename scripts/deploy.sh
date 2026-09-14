@@ -477,6 +477,9 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.18.2" "mysql/migration_v4.18.2.sql" "device_ia_config_snapshots - perfil de leitura completa de IA (export entre cameras do mesmo modelo + writeconfig.txt)"
     run_migration "4.18.4" "mysql/migration_v4.18.4.sql" "alarm_types JTT 4/5/6 (cinto afivelado, reconhecimento facial) - secao 2.7 Other Alarms da doc oficial"
     run_migration "4.19.0" "mysql/migration_v4.19.0.sql" "driver_sessions - motorista corrente do veiculo por AFIS (JT/T alertType 6), ate troca ou ACC OFF"
+    run_migration "4.19.1" "mysql/migration_v4.19.1.sql" "celular do JT/T (265-2 Chamada Telefonica) sem parametro de ocorrencia desde a v4.8.3"
+    run_migration "4.19.2" "mysql/migration_v4.19.2.sql" "worker_watermarks - state_builder detecta posicao que chega atrasada (marca por id)"
+    run_migration "4.20.0" "mysql/migration_v4.20.0.sql" "mapa de risco ADAS/DMS - alarm_types.risk_group + risk_events/risk_exposure/risk_day_state"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

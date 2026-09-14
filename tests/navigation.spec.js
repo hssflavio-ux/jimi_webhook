@@ -11,6 +11,7 @@ const ROUTES = [
     '/',
     '/rastreamento',
     '/bi',
+    '/mapa-risco',
     '/ocorrencias/dashboard',
     '/comandos',
     '/exportar',

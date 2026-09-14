@@ -35,10 +35,21 @@
  * ON DUPLICATE KEY UPDATE sobre uk_dss_imei_start — mesmo `started_at`, mesma
  * linha. Rodar duas vezes sobre a mesma janela não duplica nem fragmenta.
  *
- * ── Limitação conhecida ───────────────────────────────────────────────────
- * Ponto que chega ATRASADO com gps_time anterior à marca-d'água não é
- * reprocessado (mesma limitação do trip_builder.php). Para corrigir uma
- * janela histórica, rode o backfill com o IMEI como 2º argumento.
+ * ── Posição que chega atrasada (v4.19.2) ──────────────────────────────────
+ * A câmera guarda as posições quando perde sinal e as descarrega depois, com o
+ * gps_time ORIGINAL. Medido em produção em 13/09/2026: 11% dos pontos chegam
+ * reenviados, com mediana de 6,3 h de atraso e máximo de 6,8 dias. A
+ * marca-d'água por gps_time (watermark()) não enxerga esses pontos — eles caem
+ * ANTES dela — e eles eram ignorados para sempre: 11 dos 2.810 segmentos
+ * "offline" de 30 dias continham 108 pontos que chegaram depois de o segmento
+ * ser gravado. Paradas, Ociosidade e Ignição liam esses vãos como verdade.
+ *
+ * A detecção usa o `id` de gps_data, que cresce na ordem de CHEGADA (a tabela
+ * só recebe INSERT), guardado em `worker_watermarks`. Ponto novo com gps_time
+ * anterior ao ponto de retomada faz o equipamento ser apagado e reconstruído a
+ * partir de uma fronteira segura — ver rebuild_boundaries().
+ *
+ *   php scripts/state_builder.php 30 --rebuild   # apaga e reconstrói 30 dias
  */
 
 require_once __DIR__ . '/../config/database.php';
@@ -52,14 +63,27 @@ const STATE_MAX_POINTS_PER_DEVICE = 50000;
 /** Lookback para equipamento ainda sem segmento algum. */
 const STATE_DEFAULT_LOOKBACK_DAYS = 1;
 
-$lookbackDays = (isset($argv[1]) && (int)$argv[1] > 0)
-    ? (int)$argv[1]
+// `--rebuild` pode vir em qualquer posição; os posicionais continuam valendo.
+$args       = array_slice($argv, 1);
+$rebuildAll = in_array('--rebuild', $args, true);
+$positional = array_values(array_filter($args, fn($a) => strncmp((string)$a, '--', 2) !== 0));
+
+$lookbackDays = (isset($positional[0]) && (int)$positional[0] > 0)
+    ? (int)$positional[0]
     : STATE_DEFAULT_LOOKBACK_DAYS;
 
 /** Backfill de um equipamento só: `php scripts/state_builder.php 30 <imei>`. */
-$onlyImei = isset($argv[2]) && trim($argv[2]) !== '' ? trim($argv[2]) : null;
+$onlyImei = isset($positional[1]) && trim($positional[1]) !== '' ? trim($positional[1]) : null;
 
 $db = Database::getInstance()->getConnection();
+
+// Duas rodadas ao mesmo tempo (cron atrasado + execução manual) apagariam e
+// regravariam o mesmo equipamento em paralelo. A trava é da conexão e some
+// sozinha se o processo morrer.
+if ((int)$db->query("SELECT GET_LOCK('state_builder', 0)")->fetchColumn() !== 1) {
+    echo "State Builder: outra rodada em curso — nada a fazer.\n";
+    exit(0);
+}
 
 // Verifica de saída que a migração foi aplicada: sem isso o erro apareceria
 // device por device dentro do laço, poluindo o log com 200 linhas iguais.
@@ -70,6 +94,34 @@ try {
     fwrite(STDERR, "State Builder: tabelas indisponíveis — aplique a migração v4.6.0.\n");
     Logger::error('State Builder: tabelas indisponíveis', ['error' => $e->getMessage()]);
     exit(1);
+}
+
+// ── Posições atrasadas (v4.19.2) ───────────────────────────────────────────
+// O maior id é fotografado ANTES da leitura, e a leitura para nele: o que
+// chegar durante a rodada fica para a próxima e não é confundido com atraso.
+// Sem a tabela (intervalo entre os dois deploys) o builder segue como antes.
+$maxGpsId    = 0;
+$lateByImei  = [];
+$wmAvailable = true;
+try {
+    $maxGpsId  = (int)$db->query("SELECT COALESCE(MAX(id), 0) FROM gps_data")->fetchColumn();
+    $lastGpsId = $db->query("SELECT last_id FROM worker_watermarks
+                             WHERE worker = 'state_builder' AND source = 'gps_data'")->fetchColumn();
+    // Primeira rodada: só grava a marca. Reconstruir tudo aqui transformaria o
+    // deploy num backfill escondido — para isso existe o --rebuild.
+    if ($lastGpsId !== false) {
+        $lateStmt = $db->prepare("
+            SELECT imei, MIN(gps_time) FROM gps_data
+            WHERE id > :last AND id <= :max
+            GROUP BY imei");
+        $lateStmt->execute([':last' => (int)$lastGpsId, ':max' => $maxGpsId]);
+        $lateByImei = $lateStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
+} catch (Throwable $e) {
+    $wmAvailable = false;
+    Logger::warning('State Builder: worker_watermarks indisponível — posição atrasada não será detectada (aplique a migração v4.19.2)', [
+        'error' => $e->getMessage(),
+    ]);
 }
 
 $sql = "
@@ -91,6 +143,8 @@ $totalSegments  = 0;
 $totalSpeeding  = 0;
 $totalPoints    = 0;
 $devicesTouched = 0;
+$devicesRebuilt = 0;
+$failures       = 0;
 
 foreach ($devices as $dev) {
     $imei  = $dev['imei'];
@@ -101,17 +155,35 @@ foreach ($devices as $dev) {
     // excesso de velocidade pode ter começado antes do segmento em curso.
     $sinceState = watermark($db, 'device_state_segments', $imei) ?? $defaultSince;
     $sinceSpeed = watermark($db, 'speeding_events', $imei) ?? $defaultSince;
+
+    // Reconstrução: --rebuild pede a janela inteira; ponto atrasado pede a
+    // partir do instante dele. Os dois caem na mesma fronteira segura.
+    $rebuildFrom = null;
+    if ($rebuildAll) {
+        $rebuildFrom = $defaultSince;
+    } elseif (isset($lateByImei[$imei]) && $lateByImei[$imei] < max($sinceState, $sinceSpeed)) {
+        $rebuildFrom = $lateByImei[$imei];
+    }
+    if ($rebuildFrom !== null) {
+        [$sinceState, $sinceSpeed] = rebuild_boundaries($db, $imei, $rebuildFrom);
+    }
     $since = min($sinceState, $sinceSpeed);
 
     // Lê UMA vez o que interessa às duas máquinas; cada uma descarta o que já
     // avaliou (filtro por marca-d'água própria dentro de cada passada).
+    $ptParams = [':imei' => $imei, ':since' => $since];
+    $ptLimitId = '';
+    if ($maxGpsId > 0) {
+        $ptLimitId = ' AND id <= :maxid';
+        $ptParams[':maxid'] = $maxGpsId;
+    }
     $stmt = $db->prepare("
         SELECT gps_time, latitude, longitude, speed, acc
         FROM gps_data
-        WHERE imei = :imei AND gps_time >= :since
+        WHERE imei = :imei AND gps_time >= :since{$ptLimitId}
         ORDER BY gps_time ASC
         LIMIT " . STATE_MAX_POINTS_PER_DEVICE);
-    $stmt->execute([':imei' => $imei, ':since' => $since]);
+    $stmt->execute($ptParams);
     $points = $stmt->fetchAll();
 
     if (count($points) < 1) {
@@ -122,13 +194,23 @@ foreach ($devices as $dev) {
 
     try {
         $db->beginTransaction();
+        if ($rebuildFrom !== null) {
+            $db->prepare("DELETE FROM device_state_segments WHERE imei = :imei AND started_at >= :b")
+               ->execute([':imei' => $imei, ':b' => $sinceState]);
+            $db->prepare("DELETE FROM speeding_events WHERE imei = :imei AND started_at >= :b")
+               ->execute([':imei' => $imei, ':b' => $sinceSpeed]);
+        }
         $totalSegments += buildStateSegments($db, $imei, $cid, $points, $sinceState);
         $totalSpeeding += buildSpeedingEvents($db, $imei, $cid, $points, $sinceSpeed, $limit);
         $db->commit();
+        if ($rebuildFrom !== null) {
+            $devicesRebuilt++;
+        }
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
             $db->rollBack();
         }
+        $failures++;
         Logger::error('State Builder: falha ao segmentar equipamento', [
             'imei'  => $imei,
             'error' => $e->getMessage(),
@@ -136,10 +218,70 @@ foreach ($devices as $dev) {
     }
 }
 
+// A marca só avança numa rodada da frota inteira em que TODO equipamento
+// fechou. Rodada de um IMEI só não pode avançá-la (os outros perderiam os
+// pontos atrasados), e o equipamento que falhou precisa ver os mesmos pontos
+// na rodada seguinte.
+if ($wmAvailable && $onlyImei === null && $failures === 0) {
+    try {
+        $db->prepare("INSERT INTO worker_watermarks (worker, source, last_id)
+                      VALUES ('state_builder', 'gps_data', :max)
+                      ON DUPLICATE KEY UPDATE last_id = VALUES(last_id)")
+           ->execute([':max' => $maxGpsId]);
+    } catch (Throwable $e) {
+        Logger::error('State Builder: falha ao gravar worker_watermarks', ['error' => $e->getMessage()]);
+    }
+}
+
 // "gravações" e não "segmentos": o segmento em curso é reescrito a cada rodada
 // (mesma chave), então o número conta escritas, não linhas novas.
-echo "State Builder: {$devicesTouched} equipamentos, {$totalPoints} pontos, "
+echo "State Builder: {$devicesTouched} equipamentos ({$devicesRebuilt} reconstruídos), {$totalPoints} pontos, "
    . "{$totalSegments} gravações de segmento, {$totalSpeeding} eventos de velocidade.\n";
+
+/**
+ * Fronteiras seguras para apagar e reconstruir um equipamento a partir de `$t`.
+ *
+ * Segmento de estado sempre começa num ponto REAL; segmento offline começa no
+ * último ponto antes do vão. Recomeçar no início do último segmento de estado
+ * que começou até `$t` reproduz exatamente esse segmento, e o anterior fica
+ * intacto: ele termina justamente nessa fronteira (`ended_at` igual a ela, não
+ * maior), então não é apagado nem se sobrepõe ao que será regravado. Sem
+ * segmento de estado até `$t`, a fronteira recua ao início de qualquer segmento
+ * que esteja aberto ou atravesse `$t`.
+ *
+ * O excesso de velocidade recua ainda até o início de um evento que atravesse
+ * a fronteira dos segmentos — senão a reconstrução abriria um segundo evento
+ * sobreposto ao que ficou.
+ *
+ * @param PDO    $db   Conexão ativa
+ * @param string $imei Equipamento
+ * @param string $t    UTC do ponto mais antigo a reprocessar
+ * @returns array{0:string,1:string} [fronteira dos segmentos, fronteira dos eventos de velocidade]
+ */
+function rebuild_boundaries(PDO $db, string $imei, string $t): array
+{
+    $stmt = $db->prepare("
+        SELECT MAX(started_at) FROM device_state_segments
+        WHERE imei = :imei AND state <> 'offline' AND started_at <= :t");
+    $stmt->execute([':imei' => $imei, ':t' => $t]);
+    $bound = $stmt->fetchColumn() ?: null;
+
+    if ($bound === null) {
+        $stmt = $db->prepare("
+            SELECT MIN(started_at) FROM device_state_segments
+            WHERE imei = :imei AND started_at < :t AND (ended_at IS NULL OR ended_at > :t2)");
+        $stmt->execute([':imei' => $imei, ':t' => $t, ':t2' => $t]);
+        $bound = $stmt->fetchColumn() ?: $t;
+    }
+
+    $stmt = $db->prepare("
+        SELECT MIN(started_at) FROM speeding_events
+        WHERE imei = :imei AND started_at < :b AND (ended_at IS NULL OR ended_at > :b2)");
+    $stmt->execute([':imei' => $imei, ':b' => $bound, ':b2' => $bound]);
+    $speedBound = $stmt->fetchColumn() ?: null;
+
+    return [$bound, ($speedBound !== null && $speedBound < $bound) ? $speedBound : $bound];
+}
 
 /**
  * De onde retomar a leitura para uma das duas tabelas.

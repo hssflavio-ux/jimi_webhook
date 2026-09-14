@@ -50,6 +50,11 @@ WORKER_ENTRIES=(
     # lacuna do docs/FILA_OFFLINE_COMANDOS.md: até aqui a tela só SUPUNHA que o
     # comando seria entregue na reconexão, sem nenhuma confirmação do hub.
     "scripts/offline_instruct_poll.php:offline_instruct_poll.log:10 min:*/10 * * * *"
+    # v4.20.0 — alimenta o Mapa de Risco (/mapa-risco): risk_events,
+    # risk_exposure e risk_day_state. Marca-d'água por id (worker_watermarks),
+    # então alerta e posição que chegam dias depois entram no dia certo. O
+    # histórico entra uma vez por `php scripts/risk_builder.php --desde=AAAA-MM-DD`.
+    "scripts/risk_builder.php:risk_builder.log:15 min:*/15 * * * *"
 )
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'

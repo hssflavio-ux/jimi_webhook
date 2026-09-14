@@ -132,6 +132,8 @@ if (empty($segments)) {
         // própria (catálogo próprio, reprocessado das planilhas do
         // fabricante). Ver includes/ia_config_catalog.php.
         'configuracoes-ia'    => 'configuracoes_ia.php',
+        // v4.20.0 — Mapa de Risco ADAS/DMS (item de topo, logo abaixo do BI).
+        'mapa-risco'          => 'mapa_risco.php',
         'grupos-permissao'    => 'grupos_permissao.php',
         // v4.13.21 — fluxo da senha temporária por e-mail. As duas ficam FORA
         // de `$screenByHandler` e da matriz de `grupos_permissao.php`, como
@@ -274,6 +276,11 @@ $screenByHandler = [
     'resumo.php'                => 'resumo',
     'rastreamento.php'          => 'rastreamento',
     'bi.php'                    => 'bi',
+    // v4.20.0 — Mapa de Risco herda a permissão do BI (decisão do dono do
+    // produto): quem vê o BI vê o mapa. Por isso NÃO entra em `$screens` de
+    // grupos_permissao.php — a chave `bi` já está lá, e uma chave nova sumiria
+    // para todo grupo com matriz explícita até alguém marcá-la à mão.
+    'mapa_risco.php'            => 'bi',
     'ocorrencias_dashboard.php' => 'ocorrencias_dashboard',
     'comandos.php'              => 'comandos',
     // v4.14.0 — tela nova entra nos DOIS lugares: aqui e em $screens de

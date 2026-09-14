@@ -207,5 +207,92 @@ else
     fi
 fi
 
+# ── 6-8. v4.19.1 / v4.20.0 / v4.19.2 ────────────────────────
+# Rodam scripts PHP locais contra o MESMO banco do .env — o replay tem de
+# rodar no servidor. Nunca contra produção: o passo 8 reconstrói 1 dia de
+# segmentos da frota inteira (`state_builder --rebuild`).
+utc_offset() { # utc_offset <segundos> — instante relativo a NOW_UTC
+    local base
+    base="$(date -u -d "$NOW_UTC" +%s 2>/dev/null || date -u -j -f '%Y-%m-%d %H:%M:%S' "$NOW_UTC" +%s)"
+    date -u -d "@$((base + $1))" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -u -r "$((base + $1))" '+%Y-%m-%d %H:%M:%S'
+}
+post_gps_at() { # post_gps_at <gps_time UTC> <acc 0|1> <velocidade>
+    post_json /pushgps "{\"token\":\"$TOKEN\",\"msgType\":\"pushgps\",\"data_list\":[{\"deviceImei\":\"$TEST_IMEI\",\"msgClass\":0,\"lat\":-23.5505,\"lng\":-46.6333,\"speed\":$3,\"heading\":180,\"gpsTime\":\"$1\",\"acc\":$2,\"satelliteNum\":11}]}" >/dev/null
+}
+table_exists() { # table_exists <tabela>
+    [ "$(mysql_scalar "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='$1';")" = "1" ]
+}
+
+if [ "$SKIP_DB" = "1" ] || ! command -v mysql >/dev/null 2>&1; then
+    echo "[6-8] (sem verificação MySQL — passos de v4.19.1, v4.19.2 e v4.20.0 pulados)"
+else
+    # ── 6. Celular do JT/T (265-2) gera ocorrência — v4.19.1 ─────
+    echo "[6] /pushalarm JT/T 265-2 (Chamada Telefônica)"
+    post_json /pushalarm "{\"token\":\"$TOKEN\",\"msgType\":\"pushalarm\",\"data_list\":[{\"imei\":\"$TEST_IMEI\",\"msgClass\":1,\"msg\":{\"alertType\":\"265\",\"alarmType\":\"2\",\"alarmTime\":\"$NOW_UTC\",\"lat\":-23.5505,\"lng\":-46.6333,\"gpsSpeed\":42}}]}" >/dev/null
+    sleep 2
+    OCC_265="$(mysql_scalar "SELECT o.id FROM occurrences o
+                             JOIN occurrence_events oe ON oe.occurrence_id = o.id
+                             JOIN alarms a ON a.id = oe.alarm_id
+                             WHERE a.imei='$TEST_IMEI' AND a.alarm_type='265' AND a.alarm_subtype=2
+                               AND a.alarm_time='$NOW_UTC' LIMIT 1;")"
+    [ -n "$OCC_265" ]; check "JT/T 265-2 gera ocorrência (id=${OCC_265:-nenhuma}) — requer migração v4.19.1" $?
+
+    # ── 7. Mapa de risco — v4.20.0 ───────────────────────────────
+    echo "[7] Mapa de risco (risk_builder)"
+    if [ -z "${VEH_ID:-}" ] || ! table_exists risk_events; then
+        check "mapa de risco: pré-requisitos (veículo de teste e migração v4.20.0)" 1
+    else
+        # 40 min dirigindo antes do alarme 143 do passo 3 (ignição ligada).
+        for m in 40 30 20 10; do post_gps_at "$(utc_offset $((-m * 60)))" 1 50; done
+        sleep 2
+        BRT_DATE="$(utc_offset -10800 | cut -c1-10)"
+        php "$DIR/scripts/risk_builder.php" --desde="$BRT_DATE" --veiculo="$VEH_ID" >/dev/null 2>&1
+        RE="$(mysql_scalar "SELECT CONCAT(re.risk_group,'|',re.weight,'|',COALESCE(re.continuous_s,-1),'|',IF(re.cell_y IS NULL,'sem','com'))
+                            FROM risk_events re JOIN alarms a ON a.id = re.alarm_id
+                            WHERE a.imei='$TEST_IMEI' AND a.alarm_type='143' AND a.alarm_time='$NOW_UTC' LIMIT 1;")"
+        [ "$(echo "$RE" | cut -d'|' -f1)" = "distracao" ]; check "alarme 143 entra como 'distracao' ($RE)" $?
+        case "$(echo "$RE" | cut -d'|' -f2)" in 1|3|5) true ;; *) false ;; esac; check "peso vem do perfil (1, 3 ou 5)" $?
+        [ "$(echo "$RE" | cut -d'|' -f3)" -ge 2400 ] 2>/dev/null; check "direção contínua >= 40 min no instante do alarme" $?
+        [ "$(echo "$RE" | cut -d'|' -f4)" = "com" ]; check "alarme ganhou célula de 1 km" $?
+        EXP="$(mysql_scalar "SELECT COALESCE(SUM(driving_s),0) FROM risk_exposure WHERE vehicle_id=$VEH_ID AND brt_date='$BRT_DATE';")"
+        [ "${EXP:-0}" -ge 1800 ]; check "exposição do dia gravada (${EXP:-0} s em movimento)" $?
+
+        # O fim do mesmo alarme vira linha própria em alarms — não pode contar de novo.
+        post_json /pushalarm "{\"token\":\"$TOKEN\",\"msgType\":\"pushalarm\",\"data_list\":[{\"imei\":\"$TEST_IMEI\",\"msgClass\":0,\"msg\":{\"alertType\":\"removeAlarmType\",\"removeAlarmType\":\"143\",\"alarmTime\":\"$NOW_UTC\",\"lat\":-23.5505,\"lng\":-46.6333}}]}" >/dev/null
+        sleep 2
+        php "$DIR/scripts/risk_builder.php" --desde="$BRT_DATE" --veiculo="$VEH_ID" >/dev/null 2>&1
+        N_FIM="$(mysql_scalar "SELECT COUNT(*) FROM alarms WHERE imei='$TEST_IMEI' AND alarm_type='143' AND alarm_time='$NOW_UTC' AND status='resolved';")"
+        N_RE="$(mysql_scalar "SELECT COUNT(*) FROM risk_events re JOIN alarms a ON a.id = re.alarm_id
+                              WHERE a.imei='$TEST_IMEI' AND a.alarm_type='143' AND a.alarm_time='$NOW_UTC';")"
+        [ "${N_FIM:-0}" -ge 1 ] && [ "${N_RE:-0}" = "1" ]; check "fim de alarme gravado (${N_FIM:-0}) e fora do mapa (${N_RE:-0} linha)" $?
+    fi
+
+    # ── 8. state_builder recalcula posição atrasada — v4.19.2 ────
+    echo "[8] state_builder x posição atrasada"
+    if ! table_exists worker_watermarks; then
+        check "state_builder: pré-requisito (migração v4.19.2)" 1
+    else
+        P1="$(utc_offset -21600)"; P2="$(utc_offset -14400)"; LATE="$(utc_offset -18000)"
+        post_gps_at "$P1" 1 30
+        post_gps_at "$P2" 1 30
+        sleep 2
+        php "$DIR/scripts/state_builder.php" 1 --rebuild >/dev/null 2>&1
+        ANTES="$(mysql_scalar "SELECT COUNT(*) FROM device_state_segments WHERE imei='$TEST_IMEI' AND state='offline'
+                               AND started_at < '$LATE' AND ended_at > '$LATE';")"
+        [ "${ANTES:-0}" -ge 1 ]; check "pré-condição: vão de 2 h vira segmento offline (se falhar, a janela já tinha pontos)" $?
+        post_gps_at "$LATE" 1 30
+        sleep 2
+        php "$DIR/scripts/state_builder.php" >/dev/null 2>&1
+        DEPOIS="$(mysql_scalar "SELECT COUNT(*) FROM device_state_segments WHERE imei='$TEST_IMEI' AND state='offline'
+                                AND started_at < '$LATE' AND ended_at > '$LATE';")"
+        [ "${DEPOIS:-1}" = "0" ]; check "ponto atrasado desfaz o offline que o cobria ($DEPOIS restante)" $?
+        SOBREP="$(mysql_scalar "SELECT COUNT(*) FROM device_state_segments a JOIN device_state_segments b
+                                ON a.imei = b.imei AND a.id < b.id
+                               AND a.started_at < COALESCE(b.ended_at, '9999-12-31') AND b.started_at < COALESCE(a.ended_at, '9999-12-31')
+                               WHERE a.imei='$TEST_IMEI' AND a.started_at >= '$P1';")"
+        [ "${SOBREP:-1}" = "0" ]; check "linha do tempo reconstruída sem sobreposição" $?
+    fi
+fi
+
 echo "═══ Resultado: $PASS ok, $FAIL falha(s) ═══"
 [ "$FAIL" -eq 0 ]
