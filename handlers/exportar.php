@@ -163,7 +163,8 @@ try {
             <div>
                 <label style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--muted);display:block;">Tipo</label>
                 <select name="report_type" style="width:100%;padding:8px;font-size:13px;border:1px solid var(--hairline);border-radius:var(--radius-sm);">
-                    <option value="alarms">Alarmes</option>
+                    <option value="alarms">Alertas Videomonitoramento</option>
+                    <option value="driving_alarms">Alarmes Dirigibilidade</option>
                     <option value="occurrences">Ocorrências</option>
                     <option value="positions">Posições GPS</option>
                     <option value="trips">Viagens (Deslocamento)</option>

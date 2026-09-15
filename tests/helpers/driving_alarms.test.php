@@ -117,6 +117,14 @@ confere(str_contains($mr, 'di.removed_at IS NULL') && str_contains($mr, "device_
 $rb = (string)file_get_contents($raiz . '/scripts/risk_builder.php');
 confere(str_contains($rb, 'WHERE d.imei = g.imei AND NOT ('), 'risk_builder: exposição sem ponto de rastreador');
 
+// ── 7) Agendamentos e Exportar ──────────────────────────────────────────────
+$sch = (string)file_get_contents($raiz . '/includes/schedule.php');
+confere(str_contains($sch, "'alarms'      => 'Alertas Videomonitoramento'") && str_contains($sch, "'driving_alarms' => 'Alarmes Dirigibilidade'"), 'schedule_report_types(): dois recortes');
+$wk = (string)file_get_contents($raiz . '/scripts/worker.php');
+confere((bool)preg_match("/case 'alarms':\s*case 'driving_alarms':/", $wk), 'worker reconhece driving_alarms');
+$exp = (string)file_get_contents($raiz . '/handlers/exportar.php');
+confere(str_contains($exp, '<option value="driving_alarms">Alarmes Dirigibilidade</option>'), 'Exportar oferece Alarmes Dirigibilidade');
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");

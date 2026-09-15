@@ -554,18 +554,30 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
     // é o INVENTÁRIO de equipamentos e ficaria sem o identificador do produto.
     switch ($type) {
         case 'alarms':
+        case 'driving_alarms':
             // Nome do alarme resolvido na leitura — ver alarm_label_sql().
             // Até a v4.8.x este relatório imprimia `a.alarm_type` CRU, isto é,
             // o código numérico, sem nem o rótulo genérico que a tela tinha.
-            ['joins' => $alarmJoins, 'expr' => $alarmExpr] = alarm_label_sql();
+            //
+            // v4.21.0 — o mesmo recorte das duas telas: `alarms` é Alertas
+            // Videomonitoramento (sem condução, sem equipamento sem câmera, sem
+            // diagnóstico — que este relatório nunca filtrava) e
+            // `driving_alarms` é Alarmes Dirigibilidade.
+            ['joins' => $alarmJoins, 'expr' => $alarmExpr, 'diag' => $alarmDiag] = alarm_label_sql();
+            $drivingExpr = alarm_driving_expr(alarm_types_has_driving_flag($db));
+            $recorte = $type === 'driving_alarms'
+                ? " AND ($drivingExpr) = 1"
+                : " AND ($drivingExpr) = 0 AND " . device_has_camera_sql('d', 'dm');
             $stmt = $db->prepare("
                 SELECT COALESCE(d.device_name, a.imei) as device_name, $alarmExpr AS alarm_label,
                        a.alarm_time, a.status, a.speed, a.latitude, a.longitude, " . GEO_ADDR_SQL . "
                 FROM alarms a
                 JOIN devices d ON d.imei = a.imei AND d.customer_id = :cid
+                LEFT JOIN device_models dm ON dm.id = d.device_model_id
                 $alarmJoins
                 " . geo_join('a.latitude', 'a.longitude') . "
                 WHERE a.alarm_time BETWEEN :df AND :dt
+                  AND ($alarmDiag) = 0 $recorte
                 ORDER BY a.alarm_time DESC
             ");
             $stmt->execute([':cid' => $cid, ':df' => $from, ':dt' => $to]);

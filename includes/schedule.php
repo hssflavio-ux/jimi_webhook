@@ -243,7 +243,9 @@ function schedule_parse_recipients($raw): array
 function schedule_report_types(): array
 {
     return [
-        'alarms'      => 'Alarmes',
+        // v4.21.0 — os dois recortes das telas de alarme (spec 2026-09-14).
+        'alarms'      => 'Alertas Videomonitoramento',
+        'driving_alarms' => 'Alarmes Dirigibilidade',
         'occurrences' => 'Ocorrências',
         'positions'   => 'Posições GPS',
         'trips'       => 'Viagens (Deslocamento)',
