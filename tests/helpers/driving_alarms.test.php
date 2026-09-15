@@ -94,6 +94,13 @@ $relAl = (string)file_get_contents($raiz . '/handlers/rel_alarmes.php');
 confere(str_contains($relAl, "<?php if (!\$modoDirig): ?><th>Vídeo</th><?php endif; ?>"), 'coluna Vídeo só no modo vídeo');
 confere(str_contains($relAl, "<?php if (!\$modoDirig): // vídeo só existe em Videomonitoramento ?>"), 'modal/JS de vídeo só no modo vídeo');
 
+// ── 4) Ocorrências ──────────────────────────────────────────────────────────
+$occData = (string)file_get_contents($raiz . '/handlers/ocorrenciasdata.php');
+confere(str_contains($occData, 'occurrence_no_video_sql(') && str_contains($occData, "'no_video' =>"), '/ocorrenciasdata devolve no_video');
+$occDash = (string)file_get_contents($raiz . '/handlers/ocorrencias_dashboard.php');
+confere(str_contains($occDash, 'if (r.no_video)'), 'grade: célula Vídeo respeita no_video');
+confere(substr_count($occDash, '$detailNoVideo') >= 6, 'detalhe: mídia, coluna e player condicionados a $detailNoVideo');
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");

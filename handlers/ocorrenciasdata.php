@@ -118,6 +118,9 @@ try {
     // (anexo declarado por QUALQUER alarme do grupo, mesma leitura de
     // ocorrencias_dashboard.php) — o degrau 3 (janela ±3min) fica só no
     // detalhe, é caso raro demais pra valer o custo numa consulta de lista.
+    // v4.21.0 — dirigibilidade (por código dos alarmes agrupados) ou equipamento
+    // sem câmera: a grade não oferece vídeo nem "Pedir vídeo".
+    $noVideoSql = occurrence_no_video_sql(alarm_types_has_driving_flag($db));
     $dataStmt = $db->prepare("
         SELECT o.id, o.imei, o.alarm_type, o.risk, o.status, o.false_positive,
                o.first_alarm_at, o.last_alarm_at, o.alarm_count,
@@ -128,7 +131,8 @@ try {
                (SELECT a2.id FROM occurrence_events oe2 JOIN alarms a2 ON a2.id = oe2.alarm_id
                  WHERE oe2.occurrence_id = o.id ORDER BY a2.alarm_time DESC LIMIT 1) AS repr_alarm_id,
                EXISTS (SELECT 1 FROM occurrence_events oe3 JOIN alarms a3 ON a3.id = oe3.alarm_id
-                        WHERE oe3.occurrence_id = o.id AND a3.file_url IS NOT NULL AND a3.file_url <> '') AS has_event_media
+                        WHERE oe3.occurrence_id = o.id AND a3.file_url IS NOT NULL AND a3.file_url <> '') AS has_event_media,
+               ($noVideoSql) AS no_video
         FROM occurrences o
         LEFT JOIN customers c ON c.id = o.customer_id
         LEFT JOIN drivers dr ON dr.id = o.driver_id
@@ -153,6 +157,8 @@ try {
             'last_alarm_at' => $r['last_alarm_at'], 'alarm_count' => (int)$r['alarm_count'],
             'has_media' => !empty($r['media_file_id']) || !empty($r['has_event_media']),
             'repr_alarm_id' => $r['repr_alarm_id'] ? (int)$r['repr_alarm_id'] : null,
+            // v4.21.0 — condução ou equipamento sem câmera: a grade não oferece vídeo.
+            'no_video' => !empty($r['no_video']),
         ];
     }
 

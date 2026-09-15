@@ -32,4 +32,11 @@ test.describe('Relatórios de alarmes divididos (v4.21.0)', () => {
         await expect(authedPage.locator('#video-modal')).toHaveCount(0);
         await expect(authedPage.getByText('Pedir vídeo')).toHaveCount(0);
     });
+
+    test('/ocorrenciasdata informa no_video em toda linha', async ({ authedPage }) => {
+        const r = await authedPage.request.get('/ocorrenciasdata?page=1');
+        expect(r.status()).toBe(200);
+        const j = await r.json();
+        for (const row of j.data.rows) expect(typeof row.no_video).toBe('boolean');
+    });
 });

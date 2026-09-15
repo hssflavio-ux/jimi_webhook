@@ -74,6 +74,7 @@ $detailOcc = null;
 $detailEvents = [];
 $detailMedia = null;      // ['file_url' => …, 'file_type' => …, 'file_name' => …]
 $detailChannels = [];     // canal(1|2) => ['url','ts','kind','nome'] — player duplo
+$detailNoVideo = false;   // v4.21.0 — condução ou sem câmera: sem função de vídeo
 if (!empty($_GET['id'])) {
     try {
         // A PLACA (devices.device_name) substitui o IMEI no cabeçalho: é o
@@ -94,6 +95,13 @@ if (!empty($_GET['id'])) {
         $detailOcc = $stmt->fetch();
 
         if ($detailOcc) {
+            // v4.21.0 — dirigibilidade ou equipamento sem câmera: não se
+            // resolve mídia nem se oferece pedido (decisão do dono do produto).
+            $nv = $db->prepare("SELECT (" . occurrence_no_video_sql(alarm_types_has_driving_flag($db)) . ")
+                                  FROM occurrences o WHERE o.id = :id");
+            $nv->execute([':id' => $detailOcc['id']]);
+            $detailNoVideo = (bool)$nv->fetchColumn();
+
             // Nome resolvido na leitura pelo helper compartilhado (v4.9.10) —
             // `alarms.alarm_name` é congelado na chegada do webhook, então um
             // evento cujo código só entrou no catálogo depois apareceria aqui
@@ -120,14 +128,14 @@ if (!empty($_GET['id'])) {
             // havia nada que criasse a linha em `media_files`. A v4.9.8 passou
             // a criar, mas os degraus 2 e 3 continuam valendo para tudo que já
             // estava gravado e para o vídeo que chega DEPOIS da ocorrência.
-            if (!empty($detailOcc['media_file_id'])) {
+            if (!$detailNoVideo && !empty($detailOcc['media_file_id'])) {
                 $stmt = $db->prepare("SELECT * FROM media_files WHERE id = :mid");
                 $stmt->execute([':mid' => $detailOcc['media_file_id']]);
                 $detailMedia = $stmt->fetch() ?: null;
             }
             // 2) anexo declarado por um dos alarmes agrupados (vídeo na frente
             //    de imagem: a prova do comportamento é o vídeo)
-            if (!$detailMedia) {
+            if (!$detailNoVideo && !$detailMedia) {
                 foreach (['video', ''] as $preferido) {
                     foreach ($detailEvents as $ev) {
                         if (empty($ev['file_url'])) continue;
@@ -144,7 +152,7 @@ if (!empty($_GET['id'])) {
             }
             // 3) upload do mesmo equipamento na janela da ocorrência (±3 min) —
             //    a mesma regra que link_upload_to_occurrence() usa na chegada
-            if (!$detailMedia) {
+            if (!$detailNoVideo && !$detailMedia) {
                 $stmt = $db->prepare(
                     "SELECT file_url, file_type, file_name FROM media_files
                       WHERE imei = :imei
@@ -172,7 +180,7 @@ if (!empty($_GET['id'])) {
             // canal: é o que permite mostrar os dois vídeos ao mesmo tempo.
             // Vazio quando nenhum evento traz arquivo com canal reconhecível
             // no nome — a tela cai no player único de sempre ($detailMedia).
-            foreach ($detailEvents as $ev) {
+            foreach ($detailNoVideo ? [] : $detailEvents as $ev) {
                 if (empty($ev['file_url'])) continue;
                 $porCanal = media_channel_files($ev['file_url']);
                 foreach ([1, 2] as $canal) {
@@ -263,12 +271,13 @@ require_once __DIR__ . '/../web/layout_base.php';
             <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:20px 0 8px;">Alarmes Agrupados</h3>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>Alarme</th><th>Data/Hora</th><th>Vídeo</th></tr></thead>
+                    <thead><tr><th>Alarme</th><th>Data/Hora</th><?php if (!$detailNoVideo): ?><th>Vídeo</th><?php endif; ?></tr></thead>
                     <tbody>
                     <?php foreach ($detailEvents as $ev): ?>
                     <tr>
                         <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>
                         <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
+                        <?php if (!$detailNoVideo): ?>
                         <td>
                             <?php if ($ev['file_url']): ?>
                             <a href="<?= htmlspecialchars(media_play_url($ev['file_url'])) ?>" target="_blank" class="badge badge-primary">Ver</a>
@@ -281,6 +290,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                             </button>
                             <?php endif; ?>
                         </td>
+                        <?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -335,6 +345,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
         <!-- Mídia + Mapa -->
         <div>
+            <?php if (!$detailNoVideo): ?>
             <?php if ($detailChannels): // ── Player duplo (26/08/2026) — ver §9.9 ── ?>
             <div class="grid-cols-2" style="gap:12px;">
                 <?php foreach ([1, 2] as $canal): $item = $detailChannels[$canal] ?? null; ?>
@@ -406,9 +417,10 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <?php endif; ?>
             </div>
             <?php endif; endif; ?>
+            <?php endif; // !$detailNoVideo ?>
 
             <!-- Mapa — localização de CADA alarme agrupado, não só o mais recente -->
-            <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:20px 0 8px;">
+            <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:<?= $detailNoVideo ? '0' : '20px' ?> 0 8px;">
                 Localização<?= count($occMapPoints) > 1 ? ' (' . count($occMapPoints) . ' alarmes)' : '' ?>
             </h3>
             <?php if ($occMapPoints): ?>
@@ -669,7 +681,11 @@ function updateTable(data) {
         var date = new Date(r.last_alarm_at.replace(' ', 'T') + 'Z');
         var dateStr = date.toLocaleDateString('pt-BR') + ' ' + date.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
         var videoCell;
-        if (r.has_media) {
+        if (r.no_video) {
+            // Dirigibilidade ou equipamento sem câmera (v4.21.0): não há vídeo
+            // para mostrar nem para pedir.
+            videoCell = '<span class="text-muted">—</span>';
+        } else if (r.has_media) {
             videoCell = '<span class="badge badge-success">Disponível</span>';
         } else if (r.repr_alarm_id) {
             var btnId = 'rv-list-' + r.id;
