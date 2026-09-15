@@ -339,11 +339,17 @@ function rb_data_days_after(PDO $db, int $vehicleId, string $date, string $today
  */
 function rb_load_points(PDO $db, int $vehicleId, int $fromTs, int $toTs, int $limit = 0): array
 {
+    // v4.21.0 — ponto de equipamento SEM câmera (rastreador JM-VL) não entra na
+    // exposição: o índice é ADAS/DMS por hora dirigida, e as horas de um
+    // veículo que não tem como gerar alerta diluíam o risco da frota com câmera.
     $stmt = $db->prepare("
-        SELECT gps_time, acc, speed, latitude, longitude, driver_id, customer_id
-        FROM gps_data
-        WHERE vehicle_id = :v AND gps_time >= :f AND gps_time < :t
-        ORDER BY gps_time, id" . ($limit > 0 ? " LIMIT $limit" : ''));
+        SELECT g.gps_time, g.acc, g.speed, g.latitude, g.longitude, g.driver_id, g.customer_id
+        FROM gps_data g
+        WHERE g.vehicle_id = :v AND g.gps_time >= :f AND g.gps_time < :t
+          AND NOT EXISTS (SELECT 1 FROM devices d
+                            LEFT JOIN device_models dm ON dm.id = d.device_model_id
+                           WHERE d.imei = g.imei AND NOT (" . device_has_camera_sql('d', 'dm') . "))
+        ORDER BY g.gps_time, g.id" . ($limit > 0 ? " LIMIT $limit" : ''));
     $stmt->execute([':v' => $vehicleId, ':f' => gmdate('Y-m-d H:i:s', $fromTs), ':t' => gmdate('Y-m-d H:i:s', $toTs)]);
     $out = [];
     foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {

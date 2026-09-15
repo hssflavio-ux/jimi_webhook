@@ -39,11 +39,14 @@ $scopeCust   = report_customer_scope($filtroCust, $isAdmin, $customerId);
 $customers   = $isAdmin ? report_customer_options($db) : [];
 $mostrarCliente = ($scopeCust === null);
 
-// Equipamentos oferecidos no filtro, já no escopo resolvido.
+// Equipamentos oferecidos no filtro, já no escopo resolvido. v4.21.0: sem
+// rastreador (camera_count = 0) — não há gravação dele para baixar.
 $devStmt = $db->prepare("
     SELECT d.imei, COALESCE(NULLIF(d.device_name,''), d.imei) AS device_name
     FROM devices d
-    WHERE d.is_active = 1 " . ($scopeCust !== null ? ' AND d.customer_id = :cid' : '') . "
+    LEFT JOIN device_models dm ON dm.id = d.device_model_id
+    WHERE d.is_active = 1 AND " . device_has_camera_sql('d', 'dm')
+    . ($scopeCust !== null ? ' AND d.customer_id = :cid' : '') . "
     ORDER BY d.device_name
 ");
 $devStmt->execute($scopeCust !== null ? [':cid' => $scopeCust] : []);

@@ -109,6 +109,14 @@ confere((bool)preg_match('/\$mediaId === null\s*&& !is_driving_alarm\(\$db, \$al
 $vub = (string)file_get_contents($raiz . '/scripts/video_upload_backfill.php');
 confere(str_contains($vub, 'AS is_driving') && str_contains($vub, '$totalConducao'), 'backfill ignora condução e conta');
 
+// ── 6) Rastreador fora das telas de câmera ──────────────────────────────────
+$vd = (string)file_get_contents($raiz . '/handlers/video_downloads.php');
+confere(str_contains($vd, "device_has_camera_sql('d', 'dm')"), 'Downloads: filtro sem rastreador');
+$mr = (string)file_get_contents($raiz . '/handlers/mapa_risco.php');
+confere(str_contains($mr, 'di.removed_at IS NULL') && str_contains($mr, "device_has_camera_sql('d', 'dm')"), 'Mapa de Risco: seletor sem veículo com rastreador');
+$rb = (string)file_get_contents($raiz . '/scripts/risk_builder.php');
+confere(str_contains($rb, 'WHERE d.imei = g.imei AND NOT ('), 'risk_builder: exposição sem ponto de rastreador');
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");

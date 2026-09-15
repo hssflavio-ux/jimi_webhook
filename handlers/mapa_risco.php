@@ -1211,12 +1211,24 @@ function mr_driver_names(PDO $db, array $ids): array
  */
 function mr_vehicle_options(PDO $db, ?int $cust): array
 {
+    // v4.21.0 — o mapa é ADAS/DMS: veículo com RASTREADOR instalado agora não
+    // tem o que mostrar aqui. Veículo sem instalação continua — o histórico de
+    // câmera dele ainda vale.
+    $semRastreador = "NOT EXISTS (SELECT 1 FROM device_installations di
+                                    JOIN devices d ON d.id = di.device_id
+                                    LEFT JOIN device_models dm ON dm.id = d.device_model_id
+                                   WHERE di.vehicle_id = v.id AND di.removed_at IS NULL
+                                     AND NOT (" . device_has_camera_sql('d', 'dm') . "))";
     if ($cust !== null) {
-        $stmt = $db->prepare("SELECT id, plate FROM vehicles WHERE customer_id = :c AND is_active = 1 ORDER BY plate LIMIT 2000");
+        $stmt = $db->prepare("SELECT v.id, v.plate FROM vehicles v
+                               WHERE v.customer_id = :c AND v.is_active = 1 AND $semRastreador
+                               ORDER BY v.plate LIMIT 2000");
         $stmt->execute([':c' => $cust]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-    return $db->query("SELECT id, plate FROM vehicles WHERE is_active = 1 ORDER BY plate LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
+    return $db->query("SELECT v.id, v.plate FROM vehicles v
+                        WHERE v.is_active = 1 AND $semRastreador
+                        ORDER BY v.plate LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
 }
 
 /**
