@@ -48,9 +48,11 @@ todo ADAS/DMS de IA (FCW `204`/`229`/`264-1`, PCW etc.).
 A migração termina com duas conferências: códigos esperados ausentes do catálogo, e
 tipos **com o mesmo `alarm_name_pt`** de um marcado que ficaram sem marca (irmãos).
 
-**Leitura**: `alarm_label_sql()` ganha a chave `'driving' => "COALESCE(atc.is_driving, atb.is_driving, 0)"`,
-dos mesmos joins do rótulo (composto antes da base). Linha "Fim de Alarme" herda o
-código base e portanto a marca — correto.
+**Leitura**: função pura `alarm_driving_expr(bool $temColuna)` devolve
+`COALESCE(atc.is_driving, atb.is_driving, 0)` — sobre os mesmos joins de `alarm_label_sql()`
+(composto antes da base), que fica intocada para os seis consumidores atuais. Linha
+"Fim de Alarme" herda o código base e portanto a marca — correto. Para decidir sobre UM
+alarme em PHP: `is_driving_alarm()`, espelho de `is_diagnostic_alarm()`.
 
 **Janela entre os dois deploys** (migração não roda no deploy que a traz): função
 `alarm_types_has_driving_flag(PDO)` (cache estático, `information_schema`). Sem a
