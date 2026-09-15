@@ -1,4 +1,36 @@
-# STATUS.md — Jimi Webhook System v4.20.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.0 (YUV Parity)
+
+> ### 📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera + Alarmes Dirigibilidade (v4.21.0)
+>
+> Pedido do dono do produto: rastreador (JM-VL) não tem câmera e não deve aparecer nas telas
+> exclusivas de câmera; os eventos de condução (câmera e rastreador) ganham menu próprio e
+> ocorrência de condução não oferece vídeo. Decisões tomadas com ele (spec
+> `docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md`, plano em
+> `docs/superpowers/plans/2026-09-14-rastreadores-dirigibilidade.md`):
+> - "Alarmes Dirigibilidade" agrupa pelo **tipo** do alarme, de qualquer equipamento;
+> - o vídeo some em **toda** linha de condução, inclusive de câmera;
+> - entram também Capotamento, Aviso/Velocidade em Cerca e Impacto/Inclinação (Mudança de Faixa fica fora);
+> - alarme de rastreador que não é de condução fica **só na ficha do veículo**;
+> - pedido automático de vídeo para condução **para**; Mapa de Risco sem rastreador no seletor e na exposição;
+> - Agendamentos/Exportar ganham o tipo "Alarmes Dirigibilidade".
+>
+> **Entregue**: `alarm_types.is_driving` (28 códigos, por código), `/relatorios/dirigibilidade`,
+> menu "Alertas Videomonitoramento", ocorrências sem vídeo (grade, detalhe, `/solicitarvideo`,
+> motor, backfill), Downloads e Mapa de Risco sem rastreador, `driving_alarms` no worker e no Exportar.
+>
+> **Verificação local (sem MySQL)**: `php -l` em todo PHP; `driving_alarms.test.php` TUDO OK;
+> `migracoes_no_deploy.test.php` OK; `risk_map.test.php` 77/77; `node --check` em todos os specs.
+> `alarm_video_match.test.php` precisa de banco — não rodado. A leitura de produção foi bloqueada
+> nesta sessão: não foi medido se as freadas das câmeras JC chegam com vídeo, nem quais códigos os
+> rastreadores já emitiram.
+>
+> **Pendente em produção** (nada foi implantado):
+> - deploy **duas vezes** (ou `.sql` à mão): até a migração rodar, as telas ficam como antes e
+>   Dirigibilidade mostra aviso de migração pendente;
+> - conferir as 4 consultas do fim da migração (ausentes / irmãos sem marca / ADAS-DMS marcado / marcados);
+> - `php scripts/risk_builder.php --desde=2026-06-10` (exposição sem rastreador);
+> - abrir logado `/relatorios/alarmes`, `/relatorios/dirigibilidade` e uma ocorrência de condução;
+>   `npx playwright test tests/dirigibilidade.spec.js tests/navigation.spec.js`.
 
 > ### 📍 13–14/09/2026 — Mapa de Risco ADAS/DMS (v4.20.0) + duas correções achadas no caminho (v4.19.1, v4.19.2)
 >
@@ -162,73 +194,6 @@
 > Flavio, `"4"` = Thamara, pelo menos — outras câmeras/clientes podem ter
 > outros). Só depois disso o mecanismo em tempo real E o backfill (re-rodado)
 > passam a criar sessão de verdade.
-
-> ### 📍 11/09/2026 — 3 códigos JT/T sem nome (4/5/6) + bitmask do Alarme Padrão 256 estava errado desde o bit 12
->
-> Pedido do dono do produto: a câmera do veículo **"Telecom"** (IMEI
-> 865478070654829, JC450/JT/T) subiu os códigos 4, 6, e o "standard alarm"
-> 8192, 2 e 2048 — pediu para checar o banco de produção (ontem/hoje) e
-> decodificar o bitmask contra a tabela oficial
-> (`docs.jimicloud.com/integration/integration.html#_2-1-standard-alarm`).
->
-> **Verificação em produção** (script PHP via SSH, `Database::getInstance()`,
-> sem expor credencial): das 5 strings citadas, `2` (Excesso de Velocidade) e
-> `2048` (Falha de Câmera) já resolviam corretamente — são os bits 1 e 11,
-> já cadastrados no `decodeStandardAlarm()`. Os 3 problemas reais, confirmados
-> nas últimas 48h do IMEI (398 linhas) e depois checados na frota inteira
-> (30 dias):
-> - **`alertType` 4** (104 ocorrências, 1 equipamento) e **6** (14 ocorrências)
->   sem nome — `"Código 4 (JTT)"`/`"Código 6 (JTT)"`.
-> - **Bônus, achado na varredura da frota**: `alertType` **5** (1 ocorrência)
->   igualmente sem nome.
-> - **Bit 13 do bitmask 256** (valor **8192**, 22 ocorrências, só nesse
->   equipamento) caindo no fallback `"Alarme Standard (Bits: 8192)"` — o bit
->   simplesmente não existia no mapa.
->
-> 🔴 **A fonte de 4/5/6 quase saiu errada.** Esses números batem, por
-> coincidência, com a tabela OBD oficial (§3.45 "Table 24 OBD alarm Data
-> ID": 4=Geofence entry, 5=Geofence exit, 6=Overspeed) — mas essa tabela
-> pertence ao endpoint `/pushobd`, que este projeto não implementa. Puxar o
-> payload bruto real (`webhook_payloads`, endpoint `pushalarm`) mostrou
-> `alarmLabel`/`driverId`/`driverName` no mesmo formato dos alarmes 264/265
-> já cadastrados — confirmando que a fonte certa é **§2.7 "Other Alarms"**
-> (JT/T Device Alarms, msgClass=1): `4` = Seatbelt Fastened (AWSB), `5` =
-> Face Recognition Failed (AFIF), `6` = Face Recognition Success (AFIS).
-> Cadastrados em `alarm_types` (migração `v4.18.4`) como "Cinto de Segurança
-> Afivelado", "Falha no Reconhecimento Facial" e "Reconhecimento Facial
-> Bem-sucedido".
->
-> 🔴 **Achado maior no caminho: o bitmask de 32 bits do Alarme Padrão (256)
-> estava ERRADO desde o bit 12, não só incompleto.** `decodeStandardAlarm()`
-> (`handlers/pushalarm.php`) tinha os bits 15/18-29 escalonados fora de
-> posição contra a doc oficial §2.1 — ex.: o bit 28 dizia "Pré-aviso de
-> Capotamento", que a doc marca no bit **30**; o bit 18 dizia "Pré-aviso de
-> Velocidade", que é na verdade o bit **13** (a origem do 8192 sem nome).
-> Levantamento de 30 dias na frota inteira: **só os bits 1, 11 e 13
-> ocorreram de verdade em produção** — os demais bits corrigidos (12, 14,
-> 18-31) não têm histórico ainda, então o impacto prático até aqui é zero,
-> mas o mapa estava errado desde sempre e teria mostrado nome trocado no
-> primeiro equipamento que batesse um desses bits. ⚠️ **Esse mesmo mapa
-> errado já tinha influenciado uma decisão anterior**: a nota de cadastro do
-> alarme JTT `1047` ("Capotamento", v4.9.10) cita "bit 28 do bitmask JT/T"
-> como corroboração — pela doc oficial é o bit 30. Não invalida o cadastro
-> (a fonte primária foi informação do fornecedor), mas a corroboração por
-> bit estava calculando o bit errado. Tabela completa (0-31) reescrita e
-> reconferida linha a linha contra a doc oficial.
->
-> **Registrado, não corrigido — decisão do dono do produto**: `alertType`
-> **1049** (JTT) tem **252 ocorrências em 30 dias** na frota inteira (bem
-> mais que 4, 5 ou 6) e não consta em NENHUMA seção da doc oficial (nem
-> §2.1-2.7, nem tabela adjacente) — mesma situação do `1047` antes de
-> v4.9.10, resolvido só com informação do fornecedor. Não batizado por
-> falta dessa fonte — ver o aviso `nunca batizar por palpite` que já rendeu
-> retrabalho outras vezes neste catálogo.
->
-> **Verificação**: `php -l` limpo; bitmap corrigido conferido isoladamente
-> (`php -r`) contra os 3 valores medidos (2, 2048, 8192) e contra o bit 30
-> (capotamento) — sem regressão nos dois bits que já resolviam certo.
-
-> Entradas anteriores a 11/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

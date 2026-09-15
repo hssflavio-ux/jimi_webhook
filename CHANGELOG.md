@@ -5,6 +5,24 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.0
+
+**Rastreadores fora das telas de câmera e eventos de condução em tela própria: "Alarmes" virou "Alertas Videomonitoramento" + "Alarmes Dirigibilidade", e nenhuma linha de condução oferece vídeo.**
+
+Pedido do dono do produto: os rastreadores JM-VL não têm câmera e não devem aparecer nas telas exclusivas de câmera, mas geram os mesmos eventos de condução das câmeras. Decisões de 14/09/2026 (spec `docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md`): a tela nova agrupa pelo TIPO do alarme, de câmera e de rastreador; o vídeo some em toda linha de condução; alarme de rastreador que não é de condução fica só na ficha do veículo.
+
+- **Adicionado** `alarm_types.is_driving` (migração `v4.21.0`), por **protocolo + código**: arrancada (JIMI 144; JT/T 1024, 1042), freada (48, 145; 1025, 1043), curva (76, 146; 1026, 1044), velocidade (6, 135, 202, 95; 1027), colisão (44, 147; 1029, 1046), capotamento (45, 106, 183; 1047), impacto/inclinação (55, 75, 78, 79). Fora: 77, 116 e todo ADAS/DMS de IA. A migração confere códigos ausentes do catálogo, irmãos de mesmo nome sem marca e ADAS/DMS marcado.
+- **Adicionado** tela **Alarmes Dirigibilidade** (`/relatorios/dirigibilidade`, permissão `relatorios`): a mesma grade de `rel_alarmes.php` num modo (`handlers/rel_dirigibilidade.php`), sem coluna Vídeo, sem "Pedir vídeo", sem modo diagnóstico; modelos salvos com chave própria.
+- **Adicionado** helpers em `includes/functions.php`: `alarm_types_has_driving_flag()` (guarda da janela entre os dois deploys), `alarm_driving_expr()`, `device_has_camera_sql()`, `occurrence_no_video_sql()`, `is_driving_alarm()`.
+- **Adicionado** tipo `driving_alarms` ("Alarmes Dirigibilidade") em Agendamentos e Exportar.
+- **Alterado** menu Relatórios: "Alarmes" → **Alertas Videomonitoramento** (URL mantida). A grade exclui condução e equipamento sem câmera; o filtro de placa deixa de listar rastreador.
+- **Alterado** Dashboard de Ocorrências: ocorrência de condução (por código dos alarmes agrupados) ou de equipamento sem câmera não mostra coluna Vídeo, player nem "Solicitar vídeo"; `/ocorrenciasdata` devolve `no_video`.
+- **Alterado** `request_alarm_video()` recusa rastreador e alarme de condução (defesa no servidor); o motor de ocorrências não agenda mais `VIDEOUPLOAD` para condução; `scripts/video_upload_backfill.php` pula e conta à parte.
+- **Alterado** Vídeo › Downloads sem rastreador no filtro; Mapa de Risco sem veículo com rastreador instalado no seletor, e `scripts/risk_builder.php` ignora ponto de GPS de equipamento sem câmera na exposição (as horas de rastreador diluíam o índice).
+- **Alterado** relatório agendado/exportado `alarms`: segue o recorte de Videomonitoramento e passa a excluir eventos de diagnóstico, que nunca filtrava.
+- **Pós-deploy**: a migração só roda no SEGUNDO deploy (ou `.sql` à mão); conferir as quatro consultas do fim da migração; reprocessar `php scripts/risk_builder.php --desde=2026-06-10`.
+- **Verificação**: sem MySQL local — `php -l`, `tests/helpers/driving_alarms.test.php`, `migracoes_no_deploy.test.php`, `risk_map.test.php` (77/77), `node --check` nos specs; `tests/dirigibilidade.spec.js` novo (pula sem credenciais).
+
 ## [Unreleased] — 4.20.0
 
 **Mapa de Risco (`/mapa-risco`): onde, quando, em que ponto da jornada e com quem os comportamentos ADAS/DMS acontecem — medido por taxa de exposição, não por contagem.**

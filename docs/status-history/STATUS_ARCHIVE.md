@@ -2,6 +2,73 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 11/09/2026 — 3 códigos JT/T sem nome (4/5/6) + bitmask do Alarme Padrão 256 estava errado desde o bit 12
+>
+> Pedido do dono do produto: a câmera do veículo **"Telecom"** (IMEI
+> 865478070654829, JC450/JT/T) subiu os códigos 4, 6, e o "standard alarm"
+> 8192, 2 e 2048 — pediu para checar o banco de produção (ontem/hoje) e
+> decodificar o bitmask contra a tabela oficial
+> (`docs.jimicloud.com/integration/integration.html#_2-1-standard-alarm`).
+>
+> **Verificação em produção** (script PHP via SSH, `Database::getInstance()`,
+> sem expor credencial): das 5 strings citadas, `2` (Excesso de Velocidade) e
+> `2048` (Falha de Câmera) já resolviam corretamente — são os bits 1 e 11,
+> já cadastrados no `decodeStandardAlarm()`. Os 3 problemas reais, confirmados
+> nas últimas 48h do IMEI (398 linhas) e depois checados na frota inteira
+> (30 dias):
+> - **`alertType` 4** (104 ocorrências, 1 equipamento) e **6** (14 ocorrências)
+>   sem nome — `"Código 4 (JTT)"`/`"Código 6 (JTT)"`.
+> - **Bônus, achado na varredura da frota**: `alertType` **5** (1 ocorrência)
+>   igualmente sem nome.
+> - **Bit 13 do bitmask 256** (valor **8192**, 22 ocorrências, só nesse
+>   equipamento) caindo no fallback `"Alarme Standard (Bits: 8192)"` — o bit
+>   simplesmente não existia no mapa.
+>
+> 🔴 **A fonte de 4/5/6 quase saiu errada.** Esses números batem, por
+> coincidência, com a tabela OBD oficial (§3.45 "Table 24 OBD alarm Data
+> ID": 4=Geofence entry, 5=Geofence exit, 6=Overspeed) — mas essa tabela
+> pertence ao endpoint `/pushobd`, que este projeto não implementa. Puxar o
+> payload bruto real (`webhook_payloads`, endpoint `pushalarm`) mostrou
+> `alarmLabel`/`driverId`/`driverName` no mesmo formato dos alarmes 264/265
+> já cadastrados — confirmando que a fonte certa é **§2.7 "Other Alarms"**
+> (JT/T Device Alarms, msgClass=1): `4` = Seatbelt Fastened (AWSB), `5` =
+> Face Recognition Failed (AFIF), `6` = Face Recognition Success (AFIS).
+> Cadastrados em `alarm_types` (migração `v4.18.4`) como "Cinto de Segurança
+> Afivelado", "Falha no Reconhecimento Facial" e "Reconhecimento Facial
+> Bem-sucedido".
+>
+> 🔴 **Achado maior no caminho: o bitmask de 32 bits do Alarme Padrão (256)
+> estava ERRADO desde o bit 12, não só incompleto.** `decodeStandardAlarm()`
+> (`handlers/pushalarm.php`) tinha os bits 15/18-29 escalonados fora de
+> posição contra a doc oficial §2.1 — ex.: o bit 28 dizia "Pré-aviso de
+> Capotamento", que a doc marca no bit **30**; o bit 18 dizia "Pré-aviso de
+> Velocidade", que é na verdade o bit **13** (a origem do 8192 sem nome).
+> Levantamento de 30 dias na frota inteira: **só os bits 1, 11 e 13
+> ocorreram de verdade em produção** — os demais bits corrigidos (12, 14,
+> 18-31) não têm histórico ainda, então o impacto prático até aqui é zero,
+> mas o mapa estava errado desde sempre e teria mostrado nome trocado no
+> primeiro equipamento que batesse um desses bits. ⚠️ **Esse mesmo mapa
+> errado já tinha influenciado uma decisão anterior**: a nota de cadastro do
+> alarme JTT `1047` ("Capotamento", v4.9.10) cita "bit 28 do bitmask JT/T"
+> como corroboração — pela doc oficial é o bit 30. Não invalida o cadastro
+> (a fonte primária foi informação do fornecedor), mas a corroboração por
+> bit estava calculando o bit errado. Tabela completa (0-31) reescrita e
+> reconferida linha a linha contra a doc oficial.
+>
+> **Registrado, não corrigido — decisão do dono do produto**: `alertType`
+> **1049** (JTT) tem **252 ocorrências em 30 dias** na frota inteira (bem
+> mais que 4, 5 ou 6) e não consta em NENHUMA seção da doc oficial (nem
+> §2.1-2.7, nem tabela adjacente) — mesma situação do `1047` antes de
+> v4.9.10, resolvido só com informação do fornecedor. Não batizado por
+> falta dessa fonte — ver o aviso `nunca batizar por palpite` que já rendeu
+> retrabalho outras vezes neste catálogo.
+>
+> **Verificação**: `php -l` limpo; bitmap corrigido conferido isoladamente
+> (`php -r`) contra os 3 valores medidos (2, 2048, 8192) e contra o bit 30
+> (capotamento) — sem regressão nos dois bits que já resolviam certo.
+
+> Entradas anteriores a 11/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+
 > ### 📍 10/09/2026 (Fase 3) — UI duplicada removida, `/manutencoes` com busca, `.filtro-campo` em ~20 arquivos, sem `alert()` nativo
 >
 > Retomada dos 4 itens que a varredura de design system (mesma data, ver entrada seguinte)

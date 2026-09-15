@@ -434,7 +434,8 @@ require_once __DIR__ . '/../web/layout_base.php';
         <a href="#rel-posicoes" style="padding-left:20px;font-size:12px">Posições</a>
         <a href="#rel-deslocamento" style="padding-left:20px;font-size:12px">Deslocamento</a>
         <a href="#rel-desatualizados" style="padding-left:20px;font-size:12px">Desatualizados</a>
-        <a href="#rel-alarmes" style="padding-left:20px;font-size:12px">Alarmes</a>
+        <a href="#rel-alarmes" style="padding-left:20px;font-size:12px">Alertas Videomonitoramento</a>
+        <a href="#rel-dirigibilidade" style="padding-left:20px;font-size:12px">Alarmes Dirigibilidade</a>
         <a href="#rel-ocorrencias" style="padding-left:20px;font-size:12px">Ocorrências</a>
         <a href="#rel-geocercas" style="padding-left:20px;font-size:12px">Geocercas</a>
         <a href="#rel-status-frota" style="padding-left:20px;font-size:12px">Status da Frota</a>
@@ -1155,8 +1156,8 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 <strong>O arquivo exportado é sempre da frota inteira</strong>, mesmo que você tenha aberto uma faixa antes de clicar em Exportar. Isso é proposital: a faixa serve para investigar na tela, e o arquivo serve para levar o quadro completo.
 </div>
 
-<h3 id="rel-alarmes">Alarmes</h3>
-<p><strong>Objetivo:</strong> Histórico completo dos alarmes recebidos, na ordem em que aconteceram. Filtros por cliente, placa, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
+<h3 id="rel-alarmes">Alertas Videomonitoramento</h3>
+<p><strong>Objetivo:</strong> Histórico dos alarmes das <strong>câmeras</strong> — tudo o que não é evento de condução —, na ordem em que aconteceram. Filtros por cliente, placa, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
@@ -1170,7 +1171,7 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 </table>
 
 <div class="callout info">
-<strong>Nem todo alarme tem vídeo.</strong> A coluna Vídeo mostra o arquivo que o próprio equipamento anexou ao alarme. Câmeras que não anexam vídeo ao evento — ou alarmes que não são de câmera, como excesso de velocidade — aparecem com um traço. Para essas, o caminho é pedir a gravação em <strong>Vídeos → Playback</strong>.
+<strong>Nem todo alarme tem vídeo.</strong> A coluna Vídeo mostra o arquivo que o próprio equipamento anexou ao alarme. Câmeras que não anexam vídeo ao evento aparecem com um traço. Os eventos de condução, como excesso de velocidade, ficam em <strong>Alarmes Dirigibilidade</strong>. Para essas, o caminho é pedir a gravação em <strong>Vídeos → Playback</strong>.
 </div>
 
 <div class="callout info">
@@ -1188,6 +1189,13 @@ Usuários podem ser do tipo <strong>revendedor</strong> (vê todos os clientes) 
 
 <div class="callout info">
 <strong>Diagnóstico não gera ocorrência nem notificação.</strong> Eventos técnicos são internos ao equipamento e não representam comportamento do motorista. Eles não aparecem no Dashboard de Ocorrências, no Resumo, no BI nem nos filtros de alarme dos outros relatórios — ficam restritos ao modo de diagnóstico desta tela.
+</div>
+
+<h3 id="rel-dirigibilidade">Alarmes Dirigibilidade</h3>
+<p><strong>Objetivo:</strong> Eventos de condução — arrancada e freada bruscas, curva acentuada, excesso e aviso de velocidade (inclusive dentro de cerca), colisão, capotamento, impacto e inclinação — de <strong>câmeras e rastreadores</strong>. Mesmos filtros, mapa e exportação de Alertas Videomonitoramento, sem coluna de vídeo: esses eventos não têm função de vídeo no sistema.</p>
+
+<div class="callout info">
+<strong>Rastreador não aparece nas telas de câmera.</strong> Equipamentos sem câmera (linha JM-VL) ficam fora de Vídeos, Configurações IA, Mapa de Risco e Alertas Videomonitoramento. Os alarmes deles que não são de condução (roubo, partida ilegal, desmontado) ficam na aba Alertas da ficha do veículo. Ocorrências de condução — de qualquer equipamento — não oferecem vídeo.
 </div>
 
 <h3 id="rel-ocorrencias">Ocorrências</h3>
