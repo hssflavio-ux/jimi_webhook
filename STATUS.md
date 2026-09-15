@@ -1,18 +1,18 @@
 # STATUS.md — Jimi Webhook System v4.21.0 (YUV Parity)
 
-> ### 📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera + Alarmes Dirigibilidade (v4.21.0)
+> ### 📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera + Alertas Dirigibilidade (v4.21.0)
 >
 > Pedido do dono do produto: rastreador (JM-VL) não tem câmera e não deve aparecer nas telas
 > exclusivas de câmera; os eventos de condução (câmera e rastreador) ganham menu próprio e
 > ocorrência de condução não oferece vídeo. Decisões tomadas com ele (spec
 > `docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md`, plano em
 > `docs/superpowers/plans/2026-09-14-rastreadores-dirigibilidade.md`):
-> - "Alarmes Dirigibilidade" agrupa pelo **tipo** do alarme, de qualquer equipamento;
+> - "Alertas Dirigibilidade" agrupa pelo **tipo** do alarme, de qualquer equipamento;
 > - o vídeo some em **toda** linha de condução, inclusive de câmera;
 > - entram também Capotamento, Aviso/Velocidade em Cerca e Impacto/Inclinação (Mudança de Faixa fica fora);
 > - alarme de rastreador que não é de condução fica **só na ficha do veículo**;
 > - pedido automático de vídeo para condução **para**; Mapa de Risco sem rastreador no seletor e na exposição;
-> - Agendamentos/Exportar ganham o tipo "Alarmes Dirigibilidade".
+> - Agendamentos/Exportar ganham o tipo "Alertas Dirigibilidade".
 >
 > **Entregue**: `alarm_types.is_driving` (28 códigos, por código), `/relatorios/dirigibilidade`,
 > menu "Alertas Videomonitoramento", ocorrências sem vídeo (grade, detalhe, `/solicitarvideo`,

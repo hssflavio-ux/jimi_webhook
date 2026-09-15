@@ -1,4 +1,4 @@
-# Rastreadores fora das telas de câmera + Alarmes de Dirigibilidade (v4.21.0)
+# Rastreadores fora das telas de câmera + Alertas de Dirigibilidade (v4.21.0)
 
 Data: 14/09/2026 · Status: aprovado pelo dono do produto (desenho e os três pontos em aberto)
 
@@ -23,7 +23,7 @@ arrancada e freada bruscas, curva acentuada, excesso de velocidade, colisão. Ho
 | 4 | Alarmes de rastreador que NÃO são de condução | **Só na ficha do veículo** (saem dos relatórios) |
 | 5 | Pedido automático de vídeo (motor + backfill) para dirigibilidade | **Para** — gastava franquia num vídeo que nenhuma tela mostra |
 | 6 | Mapa de Risco | Rastreador sai do **seletor e da exposição** (denominador), com reprocessamento |
-| 7 | Agendamentos | "Alarmes" segue o filtro de Videomonitoramento; tipo novo **"Alarmes Dirigibilidade"** |
+| 7 | Agendamentos | "Alarmes" segue o filtro de Videomonitoramento; tipo novo **"Alertas Dirigibilidade"** |
 
 ## 3. Classificação: `alarm_types.is_driving`
 
@@ -69,7 +69,7 @@ Não depende de `family`. Expressão única em `includes/functions.php`
 
 ### 5.1 Menu (web/layout_base.php, grupo Relatórios)
 - `rel_alarmes`: rótulo "Alarmes" → **"Alertas Videomonitoramento"** (URL `/relatorios/alarmes` mantida).
-- Novo `rel_dirigibilidade`: **"Alarmes Dirigibilidade"** → `/relatorios/dirigibilidade`, logo abaixo.
+- Novo `rel_dirigibilidade`: **"Alertas Dirigibilidade"** → `/relatorios/dirigibilidade`, logo abaixo.
 - Permissão: chave `relatorios` (prefixo `rel_` no menu; `rel_dirigibilidade.php => 'relatorios'` em `$screenByHandler`). Nenhuma chave nova na matriz.
 
 ### 5.2 Alertas Videomonitoramento (`handlers/rel_alarmes.php`, modo `video`)
@@ -78,12 +78,12 @@ Não depende de `family`. Expressão única em `includes/functions.php`
 - Título "Alertas Videomonitoramento"; export `relatorio_alertas_videomonitoramento`.
 - Resto inalterado (coluna Vídeo, Pedir vídeo, modo diagnóstico, tipos DMS/ADAS).
 
-### 5.3 Alarmes Dirigibilidade (`handlers/rel_dirigibilidade.php` → mesmo código, modo `driving`)
+### 5.3 Alertas Dirigibilidade (`handlers/rel_dirigibilidade.php` → mesmo código, modo `driving`)
 - Handler fino: define `$ALARM_REPORT_MODE = 'driving'` e inclui `rel_alarmes.php`. Uma grade só.
 - Grade: `AND driving = 1`, qualquer equipamento. Placa: todos os equipamentos.
 - Tipos no filtro: `alarm_types WHERE is_driving = 1`.
 - **Sem** coluna Vídeo, sem Pedir vídeo, sem modo diagnóstico (nenhum tipo de condução é diagnóstico).
-- Modelos salvos com chave própria `rel_dirigibilidade`. Export "Relatório de Alarmes de Dirigibilidade".
+- Modelos salvos com chave própria `rel_dirigibilidade`. Export "Relatório de Alertas de Dirigibilidade".
 
 ### 5.4 Ocorrências
 Uma ocorrência **não tem vídeo** quando algum alarme agrupado é de dirigibilidade
@@ -106,7 +106,7 @@ Uma ocorrência **não tem vídeo** quando algum alarme agrupado é de dirigibil
 - Alarmes de rastreador não-condução: ficam só na aba Alertas de `/ativos/{id}` (já existe).
 
 ### 5.7 Agendamentos
-- `schedule_report_types()`: `alarms` → "Alertas Videomonitoramento"; novo `driving_alarms` → "Alarmes Dirigibilidade".
+- `schedule_report_types()`: `alarms` → "Alertas Videomonitoramento"; novo `driving_alarms` → "Alertas Dirigibilidade".
 - `scripts/worker.php` `buildReportSource()`: `alarms` aplica o filtro de 5.2 (e o de diagnóstico, que faltava);
   `driving_alarms` aplica o de 5.3.
 

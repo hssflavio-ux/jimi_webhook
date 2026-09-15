@@ -562,7 +562,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             // v4.21.0 — o mesmo recorte das duas telas: `alarms` é Alertas
             // Videomonitoramento (sem condução, sem equipamento sem câmera, sem
             // diagnóstico — que este relatório nunca filtrava) e
-            // `driving_alarms` é Alarmes Dirigibilidade.
+            // `driving_alarms` é Alertas Dirigibilidade.
             ['joins' => $alarmJoins, 'expr' => $alarmExpr, 'diag' => $alarmDiag] = alarm_label_sql();
             $drivingExpr = alarm_driving_expr(alarm_types_has_driving_flag($db));
             $recorte = $type === 'driving_alarms'

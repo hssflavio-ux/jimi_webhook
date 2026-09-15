@@ -1,12 +1,12 @@
 -- ============================================================================
--- Migração v4.21.0 — Alarmes de Dirigibilidade (alarm_types.is_driving)
+-- Migração v4.21.0 — Alertas de Dirigibilidade (alarm_types.is_driving)
 -- ============================================================================
 -- Sem `USE`: o banco vem da linha de comando (convenção desde a v4.7.3).
 --
 -- Decisão do dono do produto (14/09/2026): os eventos de condução — arrancada,
 -- freada, curva, excesso de velocidade, colisão, capotamento, impacto e
 -- inclinação — saem de "Alertas Videomonitoramento" e ganham a tela
--- "Alarmes Dirigibilidade", venham de câmera ou de rastreador (JM-VL). Nessas
+-- "Alertas Dirigibilidade", venham de câmera ou de rastreador (JM-VL). Nessas
 -- linhas não há função de vídeo. Spec:
 -- docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md
 --
@@ -38,7 +38,7 @@ END//
 DELIMITER ;
 
 CALL add_column_if_not_exists('alarm_types', 'is_driving',
-    "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Evento de dirigibilidade: tela Alarmes Dirigibilidade, sem vídeo (v4.21.0)' AFTER `is_diagnostic`");
+    "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Evento de dirigibilidade: tela Alertas Dirigibilidade, sem vídeo (v4.21.0)' AFTER `is_diagnostic`");
 
 DROP PROCEDURE IF EXISTS `add_column_if_not_exists`;
 

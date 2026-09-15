@@ -245,7 +245,7 @@ function schedule_report_types(): array
     return [
         // v4.21.0 — os dois recortes das telas de alarme (spec 2026-09-14).
         'alarms'      => 'Alertas Videomonitoramento',
-        'driving_alarms' => 'Alarmes Dirigibilidade',
+        'driving_alarms' => 'Alertas Dirigibilidade',
         'occurrences' => 'Ocorrências',
         'positions'   => 'Posições GPS',
         'trips'       => 'Viagens (Deslocamento)',

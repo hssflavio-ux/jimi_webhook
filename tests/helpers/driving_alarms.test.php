@@ -87,7 +87,7 @@ confere((bool)preg_match("/'dirigibilidade'\s*=>\s*'rel_dirigibilidade\.php'/", 
 confere((bool)preg_match("/'rel_dirigibilidade\.php'\s*=>\s*'relatorios'/", $router), 'router: permissão relatorios');
 $layout = (string)file_get_contents($raiz . '/web/layout_base.php');
 confere(str_contains($layout, "'label' => 'Alertas Videomonitoramento'"), 'menu: rótulo Alertas Videomonitoramento');
-confere((bool)preg_match("/'route' => 'rel_dirigibilidade',\s*'label' => 'Alarmes Dirigibilidade',\s*'href' => '\/relatorios\/dirigibilidade'/", $layout), 'menu: Alarmes Dirigibilidade');
+confere((bool)preg_match("/'route' => 'rel_dirigibilidade',\s*'label' => 'Alertas Dirigibilidade',\s*'href' => '\/relatorios\/dirigibilidade'/", $layout), 'menu: Alertas Dirigibilidade');
 $dirig = is_file($raiz . '/handlers/rel_dirigibilidade.php') ? file_get_contents($raiz . '/handlers/rel_dirigibilidade.php') : '';
 confere(str_contains($dirig, "\$ALARM_REPORT_MODE = 'driving';") && str_contains($dirig, "require __DIR__ . '/rel_alarmes.php';"), 'rel_dirigibilidade.php só define o modo');
 $relAl = (string)file_get_contents($raiz . '/handlers/rel_alarmes.php');
@@ -119,11 +119,11 @@ confere(str_contains($rb, 'WHERE d.imei = g.imei AND NOT ('), 'risk_builder: exp
 
 // ── 7) Agendamentos e Exportar ──────────────────────────────────────────────
 $sch = (string)file_get_contents($raiz . '/includes/schedule.php');
-confere(str_contains($sch, "'alarms'      => 'Alertas Videomonitoramento'") && str_contains($sch, "'driving_alarms' => 'Alarmes Dirigibilidade'"), 'schedule_report_types(): dois recortes');
+confere(str_contains($sch, "'alarms'      => 'Alertas Videomonitoramento'") && str_contains($sch, "'driving_alarms' => 'Alertas Dirigibilidade'"), 'schedule_report_types(): dois recortes');
 $wk = (string)file_get_contents($raiz . '/scripts/worker.php');
 confere((bool)preg_match("/case 'alarms':\s*case 'driving_alarms':/", $wk), 'worker reconhece driving_alarms');
 $exp = (string)file_get_contents($raiz . '/handlers/exportar.php');
-confere(str_contains($exp, '<option value="driving_alarms">Alarmes Dirigibilidade</option>'), 'Exportar oferece Alarmes Dirigibilidade');
+confere(str_contains($exp, '<option value="driving_alarms">Alertas Dirigibilidade</option>'), 'Exportar oferece Alertas Dirigibilidade');
 
 // ── novas seções entram acima desta linha ──
 

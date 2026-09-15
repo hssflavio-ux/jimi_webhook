@@ -480,7 +480,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.19.1" "mysql/migration_v4.19.1.sql" "celular do JT/T (265-2 Chamada Telefonica) sem parametro de ocorrencia desde a v4.8.3"
     run_migration "4.19.2" "mysql/migration_v4.19.2.sql" "worker_watermarks - state_builder detecta posicao que chega atrasada (marca por id)"
     run_migration "4.20.0" "mysql/migration_v4.20.0.sql" "mapa de risco ADAS/DMS - alarm_types.risk_group + risk_events/risk_exposure/risk_day_state"
-    run_migration "4.21.0" "mysql/migration_v4.21.0.sql" "alarm_types.is_driving - Alarmes Dirigibilidade (conducao sem video, camera e rastreador)"
+    run_migration "4.21.0" "mysql/migration_v4.21.0.sql" "alarm_types.is_driving - Alertas Dirigibilidade (conducao sem video, camera e rastreador)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────

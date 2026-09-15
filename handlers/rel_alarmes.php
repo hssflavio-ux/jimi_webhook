@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Alertas Videomonitoramento (e Alarmes Dirigibilidade) v4.21.0
+ * JIMI Webhook System — Alertas Videomonitoramento (e Alertas Dirigibilidade) v4.21.0
  * Rotas: /relatorios/alarmes e /relatorios/dirigibilidade (modo, ver abaixo)
  *
  * Filtros: Cliente, Placa, Tipo de Alarme, Status, Período.
@@ -18,13 +18,13 @@ require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de la
 require_once __DIR__ . '/../includes/media.php';     // coluna Vídeo (v4.9.8)
 // ── Modo da tela (v4.21.0) ──────────────────────────────────────────────────
 // Este arquivo serve DUAS telas com a mesma grade: "Alertas Videomonitoramento"
-// (esta rota) e "Alarmes Dirigibilidade" (handlers/rel_dirigibilidade.php, que
+// (esta rota) e "Alertas Dirigibilidade" (handlers/rel_dirigibilidade.php, que
 // só define o modo e inclui este arquivo). Decisões do dono do produto em
 // docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md.
 $modoDirig  = (($ALARM_REPORT_MODE ?? 'video') === 'driving');
 $rotaTela   = $modoDirig ? '/relatorios/dirigibilidade' : '/relatorios/alarmes';
 $chaveTela  = $modoDirig ? 'rel_dirigibilidade' : 'rel_alarmes';
-$tituloTela = $modoDirig ? 'Alarmes Dirigibilidade' : 'Alertas Videomonitoramento';
+$tituloTela = $modoDirig ? 'Alertas Dirigibilidade' : 'Alertas Videomonitoramento';
 
 // Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
 handle_template_actions($chaveTela, $rotaTela);
@@ -197,9 +197,9 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         $ps->execute([$filterImei]);
         $placaSel = 'Placa: ' . ($ps->fetchColumn() ?: $filterImei);
     }
-    stream_export($export, $modoDirig ? 'relatorio_alarmes_dirigibilidade' : 'relatorio_alertas_videomonitoramento',
+    stream_export($export, $modoDirig ? 'relatorio_alertas_dirigibilidade' : 'relatorio_alertas_videomonitoramento',
         ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Motorista', 'Endereço', 'Mapa'],
-        $expRows, $modoDirig ? 'Relatório de Alarmes de Dirigibilidade' : 'Relatório de Alertas de Videomonitoramento',
+        $expRows, $modoDirig ? 'Relatório de Alertas de Dirigibilidade' : 'Relatório de Alertas de Videomonitoramento',
         "$placaSel  |  " . report_period_label($dateFrom, $dateTo),
         // Endereço e nome do alarme são as duas colunas longas; as demais são
         // curtas e fixas (placa, data, status, velocidade, motorista, rótulo do mapa).

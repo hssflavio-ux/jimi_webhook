@@ -70,7 +70,7 @@ $navGroups = [
             // v4.21.0 — "Alarmes" virou duas telas (decisão do dono do produto):
             // o que é de câmera/IA e o que é de condução (câmera e rastreador).
             ['route' => 'rel_alarmes',        'label' => 'Alertas Videomonitoramento', 'href' => '/relatorios/alarmes'],
-            ['route' => 'rel_dirigibilidade', 'label' => 'Alarmes Dirigibilidade', 'href' => '/relatorios/dirigibilidade'],
+            ['route' => 'rel_dirigibilidade', 'label' => 'Alertas Dirigibilidade', 'href' => '/relatorios/dirigibilidade'],
             ['route' => 'rel_ocorrencias',    'label' => 'Ocorrências',     'href' => '/relatorios/ocorrencias'],
             ['route' => 'rel_geocercas',      'label' => 'Cercas',         'href' => '/relatorios/geocercas'],
             ['route' => 'rel_status_frota',   'label' => 'Status da Frota', 'href' => '/relatorios/status-frota'],

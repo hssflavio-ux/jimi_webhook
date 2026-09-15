@@ -1,8 +1,8 @@
-# Rastreadores fora das telas de câmera + Alarmes Dirigibilidade — Plano de Implementação
+# Rastreadores fora das telas de câmera + Alertas Dirigibilidade — Plano de Implementação
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** separar os eventos de condução (câmera ou rastreador) numa tela "Alarmes Dirigibilidade" sem vídeo, renomear a atual para "Alertas Videomonitoramento", tirar o vídeo das ocorrências de condução e tirar os rastreadores das telas exclusivas de câmera.
+**Goal:** separar os eventos de condução (câmera ou rastreador) numa tela "Alertas Dirigibilidade" sem vídeo, renomear a atual para "Alertas Videomonitoramento", tirar o vídeo das ocorrências de condução e tirar os rastreadores das telas exclusivas de câmera.
 
 **Architecture:** classificação por código numa coluna nova `alarm_types.is_driving` (migração v4.21.0), lida por quatro helpers puros em `includes/functions.php` com guarda para a janela entre os dois deploys. `rel_alarmes.php` passa a servir as duas telas por um modo (`$ALARM_REPORT_MODE`), com `rel_dirigibilidade.php` como handler fino. Ocorrências, pedido de vídeo, backfill, Downloads, Mapa de Risco e agendamentos consomem os mesmos helpers.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Versão: **4.21.0**. Migração `mysql/migration_v4.21.0.sql`, listada em `scripts/deploy.sh`.
-- Rótulos exatos: **"Alertas Videomonitoramento"** (rota `/relatorios/alarmes`, mantida) e **"Alarmes Dirigibilidade"** (rota `/relatorios/dirigibilidade`).
+- Rótulos exatos: **"Alertas Videomonitoramento"** (rota `/relatorios/alarmes`, mantida) e **"Alertas Dirigibilidade"** (rota `/relatorios/dirigibilidade`).
 - Classificação **por protocolo + código**, nunca por nome nem categoria.
 - "Sem câmera" = `COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) = 0` (regra da v4.16.0).
 - Sem MySQL local: verificação por `php -l`, `tests/helpers/*.test.php` e specs Playwright (que pulam sem `TEST_EMAIL`/`TEST_PASSWORD`).
@@ -133,14 +133,14 @@ Expected: `FALHA mysql/migration_v4.21.0.sql existe` … `FALHOU (…)`, exit 1.
 
 ```sql
 -- ============================================================================
--- Migração v4.21.0 — Alarmes de Dirigibilidade (alarm_types.is_driving)
+-- Migração v4.21.0 — Alertas de Dirigibilidade (alarm_types.is_driving)
 -- ============================================================================
 -- Sem `USE`: o banco vem da linha de comando (convenção desde a v4.7.3).
 --
 -- Decisão do dono do produto (14/09/2026): os eventos de condução — arrancada,
 -- freada, curva, excesso de velocidade, colisão, capotamento, impacto e
 -- inclinação — saem de "Alertas Videomonitoramento" e ganham a tela
--- "Alarmes Dirigibilidade", venham de câmera ou de rastreador (JM-VL). Nessas
+-- "Alertas Dirigibilidade", venham de câmera ou de rastreador (JM-VL). Nessas
 -- linhas não há função de vídeo. Spec:
 -- docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md
 --
@@ -172,7 +172,7 @@ END//
 DELIMITER ;
 
 CALL add_column_if_not_exists('alarm_types', 'is_driving',
-    "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Evento de dirigibilidade: tela Alarmes Dirigibilidade, sem vídeo (v4.21.0)' AFTER `is_diagnostic`");
+    "TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Evento de dirigibilidade: tela Alertas Dirigibilidade, sem vídeo (v4.21.0)' AFTER `is_diagnostic`");
 
 DROP PROCEDURE IF EXISTS `add_column_if_not_exists`;
 
@@ -230,7 +230,7 @@ DROP TEMPORARY TABLE IF EXISTS tmp_driving;
 - [ ] **Step 4: Listar no deploy** — em `scripts/deploy.sh`, logo após a linha do 4.20.0:
 
 ```bash
-    run_migration "4.21.0" "mysql/migration_v4.21.0.sql" "alarm_types.is_driving - Alarmes Dirigibilidade (condução sem vídeo, câmera e rastreador)"
+    run_migration "4.21.0" "mysql/migration_v4.21.0.sql" "alarm_types.is_driving - Alertas Dirigibilidade (condução sem vídeo, câmera e rastreador)"
 ```
 
 - [ ] **Step 5: Rodar e ver passar**
@@ -430,7 +430,7 @@ git commit -m "feat: helpers de dirigibilidade e de equipamento sem camera (v4.2
 
 ---
 
-### Task 3: Telas "Alertas Videomonitoramento" e "Alarmes Dirigibilidade" + rota + menu
+### Task 3: Telas "Alertas Videomonitoramento" e "Alertas Dirigibilidade" + rota + menu
 
 **Files:**
 - Create: `handlers/rel_dirigibilidade.php`
@@ -450,7 +450,7 @@ confere((bool)preg_match("/'dirigibilidade'\s*=>\s*'rel_dirigibilidade\.php'/", 
 confere((bool)preg_match("/'rel_dirigibilidade\.php'\s*=>\s*'relatorios'/", $router), 'router: permissão relatorios');
 $layout = (string)file_get_contents($raiz . '/web/layout_base.php');
 confere(str_contains($layout, "'label' => 'Alertas Videomonitoramento'"), 'menu: rótulo Alertas Videomonitoramento');
-confere((bool)preg_match("/'route' => 'rel_dirigibilidade',\s*'label' => 'Alarmes Dirigibilidade',\s*'href' => '\/relatorios\/dirigibilidade'/", $layout), 'menu: Alarmes Dirigibilidade');
+confere((bool)preg_match("/'route' => 'rel_dirigibilidade',\s*'label' => 'Alertas Dirigibilidade',\s*'href' => '\/relatorios\/dirigibilidade'/", $layout), 'menu: Alertas Dirigibilidade');
 $dirig = is_file($raiz . '/handlers/rel_dirigibilidade.php') ? file_get_contents($raiz . '/handlers/rel_dirigibilidade.php') : '';
 confere(str_contains($dirig, "\$ALARM_REPORT_MODE = 'driving';") && str_contains($dirig, "require __DIR__ . '/rel_alarmes.php';"), 'rel_dirigibilidade.php só define o modo');
 $relAl = (string)file_get_contents($raiz . '/handlers/rel_alarmes.php');
@@ -463,7 +463,7 @@ confere(str_contains($relAl, "<?php if (!\$modoDirig): // vídeo só existe em V
 ```js
 // @ts-check
 /**
- * Alertas Videomonitoramento × Alarmes Dirigibilidade (v4.21.0).
+ * Alertas Videomonitoramento × Alertas Dirigibilidade (v4.21.0).
  *
  * A tela de dirigibilidade reúne os eventos de condução de câmera E de
  * rastreador, e por decisão do dono do produto não tem NENHUMA função de
@@ -478,7 +478,7 @@ test.describe('Relatórios de alarmes divididos (v4.21.0)', () => {
         await authedPage.goto('/relatorios/alarmes');
         const menu = authedPage.locator('#sidebar');
         await expect(menu.locator('a[href="/relatorios/alarmes"]')).toContainText('Alertas Videomonitoramento');
-        await expect(menu.locator('a[href="/relatorios/dirigibilidade"]')).toContainText('Alarmes Dirigibilidade');
+        await expect(menu.locator('a[href="/relatorios/dirigibilidade"]')).toContainText('Alertas Dirigibilidade');
     });
 
     test('Alertas Videomonitoramento mantém a coluna Vídeo', async ({ authedPage }) => {
@@ -487,10 +487,10 @@ test.describe('Relatórios de alarmes divididos (v4.21.0)', () => {
         await expect(authedPage.locator('table thead th', { hasText: 'Vídeo' })).toHaveCount(1);
     });
 
-    test('Alarmes Dirigibilidade não tem nenhuma função de vídeo', async ({ authedPage }) => {
+    test('Alertas Dirigibilidade não tem nenhuma função de vídeo', async ({ authedPage }) => {
         const resp = await authedPage.goto('/relatorios/dirigibilidade');
         expect(resp?.status()).toBe(200);
-        await expect(authedPage.locator('h2', { hasText: 'Alarmes Dirigibilidade' })).toHaveCount(1);
+        await expect(authedPage.locator('h2', { hasText: 'Alertas Dirigibilidade' })).toHaveCount(1);
         await expect(authedPage.locator('table thead th', { hasText: 'Vídeo' })).toHaveCount(0);
         await expect(authedPage.locator('#video-modal')).toHaveCount(0);
         await expect(authedPage.getByText('Pedir vídeo')).toHaveCount(0);
@@ -508,7 +508,7 @@ Expected: FALHA nas 7 linhas da seção 3, exit 1.
 ```php
 <?php
 /**
- * JIMI Webhook System — Alarmes Dirigibilidade v4.21.0
+ * JIMI Webhook System — Alertas Dirigibilidade v4.21.0
  * Rota: /relatorios/dirigibilidade
  *
  * Eventos de condução (arrancada, freada, curva, excesso de velocidade,
@@ -529,7 +529,7 @@ require __DIR__ . '/rel_alarmes.php';
 (a) Docblock do topo: trocar `Relatório de Alarmes v4.0.0` / `Rota: /relatorios/alarmes` por:
 
 ```php
- * JIMI Webhook System — Alertas Videomonitoramento (e Alarmes Dirigibilidade) v4.21.0
+ * JIMI Webhook System — Alertas Videomonitoramento (e Alertas Dirigibilidade) v4.21.0
  * Rotas: /relatorios/alarmes e /relatorios/dirigibilidade (modo, ver abaixo)
 ```
 
@@ -548,13 +548,13 @@ por
 ```php
 // ── Modo da tela (v4.21.0) ──────────────────────────────────────────────────
 // Este arquivo serve DUAS telas com a mesma grade: "Alertas Videomonitoramento"
-// (esta rota) e "Alarmes Dirigibilidade" (handlers/rel_dirigibilidade.php, que
+// (esta rota) e "Alertas Dirigibilidade" (handlers/rel_dirigibilidade.php, que
 // só define o modo e inclui este arquivo). Decisões do dono do produto em
 // docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md.
 $modoDirig  = (($ALARM_REPORT_MODE ?? 'video') === 'driving');
 $rotaTela   = $modoDirig ? '/relatorios/dirigibilidade' : '/relatorios/alarmes';
 $chaveTela  = $modoDirig ? 'rel_dirigibilidade' : 'rel_alarmes';
-$tituloTela = $modoDirig ? 'Alarmes Dirigibilidade' : 'Alertas Videomonitoramento';
+$tituloTela = $modoDirig ? 'Alertas Dirigibilidade' : 'Alertas Videomonitoramento';
 
 handle_template_actions($chaveTela, $rotaTela);
 
@@ -605,7 +605,7 @@ LEFT JOIN devices d ON d.imei = a.imei
     LEFT JOIN device_models dm ON dm.id = d.device_model_id
 ```
 
-(g) No `stream_export(...)`: `'relatorio_alarmes'` → `$modoDirig ? 'relatorio_alarmes_dirigibilidade' : 'relatorio_alertas_videomonitoramento'` e `'Relatório de Alarmes'` → `$modoDirig ? 'Relatório de Alarmes de Dirigibilidade' : 'Relatório de Alertas de Videomonitoramento'`.
+(g) No `stream_export(...)`: `'relatorio_alarmes'` → `$modoDirig ? 'relatorio_alertas_dirigibilidade' : 'relatorio_alertas_videomonitoramento'` e `'Relatório de Alarmes'` → `$modoDirig ? 'Relatório de Alertas de Dirigibilidade' : 'Relatório de Alertas de Videomonitoramento'`.
 
 (h) Tipos do filtro: substituir `$types = $db->query("SELECT DISTINCT alarm_name_pt … category IN ('DMS','ADAS') …")->fetchAll();` por
 
@@ -684,7 +684,7 @@ No `$screenByHandler`, após `'rel_alarmes.php'           => 'relatorios',`:
             // v4.21.0 — "Alarmes" virou duas telas (decisão do dono do produto):
             // o que é de câmera/IA e o que é de condução (câmera e rastreador).
             ['route' => 'rel_alarmes',        'label' => 'Alertas Videomonitoramento', 'href' => '/relatorios/alarmes'],
-            ['route' => 'rel_dirigibilidade', 'label' => 'Alarmes Dirigibilidade', 'href' => '/relatorios/dirigibilidade'],
+            ['route' => 'rel_dirigibilidade', 'label' => 'Alertas Dirigibilidade', 'href' => '/relatorios/dirigibilidade'],
 ```
 
 `tests/navigation.spec.js` — após `'/relatorios/alarmes',` acrescentar `'/relatorios/dirigibilidade',`.
@@ -698,7 +698,7 @@ Expected: sem erro de sintaxe; `TUDO OK`.
 
 ```bash
 git add handlers/rel_alarmes.php handlers/rel_dirigibilidade.php handlers/router.php web/layout_base.php tests/navigation.spec.js tests/dirigibilidade.spec.js tests/helpers/driving_alarms.test.php
-git commit -m "feat: Alertas Videomonitoramento x Alarmes Dirigibilidade (v4.21.0)"
+git commit -m "feat: Alertas Videomonitoramento x Alertas Dirigibilidade (v4.21.0)"
 ```
 
 ---
@@ -1032,11 +1032,11 @@ git commit -m "feat: rastreador fora de Downloads e do Mapa de Risco (v4.21.0)"
 ```php
 // ── 7) Agendamentos e Exportar ──────────────────────────────────────────────
 $sch = (string)file_get_contents($raiz . '/includes/schedule.php');
-confere(str_contains($sch, "'alarms'      => 'Alertas Videomonitoramento'") && str_contains($sch, "'driving_alarms' => 'Alarmes Dirigibilidade'"), 'schedule_report_types(): dois recortes');
+confere(str_contains($sch, "'alarms'      => 'Alertas Videomonitoramento'") && str_contains($sch, "'driving_alarms' => 'Alertas Dirigibilidade'"), 'schedule_report_types(): dois recortes');
 $wk = (string)file_get_contents($raiz . '/scripts/worker.php');
 confere((bool)preg_match("/case 'alarms':\s*case 'driving_alarms':/", $wk), 'worker reconhece driving_alarms');
 $exp = (string)file_get_contents($raiz . '/handlers/exportar.php');
-confere(str_contains($exp, '<option value="driving_alarms">Alarmes Dirigibilidade</option>'), 'Exportar oferece Alarmes Dirigibilidade');
+confere(str_contains($exp, '<option value="driving_alarms">Alertas Dirigibilidade</option>'), 'Exportar oferece Alertas Dirigibilidade');
 ```
 
 - [ ] **Step 2: Rodar e ver falhar**
@@ -1049,7 +1049,7 @@ Expected: FALHA nas 3 linhas da seção 7.
 ```php
         // v4.21.0 — os dois recortes das telas de alarme (spec 2026-09-14).
         'alarms'      => 'Alertas Videomonitoramento',
-        'driving_alarms' => 'Alarmes Dirigibilidade',
+        'driving_alarms' => 'Alertas Dirigibilidade',
 ```
 
 - [ ] **Step 4: worker** — substituir o `case 'alarms':` inteiro (até o `];` do `return`) por
@@ -1064,7 +1064,7 @@ Expected: FALHA nas 3 linhas da seção 7.
             // v4.21.0 — o mesmo recorte das duas telas: `alarms` é Alertas
             // Videomonitoramento (sem condução, sem equipamento sem câmera, sem
             // diagnóstico — que este relatório nunca filtrava) e
-            // `driving_alarms` é Alarmes Dirigibilidade.
+            // `driving_alarms` é Alertas Dirigibilidade.
             ['joins' => $alarmJoins, 'expr' => $alarmExpr, 'diag' => $alarmDiag] = alarm_label_sql();
             $drivingExpr = alarm_driving_expr(alarm_types_has_driving_flag($db));
             $recorte = $type === 'driving_alarms'
@@ -1099,7 +1099,7 @@ Expected: FALHA nas 3 linhas da seção 7.
 
 ```php
                     <option value="alarms">Alertas Videomonitoramento</option>
-                    <option value="driving_alarms">Alarmes Dirigibilidade</option>
+                    <option value="driving_alarms">Alertas Dirigibilidade</option>
 ```
 
 - [ ] **Step 6: Rodar e ver passar**
@@ -1111,7 +1111,7 @@ Expected: sem erro; `TUDO OK`.
 
 ```bash
 git add includes/schedule.php scripts/worker.php handlers/exportar.php tests/helpers/driving_alarms.test.php
-git commit -m "feat: agendamento e exportacao de Alarmes Dirigibilidade (v4.21.0)"
+git commit -m "feat: agendamento e exportacao de Alertas Dirigibilidade (v4.21.0)"
 ```
 
 ---
@@ -1121,24 +1121,24 @@ git commit -m "feat: agendamento e exportacao de Alarmes Dirigibilidade (v4.21.0
 **Files:**
 - Modify: `handlers/wiki.php` (§ `rel-alarmes` + índice), `CHANGELOG.md`, `STATUS.md`, `CLAUDE.md`, `.env.example`
 
-- [ ] **Step 1: Wiki** — no índice, trocar `<a href="#rel-alarmes" …>Alarmes</a>` por dois links (`#rel-alarmes` "Alertas Videomonitoramento", `#rel-dirigibilidade` "Alarmes Dirigibilidade"). Na seção: `<h3 id="rel-alarmes">Alarmes</h3>` → `<h3 id="rel-alarmes">Alertas Videomonitoramento</h3>`; primeiro parágrafo passa a dizer que a tela mostra os alarmes de **câmera** que não são de condução; no callout "Nem todo alarme tem vídeo" trocar "como excesso de velocidade" por "(os de condução estão em Alarmes Dirigibilidade)". Antes de `<h4 …>Eventos de diagnóstico` inserir:
+- [ ] **Step 1: Wiki** — no índice, trocar `<a href="#rel-alarmes" …>Alarmes</a>` por dois links (`#rel-alarmes` "Alertas Videomonitoramento", `#rel-dirigibilidade` "Alertas Dirigibilidade"). Na seção: `<h3 id="rel-alarmes">Alarmes</h3>` → `<h3 id="rel-alarmes">Alertas Videomonitoramento</h3>`; primeiro parágrafo passa a dizer que a tela mostra os alarmes de **câmera** que não são de condução; no callout "Nem todo alarme tem vídeo" trocar "como excesso de velocidade" por "(os de condução estão em Alertas Dirigibilidade)". Antes de `<h4 …>Eventos de diagnóstico` inserir:
 
 ```html
-<h3 id="rel-dirigibilidade">Alarmes Dirigibilidade</h3>
+<h3 id="rel-dirigibilidade">Alertas Dirigibilidade</h3>
 <p><strong>Objetivo:</strong> Eventos de condução — arrancada e freada bruscas, curva acentuada, excesso e aviso de velocidade (inclusive dentro de cerca), colisão, capotamento, impacto e inclinação — de <strong>câmeras e rastreadores</strong>. Mesmos filtros, mapa e exportação de Alertas Videomonitoramento, sem coluna de vídeo: esses eventos não têm função de vídeo no sistema.</p>
 <div class="callout info">
 <strong>Rastreador não aparece nas telas de câmera.</strong> Equipamentos sem câmera (linha JM-VL) ficam fora de Vídeos, Configurações IA, Mapa de Risco e Alertas Videomonitoramento. Os alarmes deles que não são de condução (roubo, partida ilegal, desmontado) ficam na aba Alertas da ficha do veículo. Ocorrências de condução — de qualquer equipamento — não oferecem vídeo.
 </div>
 ```
 
-- [ ] **Step 2: CHANGELOG** — renomear `## [Unreleased] — 4.20.0` para `## [4.20.0] — 2026-09-14` e inserir acima dele `## [Unreleased] — 4.21.0` com: resumo em uma frase; seção **Adicionado** (tela Alarmes Dirigibilidade, `alarm_types.is_driving`, tipo de agendamento/export `driving_alarms`, helpers); **Alterado** (menu "Alertas Videomonitoramento", recortes, ocorrências sem vídeo, pedido automático e backfill, Downloads/Mapa de Risco sem rastreador, exposição do risk_builder); **Pós-deploy** (segundo deploy ou `.sql` à mão; `php scripts/risk_builder.php --desde=2026-06-10`; conferências da migração).
+- [ ] **Step 2: CHANGELOG** — renomear `## [Unreleased] — 4.20.0` para `## [4.20.0] — 2026-09-14` e inserir acima dele `## [Unreleased] — 4.21.0` com: resumo em uma frase; seção **Adicionado** (tela Alertas Dirigibilidade, `alarm_types.is_driving`, tipo de agendamento/export `driving_alarms`, helpers); **Alterado** (menu "Alertas Videomonitoramento", recortes, ocorrências sem vídeo, pedido automático e backfill, Downloads/Mapa de Risco sem rastreador, exposição do risk_builder); **Pós-deploy** (segundo deploy ou `.sql` à mão; `php scripts/risk_builder.php --desde=2026-06-10`; conferências da migração).
 
-- [ ] **Step 3: STATUS.md** — cabeçalho `v4.20.0` → `v4.21.0`; nova entrada `### 📍 14/09/2026 — Rastreadores fora das telas de câmera + Alarmes Dirigibilidade (v4.21.0)` no topo, com decisões (tabela §2 da spec), entregue, verificação local (resultado real dos testes) e **Pendente em produção**: aplicar migração no segundo deploy, conferir as 4 consultas da migração, reprocessar o risk_builder, abrir as duas telas logado. Mover a 4ª entrada datada mais antiga para `docs/status-history/STATUS_ARCHIVE.md` (regra das 3 inline).
+- [ ] **Step 3: STATUS.md** — cabeçalho `v4.20.0` → `v4.21.0`; nova entrada `### 📍 14/09/2026 — Rastreadores fora das telas de câmera + Alertas Dirigibilidade (v4.21.0)` no topo, com decisões (tabela §2 da spec), entregue, verificação local (resultado real dos testes) e **Pendente em produção**: aplicar migração no segundo deploy, conferir as 4 consultas da migração, reprocessar o risk_builder, abrir as duas telas logado. Mover a 4ª entrada datada mais antiga para `docs/status-history/STATUS_ARCHIVE.md` (regra das 3 inline).
 
 - [ ] **Step 4: CLAUDE.md** — após o bullet `Mapa de Risco (v4.20.0)`:
 
 ```markdown
-- 🔴 **Alarmes Dirigibilidade (v4.21.0): `alarm_types.is_driving` separa CONDUÇÃO de videomonitoramento, por CÓDIGO — e código de condução sem a marca cai na tela de vídeo.** Decisão do dono do produto (14/09/2026): condução (arrancada, freada, curva, velocidade — inclusive 202 e 95 —, colisão, capotamento, impacto/inclinação) vai para `/relatorios/dirigibilidade` venha de câmera ou de rastreador, e **nenhuma** linha de condução tem função de vídeo (grade, detalhe de ocorrência, `/solicitarvideo`, pedido automático e backfill). `Alertas Videomonitoramento` (`/relatorios/alarmes`) exclui condução **e** equipamento sem câmera — alarme de rastreador que não é de condução fica só na ficha do veículo. **Migração que cadastra código de condução tem de marcar `is_driving` junto** (mesma armadilha do `risk_group`); ADAS de IA (FCW/PCW) não é condução. Leitura só pelos helpers de `includes/functions.php` (`alarm_driving_expr()`, `occurrence_no_video_sql()`, `is_driving_alarm()`, `device_has_camera_sql()`), que caem no comportamento anterior enquanto a coluna não existe. `tests/helpers/driving_alarms.test.php` trava a lista.
+- 🔴 **Alertas Dirigibilidade (v4.21.0): `alarm_types.is_driving` separa CONDUÇÃO de videomonitoramento, por CÓDIGO — e código de condução sem a marca cai na tela de vídeo.** Decisão do dono do produto (14/09/2026): condução (arrancada, freada, curva, velocidade — inclusive 202 e 95 —, colisão, capotamento, impacto/inclinação) vai para `/relatorios/dirigibilidade` venha de câmera ou de rastreador, e **nenhuma** linha de condução tem função de vídeo (grade, detalhe de ocorrência, `/solicitarvideo`, pedido automático e backfill). `Alertas Videomonitoramento` (`/relatorios/alarmes`) exclui condução **e** equipamento sem câmera — alarme de rastreador que não é de condução fica só na ficha do veículo. **Migração que cadastra código de condução tem de marcar `is_driving` junto** (mesma armadilha do `risk_group`); ADAS de IA (FCW/PCW) não é condução. Leitura só pelos helpers de `includes/functions.php` (`alarm_driving_expr()`, `occurrence_no_video_sql()`, `is_driving_alarm()`, `device_has_camera_sql()`), que caem no comportamento anterior enquanto a coluna não existe. `tests/helpers/driving_alarms.test.php` trava a lista.
 ```
 
 - [ ] **Step 5: `.env.example`** — `SYSTEM_VERSION=4.20.0` → `SYSTEM_VERSION=4.21.0`.
@@ -1158,6 +1158,6 @@ Expected: nenhuma linha de erro de lint; todos os helpers `TUDO OK`/OK; nenhum `
 
 ```bash
 git add handlers/wiki.php CHANGELOG.md STATUS.md CLAUDE.md .env.example docs/status-history/STATUS_ARCHIVE.md
-git commit -m "docs: v4.21.0 - Alarmes Dirigibilidade, rastreadores fora das telas de camera"
+git commit -m "docs: v4.21.0 - Alertas Dirigibilidade, rastreadores fora das telas de camera"
 git push
 ```

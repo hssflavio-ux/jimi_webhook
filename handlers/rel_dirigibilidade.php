@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Alarmes Dirigibilidade v4.21.0
+ * JIMI Webhook System — Alertas Dirigibilidade v4.21.0
  * Rota: /relatorios/dirigibilidade
  *
  * Eventos de condução (arrancada, freada, curva, excesso de velocidade,
