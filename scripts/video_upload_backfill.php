@@ -80,6 +80,11 @@ $stmt = $db->prepare($sql);
 $stmt->execute($params);
 $devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// v4.21.0 — alarme de dirigibilidade não tem função de vídeo: fica fora do
+// reenvio, contado à parte para não inflar "sem linha local".
+['joins' => $vubJoins] = alarm_label_sql();
+$vubDriving = alarm_driving_expr(alarm_types_has_driving_flag($db));
+
 if (!$devices) {
     fwrite(STDERR, "Nenhum device JT/T ativo encontrado" . ($soImei ? " para IMEI {$soImei}" : '') . ".\n");
     exit(1);
@@ -93,6 +98,7 @@ $totalDisparados = 0;
 $totalPulados     = 0; // já completo, ou pedido pendente
 $totalSemLinha    = 0; // câmera tem, o banco não
 $totalErroApi     = 0;
+$totalConducao    = 0; // dirigibilidade — sem função de vídeo (v4.21.0)
 
 foreach ($devices as $dev) {
     if ($totalDisparados >= $limite) {
@@ -127,12 +133,13 @@ foreach ($devices as $dev) {
     // Um SELECT só, com todos os alarmes locais do device na janela que têm
     // label — evita N idas ao banco por alarmLabel visto na câmera.
     $stmt = $db->prepare("
-        SELECT id, alarm_label, file_url,
-               DATE_FORMAT(CONVERT_TZ(alarm_time, '+00:00', '-03:00'), '%Y-%m-%d %H:%i:%s') AS local_ts
-          FROM alarms
-         WHERE imei = :imei
-           AND alarm_label IS NOT NULL AND alarm_label <> ''
-           AND alarm_time BETWEEN DATE_SUB(:ini, INTERVAL 1 DAY) AND DATE_ADD(:fim, INTERVAL 1 DAY)
+        SELECT a.id, a.alarm_label, a.file_url, ($vubDriving) AS is_driving,
+               DATE_FORMAT(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00'), '%Y-%m-%d %H:%i:%s') AS local_ts
+          FROM alarms a
+          $vubJoins
+         WHERE a.imei = :imei
+           AND a.alarm_label IS NOT NULL AND a.alarm_label <> ''
+           AND a.alarm_time BETWEEN DATE_SUB(:ini, INTERVAL 1 DAY) AND DATE_ADD(:fim, INTERVAL 1 DAY)
     ");
     // Janela local +-1 dia de folga: alarm_time (UTC) x alarmTime da API (UTC)
     // devem bater, a folga só absorve arredondamento de fuso/relógio do device.
@@ -143,6 +150,7 @@ foreach ($devices as $dev) {
     }
 
     $semLinha = 0;
+    $conducao = 0;
     $completos = 0;
     $pendentes = 0;
     $disparadosDevice = 0;
@@ -153,6 +161,10 @@ foreach ($devices as $dev) {
             continue;
         }
         $al = $locais[$label];
+        if (!empty($al['is_driving'])) {
+            $conducao++;
+            continue;
+        }
         if (media_video_complete($al['file_url'], $canais)) {
             $completos++;
             continue;
@@ -194,16 +206,18 @@ foreach ($devices as $dev) {
 
     $totalPulados  += $completos + $pendentes;
     $totalSemLinha += $semLinha;
+    $totalConducao += $conducao;
 
     echo "[{$imei}] {$dev['model_name']}: " . count($labelsCamera) . " com anexo na câmera | "
        . "{$completos} já completo(s) | {$pendentes} pedido pendente | "
-       . "{$semLinha} sem linha local | {$disparadosDevice} disparado(s) agora.\n\n";
+       . "{$semLinha} sem linha local | {$conducao} de dirigibilidade | {$disparadosDevice} disparado(s) agora.\n\n";
 }
 
 echo "── Resumo ──\n";
 echo "Disparados: {$totalDisparados}" . ($dryRun ? ' (dry-run, nenhum comando saiu de fato)' : '') . "\n";
 echo "Pulados (já completo ou pendente): {$totalPulados}\n";
 echo "Sem linha local (alarme só na câmera — webhook não gravou; não tratado por este script): {$totalSemLinha}\n";
+echo "Dirigibilidade (sem função de vídeo, v4.21.0): {$totalConducao}\n";
 if ($totalErroApi > 0) {
     echo "Devices com falha na consulta getAlarm v2: {$totalErroApi}\n";
 }

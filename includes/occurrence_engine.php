@@ -126,7 +126,10 @@ function process_alarm_to_occurrence(array $alarm): ?int
     // Alarm Attachment Upload, doc §2.20) usando o alarmLabel que veio no push.
     // O despacho HTTP acontece FORA da transação do webhook, via
     // flush_pending_video_requests() no fim do pushalarm.php.
-    if ($occId && $mediaId === null) {
+    // v4.21.0 — dirigibilidade não tem função de vídeo em tela nenhuma: pedir o
+    // anexo só gastaria franquia do SIM (decisão do dono do produto, 14/09/2026).
+    if ($occId && $mediaId === null
+        && !is_driving_alarm($db, $alarmType, $compositeCode, (int)($alarm['msg_class'] ?? 1))) {
         queue_event_video_request($db, $imei, $alarmTime, $occId, $alarm['alarm_label'] ?? null);
     }
 

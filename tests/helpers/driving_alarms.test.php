@@ -101,6 +101,14 @@ $occDash = (string)file_get_contents($raiz . '/handlers/ocorrencias_dashboard.ph
 confere(str_contains($occDash, 'if (r.no_video)'), 'grade: célula Vídeo respeita no_video');
 confere(substr_count($occDash, '$detailNoVideo') >= 6, 'detalhe: mídia, coluna e player condicionados a $detailNoVideo');
 
+// ── 5) Pedido de vídeo (manual, automático, backfill) ───────────────────────
+$avr = (string)file_get_contents($raiz . '/includes/alarm_video_request.php');
+confere(str_contains($avr, 'AS cams_efetivas') && str_contains($avr, 'is_driving_alarm($db, (string)$al[\'alarm_type\']'), '/solicitarvideo recusa sem câmera e condução');
+$eng = (string)file_get_contents($raiz . '/includes/occurrence_engine.php');
+confere((bool)preg_match('/\$mediaId === null\s*&& !is_driving_alarm\(\$db, \$alarmType, \$compositeCode/', $eng), 'motor não agenda vídeo de condução');
+$vub = (string)file_get_contents($raiz . '/scripts/video_upload_backfill.php');
+confere(str_contains($vub, 'AS is_driving') && str_contains($vub, '$totalConducao'), 'backfill ignora condução e conta');
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");

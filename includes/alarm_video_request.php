@@ -96,6 +96,8 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
     // `alarm_time` é UTC; a câmera nomeia o arquivo na hora LOCAL dela.
     $st = $db->prepare("
         SELECT a.id, a.imei, a.file_url, a.alarm_label, dm.protocol, dm.camera_count,
+               a.alarm_type, a.alarm_subtype, a.msg_class,
+               COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) AS cams_efetivas,
                DATE_FORMAT(CONVERT_TZ(a.alarm_time, '+00:00', '-03:00'), '%Y-%m-%d %H:%i:%s') AS local_ts
           FROM alarms a
           LEFT JOIN devices d ON d.imei = a.imei
@@ -106,6 +108,17 @@ function request_alarm_video(int $alarmId, ?int $userId = null): array
     $al = $st->fetch(PDO::FETCH_ASSOC);
     if (!$al) {
         return ['ok' => false, 'msg' => 'Alarme não encontrado.'];
+    }
+    // v4.21.0 — as telas escondem o botão, mas botão escondido não é
+    // autorização: um POST direto mandaria comando a um equipamento que não
+    // grava vídeo, ou pediria um vídeo que nenhuma tela mostra.
+    if ((int)$al['cams_efetivas'] === 0) {
+        return ['ok' => false, 'msg' => 'Este equipamento é um rastreador, sem câmera: não há vídeo para pedir.'];
+    }
+    $composto = ($al['alarm_subtype'] !== null && $al['alarm_subtype'] !== '')
+        ? $al['alarm_type'] . '-' . $al['alarm_subtype'] : null;
+    if (is_driving_alarm($db, (string)$al['alarm_type'], $composto, (int)$al['msg_class'])) {
+        return ['ok' => false, 'msg' => 'Alarme de dirigibilidade: sem função de vídeo.'];
     }
     // 🔴 media_has_video(), não media_available(): desde que VIDEOUPLOAD passou
     // a pedir foto+vídeo juntos (mediaType 2), um alarme pode ter só a foto no
