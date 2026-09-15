@@ -1155,6 +1155,130 @@ function alarm_label_sql(): array {
 }
 
 /**
+ * A coluna `alarm_types.is_driving` já existe neste banco? (v4.21.0)
+ *
+ * 🔴 Migração nova NÃO roda no deploy que a traz (CLAUDE.md). No intervalo,
+ * uma consulta que citasse a coluna derrubaria /relatorios/alarmes com
+ * SQLSTATE[42S22]. Com esta guarda as telas se comportam como antes da
+ * v4.21.0 e a de Dirigibilidade avisa que falta a migração.
+ *
+ * Só o `true` fica em cache: o worker é processo longo, e um `false` guardado
+ * sobreviveria à migração aplicada logo depois.
+ *
+ * @param PDO $db Conexão
+ * @returns bool
+ */
+function alarm_types_has_driving_flag(PDO $db): bool
+{
+    static $tem = false;
+    if ($tem) {
+        return true;
+    }
+    try {
+        $st = $db->query("SELECT COUNT(*) FROM information_schema.COLUMNS
+                           WHERE table_schema = DATABASE() AND table_name = 'alarm_types'
+                             AND column_name = 'is_driving'");
+        $tem = (int)$st->fetchColumn() > 0;
+    } catch (Throwable $e) {
+        $tem = false;
+    }
+    return $tem;
+}
+
+/**
+ * Expressão SQL "este alarme é de dirigibilidade" (1/0), sobre os joins de
+ * alarm_label_sql() — composto antes da base, na mesma ordem do rótulo.
+ *
+ * A linha "Fim de Alarme" herda o código base e, com ele, a marca: sai da
+ * tela de vídeo e aparece na de dirigibilidade junto com a abertura.
+ *
+ * @param bool $temColuna Saída de alarm_types_has_driving_flag()
+ * @returns string        Expressão para usar como `($expr) = 1`
+ */
+function alarm_driving_expr(bool $temColuna): string
+{
+    return $temColuna ? 'COALESCE(atc.is_driving, atb.is_driving, 0)' : '0';
+}
+
+/**
+ * Expressão SQL "o equipamento tem câmera" — a regra das telas de vídeo da
+ * v4.16.0: `camera_count = 0` é rastreador (linha JM-VL). Sem contagem nem
+ * modelo, o `1` do fim mantém o equipamento como câmera (comportamento
+ * anterior); alarme de IMEI ausente de `devices` (LEFT JOIN vazio) também.
+ *
+ * @param string $d  Alias de `devices`
+ * @param string $dm Alias de `device_models` (LEFT JOIN por d.device_model_id)
+ * @returns string
+ */
+function device_has_camera_sql(string $d = 'd', string $dm = 'dm'): string
+{
+    return "COALESCE(NULLIF($d.camera_count, 0), $dm.camera_count, 1) > 0";
+}
+
+/**
+ * Expressão SQL "esta ocorrência não tem função de vídeo" (1/0).
+ *
+ * Verdadeira quando QUALQUER alarme agrupado é de dirigibilidade — por
+ * código: `occurrences.alarm_type` guarda o NOME, e classificar por nome é a
+ * armadilha do CLAUDE.md — ou quando o equipamento não tem câmera.
+ *
+ * @param bool   $temColuna Saída de alarm_types_has_driving_flag()
+ * @param string $o         Alias de `occurrences` na consulta externa
+ * @returns string
+ */
+function occurrence_no_video_sql(bool $temColuna, string $o = 'o'): string
+{
+    $semCamera = "EXISTS (SELECT 1 FROM devices nvd
+                            LEFT JOIN device_models nvm ON nvm.id = nvd.device_model_id
+                           WHERE nvd.imei = $o.imei AND NOT (" . device_has_camera_sql('nvd', 'nvm') . "))";
+    if (!$temColuna) {
+        return $semCamera;
+    }
+    ['joins' => $joins] = alarm_label_sql();
+    return "($semCamera OR EXISTS (SELECT 1 FROM occurrence_events nve
+                                     JOIN alarms a ON a.id = nve.alarm_id
+                                     $joins
+                                    WHERE nve.occurrence_id = $o.id
+                                      AND " . alarm_driving_expr(true) . " = 1))";
+}
+
+/**
+ * O alarme é de dirigibilidade? Espelho de is_diagnostic_alarm(), para o PHP
+ * que decide sobre UM alarme (pedido de vídeo, motor de ocorrências).
+ *
+ * Falha para o lado de "não é": sem a coluna (janela da migração) ou com erro
+ * de banco, o comportamento é o anterior à v4.21.0.
+ *
+ * @param PDO         $db            Conexão
+ * @param string      $alarmType     Código base (`alarms.alarm_type`)
+ * @param string|null $compositeCode Código composto quando há subtipo
+ * @param int         $msgClass      0 = JIMI, 1 = JT/T 808 (ADR-001)
+ * @returns bool
+ */
+function is_driving_alarm(PDO $db, string $alarmType, ?string $compositeCode, int $msgClass): bool
+{
+    if (!alarm_types_has_driving_flag($db)) {
+        return false;
+    }
+    $protocol = $msgClass === 1 ? 'JTT' : 'JIMI';
+    try {
+        $stmt = $db->prepare("SELECT is_driving FROM alarm_types WHERE protocol = :p AND alarm_code = :code LIMIT 1");
+        if ($compositeCode !== null && $compositeCode !== '') {
+            $stmt->execute([':p' => $protocol, ':code' => $compositeCode]);
+            $achado = $stmt->fetchColumn();
+            if ($achado !== false) {
+                return (bool)$achado;
+            }
+        }
+        $stmt->execute([':p' => $protocol, ':code' => $alarmType]);
+        $achado = $stmt->fetchColumn();
+        return $achado === false ? false : (bool)$achado;
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/**
  * Rótulo em pt-BR da CATEGORIA do alarme.
  *
  * A coluna `alarm_types.category` guarda um identificador estável (`conducao`,

@@ -64,6 +64,23 @@ confere(str_contains($sql, 'COLLATE utf8mb4_unicode_ci'), 'tabela temporária co
 $deploy = (string)file_get_contents($raiz . '/scripts/deploy.sh');
 confere(str_contains($deploy, 'run_migration "4.21.0" "mysql/migration_v4.21.0.sql"'), 'deploy.sh aplica a v4.21.0');
 
+// ── 2) Helpers (includes/functions.php) ─────────────────────────────────────
+require_once $raiz . '/includes/functions.php';
+foreach (['alarm_types_has_driving_flag', 'alarm_driving_expr', 'device_has_camera_sql',
+          'occurrence_no_video_sql', 'is_driving_alarm'] as $fn) {
+    confere(function_exists($fn), "$fn() existe");
+}
+if (function_exists('alarm_driving_expr')) {
+    confere(alarm_driving_expr(true) === 'COALESCE(atc.is_driving, atb.is_driving, 0)', 'expr com coluna usa os joins do rótulo');
+    confere(alarm_driving_expr(false) === '0', 'expr sem coluna (janela da migração) = 0');
+    confere(device_has_camera_sql('d', 'dm') === 'COALESCE(NULLIF(d.camera_count, 0), dm.camera_count, 1) > 0', 'regra de câmera = v4.16.0');
+    $semCol = occurrence_no_video_sql(false);
+    confere(str_contains($semCol, 'nvd.imei = o.imei') && !str_contains($semCol, 'is_driving'), 'sem coluna: só "sem câmera"');
+    $comCol = occurrence_no_video_sql(true, 'oc');
+    confere(str_contains($comCol, 'nve.occurrence_id = oc.id') && str_contains($comCol, 'LEFT JOIN alarm_types atc')
+        && str_contains($comCol, 'COALESCE(atc.is_driving, atb.is_driving, 0) = 1'), 'com coluna: condução por código dos alarmes agrupados');
+}
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");
