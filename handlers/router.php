@@ -34,6 +34,7 @@
  *   /relatorios/deslocamento/rota      → rel_deslocamento_rota.php (mapa do percurso)
  *   /relatorios/desatualizados        → rel_desatualizados.php
  *   /relatorios/alarmes               → rel_alarmes.php
+ *   /relatorios/dirigibilidade        → rel_dirigibilidade.php (mesma grade, modo condução)
  *   /relatorios/ocorrencias           → rel_ocorrencias.php
  *   /relatorios/geocercas             → rel_geocercas.php
  *   /relatorios/paradas               → rel_paradas.php
@@ -162,6 +163,7 @@ if (empty($segments)) {
             'deslocamento/replay' => 'rel_deslocamento_replay.php',
             'desatualizados' => 'rel_desatualizados.php',
             'alarmes'      => 'rel_alarmes.php',
+            'dirigibilidade' => 'rel_dirigibilidade.php',
             'ocorrencias'  => 'rel_ocorrencias.php',
             'geocercas'    => 'rel_geocercas.php',
             'paradas'      => 'rel_paradas.php',
@@ -306,6 +308,9 @@ $screenByHandler = [
     'rel_deslocamento_replay.php' => 'relatorios',
     'rel_desatualizados.php'    => 'relatorios',
     'rel_alarmes.php'           => 'relatorios',
+    // v4.21.0 — mesma grade de rel_alarmes.php em outro modo: mesma chave, e
+    // por isso NÃO entra na matriz de grupos_permissao.php.
+    'rel_dirigibilidade.php'    => 'relatorios',
     // Ação do relatório de alarmes (reenvio de vídeo), não tela nova: herda a
     // mesma chave, e por isso NÃO entra na matriz de grupos_permissao.php.
     'solicitarvideo.php'        => 'relatorios',

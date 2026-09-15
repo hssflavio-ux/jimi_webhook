@@ -81,6 +81,19 @@ if (function_exists('alarm_driving_expr')) {
         && str_contains($comCol, 'COALESCE(atc.is_driving, atb.is_driving, 0) = 1'), 'com coluna: condução por código dos alarmes agrupados');
 }
 
+// ── 3) Telas, rota e menu ───────────────────────────────────────────────────
+$router = (string)file_get_contents($raiz . '/handlers/router.php');
+confere((bool)preg_match("/'dirigibilidade'\s*=>\s*'rel_dirigibilidade\.php'/", $router), 'router: /relatorios/dirigibilidade');
+confere((bool)preg_match("/'rel_dirigibilidade\.php'\s*=>\s*'relatorios'/", $router), 'router: permissão relatorios');
+$layout = (string)file_get_contents($raiz . '/web/layout_base.php');
+confere(str_contains($layout, "'label' => 'Alertas Videomonitoramento'"), 'menu: rótulo Alertas Videomonitoramento');
+confere((bool)preg_match("/'route' => 'rel_dirigibilidade',\s*'label' => 'Alarmes Dirigibilidade',\s*'href' => '\/relatorios\/dirigibilidade'/", $layout), 'menu: Alarmes Dirigibilidade');
+$dirig = is_file($raiz . '/handlers/rel_dirigibilidade.php') ? file_get_contents($raiz . '/handlers/rel_dirigibilidade.php') : '';
+confere(str_contains($dirig, "\$ALARM_REPORT_MODE = 'driving';") && str_contains($dirig, "require __DIR__ . '/rel_alarmes.php';"), 'rel_dirigibilidade.php só define o modo');
+$relAl = (string)file_get_contents($raiz . '/handlers/rel_alarmes.php');
+confere(str_contains($relAl, "<?php if (!\$modoDirig): ?><th>Vídeo</th><?php endif; ?>"), 'coluna Vídeo só no modo vídeo');
+confere(str_contains($relAl, "<?php if (!\$modoDirig): // vídeo só existe em Videomonitoramento ?>"), 'modal/JS de vídeo só no modo vídeo');
+
 // ── novas seções entram acima desta linha ──
 
 printf("\n%s\n", $falhas === 0 ? 'TUDO OK' : "FALHOU ({$falhas})");

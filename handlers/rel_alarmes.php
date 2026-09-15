@@ -1,7 +1,7 @@
 <?php
 /**
- * JIMI Webhook System — Relatório de Alarmes v4.0.0
- * Rota: /relatorios/alarmes
+ * JIMI Webhook System — Alertas Videomonitoramento (e Alarmes Dirigibilidade) v4.21.0
+ * Rotas: /relatorios/alarmes e /relatorios/dirigibilidade (modo, ver abaixo)
  *
  * Filtros: Cliente, Placa, Tipo de Alarme, Status, Período.
  * ⚠️ O filtro de Filial saiu na v4.17.20 — cadastro sem uso (0 filiais).
@@ -16,12 +16,25 @@ require_login();
 require_once __DIR__ . '/../includes/report_templates.php';
 require_once __DIR__ . '/../includes/geocode.php';   // endereço no lugar de lat/lng
 require_once __DIR__ . '/../includes/media.php';     // coluna Vídeo (v4.9.8)
-// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
-handle_template_actions('rel_alarmes', '/relatorios/alarmes');
+// ── Modo da tela (v4.21.0) ──────────────────────────────────────────────────
+// Este arquivo serve DUAS telas com a mesma grade: "Alertas Videomonitoramento"
+// (esta rota) e "Alarmes Dirigibilidade" (handlers/rel_dirigibilidade.php, que
+// só define o modo e inclui este arquivo). Decisões do dono do produto em
+// docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md.
+$modoDirig  = (($ALARM_REPORT_MODE ?? 'video') === 'driving');
+$rotaTela   = $modoDirig ? '/relatorios/dirigibilidade' : '/relatorios/alarmes';
+$chaveTela  = $modoDirig ? 'rel_dirigibilidade' : 'rel_alarmes';
+$tituloTela = $modoDirig ? 'Alarmes Dirigibilidade' : 'Alertas Videomonitoramento';
 
-$page_title = 'Relatório de Alarmes';
-$current_route = 'rel_alarmes';
+// Salvar/aplicar/excluir modelo — antes de qualquer saída (as três ações redirecionam)
+handle_template_actions($chaveTela, $rotaTela);
+
+$page_title = $tituloTela;
+$current_route = $chaveTela;
 $db = Database::getInstance()->getConnection();
+// Sem a coluna (migração v4.21.0 ainda não aplicada) a tela de vídeo segue
+// como antes e a de dirigibilidade mostra aviso — alarm_types_has_driving_flag().
+$temFlagDirig = alarm_types_has_driving_flag($db);
 $customerId = get_customer_id();
 $user = get_jimi_user();
 $isAdmin = ($user['role'] ?? '') === 'admin' || ($user['user_type'] ?? '') === 'revendedor';
@@ -54,7 +67,8 @@ $perPage = 25;
 // A checagem é `role === 'admin'` estrito e feita aqui, no servidor: o `$isAdmin`
 // das telas de relatório inclui `revendedor` (ele existe para escolher cliente,
 // não para ver infraestrutura), e um parâmetro de URL não é permissão.
-$podeVerDiagnostico = ($user['role'] ?? '') === 'admin';
+// Nenhum tipo de condução é diagnóstico: o modo não existe em Dirigibilidade.
+$podeVerDiagnostico = !$modoDirig && ($user['role'] ?? '') === 'admin';
 $verDiagnostico = $podeVerDiagnostico && !empty($_GET['diagnostico']);
 
 // Ordenação: whitelist de colunas + default crescente por data/hora
@@ -72,7 +86,13 @@ $orderBy = match ($sort) {
 // IMEI). Carregado antes do export porque este roda antes da grade.
 $devices = [];
 try {
-    $dvStmt = $db->prepare("SELECT imei, device_name FROM devices WHERE customer_id = :cid AND is_active = 1 ORDER BY device_name");
+    // Videomonitoramento não oferece rastreador (camera_count = 0); a tela de
+    // dirigibilidade oferece todo equipamento, porque os dois geram condução.
+    $dvStmt = $db->prepare("SELECT d.imei, d.device_name FROM devices d
+                              LEFT JOIN device_models dm ON dm.id = d.device_model_id
+                             WHERE d.customer_id = :cid AND d.is_active = 1"
+                           . ($modoDirig ? '' : ' AND ' . device_has_camera_sql('d', 'dm')) . "
+                             ORDER BY d.device_name");
     $dvStmt->execute([':cid' => $customerId]);
     $devices = $dvStmt->fetchAll();
 } catch (Throwable $e) {}
@@ -125,6 +145,14 @@ $where .= $verDiagnostico
     ? " AND ($alarmDiagExpr) = 1"
     : " AND ($alarmDiagExpr) = 0";
 
+// Recorte da tela (v4.21.0). Dirigibilidade: só os tipos marcados, de qualquer
+// equipamento. Videomonitoramento: nem condução, nem equipamento sem câmera —
+// alarme de rastreador que não é de condução fica só na ficha do veículo.
+$alarmDrivingExpr = alarm_driving_expr($temFlagDirig);
+$where .= $modoDirig
+    ? " AND ($alarmDrivingExpr) = 1"
+    : " AND ($alarmDrivingExpr) = 0 AND " . device_has_camera_sql('d', 'dm');
+
 // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
 $export = $_GET['export'] ?? '';
 if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
@@ -137,6 +165,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
                COALESCE(drv.name, a.driver_name) AS driver_label
         FROM alarms a
         LEFT JOIN devices d ON d.imei = a.imei
+        LEFT JOIN device_models dm ON dm.id = d.device_model_id
         LEFT JOIN drivers drv ON drv.id = a.driver_id
         $alarmNameJoins
         $where
@@ -168,9 +197,9 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         $ps->execute([$filterImei]);
         $placaSel = 'Placa: ' . ($ps->fetchColumn() ?: $filterImei);
     }
-    stream_export($export, 'relatorio_alarmes',
+    stream_export($export, $modoDirig ? 'relatorio_alarmes_dirigibilidade' : 'relatorio_alertas_videomonitoramento',
         ['Placa', 'Data/Hora', 'Nome do Alarme', 'Status', 'Velocidade (km/h)', 'Motorista', 'Endereço', 'Mapa'],
-        $expRows, 'Relatório de Alarmes',
+        $expRows, $modoDirig ? 'Relatório de Alarmes de Dirigibilidade' : 'Relatório de Alertas de Videomonitoramento',
         "$placaSel  |  " . report_period_label($dateFrom, $dateTo),
         // Endereço e nome do alarme são as duas colunas longas; as demais são
         // curtas e fixas (placa, data, status, velocidade, motorista, rótulo do mapa).
@@ -181,6 +210,7 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 $countStmt = $db->prepare("
     SELECT COUNT(*) FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
+    LEFT JOIN device_models dm ON dm.id = d.device_model_id
     $alarmNameJoins
     $where
 ");
@@ -198,6 +228,7 @@ $dataStmt = $db->prepare("
            COALESCE(drv.name, a.driver_name) AS driver_label
     FROM alarms a
     LEFT JOIN devices d ON d.imei = a.imei
+    LEFT JOIN device_models dm ON dm.id = d.device_model_id
     LEFT JOIN drivers drv ON drv.id = a.driver_id
     $alarmNameJoins
     $where
@@ -243,18 +274,27 @@ $customers = report_customer_options($db);
 // Consequência a conhecer: um tipo DMS/ADAS que nunca ocorreu também aparece
 // (a lista descreve o catálogo, não o histórico) — o que é o comportamento
 // desejado num filtro, senão só se pode filtrar o que já se sabe existir.
-$types = $db->query(
-    "SELECT DISTINCT alarm_name_pt AS alarm_name
-       FROM alarm_types
-      WHERE category IN ('DMS','ADAS')
-      ORDER BY alarm_name_pt"
-)->fetchAll();
+if ($modoDirig) {
+    // Dirigibilidade: o catálogo marcado (v4.21.0) — descreve o catálogo, não
+    // o histórico, pela mesma razão do filtro DMS/ADAS acima.
+    $types = $temFlagDirig
+        ? $db->query("SELECT DISTINCT alarm_name_pt AS alarm_name FROM alarm_types
+                       WHERE is_driving = 1 ORDER BY alarm_name_pt")->fetchAll()
+        : [];
+} else {
+    $types = $db->query(
+        "SELECT DISTINCT alarm_name_pt AS alarm_name
+           FROM alarm_types
+          WHERE category IN ('DMS','ADAS')
+          ORDER BY alarm_name_pt"
+    )->fetchAll();
+}
 
 // Coluna Vídeo (v4.9.8): o anexo do evento que o device declarou no próprio
 // push do alarme. Resolvido pela EXTENSÃO — `alarms.file_type` está NULL em
 // todo anexo `.ts` gravado antes desta versão (ver includes/media.php).
 $temTs = false;
-foreach ($rows as $r) {
+foreach ($modoDirig ? [] : $rows as $r) {
     // media_pick(): com dois arquivos no campo, a extensão tem de sair do
     // arquivo que será REALMENTE tocado, não da string inteira.
     if (!empty($r['file_url']) && media_available($r['file_url'])
@@ -274,15 +314,15 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?php $expQ = $_GET; unset($expQ['page'], $expQ['export']); $expBase = http_build_query($expQ); ?>
 <div class="flex-between mb-16">
-    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Relatório de Alarmes</h2>
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);"><?= htmlspecialchars($tituloTela) ?></h2>
     <div style="display:flex;gap:8px;">
         <a href="?<?= $expBase ?>&export=xlsx" class="btn btn-outline btn-sm">Exportar Excel</a>
         <a href="?<?= $expBase ?>&export=pdf" class="btn btn-outline btn-sm">Exportar PDF</a>
-        <?php if (report_has_query()) echo report_back_button('/relatorios/alarmes'); ?>
+        <?php if (report_has_query()) echo report_back_button($rotaTela); ?>
     </div>
 </div>
 
-<?php render_template_bar('rel_alarmes', '/relatorios/alarmes'); ?>
+<?php render_template_bar($chaveTela, $rotaTela); ?>
 
 <div class="card mb-24" style="padding:16px 20px;">
     <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
@@ -359,6 +399,14 @@ require_once __DIR__ . '/../web/layout_base.php';
 </div>
 <?php endif; ?>
 
+<?php if ($modoDirig && !$temFlagDirig): ?>
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
+    <strong style="color:var(--ink);">Classificação de dirigibilidade indisponível.</strong>
+    Falta aplicar a migração v4.21.0 (<span class="text-mono">alarm_types.is_driving</span>) neste banco —
+    até lá esta tela fica vazia e os eventos de condução continuam em Alertas Videomonitoramento.
+</div>
+<?php endif; ?>
+
 <?php if ($verDiagnostico): ?>
 <div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--primary);font-size:13px;color:var(--muted);">
     <strong style="color:var(--ink);">Modo diagnóstico.</strong>
@@ -380,66 +428,72 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <th>Motorista</th>
                 <th>Endereço</th>
                 <th>Mapa</th>
-                <th>Vídeo</th>
+                <?php if (!$modoDirig): ?><th>Vídeo</th><?php endif; ?>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="9"><div class="empty-state"><p>Nenhum alarme encontrado.</p></div></td></tr>
+            <tr><td colspan="<?= $modoDirig ? 8 : 9 ?>"><div class="empty-state"><p>Nenhum alarme encontrado.</p></div></td></tr>
             <?php else: ?>
             <?php foreach ($rows as $r):
                 $hasCoords = $r['latitude'] && $r['longitude'] && $r['latitude'] != 0 && $r['longitude'] != 0;
-                // 🔴 TER `file_url` NÃO É TER O VÍDEO. O nome do arquivo é anunciado
-                // pela câmera no push do alarme; o arquivo em si sobe depois, por
-                // outro caminho (attachment server / FTP), e pode simplesmente não
-                // chegar. Em produção, 81 dos 106 alarmes com `file_url` — 76% —
-                // apontavam para arquivo inexistente (18/08/2026). A tela oferecia
-                // "Ver Vídeo" nos 106, e nos 81 o clique abria um player que nunca
-                // carregava: nenhuma mensagem, nenhum erro, nada.
-                //
-                // `media_available()` já existia para exatamente isto e era usada
-                // só pelo dashboard de ocorrências. Agora o relatório distingue os
-                // três estados: sem mídia, mídia disponível, mídia não recebida.
-                //
-                // 🔴 Restrito a 'video' até 25/08/2026 — mas o anexo de alarme JT/T
-                // (VIDEOUPLOAD) pode chegar como FOTO por canal, não só vídeo
-                // (medido em produção: dois `.jpg`, um por câmera, pro mesmo
-                // alarme). Com o filtro só em 'video' a linha caía no `—` mesmo
-                // com o arquivo íntegro no disco. `image` entra na mesma condição.
-                $midiaKind = media_kind($r['file_url'], $r['file_type']);
-                $temVideo  = !empty($r['file_url']) && in_array($midiaKind, ['video', 'image'], true);
-
-                // ── Player duplo (26/08/2026) ────────────────────────────────
-                // `VIDEOUPLOAD` agora pede vídeo+foto dos canais 1 E 2 juntos
-                // (docs/COMANDOS_128_CONSULTA.md §9.9): o alarme pode ter até 4
-                // arquivos no mesmo `file_url`. `media_channel_files()` separa
-                // por canal; monta-se um payload com o que existir e está no
-                // disco (vídeo tem preferência sobre foto no MESMO canal).
-                $porCanal = media_channel_files($r['file_url']);
+                $videoOk = false;
+                $temVideo = false;
+                $midiaKind = null;
                 $midiaPorCanal = [];
-                foreach ([1, 2] as $canal) {
-                    foreach (['video', 'image'] as $kind) {
-                        $nome = $porCanal[$kind][$canal] ?? null;
-                        if ($nome === null || !media_available($nome)) continue;
-                        if (isset($midiaPorCanal[$canal]) && $midiaPorCanal[$canal]['kind'] === 'video') continue;
-                        $midiaPorCanal[$canal] = [
-                            'url'  => media_play_url($nome),
-                            'ts'   => media_is_ts($nome),
-                            'kind' => $kind,
-                            'nome' => basename($nome),
+                if (!$modoDirig) {   // Dirigibilidade não resolve mídia (v4.21.0)
+                    // 🔴 TER `file_url` NÃO É TER O VÍDEO. O nome do arquivo é anunciado
+                    // pela câmera no push do alarme; o arquivo em si sobe depois, por
+                    // outro caminho (attachment server / FTP), e pode simplesmente não
+                    // chegar. Em produção, 81 dos 106 alarmes com `file_url` — 76% —
+                    // apontavam para arquivo inexistente (18/08/2026). A tela oferecia
+                    // "Ver Vídeo" nos 106, e nos 81 o clique abria um player que nunca
+                    // carregava: nenhuma mensagem, nenhum erro, nada.
+                    //
+                    // `media_available()` já existia para exatamente isto e era usada
+                    // só pelo dashboard de ocorrências. Agora o relatório distingue os
+                    // três estados: sem mídia, mídia disponível, mídia não recebida.
+                    //
+                    // 🔴 Restrito a 'video' até 25/08/2026 — mas o anexo de alarme JT/T
+                    // (VIDEOUPLOAD) pode chegar como FOTO por canal, não só vídeo
+                    // (medido em produção: dois `.jpg`, um por câmera, pro mesmo
+                    // alarme). Com o filtro só em 'video' a linha caía no `—` mesmo
+                    // com o arquivo íntegro no disco. `image` entra na mesma condição.
+                    $midiaKind = media_kind($r['file_url'], $r['file_type']);
+                    $temVideo  = !empty($r['file_url']) && in_array($midiaKind, ['video', 'image'], true);
+
+                    // ── Player duplo (26/08/2026) ────────────────────────────────
+                    // `VIDEOUPLOAD` agora pede vídeo+foto dos canais 1 E 2 juntos
+                    // (docs/COMANDOS_128_CONSULTA.md §9.9): o alarme pode ter até 4
+                    // arquivos no mesmo `file_url`. `media_channel_files()` separa
+                    // por canal; monta-se um payload com o que existir e está no
+                    // disco (vídeo tem preferência sobre foto no MESMO canal).
+                    $porCanal = media_channel_files($r['file_url']);
+                    $midiaPorCanal = [];
+                    foreach ([1, 2] as $canal) {
+                        foreach (['video', 'image'] as $kind) {
+                            $nome = $porCanal[$kind][$canal] ?? null;
+                            if ($nome === null || !media_available($nome)) continue;
+                            if (isset($midiaPorCanal[$canal]) && $midiaPorCanal[$canal]['kind'] === 'video') continue;
+                            $midiaPorCanal[$canal] = [
+                                'url'  => media_play_url($nome),
+                                'ts'   => media_is_ts($nome),
+                                'kind' => $kind,
+                                'nome' => basename($nome),
+                            ];
+                        }
+                    }
+                    // Retrocompat: arquivo sem canal reconhecível no nome (formato
+                    // antigo) cai no player único de sempre, no slot 1.
+                    if (!$midiaPorCanal && $temVideo && media_available($r['file_url'])) {
+                        $arqUnico = media_pick($r['file_url']);
+                        $midiaPorCanal[1] = [
+                            'url' => media_play_url($r['file_url']), 'ts' => media_is_ts($arqUnico),
+                            'kind' => $midiaKind, 'nome' => basename($arqUnico),
                         ];
                     }
+                    $videoOk = !empty($midiaPorCanal);
                 }
-                // Retrocompat: arquivo sem canal reconhecível no nome (formato
-                // antigo) cai no player único de sempre, no slot 1.
-                if (!$midiaPorCanal && $temVideo && media_available($r['file_url'])) {
-                    $arqUnico = media_pick($r['file_url']);
-                    $midiaPorCanal[1] = [
-                        'url' => media_play_url($r['file_url']), 'ts' => media_is_ts($arqUnico),
-                        'kind' => $midiaKind, 'nome' => basename($arqUnico),
-                    ];
-                }
-                $videoOk = !empty($midiaPorCanal);
             ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
@@ -463,6 +517,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
+                <?php if (!$modoDirig): ?>
                 <td>
                     <?php if ($videoOk): ?>
                     <button type="button" class="badge badge-primary" style="border:0;cursor:pointer;"
@@ -479,6 +534,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                     </button>
                     <?php else: echo '—'; endif; ?>
                 </td>
+                <?php endif; ?>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
@@ -487,6 +543,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
 <?= report_pagination($page, $totalPages, $totalRows, 'alarmes') ?>
 
+<?php if (!$modoDirig): // vídeo só existe em Videomonitoramento ?>
 <!-- ── Modal do vídeo do alarme (v4.9.8; player duplo 26/08/2026) ───────────
      O player é MONTADO no clique, não uma vez por linha: 25 elementos <video>
      com `preload="metadata"` numa página abrem 25 conexões só para exibir a
@@ -622,6 +679,7 @@ document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && document.getElementById('video-modal').style.display === 'flex') fecharVideo();
 });
 </script>
+<?php endif; ?>
 
 <?php if ($mapPoints): ?>
 <script>
