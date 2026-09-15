@@ -195,6 +195,8 @@
 > outros). Só depois disso o mecanismo em tempo real E o backfill (re-rodado)
 > passam a criar sessão de verdade.
 
+> Entradas anteriores a "📍 11/09/2026 (motorista)" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 
 **Objetivo**: transformar o projeto em uma cópia fiel do YUV (`app.yuv.com.br`). Gateway de webhooks Jimi preservado; dashboard e design reconstruídos com design system Coinbase. O núcleo é a **gestão de ocorrências DMS** (alarme de câmera → ocorrência → tratativa → risco, com regras por cliente).

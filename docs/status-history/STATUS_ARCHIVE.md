@@ -67,8 +67,6 @@ Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recente
 > (`php -r`) contra os 3 valores medidos (2, 2048, 8192) e contra o bit 30
 > (capotamento) — sem regressão nos dois bits que já resolviam certo.
 
-> Entradas anteriores a 11/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
-
 > ### 📍 10/09/2026 (Fase 3) — UI duplicada removida, `/manutencoes` com busca, `.filtro-campo` em ~20 arquivos, sem `alert()` nativo
 >
 > Retomada dos 4 itens que a varredura de design system (mesma data, ver entrada seguinte)
