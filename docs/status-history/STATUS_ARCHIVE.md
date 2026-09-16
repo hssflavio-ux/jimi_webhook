@@ -2,6 +2,113 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 11/09/2026 (motorista) — Sessão de motorista por reconhecimento facial (AFIS): persiste até trocar ou ACC OFF
+>
+> Pedido do dono do produto: a câmera já manda reconhecimento facial (AFIS,
+> JT/T `alertType 6`, catalogado na v4.18.4) logo após a ignição ligar e
+> periodicamente durante a viagem, com dados chegando desde ontem. Faltava a
+> regra de permanência ("o motorista fica valendo até a câmera reconhecer
+> outro OU até a ignição desligar, entendeu?") e propagar esse motorista pra
+> todo ponto do sistema que lista motorista — principalmente relatórios.
+>
+> **Investigação prévia (agentes de pesquisa + leitura direta) confirmou**: já
+> existiam `gps_data.driver_id`/`driver_name` (v4.8.0) e `alarms.driver_id`/
+> `driver_name`, mas SEM MEMÓRIA — cada evento resolvia (ou não) o motorista
+> isoladamente, nada fazia um reconhecimento "valer" pros pontos seguintes.
+> 🔴 **Bug real encontrado no caminho**: `occurrences.driver_id` (FK de
+> verdade para `drivers.id`) recebia a STRING BRUTA de `alarms.driver_id`
+> (o `driverId` que o device manda, que é o `identifier` configurado, não um
+> `drivers.id`) — a FK estourava em silêncio sempre que não batia (o caso
+> normal), e a ocorrência simplesmente não era criada. O precedente
+> arquitetural mais próximo do pedido já existia no código pra OUTRA coisa:
+> `device_installations` (câmera↔veículo) — linha aberta com
+> `removed_at IS NULL`, travada com `SELECT...FOR UPDATE`, com toda tabela de
+> evento gravando um SNAPSHOT do dono no momento do evento — nunca
+> re-resolvendo ao vivo na leitura.
+>
+> **Implementado** (mesmo padrão do achado acima, ver `mysql/migration_v4.19.0.sql`
+> e `includes/functions.php`): tabela nova `driver_sessions` (uma sessão
+> aberta por veículo) + 5 funções compartilhadas
+> (`resolve_driver_by_identifier()` — extraída de `pushgps.php`, agora ponto
+> único também usado por `pushalarm.php` — `get_open_driver_session_for_vehicle()`,
+> `driver_session_recognize()`, `driver_session_close_on_ign_off()`,
+> `driver_session_handle_acc_reading()`). `pushalarm.php` abre/confirma/troca
+> a sessão no AFIS de sucesso (6); `alertType 5`, falha de reconhecimento, e
+> qualquer alarme sem `driverId` próprio só HERDAM a sessão pra exibição, sem
+> gravar nela. De quebra, o bug de `occurrences.driver_id` acima ficou
+> corrigido de graça: o mesmo ajuste que resolve o motorista ANTES do
+> `INSERT` em `alarms` alimenta as duas tabelas.
+>
+> 🔴 **ACC-OFF não tinha gancho de tempo real em lugar nenhum do sistema** —
+> tudo que reagia a isso era um cron de 15 em 15 min
+> (`scripts/state_builder.php`), lido depois via janela SQL
+> (`rel_ignicao.php`). Implementado `driver_session_handle_acc_reading()` em
+> `pushgps.php`/`pushhb.php`, chamado ANTES das stored procedures
+> `update_device_stats_after_{gps,heartbeat}` (que sobrescrevem
+> `last_acc_status`) — replica a MESMA guarda de frescor que essas
+> procedures já usam (`p_time >= GREATEST(last_gps_time, last_heartbeat_time)`,
+> `mysql/migration_v4.17.8.sql`) pra não fechar uma sessão por causa de um
+> pacote atrasado ou reenviado. ⚠️ **Achado no caminho, também corrigido**:
+> `uninstall_device_from_vehicle()` não fechava a sessão de motorista aberta
+> ao desinstalar a câmera — sem isso, nenhum ACC-OFF daquele veículo chegaria
+> mais por aquela câmera, e a sessão ficaria aberta PARA SEMPRE.
+>
+> **Telas atualizadas**: `/rastreamento` (lista + balão do mapa + refresh de
+> 30s — tela que não mostrava motorista nenhum) e `/ativos/{id}` (Visão
+> Geral — idem) passaram a ler a sessão aberta AO VIVO, mesmo padrão de
+> exceção que `get_open_installation_for_vehicle()` já é. `/relatorios/alarmes`
+> ganhou coluna Motorista (grade + export) — tinha os dados desde sempre, só
+> nunca exibia.
+>
+> **Fase B (mesma entrega, a pedido do dono do produto)**: `trips.driver_id`
+> existe desde a v4.0.0 e nunca tinha sido escrita — a coluna Motorista do
+> Relatório de Deslocamento estava SEMPRE vazia. `scripts/trip_builder.php`
+> agora calcula o motorista mais frequente (moda) entre os pontos de cada
+> viagem, já alimentados pela sessão via `gps_data.driver_id`.
+>
+> **Backfill** (a pedido do dono do produto, pra não esperar o próximo
+> reconhecimento pós-deploy): `scripts/backfill_driver_sessions.php`
+> reconstrói `driver_sessions` a partir dos alarmes AFIS já gravados desde
+> ontem, usando `device_state_segments` (`state='parado'`, já calculado pelo
+> cron) como proxy de ACC-OFF histórico — documentado como APROXIMAÇÃO,
+> idempotente, roda manualmente uma vez depois do segundo deploy.
+>
+> **Verificação**: `php -l` completo (`handlers config core includes web
+> scripts`) limpo; 3 spec novos em `tests/driver_sessions.spec.js`
+> (reconhecimento, troca de motorista, ACC-OFF limpa a sessão) + seed de
+> veículo/instalação/2 motoristas em `scripts/test_e2e.sh`. Não rodado
+> contra banco real nesta sessão — pendente de ambiente de teste com
+> `TEST_IMEI`/`TEST_EMAIL`/`TEST_PASSWORD` configurados.
+>
+> 🔴 **Addendum (mesmo dia) — o backfill quebrou em produção, e o motivo não é
+> bug de dado, é lacuna de cadastro.** Rodado após o segundo deploy,
+> `scripts/backfill_driver_sessions.php` estourou `PDOException` (FK
+> `fk_ds_driver`) na primeira inserção. Causa raiz medida: **a tabela
+> `drivers` está com ZERO linhas em produção** — a câmera do veículo
+> "Telecom" já reconhece e manda `driverId`/`driverName` (`"1"`→"Flavio",
+> `"4"`→"Thamara", confirmado nos alarmes AFIS reais), mas ninguém cadastrou
+> esses motoristas em `/motoristas` com `identifier` batendo. Isso não é só o
+> backfill: **o mecanismo em tempo real também está mudo** desde o deploy —
+> `resolve_driver_by_identifier()` devolve `null` pra tudo, por design (não
+> cria motorista sozinho, mesma regra de `pushgps.php` desde a v4.8.0), então
+> nenhuma sessão jamais abriu.
+>
+> Bug real corrigido no `backfill_driver_sessions.php`: o script assumia que
+> `alarms.driver_id` já era um `drivers.id` válido (verdade só para alarmes
+> gravados DEPOIS do fix em `pushalarm.php`) — não resolvia o identifier
+> bruto contra `drivers.identifier` antes de tentar o INSERT, então qualquer
+> identifier sem motorista cadastrado (o caso de 100% dos alarmes até agora,
+> já que a tabela está vazia) estourava a FK em vez de ser ignorado. Corrigido
+> chamando `resolve_driver_by_identifier()` (a MESMA função do caminho em
+> tempo real) antes de cada inserção — identifier sem correspondência é
+> contado e pulado, nunca crasha.
+>
+> **Ação pendente, do dono do produto**: cadastrar os motoristas em
+> `/motoristas` com `identifier` = o valor bruto que a câmera manda (`"1"` =
+> Flavio, `"4"` = Thamara, pelo menos — outras câmeras/clientes podem ter
+> outros). Só depois disso o mecanismo em tempo real E o backfill (re-rodado)
+> passam a criar sessão de verdade.
+
 > ### 📍 11/09/2026 — 3 códigos JT/T sem nome (4/5/6) + bitmask do Alarme Padrão 256 estava errado desde o bit 12
 >
 > Pedido do dono do produto: a câmera do veículo **"Telecom"** (IMEI

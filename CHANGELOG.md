@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.1
+
+**Hodômetro (leitura real do sensor) e Horímetro (tempo de ignição ligada, calculado) nos relatórios de Posições e Deslocamento, com totalizador de período no rodapé — e a correção do bug de unidade que isso expôs.**
+
+Pedido do dono do produto. `gps_data.mileage` chega em METROS nos dois protocolos (medido em produção 15/09/2026, `hodometro-bateria-medicao-producao`), não na unidade que a doc da Jimi documenta — exibir cru mostrava o hodômetro 1000x maior que o real. E nem todo equipamento tem horímetro de hardware (`devices.engine_hours` nunca confirmado contra device real), então o horímetro exibido é CALCULADO a partir do tempo real de ignição ligada, não lido do equipamento.
+
+- **Adicionado** `odometer_km()`/`odometer_delta_km()` (`includes/functions.php`): conversor único metros→km (1 casa decimal) — usado em toda exibição de `gps_data.mileage` do sistema, não só nas telas novas.
+- **Adicionado** `ignition_seconds_in_window()` (`includes/functions.php`): horímetro calculado, soma de `device_state_segments` nos estados `movimento`+`ocioso` (ignição ligada) dentro de uma janela — funciona em qualquer equipamento, com ou sem horímetro de hardware. Testado sem banco em `tests/helpers/odometro_horimetro.test.php` (20 verificações).
+- **Corrigido** `includes/maintenance.php` (`latest_odometer()`): passou a converter metros→km — o card "Odômetro Atual" (`/ativos/{id}`) e o lembrete de manutenção por odômetro (`MAINTENANCE_DUE_KM=200`) exibiam/comparavam o valor bruto em metros como se fosse km.
+- **Corrigido** `handlers/rel_deslocamento_replay.php`: o "km rodado" do player de replay calculava a diferença de `mileage` sem converter — mesmo bug, mesma raiz.
+- **Adicionado** coluna **Hodômetro** em `/relatorios/posicoes` (leitura absoluta por linha) e `/relatorios/deslocamento` (delta por viagem ou por dia, nos dois modos), com totalizador de "km rodado no período" no rodapé da grade e do export — calculado sobre o resultado FILTRADO INTEIRO, não só a página atual. Equipamento sem leitura real (4 dos 8 modelos medidos sempre mandam `mileage=0`) mostra "—".
+- **Adicionado** coluna **Horímetro** nos dois modos de `/relatorios/deslocamento` (viagens e fechamento diário), com totalizador de período — sempre calculado (`ignition_seconds_in_window()`), nunca lido de `devices.engine_hours`.
+- **Removido** coluna "Sinal GPS" de `/relatorios/posicoes`: o filtro já exige coordenada válida e o equipamento já descarta fixo inválido antes de transmitir — a coluna só repetia "Válido" em toda linha, e a tela estava ficando larga demais com as colunas novas.
+- **Sem migração**: nenhuma coluna nova — hodômetro e horímetro são derivados de `gps_data.mileage` e `device_state_segments`, já existentes.
+- **Verificação**: sem MySQL local — `php -l` em todo `handlers config core includes`; `tests/helpers/odometro_horimetro.test.php` (20/20) e os demais helpers sem banco, sem regressão (`command_response`, `driving_alarms`, `filelist`, `media`, `migracoes_no_deploy`, `risk_map`, `sms_webhook`, `temp_password`). Telas não exercitadas contra banco real nesta sessão.
+
 ## [Unreleased] — 4.21.0
 
 **Rastreadores fora das telas de câmera e eventos de condução em tela própria: "Alarmes" virou "Alertas Videomonitoramento" + "Alertas Dirigibilidade", e nenhuma linha de condução oferece vídeo.**

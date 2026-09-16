@@ -4,12 +4,19 @@
  * Rota: /relatorios/posicoes
  *
  * Filtro: Ativo + Período + Intervalo + [Gerar] + Export.
- * Grade: Identificador, Endereço (geocodificado), Motorista, Ignição, Sinal, Velocidade, Horário.
+ * Grade: Placa, Motorista, Data/Hora, Endereço (geocodificado), Mapa,
+ * Velocidade, Hodômetro, Ignição — com totalizador de "km rodado no
+ * período" no rodapé (odometer_km()/report_odometer_endpoints(), ver
+ * includes/functions.php).
  *
  * Lista as transmissões que TÊM coordenada (decisão do dono do produto): é um
  * relatório de POSIÇÕES, e linha sem fixo de GPS não tem posição a mostrar.
  * O mapa do período inteiro foi removido — a visualização é por linha, no link
  * da coluna Mapa. Alarmes ficam no relatório próprio, não entram aqui.
+ *
+ * Coluna "Sinal GPS" (g.status) removida (v4.21.x): o filtro já exige
+ * coordenada válida (WHERE acima) e o equipamento já descarta fixo inválido
+ * antes de transmitir — a coluna só repetia "Válido" em toda linha.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -60,6 +67,7 @@ $rows = [];
 $totalRows = 0;
 $totalPages = 1;
 $geoCache = [];
+$hodTotalKm = null;
 
 if ($generated && $selImei) {
     try {
@@ -97,7 +105,7 @@ if ($generated && $selImei) {
             require_once __DIR__ . '/../includes/export_helper.php';
             $expStmt = $db->prepare("
                 SELECT g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
-                       g.acc AS ignition, g.status AS gps_status, g.gsm_signal,
+                       g.acc AS ignition, g.mileage,
                        COALESCE(d.device_name, g.imei) as device_name,
                        COALESCE(dg.name, g.driver_name,
                                 (SELECT dr.name FROM trips tr JOIN drivers dr ON dr.id = tr.driver_id
@@ -123,8 +131,8 @@ if ($generated && $selImei) {
                     geocode_cell($geoExp, $r['latitude'], $r['longitude']),
                     export_map_link($r['latitude'], $r['longitude']),
                     $r['speed'] !== null ? number_format((float)$r['speed'], 1) : '—',
+                    $r['mileage'] > 0 ? number_format(odometer_km($r['mileage']), 1, ',', '.') : '—',
                     $r['ignition'] ? 'Ligada' : 'Desligada',
-                    in_array($r['gps_status'], ['A', 'VALID'], true) ? 'Válido' : ($r['gps_status'] ?? '—'),
                 ];
             }
             // Subtítulo com a PLACA, não o IMEI: é o identificador que o
@@ -133,8 +141,18 @@ if ($generated && $selImei) {
             foreach ($devices as $dv) {
                 if ($dv['imei'] === $selImei) { $placaSel = $dv['device_name'] ?: $selImei; break; }
             }
+            // Linha de total: km rodado no período inteiro (não só a página),
+            // via odometer_delta_km() — ver cálculo de $hodTotalKm mais abaixo,
+            // reaproveitado aqui porque o export roda ANTES do bloco de
+            // paginação (mesmo padrão de $devices carregado cedo demais).
+            [$hodFirstRaw, $hodLastRaw] = report_odometer_endpoints($db, $where, $params);
+            $hodTotalKm = odometer_delta_km($hodFirstRaw, $hodLastRaw);
+            if (!empty($expRows)) {
+                $expRows[] = ['TOTAL DO PERÍODO', '', '', '', '', '',
+                    $hodTotalKm !== null ? number_format($hodTotalKm, 1, ',', '.') . ' km' : '—', ''];
+            }
             stream_export($export, 'relatorio_posicoes',
-                ['Placa', 'Motorista', 'Data/Hora', 'Endereço', 'Mapa', 'Velocidade (km/h)', 'Ignição', 'Sinal GPS'],
+                ['Placa', 'Motorista', 'Data/Hora', 'Endereço', 'Mapa', 'Velocidade (km/h)', 'Hodômetro', 'Ignição'],
                 $expRows, 'Relatório de Posições',
                 "Placa: $placaSel  |  " . report_period_label($dateFrom, $dateTo, $timeFrom, $timeTo, $timeMode),
                 // Pesos de coluna: o endereço leva ~3,6x uma coluna comum. Com
@@ -149,9 +167,17 @@ if ($generated && $selImei) {
         $totalPages = max(1, ceil($totalRows / $perPage));
         $offset = ($page - 1) * $perPage;
 
+        // Totalizador do rodapé: primeira/última leitura VÁLIDA de hodômetro
+        // de TODO o resultado filtrado (não só a página atual) — por isso é
+        // uma consulta à parte, não algo lido de $rows.
+        if (!isset($hodTotalKm)) {
+            [$hodFirstRaw, $hodLastRaw] = report_odometer_endpoints($db, $where, $params);
+            $hodTotalKm = $totalRows > 0 ? odometer_delta_km($hodFirstRaw, $hodLastRaw) : null;
+        }
+
         $stmt = $db->prepare("
             SELECT g.id, g.imei, g.latitude, g.longitude, g.speed, g.gps_time,
-                   g.acc AS ignition, g.status AS gps_status,
+                   g.acc AS ignition, g.mileage,
                    COALESCE(d.device_name, g.imei) as device_name,
                    -- Motorista, em três níveis de precedência (v4.8.0):
                    --   1. o que a CÂMERA mandou junto com a posição
@@ -268,13 +294,19 @@ require_once __DIR__ . '/../web/layout_base.php';
 <div class="table-wrap">
     <table>
         <thead>
-            <tr><th>Placa</th><th>Motorista</th><th><?= report_sort_link('gps_time', 'Data/Hora', $sort, $order) ?></th><th>Endereço</th><th>Mapa</th><th>Velocidade</th><th>Ignição</th><th>Sinal GPS</th></tr>
+            <tr><th>Placa</th><th>Motorista</th><th><?= report_sort_link('gps_time', 'Data/Hora', $sort, $order) ?></th><th>Endereço</th><th>Mapa</th><th>Velocidade</th><th>Hodômetro</th><th>Ignição</th></tr>
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
             <tr><td colspan="8"><div class="empty-state"><p><?= $generated ? 'Nenhuma posição encontrada.' : 'Selecione uma placa e clique em Gerar.' ?></p></div></td></tr>
             <?php else: ?>
-            <?php foreach ($rows as $r): ?>
+            <?php foreach ($rows as $r):
+                // mileage <= 0 é "sem leitura", não "leitura zero" — 4 dos 8
+                // modelos medidos em produção sempre mandam 0 (ver memória
+                // hodometro-bateria-medicao-producao); exibir "0,0 km" ali
+                // pareceria dado válido.
+                $hodRow = $r['mileage'] > 0 ? odometer_km($r['mileage']) : null;
+            ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
@@ -290,11 +322,20 @@ require_once __DIR__ . '/../web/layout_base.php';
                     <?php else: echo '—'; endif; ?>
                 </td>
                 <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
+                <td class="text-mono"><?= $hodRow !== null ? number_format($hodRow, 1, ',', '.') . ' km' : '—' ?></td>
                 <td><?= $r['ignition'] ? '<span class="badge badge-success">Ligada</span>' : '<span class="badge">Desligada</span>' ?></td>
-                <td><?= in_array($r['gps_status'] ?? '', ['A', 'VALID'], true) ? '<span class="badge badge-success">Válido</span>' : '<span class="badge">' . htmlspecialchars($r['gps_status'] ?? '—') . '</span>' ?></td>
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
+        <?php if ($generated && $totalRows > 0): ?>
+        <tfoot>
+            <tr>
+                <td colspan="6" style="text-align:right;font-weight:600;">Km rodado no período</td>
+                <td class="text-mono" style="font-weight:600;"><?= $hodTotalKm !== null ? number_format($hodTotalKm, 1, ',', '.') . ' km' : '—' ?></td>
+                <td></td>
+            </tr>
+        </tfoot>
+        <?php endif; ?>
     </table>
 </div>
 

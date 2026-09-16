@@ -101,7 +101,10 @@ if (!$error) {
             't'       => fmt_brt($r['gps_time'], 'd/m/Y H:i:s'),
             's'       => $r['speed'] !== null ? (float)$r['speed'] : null,
             'acc'     => (int)$r['acc'],
-            'mileage' => $r['mileage'] !== null ? (float)$r['mileage'] : null,
+            // odometer_km(): gps_data.mileage é gravado cru em metros — ver
+            // includes/functions.php. O JS abaixo só subtrai duas leituras já
+            // em km; sem esta conversão o "km rodado" saía 1000x maior.
+            'mileage' => odometer_km($r['mileage']),
         ];
     }
 

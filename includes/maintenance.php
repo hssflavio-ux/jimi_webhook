@@ -48,7 +48,11 @@ const MAINTENANCE_STATUS_COLORS = [
 ];
 
 /**
- * Último odômetro conhecido do equipamento.
+ * Último odômetro conhecido do equipamento, em km.
+ *
+ * `gps_data.mileage` é gravado cru (metros — ver odometer_km() em
+ * includes/functions.php); a conversão acontece aqui, na leitura, nunca no
+ * INSERT do webhook.
  *
  * @param PDO    $db   Conexão ativa
  * @param string $imei Equipamento
@@ -64,7 +68,7 @@ function latest_odometer(PDO $db, string $imei): ?float
         ");
         $stmt->execute([':imei' => $imei]);
         $v = $stmt->fetchColumn();
-        return $v !== false ? (float)$v : null;
+        return $v !== false ? odometer_km($v) : null;
     } catch (Throwable $e) {
         return null;
     }

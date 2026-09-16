@@ -13,6 +13,14 @@
  * (/relatorios/deslocamento/rota) — que exige login, por isso o PDF e o XLSX
  * levam no lugar dois links de OSM (partida e chegada), que abrem para quem
  * recebeu o arquivo sem ter conta no sistema.
+ *
+ * Hodômetro (leitura real do sensor, gps_data.mileage) e Horímetro (tempo de
+ * ignição ligada, CALCULADO — soma de device_state_segments, nunca o
+ * hardware do equipamento) nas duas modalidades, com totalizador de período
+ * inteiro no rodapé (não só a página atual) — ver
+ * ignition_seconds_in_window()/odometer_km() em includes/functions.php e os
+ * helpers desloc_*() logo abaixo. Hodômetro sai "—" para os equipamentos que
+ * não populam leitura real (ver memória hodometro-bateria-medicao-producao).
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -95,6 +103,86 @@ function desloc_subtitulo(string $selImei, array $devices, string $dateFrom, str
     return $placa . '  |  ' . report_period_label($dateFrom, $dateTo, $timeFrom, $timeTo) . $modo;
 }
 
+/**
+ * Segmentos de ignição (`device_state_segments`) de uma lista de IMEIs, no
+ * período do filtro — UMA busca para o relatório inteiro (grade + export +
+ * totalizador), reaproveitada por `ignition_seconds_in_window()`
+ * (includes/functions.php) por viagem ou por dia.
+ *
+ * Tabela pequena (dezenas de segmentos por dia por equipamento): buscar tudo
+ * de uma vez é mais barato que uma subquery correlacionada por linha, e evita
+ * depender de `device_state_segments.customer_id` — que é o dono ATUAL no
+ * momento em que o cron rodou, não o snapshot histórico do evento (mesma
+ * armadilha que o CLAUDE.md documenta para gps_data/alarms na Fase 2). Os
+ * IMEIs já vêm escopados de `trips.imei`, que é confiável.
+ *
+ * @param PDO    $db
+ * @param array  $imeis   IMEIs já escopados (de trips, nunca um JOIN novo)
+ * @param string $utcFrom
+ * @param string $utcTo
+ * @returns array Linhas (imei, state, started_at, duration_s)
+ */
+function desloc_state_segments(PDO $db, array $imeis, string $utcFrom, string $utcTo): array
+{
+    if (!$imeis) return [];
+    $ph = implode(',', array_fill(0, count($imeis), '?'));
+    $stmt = $db->prepare("
+        SELECT imei, state, started_at, duration_s
+        FROM device_state_segments
+        WHERE imei IN ($ph) AND ended_at IS NOT NULL AND started_at BETWEEN ? AND ?
+    ");
+    $stmt->execute(array_merge($imeis, [$utcFrom, $utcTo]));
+    return $stmt->fetchAll();
+}
+
+/**
+ * Delta de hodômetro (bruto, metros) por (imei, dia BRT) — usado no modo
+ * "fechamento diário". `MAX(mileage) - MIN(mileage)` em vez de
+ * primeira/última por horário: o odômetro só cresce, então sob leitura
+ * normal dá o mesmo resultado com uma agregação só. `mileage > 0` descarta
+ * os equipamentos que sempre mandam a leitura zerada (ver
+ * odometer_km() em includes/functions.php).
+ *
+ * @param PDO    $db
+ * @param array  $imeis   IMEIs já escopados (de trips, nunca um JOIN novo)
+ * @param string $utcFrom
+ * @param string $utcTo
+ * @returns array<string,mixed> chave "IMEI|YYYY-MM-DD" => delta bruto (metros), só dias com leitura válida
+ */
+function desloc_odometer_by_day(PDO $db, array $imeis, string $utcFrom, string $utcTo): array
+{
+    if (!$imeis) return [];
+    $ph = implode(',', array_fill(0, count($imeis), '?'));
+    $stmt = $db->prepare("
+        SELECT imei, DATE(CONVERT_TZ(gps_time, '+00:00', '-03:00')) AS dia,
+               MAX(mileage) - MIN(mileage) AS hod_delta
+        FROM gps_data
+        WHERE imei IN ($ph) AND gps_time BETWEEN ? AND ? AND mileage > 0
+        GROUP BY imei, dia
+    ");
+    $stmt->execute(array_merge($imeis, [$utcFrom, $utcTo]));
+    $out = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $out[$r['imei'] . '|' . $r['dia']] = $r['hod_delta'];
+    }
+    return $out;
+}
+
+/**
+ * Janela UTC [início, fim) de um dia BRT — fim EXCLUSIVO (início do dia
+ * seguinte), para casar com o contrato de `ignition_seconds_in_window()`.
+ *
+ * @param string $dia 'Y-m-d' (dia BRT)
+ * @returns array{0:string,1:string} [inícioUtc, fimUtcExclusivo]
+ */
+function desloc_brt_day_bounds_utc(string $dia): array
+{
+    [$from] = brt_day_range_to_utc($dia, $dia);
+    $nextDia = date('Y-m-d', strtotime($dia . ' +1 day'));
+    [$until] = brt_day_range_to_utc($nextDia, $nextDia);
+    return [$from, $until];
+}
+
 // Fechamento diário: agrega as viagens do dia BRT (primeira ignição ligada →
 // última desligada). Viagem que cruza a meia-noite conta inteira no dia em que
 // começou. CONVERT_TZ por offset fixo (BRT sem DST), convenção do projeto.
@@ -130,83 +218,165 @@ if ($generated) {
         $params[':imei'] = $selImei;
     }
 
-    // Export síncrono (padrão YUV §9.2): mesma query da grade, sem paginação
+    // Base para Hodômetro/Horímetro: IMEIs escopados por trips.imei (nunca um
+    // JOIN novo em devices — ver Fase 2 no CLAUDE.md), segmentos de ignição
+    // do período inteiro (uma busca só — tabela pequena) e, no modo diário,
+    // o delta de hodômetro por dia. +1 dia de folga no fim dos segmentos:
+    // uma viagem pode começar dentro do filtro e terminar depois dele.
+    // Try/catch próprio (não só o de baixo): tabela `trips` ausente não pode
+    // virar fatal aqui, mesma tolerância que o resto do arquivo já tem.
+    $scopedImeis = [];
+    $stateSegs = [];
+    $hodByDay = [];
+    try {
+        $imeisStmt = $db->prepare("SELECT DISTINCT t.imei FROM trips t $where");
+        $imeisStmt->execute($params);
+        $scopedImeis = $imeisStmt->fetchAll(PDO::FETCH_COLUMN);
+        $segsUntil = date('Y-m-d H:i:s', strtotime($utcTo) + 86400);
+        $stateSegs = desloc_state_segments($db, $scopedImeis, $utcFrom, $segsUntil);
+        $hodByDay = $mode === 'diario' ? desloc_odometer_by_day($db, $scopedImeis, $utcFrom, $utcTo) : [];
+    } catch (Exception $e) { /* tabela trips ausente → Hodômetro/Horímetro saem "—" */ }
+
+    // Precisa de SYNC_EXPORT_MAX_ROWS mesmo fora do export: o totalizador do
+    // rodapé reaproveita a MESMA consulta sem paginação do export síncrono
+    // (ver $allRows abaixo), para nunca discordar do que o arquivo mostra.
+    require_once __DIR__ . '/../includes/export_helper.php';
+
+    // Subquery de hodômetro por viagem: MAX-MIN em vez de primeira/última por
+    // horário — o odômetro só cresce, então dá o mesmo resultado com uma
+    // agregação só. `mileage > 0` descarta os equipamentos que sempre mandam
+    // leitura zerada (ver odometer_km() em includes/functions.php). NULL
+    // (nenhuma leitura válida na janela) e 0 (uma leitura só, ou parado com
+    // hodômetro real) são resultados DIFERENTES — só o primeiro vira "—".
+    $hodDeltaSubquery = "(SELECT MAX(g.mileage) - MIN(g.mileage) FROM gps_data g
+        WHERE g.imei = t.imei AND g.gps_time BETWEEN t.started_at AND t.ended_at
+          AND g.mileage > 0) AS hod_delta";
+
+    // Totais do período INTEIRO (não só a página atual): rodam sobre a MESMA
+    // consulta sem paginação usada pelo export (teto de SYNC_EXPORT_MAX_ROWS)
+    // — corrida uma vez, reaproveitada pelos dois, para o rodapé nunca
+    // discordar do arquivo exportado.
+    $allRows = [];
+    $totDistance = 0.0; $totAlarms = 0; $totViagens = 0; $totMovimentoS = 0;
+    $totHorimetroS = 0; $totHodKm = 0.0; $hodTemDado = false;
+    try {
+        if ($mode === 'diario') {
+            $allStmt = $db->prepare("$dailySelect $where
+                GROUP BY t.imei, dia ORDER BY dia $order, device_name
+                LIMIT " . SYNC_EXPORT_MAX_ROWS);
+            $allStmt->execute($params);
+            $allRows = $allStmt->fetchAll();
+            foreach ($allRows as $r) {
+                $totDistance   += (float)($r['distance_km'] ?? 0);
+                $totAlarms     += (int)($r['alarm_count'] ?? 0);
+                $totViagens    += (int)($r['viagens'] ?? 0);
+                $totMovimentoS += (int)($r['movimento_s'] ?? 0);
+                [$dayFrom, $dayUntil] = desloc_brt_day_bounds_utc($r['dia']);
+                $totHorimetroS += ignition_seconds_in_window($stateSegs, $r['imei'], $dayFrom, $dayUntil);
+                $hodRaw = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                if ($hodRaw !== null) { $totHodKm += odometer_km($hodRaw); $hodTemDado = true; }
+            }
+        } else {
+            $allStmt = $db->prepare("
+                SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
+                       COALESCE(dr.name, '—') as driver_name,
+                       $hodDeltaSubquery
+                FROM trips t
+                LEFT JOIN devices d ON d.imei = t.imei
+                LEFT JOIN drivers dr ON dr.id = t.driver_id
+                $where
+                ORDER BY t.$sort $order
+                LIMIT " . SYNC_EXPORT_MAX_ROWS);
+            $allStmt->execute($params);
+            $allRows = $allStmt->fetchAll();
+            foreach ($allRows as $r) {
+                $totDistance   += (float)($r['distance_km'] ?? 0);
+                $totAlarms     += (int)($r['alarm_count'] ?? 0);
+                $totHorimetroS += ignition_seconds_in_window($stateSegs, $r['imei'], $r['started_at'], $r['ended_at']);
+                if ($r['hod_delta'] !== null) { $totHodKm += odometer_km($r['hod_delta']); $hodTemDado = true; }
+            }
+            $totViagens = count($allRows);
+        }
+    } catch (Exception $e) { /* tabela trips ausente → totais zerados */ }
+
+    // Export síncrono (padrão YUV §9.2): reaproveita $allRows acima.
     $export = $_GET['export'] ?? '';
     if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
         require_permission('relatorios', 'export');
-        require_once __DIR__ . '/../includes/export_helper.php';
         $expRows = [];
-        try {
-            if ($mode === 'diario') {
-                $expStmt = $db->prepare("$dailySelect $where
-                    GROUP BY t.imei, dia ORDER BY dia $order, device_name
-                    LIMIT " . SYNC_EXPORT_MAX_ROWS);
-                $expStmt->execute($params);
-                while ($r = $expStmt->fetch()) {
-                    $expRows[] = [
-                        fmt_brt($r['primeira_on'], 'd/m/Y'),
-                        $r['device_name'],
-                        fmt_brt($r['primeira_on'], 'd/m/Y H:i'),
-                        $r['ultima_off'] ? fmt_brt($r['ultima_off'], 'd/m/Y H:i') : '—',
-                        fmt_duration((int)($r['jornada_s'] ?? 0)),
-                        fmt_duration((int)($r['movimento_s'] ?? 0)),
-                        $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
-                        $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
-                        (int)($r['alarm_count'] ?? 0),
-                        (int)$r['viagens'],
-                    ];
-                }
-                stream_export($export, 'relatorio_deslocamento_diario',
-                    ['Dia', 'Placa', 'Primeira Ignição', 'Última Ignição', 'Jornada', 'Em Movimento', 'Distância (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
-                    $expRows, 'Relatório de Deslocamento — Fechamento Diário',
-                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
-                    // Data/hora e os dois cabeçalhos longos pedem mais que as
-                    // colunas numéricas (jornada, km, alarmes, viagens).
-                    [1.0, 1.0, 1.3, 1.3, 0.9, 1.0, 1.0, 1.05, 0.8, 0.75]);
-            } else {
-                $expStmt = $db->prepare("
-                    SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
-                           COALESCE(dr.name, '—') as driver_name
-                    FROM trips t
-                    LEFT JOIN devices d ON d.imei = t.imei
-                    LEFT JOIN drivers dr ON dr.id = t.driver_id
-                    $where
-                    ORDER BY t.$sort $order
-                    LIMIT " . SYNC_EXPORT_MAX_ROWS);
-                $expStmt->execute($params);
-                while ($r = $expStmt->fetch()) {
-                    // Mesma ordem da tela: placa, motorista, início, fim,
-                    // duração, vel. máx, distância, alarmes, mapa.
-                    $expRows[] = [
-                        $r['device_name'],
-                        $r['driver_name'],
-                        fmt_brt($r['started_at']),
-                        $r['ended_at'] ? fmt_brt($r['ended_at']) : '—',
-                        fmt_duration((int)($r['duration_s'] ?? 0)),
-                        $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
-                        $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
-                        (int)($r['alarm_count'] ?? 0),
-                        // Dois PONTOS no OSM no lugar da antiga coluna "Rota"
-                        // (v4.9.0). Aquela apontava para /relatorios/deslocamento/rota,
-                        // tela nossa e atrás de login: quem recebia o arquivo por
-                        // e-mail sem conta no sistema caía na tela de login. E o
-                        // OSM público não sabe desenhar um percurso a partir de
-                        // uma URL — só aceita marcador (?mlat/?mlon) ou uma rota
-                        // RECALCULADA pelo motor de rotas, que não é o caminho
-                        // que o veículo fez. Partida e chegada abrem para
-                        // qualquer um; o traçado real continua na tela, para
-                        // quem tem login.
-                        export_map_link($r['start_lat'], $r['start_lng'], 'PARTIDA'),
-                        export_map_link($r['end_lat'], $r['end_lng'], 'CHEGADA'),
-                    ];
-                }
-                stream_export($export, 'relatorio_deslocamento',
-                    ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Vel. Máx (km/h)', 'Distância (km)', 'Alarmes', 'Mapa (partida)', 'Mapa (chegada)'],
-                    $expRows, 'Relatório de Deslocamento',
-                    desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
-                    [1.0, 1.5, 1.3, 1.3, 0.85, 1.05, 1.0, 0.8, 0.8, 0.85]);
+        if ($mode === 'diario') {
+            foreach ($allRows as $r) {
+                [$dayFrom, $dayUntil] = desloc_brt_day_bounds_utc($r['dia']);
+                $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $dayFrom, $dayUntil);
+                $hodRaw = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                $expRows[] = [
+                    fmt_brt($r['primeira_on'], 'd/m/Y'),
+                    $r['device_name'],
+                    fmt_brt($r['primeira_on'], 'd/m/Y H:i'),
+                    $r['ultima_off'] ? fmt_brt($r['ultima_off'], 'd/m/Y H:i') : '—',
+                    fmt_duration((int)($r['jornada_s'] ?? 0)),
+                    fmt_duration($horimetroS),
+                    fmt_duration((int)($r['movimento_s'] ?? 0)),
+                    $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
+                    $hodRaw !== null ? number_format(odometer_km($hodRaw), 1, ',', '.') : '—',
+                    $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
+                    (int)($r['alarm_count'] ?? 0),
+                    (int)$r['viagens'],
+                ];
             }
-        } catch (Exception $e) { /* tabela trips ausente → export vazio */ }
+            if (!empty($expRows)) {
+                $expRows[] = ['TOTAL DO PERÍODO', '', '', '', '—', fmt_duration($totHorimetroS),
+                    fmt_duration($totMovimentoS), number_format($totDistance, 1),
+                    $hodTemDado ? number_format($totHodKm, 1, ',', '.') : '—',
+                    '—', $totAlarms, $totViagens];
+            }
+            stream_export($export, 'relatorio_deslocamento_diario',
+                ['Dia', 'Placa', 'Primeira Ignição', 'Última Ignição', 'Jornada', 'Horímetro', 'Em Movimento', 'Distância (km)', 'Hodômetro (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
+                $expRows, 'Relatório de Deslocamento — Fechamento Diário',
+                desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
+                // Data/hora e os cabeçalhos longos pedem mais que as colunas
+                // numéricas (jornada, horímetro, km, alarmes, viagens).
+                [1.0, 1.0, 1.3, 1.3, 0.9, 0.9, 1.0, 1.0, 1.0, 1.05, 0.8, 0.75]);
+        } else {
+            foreach ($allRows as $r) {
+                $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $r['started_at'], $r['ended_at']);
+                $expRows[] = [
+                    $r['device_name'],
+                    $r['driver_name'],
+                    fmt_brt($r['started_at']),
+                    $r['ended_at'] ? fmt_brt($r['ended_at']) : '—',
+                    fmt_duration((int)($r['duration_s'] ?? 0)),
+                    fmt_duration($horimetroS),
+                    $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
+                    $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
+                    $r['hod_delta'] !== null ? number_format(odometer_km($r['hod_delta']), 1, ',', '.') : '—',
+                    (int)($r['alarm_count'] ?? 0),
+                    // Dois PONTOS no OSM no lugar da antiga coluna "Rota"
+                    // (v4.9.0). Aquela apontava para /relatorios/deslocamento/rota,
+                    // tela nossa e atrás de login: quem recebia o arquivo por
+                    // e-mail sem conta no sistema caía na tela de login. E o
+                    // OSM público não sabe desenhar um percurso a partir de
+                    // uma URL — só aceita marcador (?mlat/?mlon) ou uma rota
+                    // RECALCULADA pelo motor de rotas, que não é o caminho
+                    // que o veículo fez. Partida e chegada abrem para
+                    // qualquer um; o traçado real continua na tela, para
+                    // quem tem login.
+                    export_map_link($r['start_lat'], $r['start_lng'], 'PARTIDA'),
+                    export_map_link($r['end_lat'], $r['end_lng'], 'CHEGADA'),
+                ];
+            }
+            if (!empty($expRows)) {
+                $expRows[] = ['TOTAL DO PERÍODO', '', '', '', '—', fmt_duration($totHorimetroS),
+                    '—', number_format($totDistance, 1),
+                    $hodTemDado ? number_format($totHodKm, 1, ',', '.') : '—',
+                    $totAlarms, '', ''];
+            }
+            stream_export($export, 'relatorio_deslocamento',
+                ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Horímetro', 'Vel. Máx (km/h)', 'Distância (km)', 'Hodômetro (km)', 'Alarmes', 'Mapa (partida)', 'Mapa (chegada)'],
+                $expRows, 'Relatório de Deslocamento',
+                desloc_subtitulo($selImei, $devices, $dateFrom, $dateTo, $mode, $timeFrom, $timeTo),
+                [1.0, 1.5, 1.3, 1.3, 0.85, 0.85, 1.05, 1.0, 1.0, 0.8, 0.8, 0.85]);
+        }
     }
 
     try {
@@ -229,7 +399,8 @@ if ($generated) {
         } else {
             $stmt = $db->prepare("
                 SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
-                       COALESCE(dr.name, '—') as driver_name
+                       COALESCE(dr.name, '—') as driver_name,
+                       $hodDeltaSubquery
                 FROM trips t
                 LEFT JOIN devices d ON d.imei = t.imei
                 LEFT JOIN drivers dr ON dr.id = t.driver_id
@@ -354,8 +525,10 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <th>Primeira Ignição</th>
                 <th>Última Ignição</th>
                 <th>Jornada</th>
+                <th>Horímetro</th>
                 <th>Em Movimento</th>
                 <th>Distância</th>
+                <th>Hodômetro</th>
                 <th>Vel. Máx</th>
                 <th>Alarmes</th>
                 <th>Viagens</th>
@@ -368,8 +541,10 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <th><?= report_sort_link('started_at', 'Início', $sort, $order) ?></th>
                 <th><?= report_sort_link('ended_at', 'Término', $sort, $order) ?></th>
                 <th>Duração</th>
+                <th>Horímetro</th>
                 <th><?= report_sort_link('max_speed', 'Vel. Máx', $sort, $order, 'DESC') ?></th>
                 <th><?= report_sort_link('distance_km', 'Distância', $sort, $order, 'DESC') ?></th>
+                <th>Hodômetro</th>
                 <th>Alarmes</th>
                 <th>Rota</th>
             </tr>
@@ -377,7 +552,7 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
         </thead>
         <tbody>
             <?php if (empty($rows)): ?>
-            <tr><td colspan="10"><div class="empty-state"><p>
+            <tr><td colspan="<?= $mode === 'diario' ? 13 : 11 ?>"><div class="empty-state"><p>
                 <?= $generated ? 'Nenhuma viagem encontrada no período.' : 'Selecione os filtros e clique em Gerar.' ?>
             </p></div></td></tr>
             <?php elseif ($mode === 'diario'): ?>
@@ -386,6 +561,9 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 // seguinte (viagem cruzou a meia-noite), mostra a data junto.
                 $diaBrt = fmt_brt($r['primeira_on'], 'd/m/Y');
                 $offFmt = $r['ultima_off'] && fmt_brt($r['ultima_off'], 'd/m/Y') !== $diaBrt ? 'd/m H:i' : 'H:i';
+                [$dayFrom, $dayUntil] = desloc_brt_day_bounds_utc($r['dia']);
+                $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $dayFrom, $dayUntil);
+                $hodRaw = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
             ?>
             <tr>
                 <td class="text-mono"><?= $diaBrt ?></td>
@@ -393,8 +571,10 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono"><?= fmt_brt($r['primeira_on'], 'H:i') ?></td>
                 <td class="text-mono"><?= $r['ultima_off'] ? fmt_brt($r['ultima_off'], $offFmt) : '—' ?></td>
                 <td><?= fmt_duration((int)($r['jornada_s'] ?? 0)) ?></td>
+                <td><?= fmt_duration($horimetroS) ?></td>
                 <td><?= fmt_duration((int)($r['movimento_s'] ?? 0)) ?></td>
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
+                <td class="text-mono"><?= $hodRaw !== null ? number_format(odometer_km($hodRaw), 1, ',', '.') . ' km' : '—' ?></td>
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td><?= (int)$r['viagens'] ?></td>
@@ -402,15 +582,19 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
             </tr>
             <?php endforeach; ?>
             <?php else: ?>
-            <?php foreach ($rows as $r): ?>
+            <?php foreach ($rows as $r):
+                $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $r['started_at'], $r['ended_at']);
+            ?>
             <tr>
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['started_at']) ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['start_addr']??'—', 0, 40)) ?></span></td>
                 <td class="text-mono"><?= $r['ended_at'] ? fmt_brt($r['ended_at']) : '—' ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['end_addr']??'—', 0, 40)) ?></span></td>
                 <td><?= fmt_duration((int)($r['duration_s'] ?? 0)) ?></td>
+                <td><?= fmt_duration($horimetroS) ?></td>
                 <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
+                <td class="text-mono"><?= $r['hod_delta'] !== null ? number_format(odometer_km($r['hod_delta']), 1, ',', '.') . ' km' : '—' ?></td>
                 <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
                     <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
@@ -419,6 +603,35 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
             </tr>
             <?php endforeach; endif; ?>
         </tbody>
+        <?php if ($generated && !empty($allRows)): ?>
+        <tfoot>
+            <?php if ($mode === 'diario'): ?>
+            <tr>
+                <td colspan="4" style="text-align:right;font-weight:600;">Total do período</td>
+                <td style="font-weight:600;">—</td>
+                <td style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
+                <td style="font-weight:600;"><?= fmt_duration($totMovimentoS) ?></td>
+                <td style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
+                <td style="font-weight:600;">—</td>
+                <td style="font-weight:600;"><?= $totAlarms ?></td>
+                <td style="font-weight:600;"><?= $totViagens ?></td>
+                <td></td>
+            </tr>
+            <?php else: ?>
+            <tr>
+                <td colspan="4" style="text-align:right;font-weight:600;">Total do período</td>
+                <td style="font-weight:600;">—</td>
+                <td style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
+                <td style="font-weight:600;">—</td>
+                <td style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
+                <td style="font-weight:600;"><?= $totAlarms ?></td>
+                <td></td>
+            </tr>
+            <?php endif; ?>
+        </tfoot>
+        <?php endif; ?>
     </table>
 </div>
 

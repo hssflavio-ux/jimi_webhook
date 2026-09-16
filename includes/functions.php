@@ -163,6 +163,83 @@ function haversine_km(float $lat1, float $lng1, float $lat2, float $lng2): float
 }
 
 /**
+ * Metros por km no valor bruto de `gps_data.mileage`. Medido em produção
+ * (15/09/2026): os dois protocolos (JIMI e JT/T) mandam METROS — a doc da
+ * Jimi erra a unidade (diz 0,1 km/unidade no JT/T, 1 m/unidade no JIMI).
+ * Ver memória hodometro-bateria-medicao-producao.
+ */
+const ODOMETER_METERS_PER_KM = 1000;
+
+/**
+ * Converte o valor bruto de `gps_data.mileage` (metros) para km.
+ *
+ * Conversão pura de escala — decidir se o valor é "válido" (>0, presente)
+ * é responsabilidade de quem chama, porque um delta pode ser legitimamente 0.
+ *
+ * @param int|float|string|null $rawMeters
+ * @returns float|null
+ */
+function odometer_km($rawMeters): ?float
+{
+    return $rawMeters !== null ? round(((float)$rawMeters) / ODOMETER_METERS_PER_KM, 1) : null;
+}
+
+/**
+ * Km rodado entre duas leituras brutas (metros) de `gps_data.mileage` — a
+ * mais antiga e a mais nova de uma janela (viagem, dia). Quem chama resolve
+ * quais duas leituras são essas via `ORDER BY gps_time ASC/DESC LIMIT 1`;
+ * esta função só faz a aritmética, para poder ser testada sem fixture.
+ *
+ * NULL quando falta qualquer uma das pontas — 4 dos 8 modelos medidos em
+ * produção sempre mandam `mileage=0`, e `latest_odometer()`/os relatórios já
+ * descartam `0` como "sem leitura" antes de chegar aqui. Delta negativo
+ * (reset do sensor, leituras fora de ordem) também vira NULL: o hodômetro
+ * não regride, e mostrar um km negativo confundiria mais que "sem dado".
+ *
+ * @param int|float|string|null $firstRawMeters
+ * @param int|float|string|null $lastRawMeters
+ * @returns float|null
+ */
+function odometer_delta_km($firstRawMeters, $lastRawMeters): ?float
+{
+    if ($firstRawMeters === null || $lastRawMeters === null) return null;
+    $deltaMeters = (float)$lastRawMeters - (float)$firstRawMeters;
+    if ($deltaMeters < 0) return null;
+    return odometer_km($deltaMeters);
+}
+
+/**
+ * Segundos com ignição ligada (`movimento`+`ocioso` — ver includes/fleet_state.php,
+ * fonte única das regras de estado) somando os segmentos de `device_state_segments`
+ * de um IMEI cujo `started_at` cai em [from, until).
+ *
+ * Opera sobre um array já carregado (sem tocar banco): quem chama busca os
+ * segmentos do período INTEIRO de uma vez (não por linha/viagem) e reusa este
+ * cálculo por viagem ou por dia — evita N+1 e permite testar sem fixture de
+ * MySQL. Um segmento pertence à janela do seu PRÓPRIO started_at, nunca é
+ * fatiado no meio — mesma simplificação que `trip_builder.php` já usa para o
+ * fechamento diário ("viagem que cruza a meia-noite conta inteira no dia em
+ * que começou").
+ *
+ * @param array  $segments Linhas de device_state_segments: imei, state, started_at ('Y-m-d H:i:s'), duration_s
+ * @param string $imei
+ * @param string $fromUtc  'Y-m-d H:i:s' — inclusivo
+ * @param string $untilUtc 'Y-m-d H:i:s' — exclusivo
+ * @returns int Segundos com ignição ligada na janela
+ */
+function ignition_seconds_in_window(array $segments, string $imei, string $fromUtc, string $untilUtc): int
+{
+    $sum = 0;
+    foreach ($segments as $s) {
+        if ($s['imei'] !== $imei) continue;
+        if (!in_array($s['state'], ['movimento', 'ocioso'], true)) continue;
+        if ($s['started_at'] < $fromUtc || $s['started_at'] >= $untilUtc) continue;
+        $sum += (int)$s['duration_s'];
+    }
+    return $sum;
+}
+
+/**
  * Obtém o nome legível de um código de alarme (fallback simples).
  * Para resolução completa, utilize a tabela alarm_types no banco de dados.
  *
@@ -1576,6 +1653,31 @@ function report_sort_link(string $col, string $label, string $sort, string $orde
 function report_back_button(string $baseUrl, string $label = 'Voltar'): string {
     return '<a href="' . htmlspecialchars($baseUrl, ENT_QUOTES) . '" class="btn btn-outline btn-sm">&larr; '
          . htmlspecialchars($label) . '</a>';
+}
+
+/**
+ * Menor e maior leitura VÁLIDA (`mileage > 0`) de `gps_data` dentro de um
+ * WHERE já pronto do relatório (alias obrigatório `g`, mesmo usado em
+ * rel_posicoes.php/rel_deslocamento.php) — um totalizador de período, não
+ * por linha/página.
+ *
+ * MIN/MAX em vez de "primeira/última por tempo": o odômetro só cresce, então
+ * sob leitura normal as duas contas dão o mesmo resultado, e MIN/MAX é uma
+ * agregação só (sem duas buscas ORDER BY). Devolve os valores BRUTOS
+ * (metros) — passe para odometer_delta_km() para o delta em km.
+ *
+ * @param PDO    $db
+ * @param string $where  Cláusula WHERE completa do relatório (com "WHERE"), alias `g`
+ * @param array  $params Parâmetros nomeados do WHERE
+ * @returns array{0:mixed,1:mixed} [menor leitura crua, maior leitura crua] — [null,null] se nenhuma
+ */
+function report_odometer_endpoints(PDO $db, string $where, array $params): array
+{
+    $stmt = $db->prepare("SELECT MIN(g.mileage) AS mn, MAX(g.mileage) AS mx FROM gps_data g $where AND g.mileage > 0");
+    $stmt->execute($params);
+    $r = $stmt->fetch();
+    if (!$r || $r['mn'] === null) return [null, null];
+    return [$r['mn'], $r['mx']];
 }
 
 /**
