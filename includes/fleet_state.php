@@ -95,6 +95,75 @@ function device_last_seen_sql(string $d = 'd', string $ds = 'ds'): string
 }
 
 /**
+ * Minutos de silêncio (desde o último sinal, `device_last_seen_sql()`) a
+ * partir dos quais um equipamento com ignição LIGADA conta como
+ * "desatualizado" nos painéis e no relatório /relatorios/desatualizados.
+ *
+ * Mesmo valor de `CONNECTIVITY_ONLINE_MINUTES`, mas constante PRÓPRIA — mesma
+ * razão pela qual `OFFLINE_GAP_SECONDS` não reaproveita aquela: perguntas
+ * diferentes que hoje têm a mesma resposta numérica podem divergir amanhã,
+ * e cada uma precisa poder mudar sem arrastar as outras.
+ */
+const OUTDATED_IGNITION_ON_MINUTES = 5;
+
+/**
+ * Mesma ideia, para ignição DESLIGADA (ou sem leitura de ignição) — tolerância
+ * maior porque motor parado reporta com menos frequência, por design do
+ * equipamento. Mesmo valor de `OFFLINE_GAP_SECONDS` (30 min), constante
+ * própria pelo mesmo motivo do bullet acima.
+ */
+const OUTDATED_IGNITION_OFF_MINUTES = 30;
+
+/**
+ * "Este equipamento está desatualizado?" — decisão do dono do produto
+ * (15/09/2026), depois de um caso real: o card de Desatualizados usava só
+ * `device_statistics.last_gps_time` (última POSIÇÃO), e um equipamento sem
+ * fix de GPS mas comunicando normalmente (heartbeat) aparecia como
+ * desatualizado mesmo tendo "falado" com o servidor minutos antes.
+ *
+ * Por isso o sinal de referência é `device_last_seen_sql()` (o ÚLTIMO SINAL
+ * por QUALQUER via — comunicação, GPS, heartbeat ou evento), não uma coluna
+ * isolada; e a tolerância depende da ignição: ligada, pouco silêncio já é
+ * anormal; desligada, um intervalo maior é esperado.
+ *
+ * Fonte única para /painel, / (resumo) e /relatorios/desatualizados — as três
+ * telas tinham (ou, no caso do resumo, não tinham nenhum) critério próprio.
+ *
+ * @param string|null    $lastSeenUtc Último sinal, 'Y-m-d H:i:s' UTC (NULL/vazio = nunca)
+ * @param int|string|null $accStatus  Ignição na última leitura (1 = ligada; 0/NULL = desligada)
+ * @param string|null    $nowUtc     UTC de referência (default: agora)
+ * @returns bool
+ */
+function is_device_outdated(?string $lastSeenUtc, $accStatus, ?string $nowUtc = null): bool
+{
+    $lastSeenUtc = $lastSeenUtc ?: '1970-01-01 00:00:00';
+    $now = $nowUtc !== null ? strtotime($nowUtc) : time();
+    $diffMinutes = ($now - strtotime($lastSeenUtc)) / 60;
+    $limit = ((int)$accStatus === 1) ? OUTDATED_IGNITION_ON_MINUTES : OUTDATED_IGNITION_OFF_MINUTES;
+    return $diffMinutes > $limit;
+}
+
+/**
+ * Espelho SQL de `is_device_outdated()`, para `COUNT`/`WHERE` — ver o
+ * comentário dela para a regra completa. Exige
+ * `LEFT JOIN device_statistics ds ON ds.imei = d.imei` na consulta (mesma
+ * exigência de `device_last_seen_sql()`, que esta função usa por dentro).
+ *
+ * @param string $d  Alias da tabela `devices`
+ * @param string $ds Alias de `device_statistics`
+ * @returns string Expressão SQL booleana
+ */
+function device_outdated_sql(string $d = 'd', string $ds = 'ds'): string
+{
+    $lastSeen = device_last_seen_sql($d, $ds);
+    return "(
+        ({$ds}.last_acc_status = 1 AND TIMESTAMPDIFF(MINUTE, {$lastSeen}, NOW()) > " . OUTDATED_IGNITION_ON_MINUTES . ")
+        OR
+        (({$ds}.last_acc_status IS NULL OR {$ds}.last_acc_status = 0) AND TIMESTAMPDIFF(MINUTE, {$lastSeen}, NOW()) > " . OUTDATED_IGNITION_OFF_MINUTES . ")
+    )";
+}
+
+/**
  * Presença legível a partir dos minutos desde o último sinal.
  *
  * O limiar de "online" é `OFFLINE_GAP_SECONDS`, o mesmo do Status da Frota e de

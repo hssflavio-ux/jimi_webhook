@@ -2,6 +2,62 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 13–14/09/2026 — Mapa de Risco ADAS/DMS (v4.20.0) + duas correções achadas no caminho (v4.19.1, v4.19.2)
+>
+> Pedido do dono do produto: mapeamento de risco completo a partir dos alertas ADAS/DMS —
+> horário, local, faixa do dia, tempo de direção contínua, locais com mais alertas. Decisões
+> tomadas uma a uma com ele (plano em `~/.claude/plans/zazzy-scribbling-zephyr.md`):
+> - público = gestor de frota do cliente; métrica = **pontos por hora dirigida** (a contagem
+>   bruta aponta onde a frota mais anda, não onde é mais perigoso);
+> - peso pelo perfil de ocorrências do cliente; só comportamento (equipamento e `info` fora);
+> - direção contínua zera **só** com ignição desligada por 30 min ou mais — falta de sinal
+>   **não** é pausa (a câmera descarrega depois); faixas ≤30 min · 30 min–1 h · 1–2 h ·
+>   2–4 h · >4 h, sem limite por tipo de veículo;
+> - grade de 1 km; período até 90 dias; abas; tela logo abaixo do BI, com a permissão dele.
+>
+> **Medição em produção (13/09, só leitura) que moldou o desenho**: 1.484 alertas ADAS/DMS em
+> 30 dias, 1 cliente, 5 veículos; motorista em 0,4%; só 26 células de 1 km com 10 alertas ou
+> mais (→ exposição mínima no ranking); 11% dos GPS reenviados com mediana de 6,3 h e máximo de
+> 6,8 dias, e 11% dos alertas com mais de 6 h de atraso (→ marca-d'água por `id`); 2.842
+> lacunas de 30 min ou mais, 97% sem deslocamento.
+>
+> **Achados no caminho, corrigidos**: 🔴 `265-2` (celular do JT/T) sem parâmetro de ocorrência
+> desde a v4.8.3 → **v4.19.1**; 🔴 `state_builder` perdia para sempre a posição atrasada (11
+> segmentos offline com 108 pontos dentro) → **v4.19.2** (`worker_watermarks`,
+> `rebuild_boundaries()`, `--rebuild`). **Registrados, não corrigidos**: `get_occurrence_param()`
+> não é determinística; `trip_builder` tem a mesma marca por horário do `state_builder` antigo.
+>
+> **Entregue (v4.20.0)**: `alarm_types.risk_group` (por código), `risk_events`/`risk_exposure`/
+> `risk_day_state`, `scripts/risk_builder.php` (cron 15 min), `includes/risk_map.php` (regras
+> puras) e `/mapa-risco` (Onde · Quando · Jornada · Quem · Tendência, com export da aba).
+>
+> **Verificação local (sem MySQL)**: `php -l` nos 165 arquivos PHP; `risk_map.test.php` 77/77;
+> `migracoes_no_deploy.test.php` OK; `node --check` nos specs.
+>
+> **Produção (14/09/2026)**: deploy aplicado — commit `87160fc` no ar, banco e `/ping` em 4.20.0,
+> 0 tipos ADAS/DMS sem `risk_group`, índices novos presentes. (O `sudo` com senha foi barrado
+> pelo classificador de permissões desta sessão; os deploys não passaram por ela.)
+> - `state_builder.php 30 --rebuild`: 11 equipamentos, 36.854 pontos, 4 s.
+> - `risk_builder.php --desde=2026-06-10`: 302 veículo-dias, 1.293 alertas, 10.260 baldes de
+>   exposição, 0 falhas, 5,5 s.
+> - **Alertas esperados × gravados: 1.293 = 1.293** (1.558 brutos − 109 sem veículo − 156 excluídos).
+> - **Jornada de 2 alertas reais recalculada a partir do GPS bruto: bate** (4.657 s e 2.948 s).
+> - Horas em movimento: 334,8 h no mapa × 336,0 h nos segmentos. O ocioso diverge (379,9 × 224,9 h)
+>   só pelo segmento ocioso ABERTO dos rastreadores JM-VL01/VL02 (ignição ligada, parados há dias;
+>   segmento aberto não tem `duration_s`) — sem câmera, sem alerta, sem efeito no mapa.
+> - `scripts/test_e2e.sh` em produção: passos novos 6, 7 e 8 todos OK. As 2 falhas do passo 5
+>   eram da CONSULTA do teste, que procurava a ocorrência pelo nome anterior à v4.8.3 — a
+>   ocorrência (#409) nasceu com a mídia vinculada. Consulta corrigida para ir pelo
+>   `occurrence_events` do próprio alarme (commit `64aab11`, em produção) e **e2e rodado de novo:
+>   18 ok, 0 falhas**. Na segunda rodada a direção contínua do alarme de teste saiu com 22.632 s,
+>   e está certo pela regra: os pontos da primeira rodada tinham ignição ligada e não houve
+>   desligamento entre as duas. Dados de teste criados: ocorrências #409 a #412 no cliente 1
+>   (veículo "E2E TEST VEHICLE").
+> - Cron do `risk_builder` instalado; `/mapa-risco` responde (302 para o login); nada no log.
+>
+> **Pendente**: a tela com login não foi exercitada — o servidor não tem Node, e
+> `tests/mapa_risco.spec.js` precisa de `TEST_EMAIL`/`TEST_PASSWORD` para rodar daqui contra produção.
+
 > ### 📍 11/09/2026 (motorista) — Sessão de motorista por reconhecimento facial (AFIS): persiste até trocar ou ACC OFF
 >
 > Pedido do dono do produto: a câmera já manda reconhecimento facial (AFIS,

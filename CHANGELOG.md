@@ -5,6 +5,20 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.2
+
+**"Desatualizado" deixa de ser calculado por última POSIÇÃO de GPS e passa a ser por COMUNICAÇÃO, com tolerância que depende da ignição — corrige o quadro do painel mostrando equipamento como desatualizado mesmo comunicando normalmente.**
+
+Bug reportado pelo dono do produto: `/painel` mostrava "11 desatualizados", mas 7 desses equipamentos tinham comunicado minutos antes. Causa raiz: o card usava só `device_statistics.last_gps_time` (última posição válida de GPS) — um equipamento comunicando normalmente (heartbeat) mas sem conseguir fix de GPS (ex.: sem sinal de satélite) aparecia como desatualizado mesmo estando online. Decisão do dono do produto: o critério passa a ser o ÚLTIMO SINAL por qualquer via (comunicação, GPS, heartbeat ou evento), com tolerância condicionada à ignição — 5 min ligada, 30 min desligada.
+
+- **Adicionado** `is_device_outdated()`/`device_outdated_sql()` (`includes/fleet_state.php`), fonte única do critério, usada por `/painel`, `/` (resumo) e `/relatorios/desatualizados` — as três telas tinham (ou, no caso do resumo, não tinham nenhum) critério próprio. Baseado em `device_last_seen_sql()` (já existente, GREATEST de `last_communication`/`last_gps_time`/`last_heartbeat_time`/`last_event_time`), não numa coluna isolada. Testado sem banco em `tests/helpers/device_outdated.test.php` (16/16).
+- **Corrigido** `handlers/resumo.php`: o card "Desatualizados" nunca tinha fallback ao vivo (nem por snapshot ausente, nem por vencida) — ao contrário de todos os outros KPIs da mesma tela. Cron parado ou sem ter rodado para o cliente mostrava "nenhum desatualizado" sem erro, indistinguível de frota em dia.
+- **Alterado** `scripts/metrics_rollup.php`, `includes/dashboard_widgets.php` (`dashboard_outdated_kpis()`/`dashboard_render_kpi_outdated()`, e o ranking "Top 3 por desatualizados" do painel do revendedor): métricas `outdated_lt7d/gt7d/gt30d/never` (4 faixas de dias) substituídas por `outdated_total`/`outdated_on` (booleano + quantos com ignição ligada).
+- **Alterado** `/relatorios/desatualizados`: as 5 faixas por dia (menos de 24h / mais de 1 dia / mais de 7 dias / mais de 30 dias / nunca) viram 2 grupos (Desatualizados / Em dia); Detalhes e Export só existem para "Desatualizados". Grade "Frota completa" ganha coluna Status (Desatualizado/Em dia) e mantém a coluna "Posição GPS" como sinal PRÓPRIO e independente (um equipamento pode comunicar bem e não ter fix de GPS).
+- **Registrado, não corrigido** (fora do escopo do bug reportado): o ranking "Top 3 por desatualizados" de `handlers/resumo.php` não escopa por `reseller_scope_ids()` — um revendedor vê o ranking de TODOS os clientes do sistema, não só os seus. Mesma classe de bug já corrigida em `dashboard_render_reseller_view()` (v4.12.3), reintroduzida aqui porque é uma cópia separada da mesma consulta.
+- **Sem migração**: nenhuma coluna nova — o critério é derivado de colunas já existentes (`devices.last_communication`, `device_statistics.last_acc_status`/`last_gps_time`/`last_heartbeat_time`/`last_event_time`).
+- **Verificação**: sem MySQL local — `php -l` em `handlers config core includes scripts`; `tests/helpers/device_outdated.test.php` (16/16) e os demais helpers sem banco, sem regressão. Telas não exercitadas contra banco real nem no navegador nesta sessão.
+
 ## [Unreleased] — 4.21.1
 
 **Hodômetro (leitura real do sensor) e Horímetro (tempo de ignição ligada, calculado) nos relatórios de Posições e Deslocamento, com totalizador de período no rodapé — e a correção do bug de unidade que isso expôs.**

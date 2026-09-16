@@ -6,7 +6,7 @@
  * Visão 360° executiva. Blocos:
  *   1. KPIs via metrics_snapshots (5-min cache)
  *   2. Mapa de Calor (GPS recentes, on-the-fly)
- *   3. Velocidade da Frota + Desatualizados
+ *   3. Velocidade da Frota + Desatualizados (device_outdated_sql(), includes/fleet_state.php)
  *   4. Visão por Clientes (revendedor)
  *   5. Séries temporais (alarmes/ocorrências hora-a-hora)
  * Auto-refresh 30s.
@@ -111,10 +111,8 @@ $spdAte20   = get_metric($db, $customerId, 'speed_ate20', 0);
 $spdAte60   = get_metric($db, $customerId, 'speed_ate60', 0);
 $spdAcima60 = get_metric($db, $customerId, 'speed_acima60', 0);
 
-$outLt7d  = get_metric($db, $customerId, 'outdated_lt7d', 0);
-$outGt7d  = get_metric($db, $customerId, 'outdated_gt7d', 0);
-$outGt30d = get_metric($db, $customerId, 'outdated_gt30d', 0);
-$outNever = get_metric($db, $customerId, 'outdated_never', 0);
+$outTotal = get_metric($db, $customerId, 'outdated_total', 0);
+$outOn    = get_metric($db, $customerId, 'outdated_on', 0);
 
 // On-the-fly fallback for speed
 //
@@ -145,7 +143,38 @@ if ($customerId !== null && $spdParados == 0 && $spdAte20 == 0 && $spdAte60 == 0
     } catch (Exception $e) {}
 }
 $speedTotal = $spdParados + $spdAte20 + $spdAte60 + $spdAcima60;
-$outTotal   = $outLt7d + $outGt7d + $outGt30d + $outNever;
+
+// On-the-fly fallback for outdated
+//
+// 🔴 Ao contrário de TODOS os outros KPIs desta tela, "Desatualizados" nunca
+// teve fallback ao vivo nenhum — nem por snapshot ausente, nem por snapshot
+// vencida (`$metricsStale`, checado acima só para os 4 primeiros KPIs). Com o
+// cron parado ou sem ter rodado ainda para o cliente, o card mostrava
+// "Nenhum dispositivo desatualizado" sem erro, indistinguível de "tudo em
+// dia" — mesma classe de bug documentada em includes/dashboard_widgets.php.
+//
+// Critério trocado (decisão do dono do produto, 15/09/2026) de "sem POSIÇÃO
+// (`last_gps_time`) há N dias" para "sem COMUNICAR pela tolerância da
+// ignição atual" (`device_outdated_sql()`, includes/fleet_state.php): um
+// equipamento comunicando normalmente mas sem fix de GPS aparecia como
+// desatualizado — era exatamente o sintoma reportado.
+if ($customerId !== null && ($metricsStale || $outTotal == 0)) {
+    try {
+        $outdatedSql = device_outdated_sql('d', 'ds');
+        $outStmt = $db->prepare("
+            SELECT
+                SUM(CASE WHEN $outdatedSql THEN 1 ELSE 0 END) as total,
+                SUM(CASE WHEN $outdatedSql AND ds.last_acc_status = 1 THEN 1 ELSE 0 END) as on_cnt
+            FROM devices d
+            LEFT JOIN device_statistics ds ON ds.imei = d.imei
+            WHERE d.customer_id = :cid AND d.is_active = 1
+        ");
+        $outStmt->execute([':cid' => $customerId]);
+        $outRow   = $outStmt->fetch();
+        $outTotal = (int)($outRow['total']  ?? 0);
+        $outOn    = (int)($outRow['on_cnt'] ?? 0);
+    } catch (Exception $e) {}
+}
 
 // ── D1 (v4.2.0 — YUV): Ociosidade (ignição ligada + parado, últimos 30 min) ──
 $idleCount = 0;
@@ -188,7 +217,7 @@ if (($_GET['ajax'] ?? '') === 'kpis') {
         'dev'  => "$devActive/$devTotal",
         'on'   => (int)$devOnline, 'off' => (int)$devOffline,
         'occ'  => (int)$occTotal, 'occ_waiting' => (int)$occWaiting,
-        'out'  => (int)$outTotal, 'out_gt7d' => (int)$outGt7d, 'out_never' => (int)$outNever,
+        'out'  => (int)$outTotal, 'out_on' => (int)$outOn,
         'idle' => $idleCount,
     ]], JSON_UNESCAPED_UNICODE);
     exit;
@@ -216,13 +245,17 @@ if ($isReseller) {
         ")->fetchAll();
     } catch (Exception $e) {}
     try {
+        // Mesmo critério do KPI "Desatualizados" logo abaixo
+        // (device_outdated_sql(), includes/fleet_state.php) — antes era um
+        // limiar fixo de 7 dias sobre last_gps_time (posição), diferente do
+        // KPI da mesma tela.
         $topByOutdated = $db->query("
             SELECT c.name, COUNT(*) as cnt
             FROM customers c
             JOIN devices d ON d.customer_id = c.id AND d.is_active = 1
             LEFT JOIN device_statistics ds ON ds.imei = d.imei
             WHERE c.is_active = 1
-              AND (ds.last_gps_time IS NULL OR ds.last_gps_time < DATE_SUB(NOW(), INTERVAL 7 DAY))
+              AND " . device_outdated_sql('d', 'ds') . "
             GROUP BY c.id ORDER BY cnt DESC LIMIT 3
         ")->fetchAll();
     } catch (Exception $e) {}
@@ -387,7 +420,7 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div class="kpi-item">
         <div class="kpi-item-label">Desatualizados</div>
         <div class="kpi-item-value" id="kpi-out"><?= $outTotal ?></div>
-        <div class="kpi-item-delta">+7d: <span id="kpi-out7"><?= $outGt7d ?></span> · Nunca: <span id="kpi-outn"><?= $outNever ?></span></div>
+        <div class="kpi-item-delta">ignição ligada: <span id="kpi-outon"><?= $outOn ?></span></div>
     </div>
 </div>
 
@@ -431,23 +464,22 @@ require_once __DIR__ . '/../web/layout_base.php';
     <div class="card" style="padding:16px;">
         <h4 style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:8px;">Desatualizados</h4>
         <?php
+        // Desde 15/09/2026 "desatualizado" é booleano (device_outdated_sql()),
+        // não mais uma faixa de dias — a barra agora separa os desatualizados
+        // por estado da ignição (ligada = mais urgente: 5 min de tolerância
+        // contra 30 min desligada).
+        $outOff = $outTotal - $outOn;
         if ($outTotal > 0):
-            $plt = round($outLt7d / $outTotal * 100);
-            $pg7 = round($outGt7d / $outTotal * 100);
-            $pg30 = round($outGt30d / $outTotal * 100);
-            $pnv = 100 - $plt - $pg7 - $pg30;
+            $pOn = round($outOn / $outTotal * 100);
+            $pOff = 100 - $pOn;
         ?>
         <div class="velocity-bar">
-            <div style="width:<?=$plt?>%;background:var(--primary);"><?=$plt?>%</div>
-            <div style="width:<?=$pg7?>%;background:var(--warning);"><?=$pg7?>%</div>
-            <div style="width:<?=$pg30?>%;background:#f4b000;"><?=$pg30?>%</div>
-            <div style="width:<?=$pnv?>%;background:var(--error);"><?=$pnv?>%</div>
+            <div style="width:<?=$pOn?>%;background:var(--error);"><?=$pOn?>%</div>
+            <div style="width:<?=$pOff?>%;background:var(--warning);"><?=$pOff?>%</div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;">
-            <span style="color:var(--primary);">■ &lt;7d <?= $outLt7d ?></span>
-            <span style="color:var(--warning);">■ &gt;7d <?= $outGt7d ?></span>
-            <span style="color:#f4b000;">■ &gt;30d <?= $outGt30d ?></span>
-            <span style="color:var(--error);">■ Nunca <?= $outNever ?></span>
+            <span style="color:var(--error);">■ Ignição ligada <?= $outOn ?></span>
+            <span style="color:var(--warning);">■ Ignição desligada <?= $outOff ?></span>
         </div>
         <?php else: ?>
         <p class="text-muted" style="font-size:12px;">Nenhum dispositivo desatualizado.</p>
@@ -645,7 +677,7 @@ setInterval(function() {
         set('kpi-dev', k.dev);
         set('kpi-on', k.on); set('kpi-off', k.off);
         set('kpi-occ', k.occ); set('kpi-occ-w', k.occ_waiting);
-        set('kpi-out', k.out); set('kpi-out7', k.out_gt7d); set('kpi-outn', k.out_never);
+        set('kpi-out', k.out); set('kpi-outon', k.out_on);
         set('kpi-idle', k.idle);
         var ind = document.getElementById('refresh-indicator');
         if (ind) { ind.style.display = 'inline'; ind.textContent = new Date().toLocaleTimeString('pt-BR'); setTimeout(function(){ind.style.display='none';},2000); }

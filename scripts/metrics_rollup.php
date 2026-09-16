@@ -12,7 +12,7 @@
  *   alarms_today, alarms_yesterday, alarms_7d, alarms_30d
  *   ocurrences_today, ocurrences_yesterday, ocurrences_7d, ocurrences_30d
  *   speed_parados, speed_ate20, speed_ate60, speed_acima60
- *   outdated_lt7d, outdated_gt7d, outdated_gt30d, outdated_never
+ *   outdated_total, outdated_on
  */
 
 require_once __DIR__ . '/../config/database.php';
@@ -131,23 +131,25 @@ foreach ($customers as $cust) {
     $metrics['speed_ate60']     = $spd['ate60'] ?? 0;
     $metrics['speed_acima60']   = $spd['acima60'] ?? 0;
 
-    // Outdated — última posição via device_statistics (devices.last_position_at não existe)
+    // Outdated — decisão do dono do produto (15/09/2026): deixou de ser "há
+    // quantos dias sem POSIÇÃO" (device_statistics.last_gps_time) e passou a
+    // ser "está comunicando dentro da tolerância da ignição atual"
+    // (is_device_outdated()/device_outdated_sql(), includes/fleet_state.php).
+    // Um equipamento sem fix de GPS mas comunicando normalmente (heartbeat)
+    // não é mais contado como desatualizado — era o bug reportado.
+    $outdatedSql = device_outdated_sql('d', 'ds');
     $out = $db->prepare("
         SELECT
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 0 AND 6 THEN 1 ELSE 0 END) as lt7d,
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 7 AND 29 THEN 1 ELSE 0 END) as gt7d,
-            SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) >= 30 THEN 1 ELSE 0 END) as gt30d,
-            SUM(CASE WHEN ds.last_gps_time IS NULL THEN 1 ELSE 0 END) as never
+            SUM(CASE WHEN $outdatedSql THEN 1 ELSE 0 END) as total,
+            SUM(CASE WHEN $outdatedSql AND ds.last_acc_status = 1 THEN 1 ELSE 0 END) as on_cnt
         FROM devices d
         LEFT JOIN device_statistics ds ON ds.imei = d.imei
         WHERE d.customer_id = :cid AND d.is_active = 1
     ");
     $out->execute([':cid' => $cid]);
     $out = $out->fetch();
-    $metrics['outdated_lt7d']  = $out['lt7d'] ?? 0;
-    $metrics['outdated_gt7d']  = $out['gt7d'] ?? 0;
-    $metrics['outdated_gt30d'] = $out['gt30d'] ?? 0;
-    $metrics['outdated_never'] = $out['never'] ?? 0;
+    $metrics['outdated_total'] = $out['total']  ?? 0;
+    $metrics['outdated_on']    = $out['on_cnt'] ?? 0;
 
     // Delete old snapshots for this customer (keep last 24h)
     $db->prepare("DELETE FROM metrics_snapshots WHERE customer_id = :cid AND snapshot_at < DATE_SUB(NOW(), INTERVAL 24 HOUR)")

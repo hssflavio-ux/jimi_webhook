@@ -181,31 +181,36 @@ function dashboard_outdated_kpis(PDO $db, int $cid): array
 {
     static $cache = [];
     if (isset($cache[$cid])) return $cache[$cid];
-    $keys = ['outdated_lt7d', 'outdated_gt7d', 'outdated_gt30d', 'outdated_never'];
+    $keys = ['outdated_total', 'outdated_on'];
     $out = [];
+    $missing = false;
     foreach ($keys as $k) {
         try {
             $stmt = $db->prepare("SELECT metric_value FROM metrics_snapshots WHERE customer_id=:cid AND metric_key=:k ORDER BY snapshot_at DESC LIMIT 1");
             $stmt->execute([':cid' => $cid, ':k' => $k]);
             $v = $stmt->fetchColumn();
-            $out[$k] = $v !== false ? (int)$v : 0;
-        } catch (Throwable $e) { $out[$k] = 0; }
+            if ($v === false) { $missing = true; $out[$k] = 0; }
+            else { $out[$k] = (int)$v; }
+        } catch (Throwable $e) { $missing = true; $out[$k] = 0; }
     }
-    // 🔴 Ao contrário dos outros três KPIs (dispositivos, ocorrências,
+    // Ao contrário dos outros três KPIs (dispositivos, ocorrências,
     // velocidade), este nunca teve fallback ao vivo — só lia
     // `metrics_snapshots`. Enquanto o cron (`scripts/metrics_rollup.php`) não
-    // roda (banco novo, ambiente de dev, ou o cron simplesmente falhou), o
-    // widget "Desatualizados" mostra 0 SEMPRE, mesmo com câmera desatualizada
-    // de verdade — sem erro nenhum, indistinguível de "está tudo em dia".
-    // Mesma consulta do rollup, ao vivo.
-    if (array_sum($out) === 0) {
+    // roda (banco novo, ambiente de dev, cron parado) OU a snapshot venceu
+    // (`metrics_snapshot_stale()`), cai na mesma consulta ao vivo do rollup —
+    // ver device_outdated_sql() (includes/fleet_state.php).
+    //
+    // Gatilho por AUSÊNCIA de linha (não mais "soma == 0"): zero desatualizado
+    // de verdade é um resultado plausível agora, não um sinal de "faltou
+    // rodar o cron" — reintroduzir o gatilho antigo re-consultaria à toa
+    // sempre que a frota estivesse genuinamente em dia.
+    if ($missing || metrics_snapshot_stale($db, $cid)) {
         try {
+            $outdatedSql = device_outdated_sql('d', 'ds');
             $stmt = $db->prepare("
                 SELECT
-                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 0 AND 6 THEN 1 ELSE 0 END) as lt7d,
-                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) BETWEEN 7 AND 29 THEN 1 ELSE 0 END) as gt7d,
-                    SUM(CASE WHEN TIMESTAMPDIFF(DAY, ds.last_gps_time, NOW()) >= 30 THEN 1 ELSE 0 END) as gt30d,
-                    SUM(CASE WHEN ds.last_gps_time IS NULL THEN 1 ELSE 0 END) as never
+                    SUM(CASE WHEN $outdatedSql THEN 1 ELSE 0 END) as total,
+                    SUM(CASE WHEN $outdatedSql AND ds.last_acc_status = 1 THEN 1 ELSE 0 END) as on_cnt
                 FROM devices d
                 LEFT JOIN device_statistics ds ON ds.imei = d.imei
                 WHERE d.customer_id = :cid AND d.is_active = 1
@@ -213,10 +218,8 @@ function dashboard_outdated_kpis(PDO $db, int $cid): array
             $stmt->execute([':cid' => $cid]);
             $r = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
             $out = [
-                'outdated_lt7d'  => (int)($r['lt7d'] ?? 0),
-                'outdated_gt7d'  => (int)($r['gt7d'] ?? 0),
-                'outdated_gt30d' => (int)($r['gt30d'] ?? 0),
-                'outdated_never' => (int)($r['never'] ?? 0),
+                'outdated_total' => (int)($r['total']  ?? 0),
+                'outdated_on'    => (int)($r['on_cnt'] ?? 0),
             ];
         } catch (Throwable $e) {}
     }
@@ -285,9 +288,8 @@ function dashboard_render_kpi_occurrences(PDO $db, int $cid, bool $isReseller, s
 function dashboard_render_kpi_outdated(PDO $db, int $cid, bool $isReseller, string $periodo): string
 {
     $k = dashboard_outdated_kpis($db, $cid);
-    $total = $k['outdated_lt7d'] + $k['outdated_gt7d'] + $k['outdated_gt30d'] + $k['outdated_never'];
-    return '<div class="kpi-item-value">' . $total . '</div>'
-         . '<div class="kpi-item-delta">+7d: ' . $k['outdated_gt7d'] . ' · Nunca: ' . $k['outdated_never'] . '</div>';
+    return '<div class="kpi-item-value">' . (int)$k['outdated_total'] . '</div>'
+         . '<div class="kpi-item-delta">ignição ligada: ' . (int)$k['outdated_on'] . '</div>';
 }
 function dashboard_render_idle(PDO $db, int $cid, bool $isReseller, string $periodo): string
 {
@@ -590,12 +592,15 @@ function dashboard_render_reseller_view(PDO $db, int $cid, bool $isReseller, str
              JOIN occurrences o ON o.customer_id=c.id AND o.first_alarm_at >= :ts
              WHERE c.is_active=1 $scopeSql
              GROUP BY c.id ORDER BY cnt DESC LIMIT 3", [':ts' => $startUtc]],
+        // Mesmo critério do KPI "Desatualizados" (device_outdated_sql(),
+        // includes/fleet_state.php) — antes era um limiar de 7 dias sobre
+        // last_gps_time (posição), fixo e diferente do KPI ao lado.
         ['Top 3 por desatualizados',
             "SELECT c.name, COUNT(*) as cnt FROM customers c
              JOIN devices d ON d.customer_id=c.id AND d.is_active=1
              LEFT JOIN device_statistics ds ON ds.imei=d.imei
              WHERE c.is_active=1 $scopeSql
-               AND (ds.last_gps_time IS NULL OR ds.last_gps_time < DATE_SUB(NOW(), INTERVAL 7 DAY))
+               AND " . device_outdated_sql('d', 'ds') . "
              GROUP BY c.id ORDER BY cnt DESC LIMIT 3", []],
     ];
     $html = '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:12px;">';
