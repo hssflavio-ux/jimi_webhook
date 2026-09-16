@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.5
+
+**`gps_data.status_bits` — o campo `status` do pushgps (doc oficial §1.3) nunca era extraído; agora é gravado cru.**
+
+Pedido do dono do produto: conferir se `postMethod` e `status` (campos documentados no `pushgps`) estavam sendo gravados. `postMethod` já era (`post_method`, desde a reescrita v2.0.0 do handler) — confirmado contra a doc oficial (`https://docs.jimicloud.com/integration/integration.html`, §1.3): a tabela publicada só cobre `0x00`–`0x0F` (16 valores), então os `27`/`28` medidos em produção (CHANGELOG v4.17.11) continuam sem legenda oficial, sem mudança.
+
+`status` (bitmask de 32 bits) nunca foi extraído — só sobrevivia dentro de `raw_data` quando o device mandava a chave. Existe uma coluna `gps_data.status` desde o schema original, mas é `VARCHAR(50) DEFAULT 'VALID'`, sem NENHUMA leitura em código (`grep` confirmou) — outra coisa, legado congelado, não o campo documentado.
+
+- **Adicionado** `gps_data.status_bits` (`INT UNSIGNED`, migração `v4.21.5`) — grava o valor CRU do `status`, sem decodificar bit a bit, mesmo padrão já usado para `device_status_code` (gravado desde sempre, nunca lido/decodificado em código nenhum). A tabela completa dos 32 bits (doc oficial: ACC, fixação de posição, hemisfério lat/lng, operação/fora de serviço, criptografia, carga, circuito de óleo/elétrico, 5 portas individuais, satélites GPS/BeiDou/GLONASS/Galileo) está documentada no cabeçalho da migração — decodificação vira trabalho de tela quando algum relatório precisar de um bit específico.
+- **Corrigido** `handlers/pushgps.php`: extrai `$item['status']` e grava em `status_bits`.
+- **Verificação**: `php -l` limpo; `tests/helpers/migracoes_no_deploy.test.php` confirma a migração registrada em `scripts/deploy.sh`; todos os helpers sem banco continuam passando. Sem acesso a MySQL nesta sessão — a migração não foi aplicada nem exercitada contra banco real; **precisa de conferência em homolog/produção e do segundo deploy** (regra do CLAUDE.md: migração nova não roda no deploy que a traz).
+
 ## [Unreleased] — 4.21.4
 
 **Horímetro calculado (`ignition_seconds_in_window()`) lançava `TypeError` não capturado — e derrubava `/relatorios/deslocamento` inteiro — sempre que uma viagem ainda em curso (`trips.ended_at IS NULL`) entrava no resultado.**

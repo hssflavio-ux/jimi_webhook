@@ -1,4 +1,38 @@
-# STATUS.md — Jimi Webhook System v4.21.4 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.5 (YUV Parity)
+
+> ### 📍 16/09/2026 (depois do horímetro) — gps_data.status_bits: campo `status` do pushgps nunca era gravado (v4.21.5)
+>
+> Pedido do dono do produto: conferir se `postMethod` e `status` (documentados em §1.3 Push GPS
+> Data da doc oficial) estavam sendo parseados/gravados pelo `pushgps.php`; se não, implementar.
+>
+> **`postMethod` já estava** — `post_method`, desde a reescrita v2.0.0 do handler. Confirmado
+> contra a doc oficial (fetch direto de `docs.jimicloud.com`, não memória): a tabela publicada só
+> cobre `0x00`–`0x0F` (16 valores, todos com descrição), então os `27`/`28` medidos em produção
+> (achado já registrado no CHANGELOG v4.17.11) continuam genuinamente sem legenda oficial — nada
+> novo para corrigir aí, só a confirmação de que a investigação anterior estava certa.
+>
+> **`status` NUNCA foi extraído.** É um bitmask de 32 bits — a doc tem tabela completa (ACC,
+> fixação de posição, hemisfério lat/lng, operação/fora de serviço, criptografia, carga, circuito
+> de óleo/elétrico desconectado, 5 portas individuais + trava, satélites GPS/BeiDou/GLONASS/
+> Galileo usados) — mas só sobrevivia dentro de `raw_data` quando o device mandava a chave, sem
+> coluna própria, sem índice, invisível pra qualquer relatório.
+>
+> ⚠️ **Achado no caminho**: existe uma coluna `gps_data.status` desde o schema original —
+> `VARCHAR(50) DEFAULT 'VALID'` — mas grep confirmou ZERO leituras dela em código nenhum. Não é o
+> campo documentado (tipo errado pra um bitmask, default sem relação com a doc); é legado
+> congelado, mesma classe do `devices.device_name` pré-v4.11.0. Não reaproveitado — column nova.
+>
+> **Entregue**: migração `v4.21.5` — `gps_data.status_bits` (`INT UNSIGNED`), gravado CRU, sem
+> decodificar bit a bit — mesmo padrão já usado para `device_status_code` (gravado desde sempre,
+> nunca lido/decodificado em código nenhum até hoje). A tabela completa dos 32 bits está
+> documentada no cabeçalho da migração; decodificar em coluna/tela própria fica para quando algum
+> relatório precisar de um bit específico — fora do escopo desta verificação.
+>
+> **Verificação**: `php -l` limpo; `tests/helpers/migracoes_no_deploy.test.php` confirma a
+> migração registrada em `scripts/deploy.sh` (guarda exatamente essa classe de esquecimento);
+> todos os helpers sem banco continuam passando. **Sem MySQL nesta sessão — migração não aplicada
+> nem exercitada contra banco real.** Precisa do segundo deploy (regra do CLAUDE.md) e conferência
+> em homolog/produção antes de considerar `status_bits` confiável.
 
 > ### 📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso (v4.21.4)
 >
@@ -58,43 +92,7 @@
 > `http://127.0.0.1:8931` com o CSS real extraído de `layout_base.php`) confirmando alinhamento e
 > fonte corrigidos. Não exercitado contra banco real — é mudança de CSS/classe, sem query nova.
 
-> ### 📍 15/09/2026 (noite, depois do hodômetro) — "Desatualizado" passa de posição GPS para comunicação (v4.21.2)
->
-> Bug reportado pelo dono do produto: `/painel` mostrava "11 desatualizados", mas 7 desses
-> equipamentos tinham comunicado minutos antes. Investigação (systematic-debugging): o card usava
-> só `device_statistics.last_gps_time` (última posição válida de GPS) — herdado do relatório
-> `/relatorios/desatualizados`, que sempre foi assim — e um equipamento comunicando normalmente
-> (heartbeat) mas sem conseguir fix de GPS aparecia como desatualizado mesmo online. Achado no
-> caminho: `handlers/resumo.php` nunca teve fallback ao vivo pro card "Desatualizados", ao
-> contrário de TODOS os outros KPIs da mesma tela — cron parado mostrava "nenhum desatualizado"
-> sem erro.
->
-> **Decisão do dono do produto**: critério novo, o ÚLTIMO SINAL por qualquer via (comunicação,
-> GPS, heartbeat ou evento — `device_last_seen_sql()`, já existente), com tolerância que depende
-> da ignição — **5 min ligada, 30 min desligada** —, aplicada nas TRÊS telas que usam o conceito
-> (`/painel`, `/`, `/relatorios/desatualizados`), não só onde o bug apareceu.
->
-> **Entregue**: `is_device_outdated()`/`device_outdated_sql()` (`includes/fleet_state.php`), fonte
-> única, testada sem banco em `tests/helpers/device_outdated.test.php` (16/16). `resumo.php` ganhou
-> o fallback ao vivo que faltava. `scripts/metrics_rollup.php`/`dashboard_widgets.php`: métricas
-> `outdated_lt7d/gt7d/gt30d/never` (4 faixas de dias) viraram `outdated_total`/`outdated_on`
-> (booleano). `/relatorios/desatualizados`: as 5 faixas por dia viraram 2 grupos (Desatualizados/Em
-> dia); Detalhes/Export só para "Desatualizados"; grade "Frota completa" ganhou coluna Status e
-> manteve "Posição GPS" como sinal PRÓPRIO (um equipamento pode comunicar bem sem ter fix de GPS).
-> Sem migração — critério derivado de colunas já existentes.
->
-> 🔴 **Achado, registrado, NÃO corrigido** (fora do escopo do bug reportado): o ranking "Top 3 por
-> desatualizados" de `handlers/resumo.php` não escopa por `reseller_scope_ids()` — um revendedor vê
-> o ranking de TODOS os clientes do sistema. Mesma classe de bug já corrigida em
-> `dashboard_render_reseller_view()` (v4.12.3), reintroduzida aqui por ser cópia separada da mesma
-> consulta.
->
-> **Verificação local (sem MySQL)**: `php -l` em `handlers config core includes scripts`;
-> `device_outdated.test.php` 16/16; demais helpers sem banco, sem regressão. **Não exercitado
-> contra banco real nem no navegador** — as três telas precisam de conferência em homolog/produção
-> antes do deploy.
-
-> Entradas anteriores a "📍 15/09/2026 (noite, depois do hodômetro) — 'Desatualizado' passa de posição GPS para comunicação" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

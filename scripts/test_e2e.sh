@@ -146,7 +146,8 @@ GPS_PAYLOAD=$(cat <<EOF
 {"token":"$TOKEN","msgType":"pushgps","data_list":[{
   "deviceImei":"$TEST_IMEI","msgClass":0,
   "lat":-23.5505,"lng":-46.6333,"speed":42,"heading":180,
-  "gpsTime":"$NOW_UTC","acc":1,"battery":95,"satelliteNum":11
+  "gpsTime":"$NOW_UTC","acc":1,"battery":95,"satelliteNum":11,
+  "postMethod":0,"status":262147
 }]}
 EOF
 )

@@ -65,6 +65,11 @@ class PushGPSHandler extends WebhookHandler {
         // Campos documentados não extraídos anteriormente (novos em v2.0.0)
         $postType       = $item['postType']    ?? null;
         $postMethod     = $item['postMethod']  ?? null;
+        // Bitmask de status (doc oficial §1.3, "Description of status
+        // Parameters") — grava CRU, sem decodificar bit a bit, mesmo padrão
+        // já usado para device_status_code (nenhum decoder em uso ainda;
+        // tabela de bits completa documentada na migração v4.21.5).
+        $statusBits     = $item['status']      ?? null;
         $undecodedAddInfo = $item['undecodedGpsAddInfo'] ?? null;
         $driverLicenseStatus = $item['driverLicenseStatus'] ?? null;
         $driverLicense  = $item['driverLicense'] ?? null;
@@ -130,7 +135,7 @@ class PushGPSHandler extends WebhookHandler {
                 latitude, longitude, speed, direction,
                 satellites, gps_mode, gsm_signal, mileage,
                 battery, distance_from_previous, acc,
-                device_status_code, altitude,
+                device_status_code, status_bits, altitude,
                 post_type, post_method, undecoded_gps_add_info,
                 driver_license_status, driver_license,
                 driver_id, driver_name,
@@ -142,7 +147,7 @@ class PushGPSHandler extends WebhookHandler {
                 :latitude, :longitude, :speed, :direction,
                 :satellites, :gps_mode, :gsm_signal, :mileage,
                 :battery, :distance, :acc,
-                :device_status_code, :altitude,
+                :device_status_code, :status_bits, :altitude,
                 :post_type, :post_method, :undecoded_add_info,
                 :driver_license_status, :driver_license,
                 :driver_id, :driver_name,
@@ -161,7 +166,8 @@ class PushGPSHandler extends WebhookHandler {
             ':satellites' => $satellites, ':gps_mode' => $gpsMode,
             ':gsm_signal' => $gsm, ':mileage' => $mileage,
             ':battery' => $battery, ':distance' => $distance, ':acc' => $acc,
-            ':device_status_code' => $deviceStatusCode, ':altitude' => $altitude,
+            ':device_status_code' => $deviceStatusCode, ':status_bits' => $statusBits,
+            ':altitude' => $altitude,
             ':post_type' => $postType, ':post_method' => $postMethod,
             ':undecoded_add_info' => $undecodedAddInfo,
             ':driver_license_status' => $driverLicenseStatus,

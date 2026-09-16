@@ -2,6 +2,42 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 15/09/2026 (noite, depois do hodômetro) — "Desatualizado" passa de posição GPS para comunicação (v4.21.2)
+>
+> Bug reportado pelo dono do produto: `/painel` mostrava "11 desatualizados", mas 7 desses
+> equipamentos tinham comunicado minutos antes. Investigação (systematic-debugging): o card usava
+> só `device_statistics.last_gps_time` (última posição válida de GPS) — herdado do relatório
+> `/relatorios/desatualizados`, que sempre foi assim — e um equipamento comunicando normalmente
+> (heartbeat) mas sem conseguir fix de GPS aparecia como desatualizado mesmo online. Achado no
+> caminho: `handlers/resumo.php` nunca teve fallback ao vivo pro card "Desatualizados", ao
+> contrário de TODOS os outros KPIs da mesma tela — cron parado mostrava "nenhum desatualizado"
+> sem erro.
+>
+> **Decisão do dono do produto**: critério novo, o ÚLTIMO SINAL por qualquer via (comunicação,
+> GPS, heartbeat ou evento — `device_last_seen_sql()`, já existente), com tolerância que depende
+> da ignição — **5 min ligada, 30 min desligada** —, aplicada nas TRÊS telas que usam o conceito
+> (`/painel`, `/`, `/relatorios/desatualizados`), não só onde o bug apareceu.
+>
+> **Entregue**: `is_device_outdated()`/`device_outdated_sql()` (`includes/fleet_state.php`), fonte
+> única, testada sem banco em `tests/helpers/device_outdated.test.php` (16/16). `resumo.php` ganhou
+> o fallback ao vivo que faltava. `scripts/metrics_rollup.php`/`dashboard_widgets.php`: métricas
+> `outdated_lt7d/gt7d/gt30d/never` (4 faixas de dias) viraram `outdated_total`/`outdated_on`
+> (booleano). `/relatorios/desatualizados`: as 5 faixas por dia viraram 2 grupos (Desatualizados/Em
+> dia); Detalhes/Export só para "Desatualizados"; grade "Frota completa" ganhou coluna Status e
+> manteve "Posição GPS" como sinal PRÓPRIO (um equipamento pode comunicar bem sem ter fix de GPS).
+> Sem migração — critério derivado de colunas já existentes.
+>
+> 🔴 **Achado, registrado, NÃO corrigido** (fora do escopo do bug reportado): o ranking "Top 3 por
+> desatualizados" de `handlers/resumo.php` não escopa por `reseller_scope_ids()` — um revendedor vê
+> o ranking de TODOS os clientes do sistema. Mesma classe de bug já corrigida em
+> `dashboard_render_reseller_view()` (v4.12.3), reintroduzida aqui por ser cópia separada da mesma
+> consulta.
+>
+> **Verificação local (sem MySQL)**: `php -l` em `handlers config core includes scripts`;
+> `device_outdated.test.php` 16/16; demais helpers sem banco, sem regressão. **Não exercitado
+> contra banco real nem no navegador** — as três telas precisam de conferência em homolog/produção
+> antes do deploy.
+
 > ### 📍 15/09/2026 (noite) — Hodômetro + Horímetro calculado em Posições/Deslocamento (v4.21.1)
 >
 > Pedido do dono do produto: coluna de hodômetro nos relatórios de Posições e Deslocamento,
