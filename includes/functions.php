@@ -221,14 +221,22 @@ function odometer_delta_km($firstRawMeters, $lastRawMeters): ?float
  * fechamento diário ("viagem que cruza a meia-noite conta inteira no dia em
  * que começou").
  *
- * @param array  $segments Linhas de device_state_segments: imei, state, started_at ('Y-m-d H:i:s'), duration_s
- * @param string $imei
- * @param string $fromUtc  'Y-m-d H:i:s' — inclusivo
- * @param string $untilUtc 'Y-m-d H:i:s' — exclusivo
+ * @param array   $segments Linhas de device_state_segments: imei, state, started_at ('Y-m-d H:i:s'), duration_s
+ * @param string  $imei
+ * @param string  $fromUtc  'Y-m-d H:i:s' — inclusivo
+ * @param ?string $untilUtc 'Y-m-d H:i:s' — exclusivo. NULL = viagem ainda em
+ *                           curso (`trips.ended_at IS NULL`, coluna nullable
+ *                           no schema): conta até AGORA (UTC), nunca lança —
+ *                           `rel_deslocamento.php` já trata Término em aberto
+ *                           na exibição ($r['ended_at'] ? … : '—') e passava
+ *                           esse mesmo NULL direto para cá, que exigia
+ *                           `string` e estourava TypeError não capturado
+ *                           pelos `catch (Exception $e)` do chamador.
  * @returns int Segundos com ignição ligada na janela
  */
-function ignition_seconds_in_window(array $segments, string $imei, string $fromUtc, string $untilUtc): int
+function ignition_seconds_in_window(array $segments, string $imei, string $fromUtc, ?string $untilUtc): int
 {
+    $untilUtc = $untilUtc ?? gmdate('Y-m-d H:i:s');
     $sum = 0;
     foreach ($segments as $s) {
         if ($s['imei'] !== $imei) continue;

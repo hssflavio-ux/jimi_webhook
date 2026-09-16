@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.4
+
+**Horímetro calculado (`ignition_seconds_in_window()`) lançava `TypeError` não capturado — e derrubava `/relatorios/deslocamento` inteiro — sempre que uma viagem ainda em curso (`trips.ended_at IS NULL`) entrava no resultado.**
+
+Pedido do dono do produto: verificar se o horímetro implementado ontem (v4.21.1) funciona como contador CONTÍNUO de ignição ligada. Confirmado que sim — soma todos os segmentos `movimento`+`ocioso` (nunca `parado`/`offline`) do IMEI dentro da janela, across múltiplos ciclos liga/desliga, sem gap nem duplicação (segmentos são uma partição contígua de `device_state_segments`, `ended_at` de um é o `started_at` do próximo). E o "corte" de viagem que cruza a meia-noite contar inteira no dia em que começou é intencional — mesma regra que `trip_builder.php` já usa para todas as outras métricas do fechamento diário (Jornada, Em Movimento), não uma inconsistência nova do horímetro.
+
+**Achado no caminho**: `ignition_seconds_in_window()` exigia `string $untilUtc`, mas `handlers/rel_deslocamento.php` (modo "viagens") passa `$r['ended_at']` direto — que É `NULL` para uma viagem ainda em curso (coluna nullable no schema; a própria tela já trata isso na exibição do Término, `$r['ended_at'] ? … : '—'`). `null` para um parâmetro `string` não-nulo é `TypeError`, que `catch (Exception $e)` não captura — a página quebrava (500) inteira, nos três pontos que chamam a função nesse modo (totais do rodapé, export síncrono, grade renderizada). Reproduzido isoladamente antes de corrigir (`php` com o array de segmentos real da função).
+
+- **Corrigido** `includes/functions.php` (`ignition_seconds_in_window()`): `$untilUtc` aceita `null` — viagem em curso soma até AGORA (`gmdate()`, UTC), nunca lança.
+- **Verificação**: reprodução isolada do `TypeError` antes da correção (confirmado o crash); `tests/helpers/odometro_horimetro.test.php` 21/21 (nova verificação cobrindo `until NULL`); `php -l` limpo.
+- **Não verificado**: se alguma linha de `trips` em produção JÁ tem `ended_at IS NULL` hoje (o único INSERT, em `trip_builder.php`, sempre grava um valor concreto — o gatilho seria uma viagem em curso bem no momento em que o relatório roda, ou dado histórico/manual). Sem acesso a banco nesta sessão para confirmar; a correção fecha o caso de qualquer forma, já que a coluna é nullable por schema.
+
 ## [Unreleased] — 4.21.3
 
 **Fontes fora do padrão e rodapé de totalizador desalinhado em `/relatorios/posicoes` e `/relatorios/deslocamento` (v4.21.1) — corrigidos.**

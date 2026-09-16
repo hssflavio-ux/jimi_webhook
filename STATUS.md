@@ -1,4 +1,33 @@
-# STATUS.md — Jimi Webhook System v4.21.3 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.4 (YUV Parity)
+
+> ### 📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso (v4.21.4)
+>
+> Pedido do dono do produto: verificar se o horímetro calculado (v4.21.1) funciona como contador
+> CONTÍNUO de ignição ligada. **Confirmado que sim** para a lógica de soma: `ignition_seconds_in_window()`
+> soma todos os segmentos `movimento`+`ocioso` (nunca `parado`/`offline`) do IMEI dentro da janela,
+> ao longo de múltiplos ciclos liga/desliga, sem gap nem duplicação — os segmentos de
+> `device_state_segments` são uma partição contígua do tempo (`ended_at` de um é o `started_at` do
+> seguinte). O corte de viagem/dia que cruza a meia-noite contar inteiro no dia em que começou é
+> intencional, não inconsistência: é a MESMA regra que `trip_builder.php` já aplica a Jornada e Em
+> Movimento no fechamento diário — o horímetro só está seguindo o padrão já existente.
+>
+> 🔴 **Achado no caminho, corrigido**: `ignition_seconds_in_window()` exigia `string $untilUtc`,
+> mas `rel_deslocamento.php` (modo "viagens") passa `$r['ended_at']` direto — `NULL` para viagem
+> ainda em curso (coluna nullable no schema; a própria tela já trata isso na exibição do Término,
+> `$r['ended_at'] ? … : '—'`, mas não no cálculo). `null` num parâmetro `string` não-nulo é
+> `TypeError`, que os `catch (Exception $e)` dos três chamadores (rodapé, export, grade) NÃO
+> capturam — a página quebrava inteira (500), não só a célula. Reproduzido isoladamente com `php`
+> antes de corrigir (TypeError confirmado, depois função corrigida e re-testada).
+>
+> **Entregue**: `ignition_seconds_in_window()` aceita `?string $untilUtc` — `null` soma até AGORA
+> (`gmdate()`, UTC) em vez de lançar. `tests/helpers/odometro_horimetro.test.php` ganhou o caso
+> (21/21).
+>
+> **Não verificado**: se alguma linha de `trips` em produção JÁ tem `ended_at IS NULL` hoje — o
+> único `INSERT INTO trips` (`trip_builder.php`) sempre grava um valor concreto (nunca persiste
+> viagem em curso, só quando fecha por ignição/parada/timeout de 2h), então o gatilho seria uma
+> viagem em andamento bem no instante em que o relatório roda, ou dado histórico/manual. Sem banco
+> nesta sessão para confirmar; a correção fecha o caso de qualquer forma.
 
 > ### 📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento (v4.21.3)
 >
@@ -65,49 +94,7 @@
 > contra banco real nem no navegador** — as três telas precisam de conferência em homolog/produção
 > antes do deploy.
 
-> ### 📍 15/09/2026 (noite) — Hodômetro + Horímetro calculado em Posições/Deslocamento (v4.21.1)
->
-> Pedido do dono do produto: coluna de hodômetro nos relatórios de Posições e Deslocamento,
-> com totalizador de período, e pensar como calcular horímetro (tempo de ignição ligada) já que
-> nem todo equipamento tem contador de horímetro de hardware.
->
-> **Achado antes de implementar (mesma sessão, 08:12–08:29)**: `gps_data.mileage` chega em
-> METROS nos dois protocolos, não na unidade que a doc da Jimi documenta (medição em
-> `hodometro-bateria-medicao-producao`) — e só 3 dos 8 modelos de produção mandam leitura real
-> e crescente; os outros sempre mandam `0`. Exibir cru mostraria o hodômetro 1000x maior que o
-> real. O dono do produto pediu para corrigir a unidade em TODA exibição do sistema, não só nas
-> telas novas.
->
-> **Entregue**: `odometer_km()`/`odometer_delta_km()` (conversor único metros→km) e
-> `ignition_seconds_in_window()` (horímetro CALCULADO — soma de `device_state_segments` nos
-> estados `movimento`+`ocioso`, nunca lido de `devices.engine_hours`, que nunca foi confirmado
-> contra device real) em `includes/functions.php`, testados sem banco em
-> `tests/helpers/odometro_horimetro.test.php` (20/20). Corrigido de quebra o mesmo bug de
-> unidade em `latest_odometer()` (card "Odômetro Atual" e lembrete de manutenção por odômetro,
-> `MAINTENANCE_DUE_KM=200` comparava km com metros) e no player de replay
-> (`rel_deslocamento_replay.php`, "km rodado" calculava a diferença sem converter).
->
-> `/relatorios/posicoes` ganhou coluna Hodômetro (leitura absoluta por linha) + totalizador
-> "km rodado no período" no rodapé; `/relatorios/deslocamento` ganhou Hodômetro (delta) e
-> Horímetro nos dois modos (viagens e fechamento diário), com totalizador de TODO o resultado
-> filtrado (não só a página), reaproveitando a mesma consulta sem paginação do export síncrono
-> para o rodapé nunca discordar do arquivo exportado. Coluna "Sinal GPS" removida de Posições a
-> pedido do dono do produto (grade ficando larga demais; o filtro já exige coordenada válida).
-> Sem migração — os dois cálculos são derivados de `gps_data.mileage`/`device_state_segments`,
-> já existentes.
->
-> ⚠️ **Trade-off aceito**: totalizador de Deslocamento é capado em `SYNC_EXPORT_MAX_ROWS`
-> (10.000 linhas, mesmo teto do export síncrono) — período/frota que passe disso subestima o
-> total. Aceitável para a frota atual ("frota pequena"), registrado para quando deixar de ser.
->
-> **Verificação**: sem MySQL local (sem `.env`, sem servidor) — `php -l` completo limpo; os 8
-> helpers sem banco passam (`odometro_horimetro` 20/20, `command_response` 124/124,
-> `driving_alarms`, `filelist` 58/58, `media` 60/60, `migracoes_no_deploy`, `risk_map` 77/77,
-> `sms_webhook` 59/59, `temp_password` 18/18). **Não exercitado contra banco real nem no
-> navegador** — as duas telas, o card de odômetro em `/ativos/{id}` e o player de replay
-> precisam de conferência em homolog/produção antes do deploy.
-
-> Entradas anteriores a "📍 15/09/2026 (noite) — Hodômetro + Horímetro calculado em Posições/Deslocamento" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 15/09/2026 (noite, depois do hodômetro) — 'Desatualizado' passa de posição GPS para comunicação" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

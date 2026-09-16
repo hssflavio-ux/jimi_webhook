@@ -13,6 +13,9 @@
  *     (movimento/ocioso — ver includes/fleet_state.php), nunca parado/offline,
  *     e o segmento pertence à janela do seu PRÓPRIO started_at (mesma regra
  *     de fechamento diário que trip_builder.php já usa).
+ *   - viagem ainda em curso (`trips.ended_at IS NULL`, coluna nullable) não
+ *     pode lançar: `rel_deslocamento.php` passa `$r['ended_at']` direto pra
+ *     cá, e o `catch (Exception $e)` dos chamadores não pega `TypeError`.
  *
  * Uso:
  *   php tests/helpers/odometro_horimetro.test.php
@@ -66,6 +69,7 @@ checa('janela exclui segmento antes do from',    600, ignition_seconds_in_window
 checa('until é exclusivo (started_at == until não entra)', 0, ignition_seconds_in_window($segs, 'A', '2026-09-15 00:00:00', '2026-09-15 01:00:00'));
 checa('from é inclusivo (started_at == from entra)', 1800, ignition_seconds_in_window($segs, 'A', '2026-09-15 01:00:00', '2026-09-15 01:30:00'));
 checa('imei sem nenhum segmento no estado soma 0', 5000, ignition_seconds_in_window($segs, 'B', '2026-09-15 00:00:00', '2026-09-16 00:00:00'));
+checa('until NULL (viagem em curso) soma até agora, sem TypeError', 2400, ignition_seconds_in_window($segs, 'A', '2026-09-15 00:00:00', null));
 
 printf("\n%d de %d verificações OK\n", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);
