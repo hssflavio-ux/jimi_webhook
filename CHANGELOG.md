@@ -5,6 +5,17 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.3
+
+**Fontes fora do padrão e rodapé de totalizador desalinhado em `/relatorios/posicoes` e `/relatorios/deslocamento` (v4.21.1) — corrigidos.**
+
+Bug reportado pelo dono do produto. Causa raiz dupla: (1) `web/layout_base.php` nunca teve uma regra `tfoot td` — o rodapé herdava o padding mínimo do UA stylesheet em vez do `padding: 10px 16px` de `tbody td`, e a linha de total nascia colada (label e valor sem espaço, sem alinhar com as colunas de cima); (2) colunas 100% numéricas (Velocidade, Jornada, Horímetro, Em Movimento, Distância, Vel. Máx, Alarmes, Viagens) não usavam `.text-mono`, fora do padrão "todo número em JetBrains Mono" do `DESIGN.md` — confirmado por comparação com `rel_status_frota.php`, referência já correta.
+
+- **Adicionado** `tfoot td` (`web/layout_base.php`): mesmo padding de `tbody td`, borda superior e fundo `--canvas-soft` para separar visualmente a linha de total.
+- **Corrigido** `handlers/rel_posicoes.php` (coluna Velocidade) e `handlers/rel_deslocamento.php` (Jornada/Horímetro/Em Movimento/Distância/Vel. Máx/Alarmes/Viagens, grade e rodapé, nos dois modos — viagens e fechamento diário): `.text-mono` adicionado.
+- **Auditado, sem mudança**: `handlers/rel_desatualizados.php` — a coluna "Sem comunicar há" é rótulo de prosa ("há 5 min"), não número puro; mesmo tratamento (sem mono) já usado no badge de presença de `/comandos`.
+- **Verificação**: `php -l` limpo; repro visual no Chrome (CSS real extraído de `layout_base.php`, servido por `php -S` local) confirmando alinhamento e fonte antes/depois. Sem migração, sem query nova.
+
 ## [Unreleased] — 4.21.2
 
 **"Desatualizado" deixa de ser calculado por última POSIÇÃO de GPS e passa a ser por COMUNICAÇÃO, com tolerância que depende da ignição — corrige o quadro do painel mostrando equipamento como desatualizado mesmo comunicando normalmente.**

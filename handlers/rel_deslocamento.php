@@ -570,14 +570,14 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono"><?= htmlspecialchars($r['device_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['primeira_on'], 'H:i') ?></td>
                 <td class="text-mono"><?= $r['ultima_off'] ? fmt_brt($r['ultima_off'], $offFmt) : '—' ?></td>
-                <td><?= fmt_duration((int)($r['jornada_s'] ?? 0)) ?></td>
-                <td><?= fmt_duration($horimetroS) ?></td>
-                <td><?= fmt_duration((int)($r['movimento_s'] ?? 0)) ?></td>
-                <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
+                <td class="text-mono"><?= fmt_duration((int)($r['jornada_s'] ?? 0)) ?></td>
+                <td class="text-mono"><?= fmt_duration($horimetroS) ?></td>
+                <td class="text-mono"><?= fmt_duration((int)($r['movimento_s'] ?? 0)) ?></td>
+                <td class="text-mono"><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td class="text-mono"><?= $hodRaw !== null ? number_format(odometer_km($hodRaw), 1, ',', '.') . ' km' : '—' ?></td>
-                <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
-                <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
-                <td><?= (int)$r['viagens'] ?></td>
+                <td class="text-mono"><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
+                <td class="text-mono"><?= (int)($r['alarm_count'] ?? 0) ?></td>
+                <td class="text-mono"><?= (int)$r['viagens'] ?></td>
                 <td><a href="/relatorios/deslocamento/rota?imei=<?= urlencode($r['imei']) ?>&dia=<?= urlencode($r['dia']) ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a></td>
             </tr>
             <?php endforeach; ?>
@@ -590,12 +590,12 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td><?= htmlspecialchars($r['driver_name']) ?></td>
                 <td class="text-mono"><?= fmt_brt($r['started_at']) ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['start_addr']??'—', 0, 40)) ?></span></td>
                 <td class="text-mono"><?= $r['ended_at'] ? fmt_brt($r['ended_at']) : '—' ?><br><span style="font-size:10px;color:var(--muted);"><?= htmlspecialchars(substr($r['end_addr']??'—', 0, 40)) ?></span></td>
-                <td><?= fmt_duration((int)($r['duration_s'] ?? 0)) ?></td>
-                <td><?= fmt_duration($horimetroS) ?></td>
-                <td><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
-                <td><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
+                <td class="text-mono"><?= fmt_duration((int)($r['duration_s'] ?? 0)) ?></td>
+                <td class="text-mono"><?= fmt_duration($horimetroS) ?></td>
+                <td class="text-mono"><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
+                <td class="text-mono"><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td class="text-mono"><?= $r['hod_delta'] !== null ? number_format(odometer_km($r['hod_delta']), 1, ',', '.') . ' km' : '—' ?></td>
-                <td><?= (int)($r['alarm_count'] ?? 0) ?></td>
+                <td class="text-mono"><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
                     <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
                     <a href="/relatorios/deslocamento/replay?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Replay</a>
@@ -608,25 +608,25 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
             <?php if ($mode === 'diario'): ?>
             <tr>
                 <td colspan="4" style="text-align:right;font-weight:600;">Total do período</td>
-                <td style="font-weight:600;">—</td>
-                <td style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
-                <td style="font-weight:600;"><?= fmt_duration($totMovimentoS) ?></td>
-                <td style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
+                <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totMovimentoS) ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
-                <td style="font-weight:600;">—</td>
-                <td style="font-weight:600;"><?= $totAlarms ?></td>
-                <td style="font-weight:600;"><?= $totViagens ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
+                <td class="text-mono" style="font-weight:600;"><?= $totAlarms ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= $totViagens ?></td>
                 <td></td>
             </tr>
             <?php else: ?>
             <tr>
                 <td colspan="4" style="text-align:right;font-weight:600;">Total do período</td>
-                <td style="font-weight:600;">—</td>
-                <td style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
-                <td style="font-weight:600;">—</td>
-                <td style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
+                <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
+                <td class="text-mono" style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
-                <td style="font-weight:600;"><?= $totAlarms ?></td>
+                <td class="text-mono" style="font-weight:600;"><?= $totAlarms ?></td>
                 <td></td>
             </tr>
             <?php endif; ?>

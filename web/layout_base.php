@@ -661,6 +661,17 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--canvas-soft); }
 
+/* Rodapé de totalizador (rel_posicoes, rel_deslocamento). Sem esta regra o
+   <tfoot> herda o padding mínimo do UA stylesheet (não o 10px 16px de
+   `tbody td`) e o total nasce colado — label e valor sem espaço entre si,
+   fora do alinhamento das colunas de cima. */
+tfoot td {
+    padding: 10px 16px;
+    border-top: 1px solid var(--hairline);
+    background: var(--canvas-soft);
+    color: var(--ink);
+}
+
 /* Coluna de endereço (v4.8.0). Sem largura mínima, "Rua Professora Zelia Dulce
    de Campos Maia, Sorocaba, São Paulo" quebra em SETE linhas e infla a altura
    de toda a linha da grade — a tabela já rola na horizontal, então dar espaço

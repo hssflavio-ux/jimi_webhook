@@ -2,6 +2,38 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera + Alertas Dirigibilidade (v4.21.0)
+>
+> Pedido do dono do produto: rastreador (JM-VL) não tem câmera e não deve aparecer nas telas
+> exclusivas de câmera; os eventos de condução (câmera e rastreador) ganham menu próprio e
+> ocorrência de condução não oferece vídeo. Decisões tomadas com ele (spec
+> `docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md`, plano em
+> `docs/superpowers/plans/2026-09-14-rastreadores-dirigibilidade.md`):
+> - "Alertas Dirigibilidade" agrupa pelo **tipo** do alarme, de qualquer equipamento;
+> - o vídeo some em **toda** linha de condução, inclusive de câmera;
+> - entram também Capotamento, Aviso/Velocidade em Cerca e Impacto/Inclinação (Mudança de Faixa fica fora);
+> - alarme de rastreador que não é de condução fica **só na ficha do veículo**;
+> - pedido automático de vídeo para condução **para**; Mapa de Risco sem rastreador no seletor e na exposição;
+> - Agendamentos/Exportar ganham o tipo "Alertas Dirigibilidade".
+>
+> **Entregue**: `alarm_types.is_driving` (28 códigos, por código), `/relatorios/dirigibilidade`,
+> menu "Alertas Videomonitoramento", ocorrências sem vídeo (grade, detalhe, `/solicitarvideo`,
+> motor, backfill), Downloads e Mapa de Risco sem rastreador, `driving_alarms` no worker e no Exportar.
+>
+> **Verificação local (sem MySQL)**: `php -l` em todo PHP; `driving_alarms.test.php` TUDO OK;
+> `migracoes_no_deploy.test.php` OK; `risk_map.test.php` 77/77; `node --check` em todos os specs.
+> `alarm_video_match.test.php` precisa de banco — não rodado. A leitura de produção foi bloqueada
+> nesta sessão: não foi medido se as freadas das câmeras JC chegam com vídeo, nem quais códigos os
+> rastreadores já emitiram.
+>
+> **Pendente em produção** (nada foi implantado):
+> - deploy **duas vezes** (ou `.sql` à mão): até a migração rodar, as telas ficam como antes e
+>   Dirigibilidade mostra aviso de migração pendente;
+> - conferir as 4 consultas do fim da migração (ausentes / irmãos sem marca / ADAS-DMS marcado / marcados);
+> - `php scripts/risk_builder.php --desde=2026-06-10` (exposição sem rastreador);
+> - abrir logado `/relatorios/alarmes`, `/relatorios/dirigibilidade` e uma ocorrência de condução;
+>   `npx playwright test tests/dirigibilidade.spec.js tests/navigation.spec.js`.
+
 > ### 📍 13–14/09/2026 — Mapa de Risco ADAS/DMS (v4.20.0) + duas correções achadas no caminho (v4.19.1, v4.19.2)
 >
 > Pedido do dono do produto: mapeamento de risco completo a partir dos alertas ADAS/DMS —

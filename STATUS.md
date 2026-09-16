@@ -1,4 +1,33 @@
-# STATUS.md — Jimi Webhook System v4.21.2 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.3 (YUV Parity)
+
+> ### 📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento (v4.21.3)
+>
+> Bug reportado pelo dono do produto: as telas de Posições e Deslocamento (hodômetro/horímetro,
+> v4.21.1) não seguiam o padrão de fontes do design system, e a linha de somatório do rodapé
+> aparecia desalinhada das colunas. Investigação (systematic-debugging): reproduzido offline com
+> uma página estática usando o CSS real de `web/layout_base.php` (sem precisar de MySQL/login) e
+> confirmado por screenshot no Chrome antes/depois.
+>
+> **Causa raiz #1 (alinhamento)**: `tbody td`/`thead th` têm `padding: 10px 16px`, mas nunca
+> existiu regra `tfoot td` nenhuma — o rodapé herdava o padding mínimo do UA stylesheet do
+> navegador. Resultado visível: "Km rodado no período" e "21,6 km" coladas sem espaço nenhum
+> entre label e valor, e a linha inteira sem separação visual da grade acima.
+>
+> **Causa raiz #2 (fonte)**: comparado contra `rel_status_frota.php` (referência já correta,
+> `fmt_duration()`/`number_format()` sempre em `.text-mono`) — `rel_posicoes.php` (Velocidade) e
+> `rel_deslocamento.php` (Jornada/Horímetro/Em Movimento/Distância/Vel. Máx/Alarmes/Viagens, nos
+> dois modos) tinham colunas 100% numéricas sem `.text-mono`, fora do padrão "todo número em
+> JetBrains Mono" do `DESIGN.md`. `rel_desatualizados.php` foi auditado e não precisou de
+> mudança: "Sem comunicar há" é rótulo de prosa ("há 5 min"), não número puro — mesmo tratamento
+> já usado no badge de presença de `/comandos` (`$d['presenca']['rotulo']`, sem mono).
+>
+> **Entregue**: `tfoot td` (`web/layout_base.php`) com o mesmo padding de `tbody td` + borda
+> superior + fundo `--canvas-soft` para separar visualmente a linha de total. `.text-mono` nas
+> colunas numéricas apontadas acima, na grade E no rodapé dos dois relatórios.
+>
+> **Verificação**: `php -l` limpo nos 3 arquivos; repro visual no Chrome (antes/depois,
+> `http://127.0.0.1:8931` com o CSS real extraído de `layout_base.php`) confirmando alinhamento e
+> fonte corrigidos. Não exercitado contra banco real — é mudança de CSS/classe, sem query nova.
 
 > ### 📍 15/09/2026 (noite, depois do hodômetro) — "Desatualizado" passa de posição GPS para comunicação (v4.21.2)
 >
@@ -78,39 +107,7 @@
 > navegador** — as duas telas, o card de odômetro em `/ativos/{id}` e o player de replay
 > precisam de conferência em homolog/produção antes do deploy.
 
-> ### 📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera + Alertas Dirigibilidade (v4.21.0)
->
-> Pedido do dono do produto: rastreador (JM-VL) não tem câmera e não deve aparecer nas telas
-> exclusivas de câmera; os eventos de condução (câmera e rastreador) ganham menu próprio e
-> ocorrência de condução não oferece vídeo. Decisões tomadas com ele (spec
-> `docs/superpowers/specs/2026-09-14-rastreadores-dirigibilidade-design.md`, plano em
-> `docs/superpowers/plans/2026-09-14-rastreadores-dirigibilidade.md`):
-> - "Alertas Dirigibilidade" agrupa pelo **tipo** do alarme, de qualquer equipamento;
-> - o vídeo some em **toda** linha de condução, inclusive de câmera;
-> - entram também Capotamento, Aviso/Velocidade em Cerca e Impacto/Inclinação (Mudança de Faixa fica fora);
-> - alarme de rastreador que não é de condução fica **só na ficha do veículo**;
-> - pedido automático de vídeo para condução **para**; Mapa de Risco sem rastreador no seletor e na exposição;
-> - Agendamentos/Exportar ganham o tipo "Alertas Dirigibilidade".
->
-> **Entregue**: `alarm_types.is_driving` (28 códigos, por código), `/relatorios/dirigibilidade`,
-> menu "Alertas Videomonitoramento", ocorrências sem vídeo (grade, detalhe, `/solicitarvideo`,
-> motor, backfill), Downloads e Mapa de Risco sem rastreador, `driving_alarms` no worker e no Exportar.
->
-> **Verificação local (sem MySQL)**: `php -l` em todo PHP; `driving_alarms.test.php` TUDO OK;
-> `migracoes_no_deploy.test.php` OK; `risk_map.test.php` 77/77; `node --check` em todos os specs.
-> `alarm_video_match.test.php` precisa de banco — não rodado. A leitura de produção foi bloqueada
-> nesta sessão: não foi medido se as freadas das câmeras JC chegam com vídeo, nem quais códigos os
-> rastreadores já emitiram.
->
-> **Pendente em produção** (nada foi implantado):
-> - deploy **duas vezes** (ou `.sql` à mão): até a migração rodar, as telas ficam como antes e
->   Dirigibilidade mostra aviso de migração pendente;
-> - conferir as 4 consultas do fim da migração (ausentes / irmãos sem marca / ADAS-DMS marcado / marcados);
-> - `php scripts/risk_builder.php --desde=2026-06-10` (exposição sem rastreador);
-> - abrir logado `/relatorios/alarmes`, `/relatorios/dirigibilidade` e uma ocorrência de condução;
->   `npx playwright test tests/dirigibilidade.spec.js tests/navigation.spec.js`.
-
-> Entradas anteriores a "📍 14/09/2026 (tarde) — Rastreadores fora das telas de câmera" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 15/09/2026 (noite) — Hodômetro + Horímetro calculado em Posições/Deslocamento" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

@@ -321,7 +321,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                        target="_blank" class="badge badge-primary">Ver Mapa</a>
                     <?php else: echo '—'; endif; ?>
                 </td>
-                <td><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
+                <td class="text-mono"><?= $r['speed'] !== null ? number_format((float)$r['speed'], 1) . ' km/h' : '—' ?></td>
                 <td class="text-mono"><?= $hodRow !== null ? number_format($hodRow, 1, ',', '.') . ' km' : '—' ?></td>
                 <td><?= $r['ignition'] ? '<span class="badge badge-success">Ligada</span>' : '<span class="badge">Desligada</span>' ?></td>
             </tr>
