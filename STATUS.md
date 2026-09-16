@@ -1,4 +1,34 @@
-# STATUS.md — Jimi Webhook System v4.21.5 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.6 (YUV Parity)
+
+> ### 📍 16/09/2026 (depois do status_bits) — Velocidade + Nº na tela de tratativa da ocorrência (v4.21.6)
+>
+> Pedido do dono do produto: nos alarmes de Excesso de Velocidade o equipamento manda o valor da
+> velocidade (campo distinto por protocolo), mas a tela de tratativa da ocorrência não mostrava
+> esse valor nem na tabela "Alarmes Agrupados" nem no balão do mapa. Pediu também uma coluna "Nº"
+> na tabela, igual ao "Alarme N de Y" que o mapa já mostra.
+>
+> Confirmado contra a doc oficial (§1.4 Push Alarm Data): JIMI (`msg_class=0`) manda a velocidade
+> em `alertValue` ("For overspeed alarm: speed value") — já gravado em `alarms.alert_value`; JT/T
+> (`msg_class=1`) manda em `gpsSpeed` ("Only exist when reporting overspeed alerts") — já gravado
+> em `alarms.speed`. `pushalarm.php` já extraía os dois; só faltava exibir.
+>
+> **Entregue**: `occ_overspeed_kmh()` (`handlers/ocorrencias_dashboard.php`) resolve o campo certo
+> por protocolo, só para os códigos de Excesso de Velocidade (JIMI `6`/`135`/`202`/`95`, JT/T
+> `1027` — mesma lista de `migration_v4.21.0.sql`). Gate por código obrigatório: `alertValue` é
+> multi-uso (também carrega nível de evento de outros alarmes) — sem o gate, mostraria um valor de
+> outro alarme rotulado como "Velocidade". Colunas "Nº" e "Velocidade" na tabela; linha
+> "Velocidade: X km/h" no balão, só quando aplicável.
+>
+> 🔴 **Achado no caminho, corrigido**: a numeração do mapa ("Alarme N de Y") vinha da posição
+> dentro do array já FILTRADO por GPS válido — um alarme sem fix de GPS (sem balão) deslocava a
+> numeração dos seguintes, discordando da contagem "alarmes agrupados" do painel e da nova coluna
+> "Nº" da tabela. Corrigido calculando pela posição no grupo INTEIRO, mesmo número nos dois lugares.
+>
+> **Verificação**: `php -l` limpo; lógica de `occ_overspeed_kmh()` verificada isolada (10 casos:
+> os 5 códigos, `msg_class` como int/string, valor ausente, alarme fora da lista) fora da app, sem
+> banco. Layout conferido visualmente no Chrome com fixture estática (CSS real de
+> `layout_base.php`): tabela de 5 colunas cabe na coluna estreita sem cramming. **Sem banco real
+> nesta sessão** — não exercitado com ocorrência de verdade nem no navegador logado.
 
 > ### 📍 16/09/2026 (depois do horímetro) — gps_data.status_bits: campo `status` do pushgps nunca era gravado (v4.21.5)
 >
@@ -63,36 +93,7 @@
 > viagem em andamento bem no instante em que o relatório roda, ou dado histórico/manual. Sem banco
 > nesta sessão para confirmar; a correção fecha o caso de qualquer forma.
 
-> ### 📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento (v4.21.3)
->
-> Bug reportado pelo dono do produto: as telas de Posições e Deslocamento (hodômetro/horímetro,
-> v4.21.1) não seguiam o padrão de fontes do design system, e a linha de somatório do rodapé
-> aparecia desalinhada das colunas. Investigação (systematic-debugging): reproduzido offline com
-> uma página estática usando o CSS real de `web/layout_base.php` (sem precisar de MySQL/login) e
-> confirmado por screenshot no Chrome antes/depois.
->
-> **Causa raiz #1 (alinhamento)**: `tbody td`/`thead th` têm `padding: 10px 16px`, mas nunca
-> existiu regra `tfoot td` nenhuma — o rodapé herdava o padding mínimo do UA stylesheet do
-> navegador. Resultado visível: "Km rodado no período" e "21,6 km" coladas sem espaço nenhum
-> entre label e valor, e a linha inteira sem separação visual da grade acima.
->
-> **Causa raiz #2 (fonte)**: comparado contra `rel_status_frota.php` (referência já correta,
-> `fmt_duration()`/`number_format()` sempre em `.text-mono`) — `rel_posicoes.php` (Velocidade) e
-> `rel_deslocamento.php` (Jornada/Horímetro/Em Movimento/Distância/Vel. Máx/Alarmes/Viagens, nos
-> dois modos) tinham colunas 100% numéricas sem `.text-mono`, fora do padrão "todo número em
-> JetBrains Mono" do `DESIGN.md`. `rel_desatualizados.php` foi auditado e não precisou de
-> mudança: "Sem comunicar há" é rótulo de prosa ("há 5 min"), não número puro — mesmo tratamento
-> já usado no badge de presença de `/comandos` (`$d['presenca']['rotulo']`, sem mono).
->
-> **Entregue**: `tfoot td` (`web/layout_base.php`) com o mesmo padding de `tbody td` + borda
-> superior + fundo `--canvas-soft` para separar visualmente a linha de total. `.text-mono` nas
-> colunas numéricas apontadas acima, na grade E no rodapé dos dois relatórios.
->
-> **Verificação**: `php -l` limpo nos 3 arquivos; repro visual no Chrome (antes/depois,
-> `http://127.0.0.1:8931` com o CSS real extraído de `layout_base.php`) confirmando alinhamento e
-> fonte corrigidos. Não exercitado contra banco real — é mudança de CSS/classe, sem query nova.
-
-> Entradas anteriores a "📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

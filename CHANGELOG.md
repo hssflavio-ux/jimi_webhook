@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.6
+
+**Velocidade do alarme de Excesso de Velocidade — capturada há tempos, nunca exibida na tela da ocorrência (tratativa).**
+
+Pedido do dono do produto: o equipamento manda o valor da velocidade nos alarmes de excesso de velocidade (campo distinto por protocolo), mas a tela de tratativa da ocorrência não mostrava esse valor nem na tabela "Alarmes Agrupados" nem no balão do mapa. Confirmado contra a doc oficial (`https://docs.jimicloud.com/integration/integration.html`, §1.4 Push Alarm Data): JIMI (`msg_class=0`) manda em `alertValue` ("For overspeed alarm: speed value") — já gravado em `alarms.alert_value`; JT/T (`msg_class=1`) manda em `gpsSpeed` ("Only exist when reporting overspeed alerts") — já gravado em `alarms.speed`. Os dois campos já eram extraídos pelo `pushalarm.php`; faltava só exibir.
+
+- **Adicionado** `occ_overspeed_kmh()` (`handlers/ocorrencias_dashboard.php`): resolve a velocidade pelo campo certo por protocolo, mas só para os códigos de "Excesso de Velocidade" (JIMI `6`/`135`/`202`/`95`, JT/T `1027` — mesma lista de `mysql/migration_v4.21.0.sql`). Gate por código é obrigatório: `alertValue` é multi-uso (também carrega nível de evento de outros alarmes, ex. olho fechado) — sem o gate, mostraria um valor de outro alarme rotulado como "Velocidade".
+- **Adicionado** coluna "Velocidade" na tabela "Alarmes Agrupados" e linha "Velocidade: X km/h" no balão do mapa (só quando o alarme é de excesso de velocidade; "—" ou omitido nos demais).
+- **Adicionado** coluna "Nº" na tabela, numerando os alarmes do grupo na mesma ordem/numeração que o balão do mapa já usa ("Alarme N de Y") — pedido explícito do dono do produto, pra uma linha da tabela apontar pro mesmo alarme de um balão do mapa.
+- 🔴 **Achado no caminho, corrigido**: a numeração do mapa ("Alarme N de Y") era calculada pela posição dentro do array JÁ FILTRADO por GPS válido, não pela posição no grupo inteiro — um alarme sem fix de GPS (sem balão) deslocava a numeração dos alarmes seguintes, que passavam a discordar da contagem "X alarmes agrupados" do painel. Corrigido calculando o número pela posição no grupo INTEIRO antes do filtro (mesmo número agora usado na tabela).
+- **Verificação**: `php -l` limpo; lógica de `occ_overspeed_kmh()` verificada isoladamente (10 casos: os 5 códigos, protocolo por `msg_class` como int/string, ausência de valor, alarme fora da lista) fora da app, sem banco; layout conferido visualmente no Chrome com fixture estática (mesmo CSS real de `layout_base.php`) — a tabela de 5 colunas cabe na coluna estreita sem cramming. Sem banco real nesta sessão para exercitar com ocorrência de verdade.
+
 ## [Unreleased] — 4.21.5
 
 **`gps_data.status_bits` — o campo `status` do pushgps (doc oficial §1.3) nunca era extraído; agora é gravado cru.**

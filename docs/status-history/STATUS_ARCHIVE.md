@@ -2,6 +2,35 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento (v4.21.3)
+>
+> Bug reportado pelo dono do produto: as telas de Posições e Deslocamento (hodômetro/horímetro,
+> v4.21.1) não seguiam o padrão de fontes do design system, e a linha de somatório do rodapé
+> aparecia desalinhada das colunas. Investigação (systematic-debugging): reproduzido offline com
+> uma página estática usando o CSS real de `web/layout_base.php` (sem precisar de MySQL/login) e
+> confirmado por screenshot no Chrome antes/depois.
+>
+> **Causa raiz #1 (alinhamento)**: `tbody td`/`thead th` têm `padding: 10px 16px`, mas nunca
+> existiu regra `tfoot td` nenhuma — o rodapé herdava o padding mínimo do UA stylesheet do
+> navegador. Resultado visível: "Km rodado no período" e "21,6 km" coladas sem espaço nenhum
+> entre label e valor, e a linha inteira sem separação visual da grade acima.
+>
+> **Causa raiz #2 (fonte)**: comparado contra `rel_status_frota.php` (referência já correta,
+> `fmt_duration()`/`number_format()` sempre em `.text-mono`) — `rel_posicoes.php` (Velocidade) e
+> `rel_deslocamento.php` (Jornada/Horímetro/Em Movimento/Distância/Vel. Máx/Alarmes/Viagens, nos
+> dois modos) tinham colunas 100% numéricas sem `.text-mono`, fora do padrão "todo número em
+> JetBrains Mono" do `DESIGN.md`. `rel_desatualizados.php` foi auditado e não precisou de
+> mudança: "Sem comunicar há" é rótulo de prosa ("há 5 min"), não número puro — mesmo tratamento
+> já usado no badge de presença de `/comandos` (`$d['presenca']['rotulo']`, sem mono).
+>
+> **Entregue**: `tfoot td` (`web/layout_base.php`) com o mesmo padding de `tbody td` + borda
+> superior + fundo `--canvas-soft` para separar visualmente a linha de total. `.text-mono` nas
+> colunas numéricas apontadas acima, na grade E no rodapé dos dois relatórios.
+>
+> **Verificação**: `php -l` limpo nos 3 arquivos; repro visual no Chrome (antes/depois,
+> `http://127.0.0.1:8931` com o CSS real extraído de `layout_base.php`) confirmando alinhamento e
+> fonte corrigidos. Não exercitado contra banco real — é mudança de CSS/classe, sem query nova.
+
 > ### 📍 15/09/2026 (noite, depois do hodômetro) — "Desatualizado" passa de posição GPS para comunicação (v4.21.2)
 >
 > Bug reportado pelo dono do produto: `/painel` mostrava "11 desatualizados", mas 7 desses

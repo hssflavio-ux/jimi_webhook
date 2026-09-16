@@ -109,7 +109,8 @@ if (!empty($_GET['id'])) {
             ['joins' => $evtJoins, 'expr' => $evtExpr] = alarm_label_sql();
             $stmt = $db->prepare(
                 "SELECT e.id as event_id, a.id as alarm_id, {$evtExpr} AS alarm_name, a.alarm_time,
-                        a.latitude, a.longitude, a.speed, a.file_url, a.file_type
+                        a.latitude, a.longitude, a.speed, a.alert_value, a.msg_class, a.alarm_type,
+                        a.file_url, a.file_type
                  FROM occurrence_events e
                  JOIN alarms a ON a.id = e.alarm_id
                  {$evtJoins}
@@ -209,20 +210,55 @@ if ($temTsNoDetalhe) {
     $extra_head .= '<script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>';
 }
 
+/**
+ * Velocidade do alarme de Excesso de Velocidade — o device manda o valor em
+ * campo distinto por protocolo: JIMI (msg_class=0) no `alertValue`
+ * (`alarms.alert_value`), JT/T (msg_class=1) no `gpsSpeed` (`alarms.speed`).
+ * Confirmado contra a doc oficial (§1.4 Push Alarm Data): "alertValue ...
+ * For overspeed alarm: speed value" e "gpsSpeed ... Only exist when
+ * reporting overspeed alerts".
+ *
+ * Os dois campos são MULTI-USO (`alertValue` também carrega nível de evento
+ * de outros alarmes, ex. olho fechado) — só têm o significado de velocidade
+ * nos códigos de Excesso de Velocidade, então a checagem de código não é
+ * opcional: mostrar sem ela rotularia um valor de outro alarme como
+ * "Velocidade". Lista idêntica à do grupo "Excesso de velocidade" de
+ * `mysql/migration_v4.21.0.sql` (mesma classificação de `alarm_types.is_driving`).
+ *
+ * @param array $ev Linha com alarm_type, msg_class, alert_value, speed
+ * @returns float|null km/h, ou null se este alarme não é de excesso de velocidade
+ */
+function occ_overspeed_kmh(array $ev): ?float
+{
+    static $codigos = ['JIMI' => ['6', '135', '202', '95'], 'JTT' => ['1027']];
+    $protocolo = ((int)($ev['msg_class'] ?? 0)) === 1 ? 'JTT' : 'JIMI';
+    if (!in_array((string)($ev['alarm_type'] ?? ''), $codigos[$protocolo], true)) return null;
+    $valor = $protocolo === 'JIMI' ? ($ev['alert_value'] ?? null) : ($ev['speed'] ?? null);
+    if ($valor === null || $valor === '') return null;
+    return (float)$valor;
+}
+
 // ── Pontos do mapa (localização dos alarmes) ────────────────────
 // Um marcador por alarme com coordenada válida (0,0/NULL = sem fix de GPS
 // no momento do push) — a ocorrência pode agrupar vários alarmes, e cada
 // um vira o seu próprio balão no mapa, não só o ponto do mais recente.
+// `num` é a posição no grupo INTEIRO ($detailEvents, 1-based) — não a
+// posição dentro deste array já filtrado por GPS. É o mesmo número da
+// coluna "Nº" da tabela "Alarmes Agrupados" logo abaixo: alarme sem fix
+// de GPS não ganha balão, mas não pode reindexar os que têm, senão
+// "Alarme 2 de Y" no mapa deixa de bater com a linha "Nº 2" da tabela.
 $occMapPoints = [];
-foreach ($detailEvents as $ev) {
+foreach ($detailEvents as $i => $ev) {
     $lat = (float)($ev['latitude'] ?? 0);
     $lng = (float)($ev['longitude'] ?? 0);
     if ($lat == 0.0 && $lng == 0.0) continue;
     $occMapPoints[] = [
-        'lat'  => $lat,
-        'lng'  => $lng,
-        'name' => $ev['alarm_name'] ?? 'Alarme',
-        'time' => fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s'),
+        'lat'   => $lat,
+        'lng'   => $lng,
+        'num'   => $i + 1,
+        'name'  => $ev['alarm_name'] ?? 'Alarme',
+        'time'  => fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s'),
+        'speed' => occ_overspeed_kmh($ev),
     ];
 }
 
@@ -271,12 +307,14 @@ require_once __DIR__ . '/../web/layout_base.php';
             <h3 style="font-size:13px;font-weight:600;color:var(--ink);margin:20px 0 8px;">Alarmes Agrupados</h3>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>Alarme</th><th>Data/Hora</th><?php if (!$detailNoVideo): ?><th>Vídeo</th><?php endif; ?></tr></thead>
+                    <thead><tr><th>Nº</th><th>Alarme</th><th>Data/Hora</th><th>Velocidade</th><?php if (!$detailNoVideo): ?><th>Vídeo</th><?php endif; ?></tr></thead>
                     <tbody>
-                    <?php foreach ($detailEvents as $ev): ?>
+                    <?php $evNum = 0; foreach ($detailEvents as $ev): $evNum++; $evSpeed = occ_overspeed_kmh($ev); ?>
                     <tr>
+                        <td class="text-mono"><?= $evNum ?></td>
                         <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>
                         <td class="text-mono"><?= fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s') ?></td>
+                        <td class="text-mono"><?= $evSpeed !== null ? number_format($evSpeed, 1) . ' km/h' : '—' ?></td>
                         <?php if (!$detailNoVideo): ?>
                         <td>
                             <?php if ($ev['file_url']): ?>
@@ -439,6 +477,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 (function() {
     var VEHICLE_ICONS = <?= json_encode(vehicle_icons_js_catalog(), JSON_UNESCAPED_SLASHES) ?>;
     var OCC_POINTS = <?= json_encode($occMapPoints, JSON_UNESCAPED_UNICODE) ?>;
+    var OCC_TOTAL_EVENTS = <?= count($detailEvents) ?>;
     var OCC_VEHICLE_TYPE = <?= json_encode($detailOcc['vehicle_type'] ?? null) ?>;
     var OCC_COLOR = <?= json_encode(['baixo' => '#0052ff', 'medio' => '#f4b000', 'alto' => '#cf202f'][$detailOcc['risk']] ?? '#5b616e') ?>;
 
@@ -465,13 +504,19 @@ require_once __DIR__ . '/../web/layout_base.php';
     var map = L.map('occ-map');
     bcMapBaseLayers(map);
     var bounds = [];
-    var multi = OCC_POINTS.length > 1;
-    OCC_POINTS.forEach(function(p, i) {
+    var multi = OCC_TOTAL_EVENTS > 1;
+    OCC_POINTS.forEach(function(p) {
         bounds.push([p.lat, p.lng]);
-        var label = multi ? ('Alarme ' + (i + 1) + ' de ' + OCC_POINTS.length + '<br>') : '';
+        // p.num é a posição no grupo INTEIRO de alarmes (não só os com GPS) —
+        // mesmo número da coluna "Nº" da tabela "Alarmes Agrupados", pra um
+        // balão e uma linha apontarem pro mesmo alarme.
+        var label = multi ? ('Alarme ' + p.num + ' de ' + OCC_TOTAL_EVENTS + '<br>') : '';
+        var speedLine = (p.speed !== null && p.speed !== undefined)
+            ? ('<br>Velocidade: ' + p.speed.toFixed(1) + ' km/h')
+            : '';
         L.marker([p.lat, p.lng], {icon: pinIcon})
             .addTo(map)
-            .bindPopup(label + '<b>' + p.name + '</b><br>' + p.time);
+            .bindPopup(label + '<b>' + p.name + '</b><br>' + p.time + speedLine);
     });
     if (bounds.length === 1) { map.setView(bounds[0], 16); }
     else { map.fitBounds(bounds, {padding: [24, 24]}); }
