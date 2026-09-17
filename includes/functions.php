@@ -105,43 +105,15 @@ function map_link_url($lat, $lng): string
 }
 
 /**
- * Calcula a distância em quilômetros entre dois pontos geográficos
- * utilizando a fórmula de Haversine.
- *
- * Retorna 0 quando: coordenadas de origem ou destino são (0,0),
- * ou quando os pontos são idênticos. O resultado é estabilizado
- * com clamp de acos() para evitar NaN em pontos muito próximos.
- *
- * @param float $lat1 Latitude do ponto de origem
- * @param float $lon1 Longitude do ponto de origem
- * @param float $lat2 Latitude do ponto de destino
- * @param float $lon2 Longitude do ponto de destino
- * @return float Distância em quilômetros (0 se pontos iguais ou inválidos)
- */
-function calculate_distance($lat1, $lon1, $lat2, $lon2) {
-    $lat1 = floatval($lat1);
-    $lon1 = floatval($lon1);
-    $lat2 = floatval($lat2);
-    $lon2 = floatval($lon2);
-    if ($lat1 == 0 || $lat2 == 0 || ($lat1 == $lat2 && $lon1 == $lon2)) return 0;
-    $theta = $lon1 - $lon2;
-    $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
-    if ($dist > 1) $dist = 1;
-    if ($dist < -1) $dist = -1;
-    $dist = acos($dist);
-    $dist = rad2deg($dist);
-    return $dist * 60 * 1.1515 * 1.609344;
-}
-
-/**
  * Distância em quilômetros entre dois pontos, pela fórmula de Haversine.
  *
- * Existe separada de calculate_distance() de propósito. Aquela usa lei dos
- * cossenos esférica e **retorna 0 quando qualquer latitude é 0** — guarda
- * pensada para descartar GPS inválido, mas que sabota qualquer teste de raio
- * (a linha do Equador passa a ter distância zero para tudo). Como há
- * chamadores legados dependendo daquele comportamento (pushgps.php), a função
- * antiga fica intocada e as medições novas usam esta.
+ * Até a v4.21.6 convivia com uma `calculate_distance()` (lei dos cossenos
+ * esférica, **retornava 0 quando qualquer latitude é 0** — guarda pensada
+ * para descartar GPS inválido, mas que sabotava qualquer teste de raio: a
+ * linha do Equador tinha distância zero para tudo). O único chamador que
+ * dependia daquele comportamento (`pushgps.php`) passou a usar hodômetro em
+ * vez de GPS na v4.21.7 (pedido do dono do produto — ver CLAUDE.md), e a
+ * função antiga foi removida por não ter mais uso.
  *
  * Promovida de scripts/trip_builder.php na v4.5.0, onde era privada do script:
  * o worker de geocercas precisa exatamente da mesma medida para o teste de
@@ -206,6 +178,34 @@ function odometer_delta_km($firstRawMeters, $lastRawMeters): ?float
     $deltaMeters = (float)$lastRawMeters - (float)$firstRawMeters;
     if ($deltaMeters < 0) return null;
     return odometer_km($deltaMeters);
+}
+
+/**
+ * Delta de hodômetro (km) a partir de um array de pontos já carregado —
+ * varre em ordem e usa a primeira e a última leitura de `mileage` (metros,
+ * cru) que sejam > 0, descartando as zeradas (equipamento sem hodômetro
+ * real — ver odometer_delta_km() acima). NULL quando nenhum ponto do
+ * trecho tem leitura válida: nunca cai para distância por GPS.
+ *
+ * Centraliza a mesma varredura que `trip_builder.php`, `rel_deslocamento_rota.php`
+ * e `rel_deslocamento_replay.php` precisam fazer sobre pontos de `gps_data`
+ * já em memória (evita reconsultar o banco só para achar as pontas).
+ *
+ * @param array $points Pontos ordenados por gps_time ASC, cada um com chave 'mileage'
+ * @returns float|null Km, ou null se não há leitura válida no trecho
+ */
+function odometer_delta_from_points(array $points): ?float
+{
+    $first = null;
+    $last = null;
+    foreach ($points as $p) {
+        $m = (float)($p['mileage'] ?? 0);
+        if ($m > 0) {
+            if ($first === null) $first = $m;
+            $last = $m;
+        }
+    }
+    return odometer_delta_km($first, $last);
 }
 
 /**

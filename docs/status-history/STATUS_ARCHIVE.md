@@ -2,6 +2,35 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso (v4.21.4)
+>
+> Pedido do dono do produto: verificar se o horímetro calculado (v4.21.1) funciona como contador
+> CONTÍNUO de ignição ligada. **Confirmado que sim** para a lógica de soma: `ignition_seconds_in_window()`
+> soma todos os segmentos `movimento`+`ocioso` (nunca `parado`/`offline`) do IMEI dentro da janela,
+> ao longo de múltiplos ciclos liga/desliga, sem gap nem duplicação — os segmentos de
+> `device_state_segments` são uma partição contígua do tempo (`ended_at` de um é o `started_at` do
+> seguinte). O corte de viagem/dia que cruza a meia-noite contar inteiro no dia em que começou é
+> intencional, não inconsistência: é a MESMA regra que `trip_builder.php` já aplica a Jornada e Em
+> Movimento no fechamento diário — o horímetro só está seguindo o padrão já existente.
+>
+> 🔴 **Achado no caminho, corrigido**: `ignition_seconds_in_window()` exigia `string $untilUtc`,
+> mas `rel_deslocamento.php` (modo "viagens") passa `$r['ended_at']` direto — `NULL` para viagem
+> ainda em curso (coluna nullable no schema; a própria tela já trata isso na exibição do Término,
+> `$r['ended_at'] ? … : '—'`, mas não no cálculo). `null` num parâmetro `string` não-nulo é
+> `TypeError`, que os `catch (Exception $e)` dos três chamadores (rodapé, export, grade) NÃO
+> capturam — a página quebrava inteira (500), não só a célula. Reproduzido isoladamente com `php`
+> antes de corrigir (TypeError confirmado, depois função corrigida e re-testada).
+>
+> **Entregue**: `ignition_seconds_in_window()` aceita `?string $untilUtc` — `null` soma até AGORA
+> (`gmdate()`, UTC) em vez de lançar. `tests/helpers/odometro_horimetro.test.php` ganhou o caso
+> (21/21).
+>
+> **Não verificado**: se alguma linha de `trips` em produção JÁ tem `ended_at IS NULL` hoje — o
+> único `INSERT INTO trips` (`trip_builder.php`) sempre grava um valor concreto (nunca persiste
+> viagem em curso, só quando fecha por ignição/parada/timeout de 2h), então o gatilho seria uma
+> viagem em andamento bem no instante em que o relatório roda, ou dado histórico/manual. Sem banco
+> nesta sessão para confirmar; a correção fecha o caso de qualquer forma.
+
 > ### 📍 16/09/2026 — Fontes e alinhamento do rodapé nos relatórios de Posições/Deslocamento (v4.21.3)
 >
 > Bug reportado pelo dono do produto: as telas de Posições e Deslocamento (hodômetro/horímetro,

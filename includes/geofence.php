@@ -11,9 +11,10 @@
  *   circulo  — center_lat/center_lng + radius_m, testado por haversine_km()
  *   poligono — array [[lat,lng],...], testado por ray casting (PNPOLY)
  *
- * Toda medida de distância usa haversine_km() de includes/functions.php.
- * NUNCA calculate_distance(): aquela devolve 0 quando uma latitude é 0, o que
- * transformaria qualquer ponto na linha do Equador em "dentro de tudo".
+ * Toda medida de distância usa haversine_km() de includes/functions.php —
+ * nunca a antiga calculate_distance() (removida na v4.21.7), que devolvia 0
+ * quando uma latitude era 0 e transformaria qualquer ponto na linha do
+ * Equador em "dentro de tudo".
  */
 
 require_once __DIR__ . '/functions.php';

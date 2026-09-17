@@ -61,8 +61,11 @@ if (!$trip && !$error) {
     $deviceName = $trip['device_name'];
     $utcFrom = $trip['started_at'];
     $utcTo = $trip['ended_at'] ?: $trip['started_at'];
+    // 'distance_km' é preenchido abaixo, depois de carregar $raw — hodômetro
+    // real (v4.21.7), não trips.distance_km (que para viagens antigas ainda
+    // guarda o valor por GPS de antes desta versão; sem backfill).
     $summary = [
-        'distance_km' => (float)$trip['distance_km'],
+        'distance_km' => null,
         'max_speed'   => (float)$trip['max_speed'],
         'alarm_count' => (int)$trip['alarm_count'],
     ];
@@ -89,6 +92,12 @@ if (!$error) {
     $raw = $stmt->fetchAll();
     $totalPoints = count($raw);
 
+    // Distância total do KPI de resumo: hodômetro real (v4.21.7), primeira e
+    // última leitura válida (>0) de mileage entre TODOS os pontos do trecho
+    // (não só os amostrados abaixo, que existem só para o mapa/timeline) —
+    // mesma varredura de trip_builder.php, ver odometer_delta_from_points().
+    $summary['distance_km'] = odometer_delta_from_points($raw);
+
     $maxPts = 3000;
     $step = $totalPoints > $maxPts ? (int)ceil($totalPoints / $maxPts) : 1;
     $sampled = $step > 1;
@@ -102,9 +111,11 @@ if (!$error) {
             's'       => $r['speed'] !== null ? (float)$r['speed'] : null,
             'acc'     => (int)$r['acc'],
             // odometer_km(): gps_data.mileage é gravado cru em metros — ver
-            // includes/functions.php. O JS abaixo só subtrai duas leituras já
-            // em km; sem esta conversão o "km rodado" saía 1000x maior.
-            'mileage' => odometer_km($r['mileage']),
+            // includes/functions.php. mileage <= 0 vira null (não 0.0!): é o
+            // equipamento sem hodômetro real, não uma leitura válida de zero
+            // — sem isso o "Percorrido" ao vivo mostrava "0.0 km" (parecendo
+            // medição real) em vez de "—" para esses equipamentos (v4.21.7).
+            'mileage' => ((float)$r['mileage'] > 0) ? odometer_km($r['mileage']) : null,
         ];
     }
 
@@ -190,7 +201,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php else: ?>
 
 <div class="card mb-16" style="padding:12px 20px;display:flex;flex-wrap:wrap;gap:28px;">
-    <div><div class="rp-kpi-label">Distância</div><div class="rp-kpi"><?= number_format($summary['distance_km'], 1) ?> km</div></div>
+    <div><div class="rp-kpi-label">Distância</div><div class="rp-kpi"><?= $summary['distance_km'] !== null ? number_format($summary['distance_km'], 1) . ' km' : '—' ?></div></div>
     <div><div class="rp-kpi-label">Vel. Máx</div><div class="rp-kpi"><?= number_format($summary['max_speed'], 1) ?> km/h</div></div>
     <div><div class="rp-kpi-label">Alarmes</div><div class="rp-kpi"><?= $summary['alarm_count'] ?></div></div>
     <div><div class="rp-kpi-label">Posições</div><div class="rp-kpi"><?= $totalPoints ?><?= $sampled ? ' <span style="font-size:10px;color:var(--muted);">(amostrado)</span>' : '' ?></div></div>
@@ -300,7 +311,13 @@ function rpFmtHora(ts) {
     return d.toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Sao_Paulo' });
 }
 
-var mileage0 = RP.points[0].mileage;
+// Primeira leitura VÁLIDA de mileage entre os pontos amostrados — não
+// necessariamente RP.points[0], que pode ser um ponto sem hodômetro válido
+// mesmo num trecho que tem leitura real mais adiante (v4.21.7).
+var mileage0 = null;
+for (var mi = 0; mi < RP.points.length; mi++) {
+    if (RP.points[mi].mileage !== null) { mileage0 = RP.points[mi].mileage; break; }
+}
 function rpAtualizarLeitura() {
     var pos = rpInterpolar(RP.now);
     marker.setLatLng([pos.lat, pos.lng]);

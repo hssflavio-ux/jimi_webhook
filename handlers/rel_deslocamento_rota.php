@@ -43,7 +43,9 @@ if (!preg_match('#^/relatorios/deslocamento(\?.*)?$#', $returnTo)) {
 $error = '';
 $imei = '';
 $utcFrom = $utcTo = null;
-$summary = ['distance_km' => 0, 'max_speed' => 0, 'alarm_count' => 0, 'viagens' => 0];
+// distance_km null até $raw ser carregado abaixo — sempre hodômetro real
+// (v4.21.7), nunca trips.distance_km (GPS, congelado para viagens antigas).
+$summary = ['distance_km' => null, 'max_speed' => 0, 'alarm_count' => 0, 'viagens' => 0];
 
 try {
     if ($tripId > 0) {
@@ -63,8 +65,10 @@ try {
             $deviceName = $trip['device_name'];
             $utcFrom = $trip['started_at'];
             $utcTo = $trip['ended_at'] ?: $trip['started_at'];
+            // 'distance_km' fica null aqui — preenchido abaixo com hodômetro
+            // real, depois de $raw carregado (não trips.distance_km).
             $summary = [
-                'distance_km' => (float)$trip['distance_km'],
+                'distance_km' => null,
                 'max_speed'   => (float)$trip['max_speed'],
                 'alarm_count' => (int)$trip['alarm_count'],
                 'viagens'     => 1,
@@ -76,7 +80,7 @@ try {
         [$dayFrom, $dayTo] = brt_day_range_to_utc($dia, $dia);
         $sql = "SELECT MAX(COALESCE(d.device_name, t.imei)) AS device_name,
                        MIN(t.started_at) AS primeira_on, MAX(t.ended_at) AS ultima_off,
-                       SUM(t.distance_km) AS distance_km, MAX(t.max_speed) AS max_speed,
+                       MAX(t.max_speed) AS max_speed,
                        SUM(t.alarm_count) AS alarm_count, COUNT(*) AS viagens
                 FROM trips t LEFT JOIN devices d ON d.imei = t.imei
                 WHERE t.imei = :imei AND t.started_at BETWEEN :df AND :dt"
@@ -94,7 +98,7 @@ try {
             $utcFrom = $day['primeira_on'];
             $utcTo = $day['ultima_off'] ?: $day['primeira_on'];
             $summary = [
-                'distance_km' => (float)$day['distance_km'],
+                'distance_km' => null,
                 'max_speed'   => (float)$day['max_speed'],
                 'alarm_count' => (int)$day['alarm_count'],
                 'viagens'     => (int)$day['viagens'],
@@ -116,7 +120,7 @@ $occCount = 0;
 if (!$error) {
     // Posições/comunicações da câmera na janela (idx_imei_time)
     $stmt = $db->prepare("
-        SELECT latitude, longitude, speed, acc, gps_time
+        SELECT latitude, longitude, speed, acc, gps_time, mileage
         FROM gps_data
         WHERE imei = :imei AND gps_time BETWEEN :df AND :dt
           AND latitude IS NOT NULL AND latitude <> 0
@@ -125,6 +129,11 @@ if (!$error) {
     $stmt->execute([':imei' => $imei, ':df' => $utcFrom, ':dt' => $utcTo]);
     $raw = $stmt->fetchAll();
     $totalPoints = count($raw);
+
+    // Distância do KPI de resumo: hodômetro real (v4.21.7), primeira e última
+    // leitura válida (>0) de mileage entre TODOS os pontos do trecho — ver
+    // odometer_delta_from_points() em includes/functions.php.
+    $summary['distance_km'] = odometer_delta_from_points($raw);
 
     // Amostragem para não pesar o navegador: mantém no máx. ~3000 pontos,
     // preservando sempre o primeiro e o último.
@@ -229,7 +238,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 <?php else: ?>
 
 <div class="card mb-16" style="padding:12px 20px;display:flex;flex-wrap:wrap;gap:28px;">
-    <div><div class="rota-kpi-label">Distância</div><div class="rota-kpi"><?= number_format($summary['distance_km'], 1) ?> km</div></div>
+    <div><div class="rota-kpi-label">Distância</div><div class="rota-kpi"><?= $summary['distance_km'] !== null ? number_format($summary['distance_km'], 1) . ' km' : '—' ?></div></div>
     <div><div class="rota-kpi-label">Duração</div><div class="rota-kpi"><?= $jornadaS > 0 ? sprintf('%dh%02dm', floor($jornadaS/3600), floor(($jornadaS%3600)/60)) : '—' ?></div></div>
     <div><div class="rota-kpi-label">Vel. Máx</div><div class="rota-kpi"><?= number_format($summary['max_speed'], 1) ?> km/h</div></div>
     <div><div class="rota-kpi-label">Viagens</div><div class="rota-kpi"><?= $summary['viagens'] ?></div></div>

@@ -1,4 +1,53 @@
-# STATUS.md — Jimi Webhook System v4.21.6 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.21.7 (YUV Parity)
+
+> ### 📍 16/09/2026 (depois da velocidade) — Todo cálculo de deslocamento passa a usar hodômetro, não GPS (v4.21.7)
+>
+> Pedido do dono do produto: os relatórios de Deslocamento mostravam "Distância" (calculada por
+> GPS, Haversine entre pontos consecutivos) e "Hodômetro" (leitura real do sensor) com valores
+> diferentes — explicado na conversa como duas fontes/metodologias distintas. Decisão do dono do
+> produto: **basear TUDO no hodômetro real**, considerando o equipamento que ainda manda leitura
+> zerada uma falha de CONFIGURAÇÃO, não uma limitação de modelo (diverge da medição registrada na
+> memória `hodometro-bateria-medicao-producao`, que achara só 3 de 8 modelos com leitura real —
+> mantida como estava, não corrigida, por não ter sido o pedido).
+>
+> **Escopo, decidido por perguntas explícitas antes de mexer em código** (dono do produto pediu
+> para não decidir sozinho): TODOS os pontos que calculam deslocamento por GPS entram no escopo —
+> `trip_builder.php`, `state_builder.php` e `pushgps.php`, não só o relatório. Sem fallback para
+> GPS quando o hodômetro está inválido (mostra "—"). Sem backfill de `trips`/`device_state_segments`
+> já gravados (só viagens/segmentos novos). Filtro de detecção de viagem (`isRealTrip()`) continua
+> em GPS/velocidade — trocar isso arriscaria deixar de REGISTRAR uma viagem real por hodômetro
+> temporariamente inválido, um custo maior que mostrar "—" numa coluna.
+>
+> **Em `/relatorios/deslocamento`**: "Distância" passou a ser hodômetro final menos inicial do
+> trecho (o que a coluna "Hodômetro" já calculava); "Hodômetro" passou a ser a leitura ABSOLUTA do
+> contador no fim do trecho (nova). As duas são recalculadas AO VIVO de `gps_data.mileage` — nunca
+> lidas de `trips.distance_km` —, então valem também para viagens antigas sem precisar de backfill.
+>
+> **Achados no caminho, corrigidos**: (1) `handlers/rel_deslocamento_replay.php` tinha DUAS contas
+> de distância na MESMA tela discordando entre si — o KPI de resumo lia `trips.distance_km` (GPS)
+> enquanto o contador "Percorrido" ao vivo já usava hodômetro; unificadas. (2) esse mesmo contador
+> ao vivo tratava `mileage=0` como leitura válida (`odometer_km(0) = 0.0`, não null) — equipamento
+> sem hodômetro real mostrava "0.0 km" fixo a viagem inteira em vez de "—"; corrigido descartando
+> `mileage <= 0` antes de converter. (3) `scripts/worker.php` (relatório agendado "trips", export
+> por e-mail) ainda lia `t.distance_km` puro — seria a última tela a continuar mostrando GPS depois
+> de tudo o resto corrigido; ganhou a mesma subquery ao vivo.
+>
+> **Entregue**: `odometer_delta_from_points()` (`includes/functions.php`) — varredura compartilhada
+> (primeira/última leitura válida de `mileage` num array de pontos) usada por `trip_builder.php`,
+> `rel_deslocamento_rota.php` e `rel_deslocamento_replay.php`. `trip_builder.php`/`state_builder.php`
+> passaram a persistir hodômetro (nullable) em vez de Haversine em `distance_km`, mantendo uma
+> distância GPS interna só para o filtro de qualidade. `pushgps.php` (`calculateDistance()`) busca
+> a última leitura válida por `gps_time` (não por ordem de chegada — pontos atrasados existem) e
+> alimenta `device_statistics.total_distance_km` com o delta de hodômetro, sem mudar a stored
+> procedure. `calculate_distance()` (lei dos cossenos, único chamador era `pushgps.php`) removida
+> por ficar sem uso.
+>
+> **Verificação**: `php -l` limpo no projeto inteiro; `tests/helpers/odometro_horimetro.test.php`
+> ganhou 6 casos para `odometer_delta_from_points()` (27/27); suíte de helpers sem banco rodada
+> por completo, nada quebrou. **Sem MySQL nesta sessão** — nenhum webhook real gerou linha em
+> `trips`/`device_state_segments`/`gps_data` para conferir o cálculo fim a fim; `trip_builder.php`,
+> `state_builder.php` e `pushgps.php` não foram exercitados contra banco. Precisa de conferência em
+> homolog/produção (câmera real, viagem completa) antes do próximo deploy.
 
 > ### 📍 16/09/2026 (depois do status_bits) — Velocidade + Nº na tela de tratativa da ocorrência (v4.21.6)
 >
@@ -64,36 +113,7 @@
 > nem exercitada contra banco real.** Precisa do segundo deploy (regra do CLAUDE.md) e conferência
 > em homolog/produção antes de considerar `status_bits` confiável.
 
-> ### 📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso (v4.21.4)
->
-> Pedido do dono do produto: verificar se o horímetro calculado (v4.21.1) funciona como contador
-> CONTÍNUO de ignição ligada. **Confirmado que sim** para a lógica de soma: `ignition_seconds_in_window()`
-> soma todos os segmentos `movimento`+`ocioso` (nunca `parado`/`offline`) do IMEI dentro da janela,
-> ao longo de múltiplos ciclos liga/desliga, sem gap nem duplicação — os segmentos de
-> `device_state_segments` são uma partição contígua do tempo (`ended_at` de um é o `started_at` do
-> seguinte). O corte de viagem/dia que cruza a meia-noite contar inteiro no dia em que começou é
-> intencional, não inconsistência: é a MESMA regra que `trip_builder.php` já aplica a Jornada e Em
-> Movimento no fechamento diário — o horímetro só está seguindo o padrão já existente.
->
-> 🔴 **Achado no caminho, corrigido**: `ignition_seconds_in_window()` exigia `string $untilUtc`,
-> mas `rel_deslocamento.php` (modo "viagens") passa `$r['ended_at']` direto — `NULL` para viagem
-> ainda em curso (coluna nullable no schema; a própria tela já trata isso na exibição do Término,
-> `$r['ended_at'] ? … : '—'`, mas não no cálculo). `null` num parâmetro `string` não-nulo é
-> `TypeError`, que os `catch (Exception $e)` dos três chamadores (rodapé, export, grade) NÃO
-> capturam — a página quebrava inteira (500), não só a célula. Reproduzido isoladamente com `php`
-> antes de corrigir (TypeError confirmado, depois função corrigida e re-testada).
->
-> **Entregue**: `ignition_seconds_in_window()` aceita `?string $untilUtc` — `null` soma até AGORA
-> (`gmdate()`, UTC) em vez de lançar. `tests/helpers/odometro_horimetro.test.php` ganhou o caso
-> (21/21).
->
-> **Não verificado**: se alguma linha de `trips` em produção JÁ tem `ended_at IS NULL` hoje — o
-> único `INSERT INTO trips` (`trip_builder.php`) sempre grava um valor concreto (nunca persiste
-> viagem em curso, só quando fecha por ignição/parada/timeout de 2h), então o gatilho seria uma
-> viagem em andamento bem no instante em que o relatório roda, ou dado histórico/manual. Sem banco
-> nesta sessão para confirmar; a correção fecha o caso de qualquer forma.
-
-> Entradas anteriores a "📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 16/09/2026 (depois do horímetro) — gps_data.status_bits: campo `status` do pushgps nunca era gravado" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

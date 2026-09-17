@@ -54,7 +54,7 @@
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../core/Logger.php';
-require_once __DIR__ . '/../includes/functions.php';   // haversine_km(), is_valid_coordinate()
+require_once __DIR__ . '/../includes/functions.php';   // odometer_delta_km(), is_valid_coordinate()
 require_once __DIR__ . '/../includes/fleet_state.php'; // classify_point() e os limiares
 
 /** Teto de pontos lidos por equipamento por rodada (protege contra backlog). */
@@ -178,7 +178,7 @@ foreach ($devices as $dev) {
         $ptParams[':maxid'] = $maxGpsId;
     }
     $stmt = $db->prepare("
-        SELECT gps_time, latitude, longitude, speed, acc
+        SELECT gps_time, latitude, longitude, speed, acc, mileage
         FROM gps_data
         WHERE imei = :imei AND gps_time >= :since{$ptLimitId}
         ORDER BY gps_time ASC
@@ -391,10 +391,11 @@ function buildStateSegments(PDO $db, string $imei, ?int $cid, array $points, str
         // Mesmo estado: acumula.
         $seg['end_lat']      = $p['latitude'];
         $seg['end_lng']      = $p['longitude'];
-        $seg['distance_km'] += haversine_km(
-            (float)$prev['latitude'], (float)$prev['longitude'],
-            (float)$p['latitude'],    (float)$p['longitude']
-        );
+        $m = (float)($p['mileage'] ?? 0);
+        if ($m > 0) {
+            if ($seg['odometer_start_m'] === null) $seg['odometer_start_m'] = $m;
+            $seg['odometer_end_m'] = $m;
+        }
         $seg['max_speed'] = max($seg['max_speed'], (float)$p['speed']);
         $seg['point_count']++;
         $prev = $p;
@@ -415,7 +416,7 @@ function buildStateSegments(PDO $db, string $imei, ?int $cid, array $points, str
             'start_lng'   => $seg['start_lng'],
             'end_lat'     => $seg['end_lat'],
             'end_lng'     => $seg['end_lng'],
-            'distance_km' => round($seg['distance_km'], 3),
+            'distance_km' => odometer_delta_km($seg['odometer_start_m'], $seg['odometer_end_m']),
             'max_speed'   => $seg['max_speed'],
             'point_count' => $seg['point_count'],
         ]);
@@ -435,6 +436,13 @@ function buildStateSegments(PDO $db, string $imei, ?int $cid, array $points, str
  */
 function openSegment(string $imei, ?int $cid, string $state, array $p): array
 {
+    // odometer_start_m/odometer_end_m: primeira e última leitura válida
+    // (>0) de mileage vistas no segmento — o mesmo hodômetro > distância
+    // por GPS da v4.21.7 (ver trip_builder.php). NULL enquanto nenhum
+    // ponto do segmento tiver leitura real; distance_km sai NULL nesse caso
+    // (persistSegment/closeSegment), nunca cai para Haversine.
+    $m = (float)($p['mileage'] ?? 0);
+    $mileageValid = $m > 0 ? $m : null;
     return [
         'imei'        => $imei,
         'customer_id' => $cid,
@@ -444,7 +452,8 @@ function openSegment(string $imei, ?int $cid, string $state, array $p): array
         'start_lng'   => $p['longitude'],
         'end_lat'     => $p['latitude'],
         'end_lng'     => $p['longitude'],
-        'distance_km' => 0.0,
+        'odometer_start_m' => $mileageValid,
+        'odometer_end_m'   => $mileageValid,
         'max_speed'   => (float)$p['speed'],
         'point_count' => 1,
     ];
@@ -488,7 +497,7 @@ function closeSegment(PDO $db, array $seg, string $endTime, array $endPt): int
         'start_lng'   => $seg['start_lng'],
         'end_lat'     => $endPt['latitude'],
         'end_lng'     => $endPt['longitude'],
-        'distance_km' => round($seg['distance_km'], 3),
+        'distance_km' => odometer_delta_km($seg['odometer_start_m'], $seg['odometer_end_m']),
         'max_speed'   => $seg['max_speed'],
         'point_count' => $seg['point_count'],
     ]);

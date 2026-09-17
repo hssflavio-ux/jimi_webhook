@@ -125,8 +125,8 @@ class PushGPSHandler extends WebhookHandler {
             return false;
         }
         
-        // Calcular distância desde último ponto GPS
-        $distance = $this->calculateDistance($imei, $latitude, $longitude);
+        // Calcular distância desde último ponto GPS (hodômetro — v4.21.7)
+        $distance = $this->calculateDistance($imei, $mileage, $gpsTime);
 
         // Inserir GPS no banco
         $stmt = $this->db->prepare("
@@ -196,38 +196,43 @@ class PushGPSHandler extends WebhookHandler {
         return true;
     }
     
-    private function calculateDistance($imei, $lat, $lon) {
+    /**
+     * Distância deste ponto desde o anterior — hodômetro real do equipamento
+     * (`gps_data.mileage`), não GPS (v4.21.7, pedido do dono do produto:
+     * basear todo cálculo de deslocamento no hodômetro). Alimenta tanto
+     * `gps_data.distance_from_previous` quanto o acumulador
+     * `device_statistics.total_distance_km` (stored procedure
+     * `update_device_stats_after_gps`, inalterada — só o valor que ela
+     * recebe mudou de fonte).
+     *
+     * Busca a última leitura de mileage > 0 ANTERIOR (por gps_time, não por
+     * ordem de chegada — pontos atrasados existem, ver CLAUDE.md) a este
+     * ponto; sem base de comparação ou sem leitura válida (mileage <= 0,
+     * modelo que sempre manda zerado), devolve 0 — sem fallback para GPS.
+     * `mileage` só cresce: delta negativo (reset do sensor) também vira 0.
+     *
+     * @param string $imei
+     * @param mixed  $mileage Leitura crua (metros) deste ponto
+     * @param string $gpsTime Timestamp deste ponto (UTC)
+     * @returns float Km percorridos desde o ponto anterior válido, ou 0
+     */
+    private function calculateDistance($imei, $mileage, $gpsTime) {
         try {
+            $mileage = (float)$mileage;
+            if ($mileage <= 0) return 0;
+
             $stmt = $this->db->prepare("
-                SELECT last_latitude, last_longitude 
-                FROM device_statistics 
-                WHERE imei = :imei LIMIT 1
+                SELECT mileage FROM gps_data
+                WHERE imei = :imei AND gps_time < :gps_time AND mileage > 0
+                ORDER BY gps_time DESC LIMIT 1
             ");
-            $stmt->execute([':imei' => $imei]);
-            $last = $stmt->fetch();
-            
-            if (!$last || !$last['last_latitude'] || !$last['last_longitude']) return 0;
-            if ($last['last_latitude'] == 0 || $last['last_longitude'] == 0) return 0;
-            
-            $distKm = calculate_distance(
-                $last['last_latitude'], $last['last_longitude'], $lat, $lon
-            );
-            
-            // Cutoff de 100km: previne que falhas de GPS (ex: coordenadas 0,0 após
-            // reinicialização do dispositivo) contaminem a distância total acumulada.
-            // Nenhum veículo terrestre percorre >100km entre pontos consecutivos
-            // (intervalo típico de 10-30s entre envios GPS).
-            if ($distKm > 100) {
-                Logger::warning('GPS jump detected (distance > 100km)', [
-                    'source' => $this->handlerName,
-                    'imei' => $imei, 'distance_km' => $distKm,
-                    'last_lat' => $last['last_latitude'], 'last_lon' => $last['last_longitude'],
-                    'curr_lat' => $lat, 'curr_lon' => $lon
-                ]);
-                return 0;
-            }
-            
-            return round($distKm, 3);
+            $stmt->execute([':imei' => $imei, ':gps_time' => $gpsTime]);
+            $lastMileage = $stmt->fetchColumn();
+
+            if ($lastMileage === false) return 0;
+
+            $deltaKm = odometer_delta_km($lastMileage, $mileage);
+            return $deltaKm ?? 0;
         } catch (Exception $e) {
             Logger::warning('Distance calculation failed', [
                 'source' => $this->handlerName,

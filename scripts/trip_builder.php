@@ -6,6 +6,14 @@
  * Cron job que segmenta gps_data em viagens (trips) por ignição (lig→desl)
  * para cada device. Cruza com alarms da janela para contagem.
  *
+ * `distance_km` (v4.21.7, pedido do dono do produto) é o hodômetro real do
+ * trecho — leitura final menos inicial de `gps_data.mileage` — NUNCA GPS
+ * (Haversine); NULL quando o equipamento não reporta hodômetro válido nesse
+ * trecho, sem fallback. O filtro de qualidade de isRealTrip() continua em
+ * GPS/velocidade de propósito (gps_distance_km, não persistido) — ver o
+ * comentário de isRealTrip() abaixo. Histórico gravado ANTES desta versão
+ * mantém o valor antigo (Haversine); não houve backfill.
+ *
  * Uso: php scripts/trip_builder.php
  */
 
@@ -72,7 +80,7 @@ foreach ($devices as $dev) {
     // A ignição fica na coluna `acc` de gps_data (pushgps grava acc/accStatus).
     // Aliasamos para `ignition` para manter a lógica de detecção legível.
     $points = $db->prepare("
-        SELECT id, latitude, longitude, speed, gps_time, acc AS ignition, driver_id
+        SELECT id, latitude, longitude, speed, gps_time, acc AS ignition, driver_id, mileage
         FROM gps_data
         WHERE imei = :imei AND gps_time > :from
         ORDER BY gps_time ASC
@@ -192,7 +200,14 @@ function finalizeTrip($db, array $trip, int $endIdx): int {
     $trip['end_lng']     = $last['longitude'];
     $trip['duration_s']  = strtotime($trip['ended_at']) - strtotime($trip['started_at']);
     $trip['max_speed']   = $maxSpeed;
-    $trip['distance_km'] = calcDistance($pts);
+    // Duas distâncias, dois propósitos: gps_distance_km é só o filtro de
+    // qualidade (isRealTrip, abaixo) — nunca exibida. distance_km é o
+    // hodômetro real do trecho (última leitura válida menos a primeira,
+    // ver odometer_delta_from_points() em includes/functions.php); NULL
+    // quando o equipamento não reporta leitura real nesse trecho — nunca
+    // cai para o cálculo por GPS.
+    $trip['gps_distance_km'] = calcDistance($pts);
+    $trip['distance_km']     = odometer_delta_from_points($pts);
     $trip['points']      = $pts;
     $trip['alarm_count'] = countAlarms($db, $trip['imei'], $trip['started_at'], $trip['ended_at']);
     // v4.19.0 — motorista mais frequente (moda) entre os pontos da viagem.
@@ -213,22 +228,30 @@ function finalizeTrip($db, array $trip, int $endIdx): int {
  * segundos, paradas com ignição ligada (ex.: veículo estacionado a noite toda
  * com ACC on) e deriva de GPS.
  *
- * @param array $trip Viagem finalizada (com duration_s, max_speed, distance_km, points)
+ * O filtro continua em GPS/velocidade de propósito (gps_distance_km), não no
+ * hodômetro: equipamento com leitura de hodômetro temporariamente zerada/
+ * inválida não pode deixar de REGISTRAR uma viagem real — só a distância
+ * EXIBIDA (distance_km) depende do hodômetro.
+ *
+ * @param array $trip Viagem finalizada (com duration_s, max_speed, gps_distance_km, points)
  * @return bool true se deve ser persistida
  */
 function isRealTrip(array $trip): bool {
     if (count($trip['points']) < 2) return false;
     if ((int)$trip['duration_s'] < MIN_TRIP_DURATION_S) return false;
     return (float)$trip['max_speed'] >= MIN_TRIP_MAX_SPEED
-        || (float)$trip['distance_km'] >= MIN_TRIP_DISTANCE_KM;
+        || (float)$trip['gps_distance_km'] >= MIN_TRIP_DISTANCE_KM;
 }
 
 /**
- * Soma a distância entre pontos consecutivos da viagem.
+ * Soma a distância entre pontos consecutivos da viagem (Haversine).
  *
- * A haversine local foi promovida para includes/functions.php como
- * haversine_km() na v4.5.0 — o worker de geocercas usa a mesma medida no
- * teste de raio, e duas cópias divergiriam com o tempo.
+ * Usada SÓ para o filtro de qualidade de isRealTrip() (v4.21.7) — a
+ * distância exibida/persistida em trips.distance_km é o hodômetro real
+ * (odometer_delta_from_points(), includes/functions.php). A haversine local
+ * foi promovida para includes/functions.php como haversine_km() na v4.5.0 —
+ * o worker de geocercas usa a mesma medida no teste de raio, e duas cópias
+ * divergiriam com o tempo.
  *
  * @param array $points Pontos ordenados por gps_time
  * @returns float Distância em km, com 2 casas

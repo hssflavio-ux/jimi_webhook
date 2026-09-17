@@ -648,10 +648,18 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
             // real só existe na tela /relatorios/deslocamento/rota, que exige
             // login — e o OSM público não desenha trajeto a partir de URL. Ver
             // a nota em handlers/rel_deslocamento.php.
+            //
+            // Distância = hodômetro real do trecho (v4.21.7), pela mesma
+            // subquery ao vivo de handlers/rel_deslocamento.php — nunca
+            // t.distance_km (congelado no valor por GPS para viagens
+            // gravadas antes desta versão; sem backfill).
             $stmt = $db->prepare("
-                SELECT t.started_at, t.ended_at, t.duration_s, t.distance_km, t.max_speed, t.alarm_count,
+                SELECT t.started_at, t.ended_at, t.duration_s, t.max_speed, t.alarm_count,
                        t.start_addr, t.end_addr, t.start_lat, t.start_lng, t.end_lat, t.end_lng,
-                       COALESCE(d.device_name, t.imei) AS device_label
+                       COALESCE(d.device_name, t.imei) AS device_label,
+                       (SELECT MAX(g.mileage) - MIN(g.mileage) FROM gps_data g
+                        WHERE g.imei = t.imei AND g.gps_time BETWEEN t.started_at AND t.ended_at
+                          AND g.mileage > 0) AS hod_delta
                 FROM trips t
                 LEFT JOIN devices d ON d.imei = t.imei
                 WHERE t.customer_id = :cid AND t.started_at BETWEEN :df AND :dt
@@ -665,7 +673,7 @@ function buildReportSource($db, string $type, $cid, string $from, string $to): ?
                 function($r) {
                     $duration = $r['duration_s'] ? gmdate('H:i:s', $r['duration_s']) : '';
                     return [$r['device_label'], fmt_brt($r['started_at']), $r['ended_at'] ? fmt_brt($r['ended_at']) : '', $duration,
-                            $r['distance_km'] ?? '', $r['max_speed'] ?? '', $r['alarm_count'],
+                            odometer_km($r['hod_delta']) ?? '', $r['max_speed'] ?? '', $r['alarm_count'],
                             $r['start_addr'] ?? '', $r['end_addr'] ?? '',
                             export_map_link($r['start_lat'], $r['start_lng'], 'PARTIDA'),
                             export_map_link($r['end_lat'], $r['end_lng'], 'CHEGADA')];

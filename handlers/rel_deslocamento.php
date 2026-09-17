@@ -14,13 +14,26 @@
  * levam no lugar dois links de OSM (partida e chegada), que abrem para quem
  * recebeu o arquivo sem ter conta no sistema.
  *
- * Hodômetro (leitura real do sensor, gps_data.mileage) e Horímetro (tempo de
- * ignição ligada, CALCULADO — soma de device_state_segments, nunca o
- * hardware do equipamento) nas duas modalidades, com totalizador de período
- * inteiro no rodapé (não só a página atual) — ver
- * ignition_seconds_in_window()/odometer_km() em includes/functions.php e os
- * helpers desloc_*() logo abaixo. Hodômetro sai "—" para os equipamentos que
- * não populam leitura real (ver memória hodometro-bateria-medicao-producao).
+ * Distância, Hodômetro (os dois lidos do sensor real, gps_data.mileage — v4.21.7,
+ * pedido do dono do produto: todo cálculo de deslocamento passou a se basear
+ * no hodômetro, nunca em GPS) e Horímetro (tempo de ignição ligada,
+ * CALCULADO — soma de device_state_segments, nunca o hardware do
+ * equipamento) nas duas modalidades, com totalizador de período inteiro no
+ * rodapé (não só a página atual) — ver ignition_seconds_in_window()/
+ * odometer_km()/odometer_delta_km() em includes/functions.php e os helpers
+ * desloc_*() logo abaixo.
+ *
+ * Distância = hodômetro final menos hodômetro inicial do trecho (viagem ou
+ * dia) — MAX(mileage)-MIN(mileage) na janela, `desloc_*_by_day()`/
+ * `$hodDeltaSubquery` abaixo. Hodômetro = leitura ABSOLUTA do contador no FIM
+ * do trecho — MAX(mileage) sozinho, `desloc_odometer_end_by_day()`/
+ * `$hodEndSubquery`. As duas saem "—" para equipamentos que não populam
+ * leitura real (ver memória hodometro-bateria-medicao-producao) — SEM cair
+ * para cálculo por GPS. `trips.distance_km`/`device_state_segments.distance_km`
+ * gravados ANTES desta versão continuam com o valor antigo (Haversine, não
+ * hodômetro); esta tela nunca lê essas colunas para Distância/Hodômetro —
+ * sempre recalcula ao vivo a partir de gps_data.mileage, então isso não
+ * afeta o que é exibido aqui, nem para viagem antiga nem nova.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -169,6 +182,40 @@ function desloc_odometer_by_day(PDO $db, array $imeis, string $utcFrom, string $
 }
 
 /**
+ * Leitura ABSOLUTA do hodômetro ao FIM de cada (imei, dia BRT) — a maior
+ * `mileage` válida (>0) do dia, para a coluna "Hodômetro" (v4.21.7: deixou
+ * de mostrar o delta — que virou a coluna "Distância" — e passou a mostrar
+ * o valor real do contador no fim do trecho). Mesma janela e mesmo filtro
+ * de `desloc_odometer_by_day()`, uma segunda agregação sobre a MESMA
+ * consulta seria mais barata, mas manter as duas funções espelhadas evita
+ * amarrar quem lê uma a saber que a outra existe.
+ *
+ * @param PDO    $db
+ * @param array  $imeis   IMEIs já escopados (de trips, nunca um JOIN novo)
+ * @param string $utcFrom
+ * @param string $utcTo
+ * @returns array<string,mixed> chave "IMEI|YYYY-MM-DD" => leitura bruta (metros), só dias com leitura válida
+ */
+function desloc_odometer_end_by_day(PDO $db, array $imeis, string $utcFrom, string $utcTo): array
+{
+    if (!$imeis) return [];
+    $ph = implode(',', array_fill(0, count($imeis), '?'));
+    $stmt = $db->prepare("
+        SELECT imei, DATE(CONVERT_TZ(gps_time, '+00:00', '-03:00')) AS dia,
+               MAX(mileage) AS hod_end
+        FROM gps_data
+        WHERE imei IN ($ph) AND gps_time BETWEEN ? AND ? AND mileage > 0
+        GROUP BY imei, dia
+    ");
+    $stmt->execute(array_merge($imeis, [$utcFrom, $utcTo]));
+    $out = [];
+    foreach ($stmt->fetchAll() as $r) {
+        $out[$r['imei'] . '|' . $r['dia']] = $r['hod_end'];
+    }
+    return $out;
+}
+
+/**
  * Janela UTC [início, fim) de um dia BRT — fim EXCLUSIVO (início do dia
  * seguinte), para casar com o contrato de `ignition_seconds_in_window()`.
  *
@@ -228,6 +275,7 @@ if ($generated) {
     $scopedImeis = [];
     $stateSegs = [];
     $hodByDay = [];
+    $hodEndByDay = [];
     try {
         $imeisStmt = $db->prepare("SELECT DISTINCT t.imei FROM trips t $where");
         $imeisStmt->execute($params);
@@ -235,6 +283,7 @@ if ($generated) {
         $segsUntil = date('Y-m-d H:i:s', strtotime($utcTo) + 86400);
         $stateSegs = desloc_state_segments($db, $scopedImeis, $utcFrom, $segsUntil);
         $hodByDay = $mode === 'diario' ? desloc_odometer_by_day($db, $scopedImeis, $utcFrom, $utcTo) : [];
+        $hodEndByDay = $mode === 'diario' ? desloc_odometer_end_by_day($db, $scopedImeis, $utcFrom, $utcTo) : [];
     } catch (Exception $e) { /* tabela trips ausente → Hodômetro/Horímetro saem "—" */ }
 
     // Precisa de SYNC_EXPORT_MAX_ROWS mesmo fora do export: o totalizador do
@@ -252,12 +301,25 @@ if ($generated) {
         WHERE g.imei = t.imei AND g.gps_time BETWEEN t.started_at AND t.ended_at
           AND g.mileage > 0) AS hod_delta";
 
+    // Leitura ABSOLUTA do hodômetro ao fim da viagem — coluna "Hodômetro"
+    // (v4.21.7). Mesma janela e mesmo filtro de $hodDeltaSubquery ("Distância"),
+    // só troca MAX-MIN por MAX sozinho.
+    $hodEndSubquery = "(SELECT MAX(g.mileage) FROM gps_data g
+        WHERE g.imei = t.imei AND g.gps_time BETWEEN t.started_at AND t.ended_at
+          AND g.mileage > 0) AS hod_end";
+
     // Totais do período INTEIRO (não só a página atual): rodam sobre a MESMA
     // consulta sem paginação usada pelo export (teto de SYNC_EXPORT_MAX_ROWS)
     // — corrida uma vez, reaproveitada pelos dois, para o rodapé nunca
     // discordar do arquivo exportado.
+    //
+    // $totHodKm/$hodTemDado são o total de "Distância" (soma dos deltas de
+    // hodômetro do período) — não existe total de "Hodômetro" (leitura
+    // ABSOLUTA): somar leituras de contador de viagens/dias diferentes não
+    // tem significado, por isso a célula do rodapé daquela coluna é sempre
+    // "—", igual a Vel. Máx.
     $allRows = [];
-    $totDistance = 0.0; $totAlarms = 0; $totViagens = 0; $totMovimentoS = 0;
+    $totAlarms = 0; $totViagens = 0; $totMovimentoS = 0;
     $totHorimetroS = 0; $totHodKm = 0.0; $hodTemDado = false;
     try {
         if ($mode === 'diario') {
@@ -267,7 +329,6 @@ if ($generated) {
             $allStmt->execute($params);
             $allRows = $allStmt->fetchAll();
             foreach ($allRows as $r) {
-                $totDistance   += (float)($r['distance_km'] ?? 0);
                 $totAlarms     += (int)($r['alarm_count'] ?? 0);
                 $totViagens    += (int)($r['viagens'] ?? 0);
                 $totMovimentoS += (int)($r['movimento_s'] ?? 0);
@@ -280,7 +341,8 @@ if ($generated) {
             $allStmt = $db->prepare("
                 SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
                        COALESCE(dr.name, '—') as driver_name,
-                       $hodDeltaSubquery
+                       $hodDeltaSubquery,
+                       $hodEndSubquery
                 FROM trips t
                 LEFT JOIN devices d ON d.imei = t.imei
                 LEFT JOIN drivers dr ON dr.id = t.driver_id
@@ -290,7 +352,6 @@ if ($generated) {
             $allStmt->execute($params);
             $allRows = $allStmt->fetchAll();
             foreach ($allRows as $r) {
-                $totDistance   += (float)($r['distance_km'] ?? 0);
                 $totAlarms     += (int)($r['alarm_count'] ?? 0);
                 $totHorimetroS += ignition_seconds_in_window($stateSegs, $r['imei'], $r['started_at'], $r['ended_at']);
                 if ($r['hod_delta'] !== null) { $totHodKm += odometer_km($r['hod_delta']); $hodTemDado = true; }
@@ -308,7 +369,8 @@ if ($generated) {
             foreach ($allRows as $r) {
                 [$dayFrom, $dayUntil] = desloc_brt_day_bounds_utc($r['dia']);
                 $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $dayFrom, $dayUntil);
-                $hodRaw = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                $hodDelta = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                $hodEnd   = $hodEndByDay[$r['imei'] . '|' . $r['dia']] ?? null;
                 $expRows[] = [
                     fmt_brt($r['primeira_on'], 'd/m/Y'),
                     $r['device_name'],
@@ -317,8 +379,8 @@ if ($generated) {
                     fmt_duration((int)($r['jornada_s'] ?? 0)),
                     fmt_duration($horimetroS),
                     fmt_duration((int)($r['movimento_s'] ?? 0)),
-                    $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
-                    $hodRaw !== null ? number_format(odometer_km($hodRaw), 1, ',', '.') : '—',
+                    $hodDelta !== null ? number_format(odometer_km($hodDelta), 1, ',', '.') : '—',
+                    $hodEnd !== null ? number_format(odometer_km($hodEnd), 1, ',', '.') : '—',
                     $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
                     (int)($r['alarm_count'] ?? 0),
                     (int)$r['viagens'],
@@ -326,9 +388,9 @@ if ($generated) {
             }
             if (!empty($expRows)) {
                 $expRows[] = ['TOTAL DO PERÍODO', '', '', '', '—', fmt_duration($totHorimetroS),
-                    fmt_duration($totMovimentoS), number_format($totDistance, 1),
+                    fmt_duration($totMovimentoS),
                     $hodTemDado ? number_format($totHodKm, 1, ',', '.') : '—',
-                    '—', $totAlarms, $totViagens];
+                    '—', '—', $totAlarms, $totViagens];
             }
             stream_export($export, 'relatorio_deslocamento_diario',
                 ['Dia', 'Placa', 'Primeira Ignição', 'Última Ignição', 'Jornada', 'Horímetro', 'Em Movimento', 'Distância (km)', 'Hodômetro (km)', 'Vel. Máx (km/h)', 'Alarmes', 'Viagens'],
@@ -348,8 +410,8 @@ if ($generated) {
                     fmt_duration((int)($r['duration_s'] ?? 0)),
                     fmt_duration($horimetroS),
                     $r['max_speed'] ? number_format((float)$r['max_speed'], 1) : '—',
-                    $r['distance_km'] ? number_format((float)$r['distance_km'], 1) : '—',
                     $r['hod_delta'] !== null ? number_format(odometer_km($r['hod_delta']), 1, ',', '.') : '—',
+                    $r['hod_end'] !== null ? number_format(odometer_km($r['hod_end']), 1, ',', '.') : '—',
                     (int)($r['alarm_count'] ?? 0),
                     // Dois PONTOS no OSM no lugar da antiga coluna "Rota"
                     // (v4.9.0). Aquela apontava para /relatorios/deslocamento/rota,
@@ -367,9 +429,9 @@ if ($generated) {
             }
             if (!empty($expRows)) {
                 $expRows[] = ['TOTAL DO PERÍODO', '', '', '', '—', fmt_duration($totHorimetroS),
-                    '—', number_format($totDistance, 1),
+                    '—',
                     $hodTemDado ? number_format($totHodKm, 1, ',', '.') : '—',
-                    $totAlarms, '', ''];
+                    '—', $totAlarms, '', ''];
             }
             stream_export($export, 'relatorio_deslocamento',
                 ['Placa', 'Motorista', 'Início', 'Término', 'Duração', 'Horímetro', 'Vel. Máx (km/h)', 'Distância (km)', 'Hodômetro (km)', 'Alarmes', 'Mapa (partida)', 'Mapa (chegada)'],
@@ -400,7 +462,8 @@ if ($generated) {
             $stmt = $db->prepare("
                 SELECT t.*, COALESCE(d.device_name, t.imei) as device_name,
                        COALESCE(dr.name, '—') as driver_name,
-                       $hodDeltaSubquery
+                       $hodDeltaSubquery,
+                       $hodEndSubquery
                 FROM trips t
                 LEFT JOIN devices d ON d.imei = t.imei
                 LEFT JOIN drivers dr ON dr.id = t.driver_id
@@ -563,7 +626,8 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 $offFmt = $r['ultima_off'] && fmt_brt($r['ultima_off'], 'd/m/Y') !== $diaBrt ? 'd/m H:i' : 'H:i';
                 [$dayFrom, $dayUntil] = desloc_brt_day_bounds_utc($r['dia']);
                 $horimetroS = ignition_seconds_in_window($stateSegs, $r['imei'], $dayFrom, $dayUntil);
-                $hodRaw = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                $hodDelta = $hodByDay[$r['imei'] . '|' . $r['dia']] ?? null;
+                $hodEnd   = $hodEndByDay[$r['imei'] . '|' . $r['dia']] ?? null;
             ?>
             <tr>
                 <td class="text-mono"><?= $diaBrt ?></td>
@@ -573,8 +637,8 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono"><?= fmt_duration((int)($r['jornada_s'] ?? 0)) ?></td>
                 <td class="text-mono"><?= fmt_duration($horimetroS) ?></td>
                 <td class="text-mono"><?= fmt_duration((int)($r['movimento_s'] ?? 0)) ?></td>
-                <td class="text-mono"><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
-                <td class="text-mono"><?= $hodRaw !== null ? number_format(odometer_km($hodRaw), 1, ',', '.') . ' km' : '—' ?></td>
+                <td class="text-mono"><?= $hodDelta !== null ? number_format(odometer_km($hodDelta), 1, ',', '.') . ' km' : '—' ?></td>
+                <td class="text-mono"><?= $hodEnd !== null ? number_format(odometer_km($hodEnd), 1, ',', '.') . ' km' : '—' ?></td>
                 <td class="text-mono"><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
                 <td class="text-mono"><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td class="text-mono"><?= (int)$r['viagens'] ?></td>
@@ -593,8 +657,8 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono"><?= fmt_duration((int)($r['duration_s'] ?? 0)) ?></td>
                 <td class="text-mono"><?= fmt_duration($horimetroS) ?></td>
                 <td class="text-mono"><?= $r['max_speed'] ? number_format((float)$r['max_speed'], 1) . ' km/h' : '—' ?></td>
-                <td class="text-mono"><?= $r['distance_km'] ? number_format((float)$r['distance_km'], 1) . ' km' : '—' ?></td>
                 <td class="text-mono"><?= $r['hod_delta'] !== null ? number_format(odometer_km($r['hod_delta']), 1, ',', '.') . ' km' : '—' ?></td>
+                <td class="text-mono"><?= $r['hod_end'] !== null ? number_format(odometer_km($r['hod_end']), 1, ',', '.') . ' km' : '—' ?></td>
                 <td class="text-mono"><?= (int)($r['alarm_count'] ?? 0) ?></td>
                 <td>
                     <a href="/relatorios/deslocamento/rota?trip_id=<?= (int)$r['id'] ?><?= $drillCust ?>&return=<?= $returnTo ?>" class="btn btn-outline btn-sm">Ver rota</a>
@@ -611,8 +675,8 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono" style="font-weight:600;">—</td>
                 <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totMovimentoS) ?></td>
-                <td class="text-mono" style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
                 <td class="text-mono" style="font-weight:600;">—</td>
                 <td class="text-mono" style="font-weight:600;"><?= $totAlarms ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= $totViagens ?></td>
@@ -624,8 +688,8 @@ $drillCust = ($scopeCust !== null && $filterCust !== null && $filterCust !== '')
                 <td class="text-mono" style="font-weight:600;">—</td>
                 <td class="text-mono" style="font-weight:600;"><?= fmt_duration($totHorimetroS) ?></td>
                 <td class="text-mono" style="font-weight:600;">—</td>
-                <td class="text-mono" style="font-weight:600;"><?= $totDistance ? number_format($totDistance, 1) . ' km' : '—' ?></td>
                 <td class="text-mono" style="font-weight:600;"><?= $hodTemDado ? number_format($totHodKm, 1, ',', '.') . ' km' : '—' ?></td>
+                <td class="text-mono" style="font-weight:600;">—</td>
                 <td class="text-mono" style="font-weight:600;"><?= $totAlarms ?></td>
                 <td></td>
             </tr>
