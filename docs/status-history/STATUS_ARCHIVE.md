@@ -2,6 +2,40 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 16/09/2026 (depois do horímetro) — gps_data.status_bits: campo `status` do pushgps nunca era gravado (v4.21.5)
+>
+> Pedido do dono do produto: conferir se `postMethod` e `status` (documentados em §1.3 Push GPS
+> Data da doc oficial) estavam sendo parseados/gravados pelo `pushgps.php`; se não, implementar.
+>
+> **`postMethod` já estava** — `post_method`, desde a reescrita v2.0.0 do handler. Confirmado
+> contra a doc oficial (fetch direto de `docs.jimicloud.com`, não memória): a tabela publicada só
+> cobre `0x00`–`0x0F` (16 valores, todos com descrição), então os `27`/`28` medidos em produção
+> (achado já registrado no CHANGELOG v4.17.11) continuam genuinamente sem legenda oficial — nada
+> novo para corrigir aí, só a confirmação de que a investigação anterior estava certa.
+>
+> **`status` NUNCA foi extraído.** É um bitmask de 32 bits — a doc tem tabela completa (ACC,
+> fixação de posição, hemisfério lat/lng, operação/fora de serviço, criptografia, carga, circuito
+> de óleo/elétrico desconectado, 5 portas individuais + trava, satélites GPS/BeiDou/GLONASS/
+> Galileo usados) — mas só sobrevivia dentro de `raw_data` quando o device mandava a chave, sem
+> coluna própria, sem índice, invisível pra qualquer relatório.
+>
+> ⚠️ **Achado no caminho**: existe uma coluna `gps_data.status` desde o schema original —
+> `VARCHAR(50) DEFAULT 'VALID'` — mas grep confirmou ZERO leituras dela em código nenhum. Não é o
+> campo documentado (tipo errado pra um bitmask, default sem relação com a doc); é legado
+> congelado, mesma classe do `devices.device_name` pré-v4.11.0. Não reaproveitado — column nova.
+>
+> **Entregue**: migração `v4.21.5` — `gps_data.status_bits` (`INT UNSIGNED`), gravado CRU, sem
+> decodificar bit a bit — mesmo padrão já usado para `device_status_code` (gravado desde sempre,
+> nunca lido/decodificado em código nenhum até hoje). A tabela completa dos 32 bits está
+> documentada no cabeçalho da migração; decodificar em coluna/tela própria fica para quando algum
+> relatório precisar de um bit específico — fora do escopo desta verificação.
+>
+> **Verificação**: `php -l` limpo; `tests/helpers/migracoes_no_deploy.test.php` confirma a
+> migração registrada em `scripts/deploy.sh` (guarda exatamente essa classe de esquecimento);
+> todos os helpers sem banco continuam passando. **Sem MySQL nesta sessão — migração não aplicada
+> nem exercitada contra banco real.** Precisa do segundo deploy (regra do CLAUDE.md) e conferência
+> em homolog/produção antes de considerar `status_bits` confiável.
+
 > ### 📍 16/09/2026 (depois das fontes) — Horímetro: TypeError não capturado em viagem em curso (v4.21.4)
 >
 > Pedido do dono do produto: verificar se o horímetro calculado (v4.21.1) funciona como contador

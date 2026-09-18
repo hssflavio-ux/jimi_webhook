@@ -469,7 +469,7 @@ function rb_process_day(PDO $db, int $vehicleId, string $date, array $catalog, a
         $level  = rb_level_for($db, (int)$a['customer_id'], $cat, $ctx);
         $valid  = is_valid_coordinate($a['latitude'], $a['longitude']);
         [$cy, $cx] = $valid ? risk_cell((float)$a['latitude'], (float)$a['longitude']) : [null, null];
-        $speed  = rb_alarm_speed($a);
+        $speed  = alarm_speed_kmh($a);
         $cont   = $walk['alert_continuous'][$id] ?? null;
         $driver = rb_driver_for($drivers, $a['driver_id'], (int)$a['customer_id']);
 
@@ -564,24 +564,6 @@ function rb_catalog_row(array $catalog, array $alarm): ?array
         }
     }
     return $catalog["{$protocol}|{$alarm['alarm_type']}"] ?? null;
-}
-
-/**
- * Velocidade no alerta. O JT/T tem duas colunas (`speed` do GPS e `car_speed`
- * do veículo) e nem sempre preenche as duas: vale a que tiver valor.
- *
- * @param array $alarm
- * @returns float|null
- */
-function rb_alarm_speed(array $alarm): ?float
-{
-    if ($alarm['speed'] !== null && (float)$alarm['speed'] > 0) {
-        return (float)$alarm['speed'];
-    }
-    if ($alarm['car_speed'] !== null) {
-        return (float)$alarm['car_speed'];
-    }
-    return $alarm['speed'] !== null ? (float)$alarm['speed'] : null;
 }
 
 /**

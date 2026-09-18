@@ -109,7 +109,7 @@ if (!empty($_GET['id'])) {
             ['joins' => $evtJoins, 'expr' => $evtExpr] = alarm_label_sql();
             $stmt = $db->prepare(
                 "SELECT e.id as event_id, a.id as alarm_id, {$evtExpr} AS alarm_name, a.alarm_time,
-                        a.latitude, a.longitude, a.speed, a.alert_value, a.msg_class, a.alarm_type,
+                        a.latitude, a.longitude, a.speed, a.car_speed, a.alert_value, a.msg_class, a.alarm_type,
                         a.file_url, a.file_type
                  FROM occurrence_events e
                  JOIN alarms a ON a.id = e.alarm_id
@@ -238,6 +238,31 @@ function occ_overspeed_kmh(array $ev): ?float
     return (float)$valor;
 }
 
+/**
+ * Velocidade a mostrar na coluna "Velocidade"/balão do mapa — para QUALQUER
+ * alarme, não só Excesso de Velocidade. Pedido do dono do produto
+ * (17/09/2026): o device manda `gpsSpeed`/`speed` em qualquer alarme (não só
+ * nos de excesso de velocidade), confirmado em produção contra `raw_data`
+ * real de alarmes DMS/ADAS (`263: Distração` chegou com `gpsSpeed=46`,
+ * `264-3: ADAS Distância Insegura` com `64.2` etc. — 94–99,7% das linhas
+ * reais têm o campo).
+ *
+ * Prioriza `occ_overspeed_kmh()` (o valor exato que disparou o alarme de
+ * excesso de velocidade, já verificado contra a doc oficial) e só cai para
+ * `alarm_speed_kmh()` — o mesmo ponto único que o Mapa de Risco usa
+ * (`includes/functions.php`) — quando o alarme não é de excesso de
+ * velocidade. As duas fontes nunca precisam concordar: só uma delas se
+ * aplica a cada alarme.
+ *
+ * @param array $ev Linha com os campos de occ_overspeed_kmh() + car_speed
+ * @returns float|null km/h, ou null se nada veio (sem fix de GPS, sem CAN)
+ */
+function occ_event_speed_kmh(array $ev): ?float
+{
+    $overspeed = occ_overspeed_kmh($ev);
+    return $overspeed !== null ? $overspeed : alarm_speed_kmh($ev);
+}
+
 // ── Pontos do mapa (localização dos alarmes) ────────────────────
 // Um marcador por alarme com coordenada válida (0,0/NULL = sem fix de GPS
 // no momento do push) — a ocorrência pode agrupar vários alarmes, e cada
@@ -258,7 +283,7 @@ foreach ($detailEvents as $i => $ev) {
         'num'   => $i + 1,
         'name'  => $ev['alarm_name'] ?? 'Alarme',
         'time'  => fmt_brt($ev['alarm_time'], 'd/m/Y H:i:s'),
-        'speed' => occ_overspeed_kmh($ev),
+        'speed' => occ_event_speed_kmh($ev),
     ];
 }
 
@@ -309,7 +334,7 @@ require_once __DIR__ . '/../web/layout_base.php';
                 <table>
                     <thead><tr><th>Nº</th><th>Alarme</th><th>Data/Hora</th><th>Velocidade</th><?php if (!$detailNoVideo): ?><th>Vídeo</th><?php endif; ?></tr></thead>
                     <tbody>
-                    <?php $evNum = 0; foreach ($detailEvents as $ev): $evNum++; $evSpeed = occ_overspeed_kmh($ev); ?>
+                    <?php $evNum = 0; foreach ($detailEvents as $ev): $evNum++; $evSpeed = occ_event_speed_kmh($ev); ?>
                     <tr>
                         <td class="text-mono"><?= $evNum ?></td>
                         <td><?= htmlspecialchars($ev['alarm_name'] ?? '—') ?></td>

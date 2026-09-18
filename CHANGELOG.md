@@ -5,6 +5,18 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.21.8
+
+**Velocidade na tela de tratativa da ocorrência passa a valer para QUALQUER alarme (DMS/ADAS incluídos), não só Excesso de Velocidade — a coluna existia desde a v4.21.6 mas ficava vazia (`—`) em todo o resto.**
+
+Pedido do dono do produto, depois de conferir contra dado real de produção (17/09/2026): `pushalarm.php` já extrai `gpsSpeed`/`speed` de QUALQUER alarme, não só overspeed — `occ_overspeed_kmh()` (v4.21.6) é que só calculava um valor pros 5 códigos de Excesso de Velocidade, retornando `null` pra tudo o mais mesmo com `alarms.speed` preenchido. Medido em produção: dos 1.892 alarmes DMS/ADAS das últimas semanas, 1.868 (98,7%) trazem `speed` > 0 (JT/T 99,7%, JIMI 94%) — o campo vem quase sempre, porque é parte do mesmo fix de GPS que dá lat/lng, não uma extensão exclusiva de overspeed (a doc oficial, §1.4, diz o contrário — mesma classe de erro do `CHECK`/`MILE#`/`FILELIST`, já documentada no `CLAUDE.md`).
+
+- **Adicionado** `alarm_speed_kmh()` (`includes/functions.php`) — ponto único de "velocidade reportada com o alarme" (`speed`, com fallback pra `car_speed`), movido de `scripts/risk_builder.php` (era `rb_alarm_speed()`, só do Mapa de Risco). Mapa de Risco já tratava velocidade como dado válido pra qualquer alarme desde sempre (`speed_band`, gráfico "Índice por velocidade"); a tela de ocorrência é que ainda não usava a mesma fonte — duas cópias da mesma conta é a classe de bug do contador On/Off divergente entre telas.
+- **Adicionado** `occ_event_speed_kmh()` (`handlers/ocorrencias_dashboard.php`): prioriza `occ_overspeed_kmh()` (valor exato do alarme de excesso de velocidade, já verificado contra a doc oficial na v4.21.6, sem mudança) e cai para `alarm_speed_kmh()` em qualquer outro alarme. Substitui as duas chamadas antigas (tabela "Alarmes Agrupados" e balão do mapa) — as duas fontes nunca competem, só uma se aplica por alarme.
+- **Corrigido** SELECT de eventos da ocorrência (`ocorrencias_dashboard.php`) para trazer `a.car_speed`, que faltava.
+- **Não alterado**: `occ_overspeed_kmh()` continua igual — ainda o único caminho pro campo `alert_value` (JIMI), que é multi-uso e só significa velocidade nos 5 códigos de excesso de velocidade.
+- **Verificação**: `php -l` limpo no projeto inteiro; `tests/helpers/alarm_speed.test.php` (novo, 16 checagens) cobre `alarm_speed_kmh()` isolado e confere por leitura de fonte que `risk_builder.php`/`ocorrencias_dashboard.php` usam o ponto único, não cópias; suíte de helpers sem banco rodada por completo, nada quebrou (`risk_map.test.php` 77/77, sem regressão na refatoração do risk_builder). Achado por leitura direta de `alarms.raw_data`/`speed` em produção (script de diagnóstico read-only, removido depois); **sem conferência visual da tela logada nesta sessão**.
+
 ## [Unreleased] — 4.21.7
 
 **Todo cálculo de deslocamento passa a se basear no hodômetro real do equipamento (`gps_data.mileage`), nunca mais em distância calculada por GPS (Haversine) — pedido do dono do produto, que considera falha de configuração (não limitação de modelo) o equipamento que ainda não manda leitura real.**

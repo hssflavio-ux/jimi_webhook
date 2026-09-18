@@ -1412,6 +1412,41 @@ function alarm_category_label(?string $cat): string {
 }
 
 /**
+ * Velocidade reportada junto com um alarme — QUALQUER alarme, não só
+ * excesso de velocidade. O device manda `gpsSpeed`/`speed` no mesmo fix que
+ * dá lat/lng, e `pushalarm.php` grava em `alarms.speed` sem gate por código
+ * (confirmado em produção 17/09/2026: 94–99,7% dos alarmes DMS/ADAS reais
+ * trazem o campo preenchido, JIMI e JT/T). O JT/T tem uma segunda coluna
+ * (`car_speed`, do barramento do veículo) que nem sempre vem junto com
+ * `speed`: vale a que tiver valor.
+ *
+ * Movida de `scripts/risk_builder.php` (era `rb_alarm_speed()`, só para o
+ * Mapa de Risco) para ponto único: a tela de tratativa da ocorrência
+ * (`handlers/ocorrencias_dashboard.php`) precisa exatamente da mesma conta,
+ * e duas cópias da mesma lógica é como a contagem On/Off ficou divergente
+ * entre telas (ver CLAUDE.md).
+ *
+ * Não confundir com `alert_value` (JIMI) — esse campo É multi-uso (carrega
+ * nível de evento em alarmes não relacionados a velocidade, ex. olho
+ * fechado) e só significa velocidade nos códigos de Excesso de Velocidade;
+ * ver `occ_overspeed_kmh()` em `handlers/ocorrencias_dashboard.php`.
+ *
+ * @param array $alarm Linha com speed, car_speed
+ * @returns float|null km/h — 0.0 é dado válido (parado); null só quando
+ *                     nenhum dos dois campos veio
+ */
+function alarm_speed_kmh(array $alarm): ?float
+{
+    if (($alarm['speed'] ?? null) !== null && (float)$alarm['speed'] > 0) {
+        return (float)$alarm['speed'];
+    }
+    if (($alarm['car_speed'] ?? null) !== null) {
+        return (float)$alarm['car_speed'];
+    }
+    return ($alarm['speed'] ?? null) !== null ? (float)$alarm['speed'] : null;
+}
+
+/**
  * Rótulo em pt-BR da SEVERIDADE do alarme.
  *
  * O enum de `alarm_types.severity` é em inglês e é usado em comparação SQL
