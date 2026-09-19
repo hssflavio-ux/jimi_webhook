@@ -12,6 +12,7 @@
 
 require_once __DIR__ . '/../../includes/wiki_registry.php';
 require_once __DIR__ . '/../../includes/wiki_access.php';
+require_once __DIR__ . '/../../includes/wiki_render.php';
 
 $falhas = 0;
 $total  = 0;
@@ -62,6 +63,72 @@ foreach ($reg as $s) {
     if (array_diff($s['actions'], ['create', 'edit', 'delete', 'export'])) $ruins[] = $s['id'] . ':actions';
 }
 checa('toda entrada do registro é válida', [], $ruins);
+
+function texto_normal(string $html): string {
+    $html = preg_replace('/<!--.*?-->/s', '', $html);
+    $html = preg_replace('/<\?php.*?\?>/s', '', $html);
+    return trim(preg_replace('/\s+/', ' ', strip_tags($html)));
+}
+function marcador(string $id): string {
+    $f = __DIR__ . '/../../includes/wiki/sections/' . $id . '.php';
+    return substr(texto_normal((string)file_get_contents($f)), 0, 80);
+}
+
+echo "== vazamento: parcial bloqueado não pode aparecer ==\n";
+$accAdm  = wiki_compute_access($reg, 'admin', $tudo);
+$accBloq = wiki_compute_access($reg, 'cliente', $nada);
+$htmlAdm  = texto_normal(wiki_render_body($reg, $accAdm));
+$htmlBloq = texto_normal(wiki_render_body($reg, $accBloq));
+$marcadores = [];
+foreach ($reg as $s) {
+    if (!empty($s['dynamic'])) continue;
+    $m = marcador($s['id']);
+    $marcadores[$s['id']] = $m;
+    if (!empty($s['hidden'])) {
+        checa("oculta não é renderizada: {$s['id']}", false, strpos($htmlAdm, $m) !== false);
+        continue;
+    }
+    checa("admin vê o conteúdo de {$s['id']}", true, strpos($htmlAdm, $m) !== false);
+    $bloqueavel = $s['screen'] !== null || $s['admin_only'];
+    checa("perfil sem acesso: {$s['id']} " . ($bloqueavel ? 'não vaza' : 'segue visível'),
+        !$bloqueavel, strpos($htmlBloq, $m) !== false);
+}
+checa('marcadores únicos entre parciais', count($marcadores), count(array_unique($marcadores)));
+
+echo "== índice ==\n";
+$toc = wiki_render_toc($reg, $accBloq);
+$semAncora = [];
+foreach ($reg as $s) {
+    if (!empty($s['hidden'])) continue;
+    if (strpos($toc, 'href="#' . $s['id'] . '"') === false) $semAncora[] = $s['id'];
+}
+foreach (array_keys(wiki_groups()) as $g) {
+    if (strpos($toc, 'href="#' . $g . '"') === false) $semAncora[] = $g;
+}
+checa('índice tem toda seção visível e todo grupo', [], $semAncora);
+checa('oculta não aparece no índice', false, strpos($toc, 'href="#parametros"') !== false);
+checa('bloqueada vira link esmaecido', true, strpos($toc, 'class="locked"') !== false);
+checa('liberada não é esmaecida', false, strpos(wiki_render_toc($reg, $accAdm), 'class="locked"') !== false);
+
+echo "== stub e faixa ==\n";
+$htmlBloqCru = wiki_render_body($reg, $accBloq);
+checa('stub traz o motivo do grupo', true, strpos($htmlBloqCru, WIKI_MOTIVO_GRUPO) !== false);
+checa('stub traz o motivo de admin', true, strpos(wiki_render_body($reg, wiki_compute_access($reg, 'cliente', $tudo)), WIKI_MOTIVO_ADMIN) !== false);
+checa('stub mantém a âncora da seção', true, strpos($htmlBloqCru, 'id="rel-posicoes"') !== false);
+$semExport = fn($s, $a = 'view') => $a !== 'export';
+$htmlFaixa = wiki_render_body($reg, wiki_compute_access($reg, 'admin', $semExport));
+checa('faixa lista o que falta', true, strpos($htmlFaixa, 'Não disponível para você: exportar') !== false);
+checa('faixa mostra o recurso restrito', true, strpos($htmlFaixa, 'Descarte em massa') !== false);
+checa('seção sem ações não ganha faixa', false, strpos(wiki_render_body([wiki_sec('intro', 'Visão Geral do Sistema', ['level' => 2])], ['intro' => wiki_access(wiki_sec('intro', 'x'), 'admin', $tudo)]), 'wiki-access') !== false);
+
+echo "== âncoras antigas ==\n";
+$antigas = ['intro','primeiros-passos','resumo','rastreamento','bi','mapa-risco','ocorrencias-dashboard','notificacoes',
+    'videos','video-aovivo','video-playback','video-downloads','relatorios','rel-comum','rel-modelos','rel-posicoes',
+    'rel-deslocamento','rel-desatualizados','rel-alarmes','rel-dirigibilidade','rel-ocorrencias','rel-geocercas',
+    'rel-status-frota','rel-paradas','rel-ociosidade','rel-ignicao','rel-velocidade','agendamentos','cadastros',
+    'ativos','chips','clientes','equipamentos','geocercas','grupos-permissao','motoristas','config-ocorrencias',
+    'config-notificacoes','config-smtp','usuarios','operacoes','comandos','parametros','firmwares','exportar','checklist'];
+checa('nenhuma âncora anterior à v4.22.0 sumiu', [], array_values(array_diff($antigas, array_merge($ids, array_keys(wiki_groups())))));
 
 echo "\n$total verificações, $falhas falha(s)\n";
 exit($falhas > 0 ? 1 : 0);
