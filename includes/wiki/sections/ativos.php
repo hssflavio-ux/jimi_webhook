@@ -61,7 +61,7 @@ O veículo pode ser cadastrado a qualquer momento. A ordem pesa na instalação:
 <table class="tbl-mock">
 <tr><th>Situação do veículo</th><th>O que aparece e o que fazer</th></tr>
 <tr><td>Sem câmera</td><td>Campo <strong>Câmera</strong> com a lista das câmeras livres e o botão <strong>Instalar</strong>. Só entram na lista câmeras do mesmo cliente, ativas, sem instalação em outro veículo e com chip vinculado. Confirma com "Câmera instalada"</td></tr>
-<tr><td>Nenhuma câmera na lista</td><td>Aparece o aviso "Nenhuma câmera livre com chip vinculado". Vá a <a href="#equipamentos" style="color:inherit">Equipamentos</a>: cadastre a câmera com um chip, ou libere uma que esteja instalada em outro veículo</td></tr>
+<tr><td>Nenhuma câmera na lista</td><td>Aparece o aviso "Nenhuma câmera livre com chip vinculado". Cadastre a câmera com um chip em <a href="#equipamentos" style="color:inherit">Equipamentos</a>; se ela estiver em outro veículo, abra a ficha desse veículo e use <strong>Desinstalar</strong></td></tr>
 <tr><td>Com câmera</td><td>Mostra o IMEI e "Instalada desde" a data e hora. O botão <strong>Desinstalar</strong> pede confirmação e confirma com "Câmera desinstalada — livre para outro veículo"</td></tr>
 </table>
 <p>Cada veículo tem <strong>no máximo uma câmera</strong>, e cada câmera está em <strong>no máximo um veículo</strong> por vez. Para trocar a câmera de um veículo, desinstale a atual e depois instale a nova.</p>
