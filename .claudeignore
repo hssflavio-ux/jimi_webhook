@@ -8,6 +8,35 @@
 # Logs de runtime
 logs/
 
+# Estado interno do plugin de memória de sessão (não é conteúdo de memória —
+# now.md/recent.md/archive.md continuam visíveis, só o log bruto e o tmp saem)
+.remember/logs/
+.remember/tmp/
+
 # Dependências (caso apareçam futuramente)
 vendor/
 node_modules/
+
+# Artefatos de testes Playwright (gerados em runtime, não versionados)
+playwright-report/
+test-results/
+
+# Dashboard antigo, arquivado — o próprio CLAUDE.md registra que copiar daqui
+# "por semelhança de forma" sem validar já causou bug (ver VIDEOUPLOAD em
+# CLAUDE.md); não é fonte de verdade para o código atual
+docs/_arquivo_morto/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backups
+*.old
+*.bak
