@@ -39,12 +39,21 @@ jeito que o **handler** responde, não como o menu mostra. Ordem de decisão:
    não libera esta tela; peça ao administrador da sua conta".
 3. Caso contrário → **liberada**.
 
-`admin_only` é copiado do `require_admin()` do topo do handler. Hoje isso vale
-para: Clientes, Usuários, Grupos de Permissão, Perfis de Parâmetros,
-Parâmetros, Firmware, SMS (config), Configurações IA e o relatório de
-Parâmetros. **Auditoria não é admin-only** (liberável por grupo). O menu mostra
-Clientes e Usuários dentro de Cadastros mesmo sendo `require_admin()`; a wiki
-segue o handler.
+`admin_only` é copiado do `require_admin()` que abre o handler (linha que
+começa com `require_admin();`). Medido em 19/09/2026, vale para: Clientes,
+Usuários, Perfis de Parâmetros, Parâmetros, Firmware, SMS (config),
+Configurações IA e o relatório de Parâmetros. **Não são admin-only:** Auditoria
+(liberável por grupo) e **Grupos de Permissão**, que a wiki antiga marcava como
+"admin" mas cujo handler só cita `require_admin()` em comentário — as escritas
+passam por `require_permission('grupos-permissao', …)`, e `can()` é permissivo
+para quem não tem grupo. O menu mostra Clientes e Usuários dentro de Cadastros
+mesmo sendo `require_admin()`; a wiki segue o handler.
+
+> ⚠️ **Achado no caminho, fora do escopo desta entrega:** por essa mesma razão,
+> um usuário não-admin **sem grupo de permissão** consegue abrir
+> `/grupos-permissao` e gravar (criar/editar/excluir grupos). A wiki passa a
+> refletir o que o handler faz; se isso é intencional ou uma lacuna é decisão do
+> dono do produto e vai como pendência no `STATUS.md`, não como correção aqui.
 
 `can()` é permissivo por omissão (usuário sem grupo → sem restrição), então
 usuário sem grupo vê tudo, exceto o que é `admin_only`. O card diz isso.
@@ -60,7 +69,12 @@ Lista ordenada de seções. Campos:
   `summary` (uma linha, usada no stub bloqueado), `order`.
 - `screen` — chave da matriz de permissões (`relatorios`, `ativos`,
   `comandos-sms`…).
+- `handler` — arquivo de `handlers/` que decide o acesso à tela (ex.:
+  `firmwares.php`); é o que permite os testes conferirem `admin_only` contra o
+  código real. Vazio para seções que não são uma tela (Visão Geral, "O que vale
+  para todos os relatórios").
 - `admin_only` — bool, derivado do `require_admin()` real.
+- `dynamic` — bool; a seção não tem parcial, o corpo é gerado (só "Meu acesso").
 - `actions` — as ações que a tela de fato exige em `require_permission()`
   (ex.: `['create','edit','delete','export']`), ou `[]` para tela só de leitura.
   A matriz de permissões expõe as mesmas 5 colunas para toda tela e **não**
@@ -146,8 +160,13 @@ PHP puro, sem banco:
 - `tests/helpers/wiki_registry.test.php` — travas contra desatualização:
   1. toda chave de `$screens` (`grupos_permissao.php`) tem seção, ou consta
      numa lista de exceções com o motivo escrito;
-  2. `admin_only` ↔ `require_admin()` no topo do handler, nos dois sentidos;
-  3. `actions` ↔ `require_permission('<tela>','<ação>')` no handler;
+  2. `admin_only` ↔ linha `require_admin();` no `handler` da seção, nos dois
+     sentidos (comentário que cita `require_admin()` não conta);
+  3. `actions` ↔ chamadas `require_permission('<tela>', …)` / `can('<tela>', …)`
+     em `handlers/*.php`, comparadas **por tela** (a união das `actions` das
+     seções da tela tem de ser igual ao que os handlers exigem, exceto `view`).
+     Por tela e não por handler porque a permissão pode ser exigida num arquivo
+     irmão (`ativos_novo.php` exige `create` de `ativos`);
   4. âncoras antigas preservadas;
   5. cada seção tem parcial e não há parcial órfão.
 - `php -l` em tudo (espelha a fase VERIFY do `deploy.sh`).
