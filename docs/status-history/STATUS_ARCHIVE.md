@@ -2,6 +2,36 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 16/09/2026 (depois do status_bits) — Velocidade + Nº na tela de tratativa da ocorrência (v4.21.6)
+>
+> Pedido do dono do produto: nos alarmes de Excesso de Velocidade o equipamento manda o valor da
+> velocidade (campo distinto por protocolo), mas a tela de tratativa da ocorrência não mostrava
+> esse valor nem na tabela "Alarmes Agrupados" nem no balão do mapa. Pediu também uma coluna "Nº"
+> na tabela, igual ao "Alarme N de Y" que o mapa já mostra.
+>
+> Confirmado contra a doc oficial (§1.4 Push Alarm Data): JIMI (`msg_class=0`) manda a velocidade
+> em `alertValue` ("For overspeed alarm: speed value") — já gravado em `alarms.alert_value`; JT/T
+> (`msg_class=1`) manda em `gpsSpeed` ("Only exist when reporting overspeed alerts") — já gravado
+> em `alarms.speed`. `pushalarm.php` já extraía os dois; só faltava exibir.
+>
+> **Entregue**: `occ_overspeed_kmh()` (`handlers/ocorrencias_dashboard.php`) resolve o campo certo
+> por protocolo, só para os códigos de Excesso de Velocidade (JIMI `6`/`135`/`202`/`95`, JT/T
+> `1027` — mesma lista de `migration_v4.21.0.sql`). Gate por código obrigatório: `alertValue` é
+> multi-uso (também carrega nível de evento de outros alarmes) — sem o gate, mostraria um valor de
+> outro alarme rotulado como "Velocidade". Colunas "Nº" e "Velocidade" na tabela; linha
+> "Velocidade: X km/h" no balão, só quando aplicável.
+>
+> 🔴 **Achado no caminho, corrigido**: a numeração do mapa ("Alarme N de Y") vinha da posição
+> dentro do array já FILTRADO por GPS válido — um alarme sem fix de GPS (sem balão) deslocava a
+> numeração dos seguintes, discordando da contagem "alarmes agrupados" do painel e da nova coluna
+> "Nº" da tabela. Corrigido calculando pela posição no grupo INTEIRO, mesmo número nos dois lugares.
+>
+> **Verificação**: `php -l` limpo; lógica de `occ_overspeed_kmh()` verificada isolada (10 casos:
+> os 5 códigos, `msg_class` como int/string, valor ausente, alarme fora da lista) fora da app, sem
+> banco. Layout conferido visualmente no Chrome com fixture estática (CSS real de
+> `layout_base.php`): tabela de 5 colunas cabe na coluna estreita sem cramming. **Sem banco real
+> nesta sessão** — não exercitado com ocorrência de verdade nem no navegador logado.
+
 > ### 📍 16/09/2026 (depois do horímetro) — gps_data.status_bits: campo `status` do pushgps nunca era gravado (v4.21.5)
 >
 > Pedido do dono do produto: conferir se `postMethod` e `status` (documentados em §1.3 Push GPS

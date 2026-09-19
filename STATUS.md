@@ -1,4 +1,31 @@
-# STATUS.md — Jimi Webhook System v4.21.8 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.22.0 (YUV Parity)
+
+> ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
+>
+> `/wiki` deixou de ser um HTML escrito à mão (parou em 14/08/2026, sem nada que a ligasse ao resto):
+> agora é gerada de um **registro** (`includes/wiki_registry.php`, 42 seções, um parcial por seção em
+> `includes/wiki/sections/`) e de um **resolvedor de acesso** (`includes/wiki_access.php`) que decide
+> como o handler decide (`require_admin()` + `can()`). Seção sem acesso vira stub bloqueado com o
+> motivo; as demais ganham a faixa "Seu acesso". Renderizador **falha fechado** (seção fora do mapa
+> de acesso = bloqueada). Travas: `tests/helpers/wiki_access.test.php` (110/110),
+> `tests/helpers/wiki_registry.test.php` (10/10 — matriz `$screens` ↔ registro, `admin_only` ↔
+> `require_admin();`, `actions` ↔ `require_permission()`/`can()`, só `parametros` oculto) e
+> `tests/wiki.spec.js` (âncoras do índice). Regra de processo: tela nova entra em **TRÊS** lugares
+> (router, matriz e registro da wiki) — `CLAUDE.md`. Badge "admin" agora vem do handler: Grupos de
+> Permissão, Config. Ocorrências/Notificações e Servidor de E-mail deixam de exibi-lo.
+>
+> 🔴 **Pendência (decisão do dono do produto, NÃO corrigida aqui):** `/grupos-permissao` **não exige
+> admin** — usuário não-admin sem grupo de permissão consegue criar/editar/excluir grupos (achado
+> 19/09/2026, ao montar o registro; o teste de `admin_only` só confere a wiki contra o handler).
+>
+> ⚠️ **Verificação em navegador NÃO feita** (sem MySQL/`.env` local; Playwright não rodou): conferir
+> `/wiki` em homolog após o deploy — perfil admin, perfil com grupo restrito e usuário sem grupo.
+>
+> **Decisão em aberto:** o índice lateral agora mostra o título COMPLETO das seções ("BI — Business
+> Intelligence", "O que vale para todos os relatórios") em vez dos rótulos curtos de antes. Um campo
+> de rótulo curto no registro resolveria isso e também os atalhos ambíguos dos cards previstos para
+> a v4.23.0 (ex.: "Ao Vivo"). **Parâmetros** continua oculto na wiki porque o menu o esconde desde a
+> v4.13.10.
 
 > ### 📍 17/09/2026 — Velocidade passa a valer para QUALQUER alarme na tela de tratativa, não só Excesso de Velocidade (v4.21.8)
 >
@@ -86,37 +113,7 @@
 > `state_builder.php` e `pushgps.php` não foram exercitados contra banco. Precisa de conferência em
 > homolog/produção (câmera real, viagem completa) antes do próximo deploy.
 
-> ### 📍 16/09/2026 (depois do status_bits) — Velocidade + Nº na tela de tratativa da ocorrência (v4.21.6)
->
-> Pedido do dono do produto: nos alarmes de Excesso de Velocidade o equipamento manda o valor da
-> velocidade (campo distinto por protocolo), mas a tela de tratativa da ocorrência não mostrava
-> esse valor nem na tabela "Alarmes Agrupados" nem no balão do mapa. Pediu também uma coluna "Nº"
-> na tabela, igual ao "Alarme N de Y" que o mapa já mostra.
->
-> Confirmado contra a doc oficial (§1.4 Push Alarm Data): JIMI (`msg_class=0`) manda a velocidade
-> em `alertValue` ("For overspeed alarm: speed value") — já gravado em `alarms.alert_value`; JT/T
-> (`msg_class=1`) manda em `gpsSpeed` ("Only exist when reporting overspeed alerts") — já gravado
-> em `alarms.speed`. `pushalarm.php` já extraía os dois; só faltava exibir.
->
-> **Entregue**: `occ_overspeed_kmh()` (`handlers/ocorrencias_dashboard.php`) resolve o campo certo
-> por protocolo, só para os códigos de Excesso de Velocidade (JIMI `6`/`135`/`202`/`95`, JT/T
-> `1027` — mesma lista de `migration_v4.21.0.sql`). Gate por código obrigatório: `alertValue` é
-> multi-uso (também carrega nível de evento de outros alarmes) — sem o gate, mostraria um valor de
-> outro alarme rotulado como "Velocidade". Colunas "Nº" e "Velocidade" na tabela; linha
-> "Velocidade: X km/h" no balão, só quando aplicável.
->
-> 🔴 **Achado no caminho, corrigido**: a numeração do mapa ("Alarme N de Y") vinha da posição
-> dentro do array já FILTRADO por GPS válido — um alarme sem fix de GPS (sem balão) deslocava a
-> numeração dos seguintes, discordando da contagem "alarmes agrupados" do painel e da nova coluna
-> "Nº" da tabela. Corrigido calculando pela posição no grupo INTEIRO, mesmo número nos dois lugares.
->
-> **Verificação**: `php -l` limpo; lógica de `occ_overspeed_kmh()` verificada isolada (10 casos:
-> os 5 códigos, `msg_class` como int/string, valor ausente, alarme fora da lista) fora da app, sem
-> banco. Layout conferido visualmente no Chrome com fixture estática (CSS real de
-> `layout_base.php`): tabela de 5 colunas cabe na coluna estreita sem cramming. **Sem banco real
-> nesta sessão** — não exercitado com ocorrência de verdade nem no navegador logado.
-
-> Entradas anteriores a "📍 16/09/2026 (depois do status_bits) — Velocidade + Nº na tela de tratativa da ocorrência" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 16/09/2026 (depois da velocidade) — Todo cálculo de deslocamento passa a usar hodômetro, não GPS" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

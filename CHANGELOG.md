@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.22.0
+
+**A Central de Ajuda (`/wiki`) passa a ser gerada de um registro de seções e a mostrar, a cada usuário, o que o perfil dele pode ou não fazer — e os testes travam o registro contra o código real, para a wiki não parar de novo (parou em 14/08/2026 porque nada a ligava ao resto do sistema).**
+
+- **Adicionado** registro de seções (`includes/wiki_registry.php`, 42 seções) e resolvedor de acesso (`includes/wiki_access.php`), que decide se o usuário abre cada seção e quais ações (criar/editar/excluir/exportar) o perfil dele tem, pela mesma regra que os handlers aplicam (`require_admin()` + `can()` da matriz do grupo de permissão).
+- **Adicionado** renderizador (`includes/wiki_render.php`) e o conteúdo dividido em **um parcial por seção** (`includes/wiki/sections/*.php`, 42 arquivos, todos abertos com a trava `WIKI_SECTION`). Seção que o perfil não pode usar aparece como stub bloqueado, com o motivo, em vez de sumir.
+- **Adicionado** faixa "Seu acesso" nas seções com ações ou recursos restritos, listando o que o perfil pode e o que não pode fazer naquela tela.
+- **Adicionado** índice lateral gerado do registro (`#wikiToc`) e rodapé com a versão do sistema (`SYSTEM_VERSION`).
+- **Adicionado** `tests/helpers/wiki_access.test.php` (110 verificações, sem banco) e `tests/helpers/wiki_registry.test.php` (10 verificações) — este confere o registro contra o código real: toda tela de `$screens` (`handlers/grupos_permissao.php`) tem seção ou exceção escrita; `admin_only` bate com a linha `require_admin();` do handler; as `actions` de cada tela batem com o que os handlers exigem por `require_permission()`/`can()`; a única seção oculta é a que o menu esconde. Mais `tests/wiki.spec.js` (Playwright): todo link do índice tem âncora na página.
+- **Alterado** a wiki agora decide o acesso como o handler decide. O badge "admin" vem do handler (`require_admin();`), não de uma lista à mão: **Grupos de Permissão, Config. Ocorrências, Config. Notificações e Servidor de E-mail deixam de exibi-lo**. **Parâmetros fica oculto** na wiki, como o menu o esconde desde a v4.13.10.
+- **Alterado** o índice lateral mostra o **título completo** das seções (ex.: "BI — Business Intelligence", "O que vale para todos os relatórios") em vez dos rótulos curtos de antes.
+- **Alterado** regra de processo (`CLAUDE.md`): tela nova entra em **TRÊS** lugares — `$screenByHandler`, `$screens` e o registro da wiki.
+- **Segurança/Nota** o renderizador **falha fechado**: seção ausente do mapa de acesso vira bloqueada, nunca liberada. Achado no caminho e **não corrigido** (decisão do dono do produto): `/grupos-permissao` não exige admin — usuário não-admin sem grupo de permissão consegue criar/editar/excluir grupos (registrado em `STATUS.md`).
+- **Verificação**: `php tests/helpers/wiki_access.test.php` (110/110) e `php tests/helpers/wiki_registry.test.php` (10/10); `php -l` limpo no projeto; `node --check tests/wiki.spec.js`. **Sem conferência da tela no navegador nesta sessão** (sem MySQL/`.env` local) e sem execução do Playwright — confirmar `/wiki` em homolog após o deploy.
+
 ## [Unreleased] — 4.21.8
 
 **Velocidade na tela de tratativa da ocorrência passa a valer para QUALQUER alarme (DMS/ADAS incluídos), não só Excesso de Velocidade — a coluna existia desde a v4.21.6 mas ficava vazia (`—`) em todo o resto.**
