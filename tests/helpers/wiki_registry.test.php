@@ -97,12 +97,9 @@ $EXCECOES = [
     'config-dispositivos' => 'aberta pela ficha do veículo (aba Configurações); documentada dentro de Ativos',
     'config-parametros'   => 'fora do menu desde a v4.13.10, junto com Parâmetros',
     // Etapa 2 (v4.22.1) — remover cada linha ao criar a seção:
-    'manutencoes'         => 'PENDENTE etapa 2',
     'comandos-sms'        => 'PENDENTE etapa 2',
-    'painel'              => 'PENDENTE etapa 2',
     'config-sms'          => 'PENDENTE etapa 2',
     'configuracoes-ia'    => 'PENDENTE etapa 2',
-    'auditoria'           => 'PENDENTE etapa 2',
 ];
 $cobertas = array_unique(array_filter(array_column($reg, 'screen')));
 checa('toda tela da matriz tem seção (ou exceção escrita)', [],

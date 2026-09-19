@@ -77,6 +77,10 @@ function wiki_registry(): array {
             'screen' => 'resumo', 'handler' => 'resumo.php',
             'summary' => 'Visão executiva da frota: indicadores, mapa de calor e dispositivos desatualizados.',
         ]),
+        wiki_sec('painel', 'Painel', [
+            'level' => 2, 'sub' => true, 'screen' => 'painel', 'handler' => 'painel.php',
+            'summary' => 'Indicadores e gráficos em blocos (widgets) que você escolhe e reordena para o seu usuário.',
+        ]),
         wiki_sec('rastreamento', 'Rastreamento', [
             'level' => 2, 'sub' => true, 'screen' => 'rastreamento', 'handler' => 'rastreamento.php',
             'summary' => 'Mapa ao vivo com a última posição de todos os veículos da frota.',
@@ -176,6 +180,11 @@ function wiki_registry(): array {
             'actions' => ['create', 'edit', 'delete', 'export'],
             'summary' => 'Cadastro de motoristas com CNH e exame toxicológico.',
         ]),
+        wiki_sec('manutencoes', 'Manutenção', [
+            'group' => 'cadastros', 'screen' => 'manutencoes', 'handler' => 'manutencoes.php',
+            'actions' => ['create', 'edit', 'delete'],
+            'summary' => 'Lembretes de manutenção por odômetro, horas ou data, e aviso de vencimento de CNH e exame toxicológico.',
+        ]),
         wiki_sec('config-ocorrencias', 'Configuração de Ocorrências', [
             'group' => 'cadastros', 'screen' => 'config-ocorrencias', 'handler' => 'config_ocorrencias.php',
             'actions' => ['create', 'edit', 'delete'],
@@ -195,6 +204,11 @@ function wiki_registry(): array {
             'group' => 'cadastros', 'screen' => 'usuarios', 'handler' => 'usuarios.php', 'admin_only' => true,
             'actions' => ['create', 'edit', 'export'],
             'summary' => 'Gestão dos usuários do sistema (da sua empresa e dos seus clientes).',
+        ]),
+        wiki_sec('auditoria', 'Auditoria', [
+            'group' => 'cadastros', 'screen' => 'auditoria', 'handler' => 'auditoria.php',
+            'actions' => ['export'],
+            'summary' => 'Consulta de quem fez o quê no sistema: alterações de cadastro, acessos negados, logins e comandos enviados.',
         ]),
 
         // ── Operações ──
