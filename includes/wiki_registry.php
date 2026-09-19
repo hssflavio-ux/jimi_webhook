@@ -144,7 +144,7 @@ function wiki_registry(): array {
         wiki_sec('ativos', 'Ativos', [
             'group' => 'cadastros', 'screen' => 'ativos', 'handler' => 'ativos.php',
             'actions' => ['create', 'edit', 'delete', 'export'],
-            'summary' => 'Cadastro dos veículos da frota.',
+            'summary' => 'Cadastro dos veículos da frota e da câmera instalada em cada um.',
         ]),
         wiki_sec('chips', 'Chips SIM', [
             'group' => 'cadastros', 'screen' => 'chips', 'handler' => 'chips.php',
