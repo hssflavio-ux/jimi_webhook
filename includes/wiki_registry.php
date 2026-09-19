@@ -59,11 +59,15 @@ function wiki_sec(string $id, string $title, array $o = []): array {
 
 /** @returns array<int,array> Seções na ordem em que aparecem na página. */
 function wiki_registry(): array {
-    // Relatórios: mesma tela ('relatorios'), cada um com seu handler.
-    $rel = fn(string $id, string $title, string $handler, string $summary) => wiki_sec($id, $title, [
-        'group' => 'relatorios', 'screen' => 'relatorios', 'handler' => $handler,
-        'actions' => ['export'], 'summary' => $summary,
-    ]);
+    // Relatórios: mesma tela ('relatorios'), cada um com seu handler. `$actions`
+    // é ['export'] por padrão; Paradas e Ociosidade não têm exportação no
+    // handler, então declaram [] (a faixa "Seu acesso" não pode prometer o que
+    // a tela não oferece).
+    $rel = fn(string $id, string $title, string $handler, string $summary, array $actions = ['export'])
+        => wiki_sec($id, $title, [
+            'group' => 'relatorios', 'screen' => 'relatorios', 'handler' => $handler,
+            'actions' => $actions, 'summary' => $summary,
+        ]);
 
     return [
         wiki_sec('intro', 'Visão Geral do Sistema', ['level' => 2]),
@@ -78,7 +82,7 @@ function wiki_registry(): array {
             'summary' => 'Mapa ao vivo com a última posição de todos os veículos da frota.',
         ]),
         wiki_sec('bi', 'BI — Business Intelligence', [
-            'level' => 2, 'sub' => true, 'screen' => 'bi', 'handler' => 'bi.php', 'actions' => ['export'],
+            'level' => 2, 'sub' => true, 'screen' => 'bi', 'handler' => 'bi.php', 'actions' => [],
             'summary' => 'Análises sob demanda com filtros de cliente, ativos, motoristas, alarmes e período.',
         ]),
         wiki_sec('mapa-risco', 'Mapa de Risco', [
@@ -126,8 +130,8 @@ function wiki_registry(): array {
         ]),
         $rel('rel-geocercas', 'Geocercas', 'rel_geocercas.php', 'Quando cada veículo entrou e saiu das cercas e quanto tempo ficou dentro.'),
         $rel('rel-status-frota', 'Status da Frota', 'rel_status_frota.php', 'Retrato de agora: veículos em movimento, ociosos, parados e sem comunicação.'),
-        $rel('rel-paradas', 'Paradas', 'rel_paradas.php', 'Períodos com a ignição desligada, com início, fim, duração e local.'),
-        $rel('rel-ociosidade', 'Ociosidade', 'rel_ociosidade.php', 'Períodos com o motor ligado e o veículo imóvel.'),
+        $rel('rel-paradas', 'Paradas', 'rel_paradas.php', 'Períodos com a ignição desligada, com início, fim, duração e local.', []),
+        $rel('rel-ociosidade', 'Ociosidade', 'rel_ociosidade.php', 'Períodos com o motor ligado e o veículo imóvel.', []),
         $rel('rel-ignicao', 'Ignição', 'rel_ignicao.php', 'Cada vez que a ignição foi ligada ou desligada e por quanto tempo.'),
         $rel('rel-velocidade', 'Excesso de Velocidade', 'rel_velocidade.php', 'Trechos acima do limite configurado, com velocidade máxima e duração.'),
         wiki_sec('agendamentos', 'Agendamentos', [

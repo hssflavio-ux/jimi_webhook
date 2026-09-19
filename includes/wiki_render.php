@@ -8,6 +8,12 @@
  */
 
 require_once __DIR__ . '/wiki_registry.php';
+require_once __DIR__ . '/wiki_access.php';
+
+/** Acesso padrão quando o mapa não tem a seção: falha FECHADO (bloqueada). */
+function wiki_acesso_padrao(): array {
+    return ['state' => 'bloqueada', 'reason' => WIKI_MOTIVO_GRUPO, 'allowed' => [], 'denied' => []];
+}
 
 function wiki_esc(string $s): string {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
@@ -73,10 +79,10 @@ function wiki_access_strip(array $sec, array $acc): string {
     if (empty($sec['actions']) && empty($sec['extras'])) return '';
     $ok = array_merge(['ver'], array_map('wiki_acao_rotulo', $acc['allowed']));
     $html = '<div class="wiki-access"><span class="wiki-access-label">Seu acesso</span>'
-        . '<span class="wiki-access-ok">Você pode: ' . implode(' · ', $ok) . '</span>';
+        . '<span class="wiki-access-ok">Você pode: ' . wiki_esc(implode(' · ', $ok)) . '</span>';
     if ($acc['denied']) {
         $html .= '<span class="wiki-access-no">Não disponível para você: '
-            . implode(', ', array_map('wiki_acao_rotulo', $acc['denied'])) . '</span>';
+            . wiki_esc(implode(', ', array_map('wiki_acao_rotulo', $acc['denied']))) . '</span>';
     }
     foreach ($sec['extras'] as $extra) {
         $html .= '<span class="wiki-access-extra">' . wiki_esc($extra) . '</span>';
@@ -103,7 +109,7 @@ function wiki_render_toc(array $registry, array $access): string {
             $out .= '<a href="#' . wiki_esc($sec['group']) . '">' . wiki_esc($grupos[$sec['group']]) . "</a>\n";
         }
         $ultimo = $sec['group'];
-        $bloqueada = $access[$sec['id']]['state'] === 'bloqueada';
+        $bloqueada = ($access[$sec['id']] ?? wiki_acesso_padrao())['state'] === 'bloqueada';
         $recuo = ($sec['group'] !== null || !empty($sec['sub']))
             ? ' style="padding-left:20px;font-size:12px"' : '';
         $out .= '<a href="#' . wiki_esc($sec['id']) . '"' . ($bloqueada ? ' class="locked"' : '') . $recuo . '>'
@@ -122,7 +128,7 @@ function wiki_render_body(array $registry, array $access): string {
             $out .= '<h2 id="' . wiki_esc($sec['group']) . '">' . wiki_esc($grupos[$sec['group']]) . "</h2>\n";
         }
         $ultimo = $sec['group'];
-        $acc = $access[$sec['id']];
+        $acc = $access[$sec['id']] ?? wiki_acesso_padrao();
         $bloqueada = $acc['state'] === 'bloqueada';
         $out .= wiki_heading($sec, $bloqueada) . "\n";
         $out .= $bloqueada

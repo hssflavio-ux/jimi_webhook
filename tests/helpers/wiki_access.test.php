@@ -130,5 +130,12 @@ $antigas = ['intro','primeiros-passos','resumo','rastreamento','bi','mapa-risco'
     'config-notificacoes','config-smtp','usuarios','operacoes','comandos','parametros','firmwares','exportar','checklist'];
 checa('nenhuma âncora anterior à v4.22.0 sumiu', [], array_values(array_diff($antigas, array_merge($ids, array_keys(wiki_groups())))));
 
+echo "== mapa de acesso sem a seção: falha FECHADO ==\n";
+// Mapa vazio = nenhuma seção resolvida. Bloquear é o lado seguro: liberar
+// abriria o parcial (e o texto) de uma tela que ninguém decidiu liberar.
+$htmlSemMapa = texto_normal(wiki_render_body($reg, []));
+checa('seção ausente do mapa não vaza o parcial (rel-posicoes)', false, strpos($htmlSemMapa, marcador('rel-posicoes')) !== false);
+checa('seção ausente do mapa vira link com cadeado no índice', true, strpos(wiki_render_toc($reg, []), 'class="locked"') !== false);
+
 echo "\n$total verificações, $falhas falha(s)\n";
 exit($falhas > 0 ? 1 : 0);

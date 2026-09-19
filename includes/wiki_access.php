@@ -43,8 +43,9 @@ function wiki_access(array $sec, string $role, callable $can): array {
 }
 
 /**
- * Resolve o acesso de todas as seções de uma vez (uma consulta por seção, no
- * máximo, e só ao get_user_permissions() que já é cacheado por request).
+ * Resolve o acesso de todas as seções de uma vez. Função pura: não faz consulta
+ * nem lê sessão; só chama o `$can` injetado (em produção, o `can()`, que lê as
+ * permissões já cacheadas por request).
  *
  * @returns array<string,array> id da seção => resultado de wiki_access()
  */
