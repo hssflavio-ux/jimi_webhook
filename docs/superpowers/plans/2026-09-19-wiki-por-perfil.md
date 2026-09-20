@@ -1258,6 +1258,30 @@ wiki_sec('auditoria', 'Auditoria', [
 - [ ] **Step 4: Rodar os dois testes → 0 falhas; confirmar que `actions` do registro batem** (o teste de ações acusa se a tela exigir outra).
 - [ ] **Step 5: Commit** — `docs: wiki - Manutencao, Painel e Auditoria (v4.22.1)`.
 
+### Task 7b: Correções de produto pedidas pelo dono (20/09/2026)
+
+**Origem:** achados de produto das revisões das Tasks 6 e 7. Decisão do dono do produto, verbatim: *"proceda com as correções, quanto ao acesso à auditoria, é exclusivo do administrador do sistema."* Fora do plano original — entra aqui para ficar registrado. Nenhum deploy.
+
+**Escopo (e só ele):** seis correções em código de produto + o ajuste dos textos da wiki que elas tornam falsos. `/grupos-permissao` NÃO entra (segue como pendência no `STATUS.md`).
+
+**Commit 1 — Auditoria exclusiva do administrador**
+- `handlers/auditoria.php`, `auditoria_negados.php`, `auditoria_cadastro.php`, `auditoria_login.php`: linha `require_admin();` (no início da linha, logo após os `require_once` de auth, antes de qualquer saída) — mesmo padrão de `clientes.php`/`usuarios.php`. As chamadas `require_permission('auditoria', …)` existentes ficam.
+- `web/layout_base.php`: tirar o item Auditoria do grupo `cadastros` e pô-lo em `$navBottom` com `'admin_only' => true` (item de GRUPO não respeita `admin_only`; só `$navBottom` respeita — ver comentários existentes sobre Firmware/SMS). Atualizar o comentário v4.15.0 ("grantável por grupo") que deixa de valer.
+- `handlers/grupos_permissao.php` `$screens`: rótulo `'auditoria' => 'Auditoria (só admin)'`, com comentário no mesmo estilo de `firmwares`.
+- `includes/wiki_registry.php`: entrada `auditoria` com `'admin_only' => true`; `includes/wiki/sections/auditoria.php`: o texto deixa de dizer que o acesso é liberável por grupo e passa a dizer que é restrito a administradores.
+- `tests/helpers/wiki_registry.test.php`: acrescentar verificação de que os 3 handlers-irmãos (`auditoria_negados/cadastro/login.php`) também têm a linha `^require_admin();`.
+- Verificar (grep) se algum `tests/*.spec.js` ou doc de teste supõe Auditoria aberta a não-admin e ajustar a expectativa.
+
+**Commit 2 — demais correções**
+- **Manutenção** (`handlers/manutencoes.php`): a "placa" vem de `devices.device_name` (legado congelado desde a v4.11.0) e aparece como "(sem placa)" para toda câmera nova. Passar a mostrar a placa do veículo onde a câmera está instalada agora (`device_installations` com `removed_at IS NULL` → `vehicles.plate`), mantendo o escopo por cliente do arquivo; `device_name` legado só como último recurso, antes de "(sem placa)".
+- **Auditoria, placeholder do filtro de ação** (`handlers/auditoria*.php`): o exemplo "chip.delete" não existe; trocar por um nome de ação real (ler os valores gravados por `audit_log()` nos handlers).
+- **Importação de câmeras em lote** (`handlers/equipamentos.php` ~1013-1016): a mensagem do servidor é descartada e o usuário não vê quais linhas foram ignoradas; mostrar a mensagem no mesmo estilo de alerta que a tela já usa.
+- **Chips, Remover** (`handlers/chips.php` ~22-39): recusar a remoção de chip vinculado a uma câmera, com mensagem no mesmo padrão da guarda de Desativar (citando o IMEI e apontando para Equipamentos).
+- **Chips, "Selecione o cliente"** (`handlers/chips.php` ~66): a mensagem manda selecionar algo que o formulário não tem; corrigir o TEXTO para dizer como o cliente é de fato escolhido (contexto de cliente no topo), sem criar seletor novo.
+- **Wiki:** ajustar em `includes/wiki/sections/` só o que ficou falso: `manutencoes.php` ("(sem placa)"), `equipamentos.php` (ressalva da importação), `chips.php` (Remover agora tem guarda), `auditoria.php` (acima).
+
+**Critérios de aceite:** `php -l` em tudo que mudou; `php tests/helpers/wiki_access.test.php && php tests/helpers/wiki_registry.test.php` com 0 falhas; nenhuma mudança em `CHANGELOG.md`/`STATUS.md`/`.env.example` (a Task 10 registra tudo na v4.22.1). Cada correção de comportamento é descrita no relatório com o arquivo:linha antes/depois. Duas mensagens de commit: `feat: Auditoria exclusiva do administrador (v4.22.1)` e `fix: correcoes de produto - Manutencao, importacao, Chips e placeholder da Auditoria (v4.22.1)`.
+
 ### Task 8: Seções novas de operação — Comandos por SMS, SMS (configuração), Configurações IA
 
 **Files:**

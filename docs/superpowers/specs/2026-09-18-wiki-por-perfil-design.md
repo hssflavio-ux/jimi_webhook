@@ -42,8 +42,10 @@ jeito que o **handler** responde, não como o menu mostra. Ordem de decisão:
 `admin_only` é copiado do `require_admin()` que abre o handler (linha que
 começa com `require_admin();`). Medido em 19/09/2026, vale para: Clientes,
 Usuários, Perfis de Parâmetros, Parâmetros, Firmware, SMS (config),
-Configurações IA e o relatório de Parâmetros. **Não são admin-only:** Auditoria
-(liberável por grupo) e **Grupos de Permissão**, que a wiki antiga marcava como
+Configurações IA, o relatório de Parâmetros e — por decisão do dono do produto
+em 20/09/2026 ("o acesso à auditoria é exclusivo do administrador do sistema") —
+Auditoria (`require_admin()` nos 4 handlers, entregue na Task 7b do plano).
+**Não é admin-only:** **Grupos de Permissão**, que a wiki antiga marcava como
 "admin" mas cujo handler só cita `require_admin()` em comentário — as escritas
 passam por `require_permission('grupos-permissao', …)`, e `can()` é permissivo
 para quem não tem grupo. O menu mostra Clientes e Usuários dentro de Cadastros
