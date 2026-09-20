@@ -27,7 +27,7 @@
 <tr><td>Pedido criado</td><td>Entra na fila com status "pendente" e é processado em até 1 minuto</td></tr>
 <tr><td>Baixar (status "concluído")</td><td>Download do arquivo gerado</td></tr>
 <tr><td>Auto-atualização</td><td>O status dos relatórios se atualiza sozinho na tela</td></tr>
-<tr><td>Tipos disponíveis</td><td>Alarmes, Ocorrências, Posições, Viagens, Equipamentos, Paradas, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota</td></tr>
+<tr><td>Tipos disponíveis</td><td>Alertas Videomonitoramento, Alertas Dirigibilidade, Ocorrências, Posições GPS, Viagens (Deslocamento), Equipamentos, Paradas, Ociosidade, Ignição, Excesso de Velocidade e Status da Frota (foto do agora). Os dois tipos de alertas seguem o mesmo recorte das telas de mesmo nome: condução vai só em Dirigibilidade, e Videomonitoramento não inclui rastreadores nem eventos técnicos de diagnóstico</td></tr>
 <tr><td>Agendados</td><td>A tela também resume os <a href="#agendamentos" style="color:inherit">agendamentos</a> ativos e quando cada um envia da próxima vez</td></tr>
 </table>
 

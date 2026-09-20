@@ -34,7 +34,7 @@
 <table class="tbl-mock">
 <tr><th>Campo</th><th>O que preencher</th></tr>
 <tr><td>Nome</td><td>Como o agendamento aparece na lista e no assunto do e-mail</td></tr>
-<tr><td>Relatório e formato</td><td>Qual relatório enviar, em Excel, CSV ou PDF</td></tr>
+<tr><td>Relatório e formato</td><td>Qual relatório enviar, em Excel, CSV ou PDF. Os tipos são: Alertas Videomonitoramento, Alertas Dirigibilidade, Ocorrências, Posições GPS, Viagens (Deslocamento), Equipamentos, Paradas, Ociosidade, Ignição e Excesso de Velocidade — o Status da Frota não pode ser agendado, porque é uma foto do momento. A distância de Viagens vem do hodômetro do equipamento, como na tela de Deslocamento</td></tr>
 <tr><td>Frequência</td><td><strong>Diária</strong>, <strong>semanal</strong> (com o dia da semana) ou <strong>mensal</strong> (com o dia do mês)</td></tr>
 <tr><td>Hora do envio</td><td>Hora cheia, no <strong>horário de Brasília</strong></td></tr>
 <tr><td>Destinatários</td><td>Até 3 endereços, separados por vírgula</td></tr>
