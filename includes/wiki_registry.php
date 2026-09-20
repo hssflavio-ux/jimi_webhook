@@ -124,7 +124,7 @@ function wiki_registry(): array {
         ]),
         $rel('rel-posicoes', 'Posições', 'rel_posicoes.php', 'Histórico de posições de um ativo em um período, com trajeto no mapa.'),
         $rel('rel-deslocamento', 'Deslocamento', 'rel_deslocamento.php', 'Deslocamentos do veículo com duração, velocidade máxima e distância.'),
-        $rel('rel-desatualizados', 'Desatualizados', 'rel_desatualizados.php', 'Equipamentos que estão há muito tempo sem se comunicar.'),
+        $rel('rel-desatualizados', 'Desatualizados', 'rel_desatualizados.php', 'Equipamentos que passaram do tempo tolerado sem se comunicar.'),
         $rel('rel-alarmes', 'Alertas Videomonitoramento', 'rel_alarmes.php', 'Histórico dos alarmes das câmeras (tudo que não é evento de condução).'),
         $rel('rel-dirigibilidade', 'Alertas Dirigibilidade', 'rel_dirigibilidade.php', 'Eventos de condução: frenagem, arrancada, curva, velocidade, colisão.'),
         wiki_sec('rel-ocorrencias', 'Ocorrências', [

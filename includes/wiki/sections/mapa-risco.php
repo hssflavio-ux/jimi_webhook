@@ -11,6 +11,7 @@
 <tr><td>Aba Jornada</td><td>Índice por faixa de direção contínua e por faixa de velocidade no momento do alerta.</td></tr>
 <tr><td>Aba Quem</td><td>Veículos, tipo de veículo, motoristas e comportamentos, e a reincidência (o mesmo comportamento 3 vezes ou mais no período). Veículo e motorista só entram no ranking com 5 h de exposição.</td></tr>
 <tr><td>Aba Tendência</td><td>Últimas 12 semanas e últimos 12 meses, e o mês atual contra o anterior nos mesmos dias corridos.</td></tr>
+<tr><td>Rastreadores</td><td>Equipamentos sem câmera (rastreadores) não entram no Mapa de Risco: não aparecem no seletor de veículos e as horas deles não diluem o índice. Os eventos de condução deles ficam em <a href="#rel-dirigibilidade" style="color:inherit">Alertas Dirigibilidade</a>.</td></tr>
 <tr><td>Período</td><td>Até 90 dias. Os últimos 7 dias ainda podem mudar: a câmera descarrega alertas e posições guardados sem sinal até dias depois.</td></tr>
 <tr><td>Exportar</td><td>Excel ou PDF com as tabelas da aba aberta.</td></tr>
 <tr><td>Quem vê</td><td>Quem tem acesso ao BI.</td></tr>

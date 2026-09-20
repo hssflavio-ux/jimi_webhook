@@ -11,6 +11,7 @@
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
+<tr><td>Escolher o cliente</td><td>Administradores e revendedores têm o seletor <strong>Cliente</strong>; a lista de geocercas e de placas acompanha o cliente escolhido</td></tr>
 <tr><td>Filtrar por geocerca</td><td>Restringe a uma cerca específica ou mostra todas</td></tr>
 <tr><td>Filtrar por tipo</td><td>Só entradas, só saídas ou ambas (na modalidade Entradas e saídas)</td></tr>
 <tr><td>Ver Mapa</td><td>Abre em nova aba o ponto exato onde a travessia aconteceu</td></tr>

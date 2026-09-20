@@ -1,19 +1,26 @@
 <?php defined('WIKI_SECTION') || exit; ?>
-<p><strong>Objetivo:</strong> Histórico dos alarmes das <strong>câmeras</strong> — tudo o que não é evento de condução —, na ordem em que aconteceram. Filtros por cliente, placa, tipos de alarme (pode marcar vários), situação e período. Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
+<p><strong>Objetivo:</strong> Histórico dos alarmes das <strong>câmeras</strong> — tudo o que não é evento de condução —, na ordem em que aconteceram. Filtros por cliente, placa, tipos de alarme (pode marcar vários), situação e período (a tela abre no dia de hoje; o máximo é de 31 dias). Cada alarme tem um atalho para ver o local no mapa e, quando o equipamento anexou vídeo, um botão para assistir.</p>
+
+<p>A grade traz, para cada alarme: <strong>Placa</strong>, <strong>Data/Hora</strong>, <strong>Nome do Alarme</strong>, <strong>Status</strong> (Ativo ou Resolvido), <strong>Velocidade</strong>, <strong>Motorista</strong>, <strong>Endereço</strong>, o atalho do <strong>Mapa</strong> e o <strong>Vídeo</strong>.</p>
 
 <table class="tbl-mock">
 <tr><th>Ação</th><th>Resultado</th></tr>
 <tr><td>Filtrar + Gerar</td><td>Tabela atualiza com os filtros aplicados, do alarme mais antigo para o mais recente</td></tr>
-<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Data/Hora, Placa, Código e Nome do Alarme</td></tr>
+<tr><td>Ordenar por coluna</td><td>Setinha no cabeçalho de Placa, Data/Hora e Nome do Alarme</td></tr>
 <tr><td>Tipos de Alarme</td><td>Clique nos tipos para incluí-los na consulta — dá para selecionar vários de uma vez</td></tr>
-<tr><td>Ver posições no mapa</td><td>Abre um mapa com todos os alarmes da consulta. Cada marcador traz a <strong>placa, a data/hora e o nome do alarme</strong> — aqui cada ponto é de um veículo diferente</td></tr>
+<tr><td>Ver no Mapa</td><td>Abre um mapa com os alarmes da <strong>página que está na tela</strong>. Cada marcador traz a <strong>placa, a data/hora e o nome do alarme</strong> — aqui cada ponto é de um veículo diferente</td></tr>
 <tr><td>Ver Mapa (na linha)</td><td>Abre o mapa em uma nova aba, no local exato daquele alarme</td></tr>
-<tr><td>Ver Vídeo (na linha)</td><td>Abre uma janela sobre a tela com o vídeo do evento, já posicionado num quadro do <strong>meio</strong>. Quando a câmera tem duas lentes, os dois vídeos (câmera 1 e câmera 2) tocam lado a lado ao mesmo tempo. Toca ali mesmo — baixar é opcional. Só aparece nos alarmes cujo equipamento anexou vídeo</td></tr>
+<tr><td>Ver Vídeo (na linha)</td><td>Abre uma janela sobre a tela com o vídeo do evento, já posicionado num quadro do <strong>meio</strong>. Quando a câmera tem duas lentes, os dois vídeos (câmera 1 e câmera 2) tocam lado a lado ao mesmo tempo. Toca ali mesmo — baixar é opcional. Quando o equipamento mandou só foto, o botão vira <strong>Ver Foto</strong>. Só aparece nos alarmes cujo arquivo já chegou ao sistema</td></tr>
+<tr><td>Pedir vídeo (na linha)</td><td>Aparece no lugar de Ver Vídeo quando a câmera <strong>anunciou</strong> um arquivo para o alarme, mas ele não chegou. O clique pede o vídeo de novo: a câmera gera o trecho a partir do cartão de memória e envia depois — não é instantâneo, então volte à tela mais tarde</td></tr>
 <tr><td>Exportar</td><td>Baixa Excel ou PDF com os dados filtrados</td></tr>
 </table>
 
 <div class="callout info">
-<strong>Nem todo alarme tem vídeo.</strong> A coluna Vídeo mostra o arquivo que o próprio equipamento anexou ao alarme. Câmeras que não anexam vídeo ao evento aparecem com um traço. Os eventos de condução, como excesso de velocidade, ficam em <strong>Alertas Dirigibilidade</strong>. Para essas, o caminho é pedir a gravação em <strong>Vídeos → Playback</strong>.
+<strong>Nem todo alarme tem vídeo.</strong> A coluna Vídeo mostra o arquivo que o próprio equipamento anexou ao alarme: <em>Ver Vídeo</em> (ou <em>Ver Foto</em>) quando o arquivo já está no sistema, <em>Pedir vídeo</em> quando a câmera o anunciou e ele não chegou, e um traço quando o alarme não tem anexo. Câmeras que não anexam vídeo ao evento aparecem com traço; para elas, o caminho é pedir a gravação em <strong>Vídeos → Playback</strong>.
+</div>
+
+<div class="callout info">
+<strong>O que esta tela mostra — e o que não mostra.</strong> Ela lista os alarmes de <strong>equipamentos com câmera</strong> e deixa de fora dois grupos: os <strong>eventos de condução</strong> (arrancada, freada, curva, excesso de velocidade, colisão, capotamento, impacto e inclinação), que ficam em <strong>Alertas Dirigibilidade</strong> — venham de câmera ou de rastreador —, e os alarmes de <strong>rastreador</strong> que não são de condução (roubo, partida ilegal, desmontado), que ficam só na aba Alertas da ficha do veículo. Por isso o filtro de Placa desta tela não lista rastreadores, e o filtro de Tipos de Alarme oferece só os tipos de câmera com IA (DMS e ADAS).
 </div>
 
 <div class="callout info">
