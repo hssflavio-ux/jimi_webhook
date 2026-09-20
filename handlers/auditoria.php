@@ -187,7 +187,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <div class="form-group" style="margin:0;">
             <label>Ação contém</label>
-            <input type="text" name="action" value="<?= htmlspecialchars($filtroAction) ?>" placeholder="ex.: chip.delete">
+            <input type="text" name="action" value="<?= htmlspecialchars($filtroAction) ?>" placeholder="ex.: sim_card.delete">
         </div>
         <div class="form-group" style="margin:0;">
             <label>Entidade</label>

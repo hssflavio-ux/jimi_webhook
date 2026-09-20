@@ -208,10 +208,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+/**
+ * Texto que identifica o veículo de um lembrete na lista e no seletor.
+ *
+ * A placa é `vehicles.plate` do veículo onde a câmera está instalada AGORA
+ * (`device_installations.removed_at IS NULL`) — desde a v4.11.0 `devices.device_name`
+ * é legado congelado e fica NULL em toda câmera cadastrada depois disso, o que
+ * fazia o seletor mostrar "(sem placa) <imei>" para câmera nova. O nome legado
+ * só entra como último recurso, antes do "(sem placa)". Placa é texto livre:
+ * nada é validado nem reformatado aqui.
+ *
+ * @param string|null $plate      `vehicles.plate` da instalação corrente (NULL se livre)
+ * @param string|null $deviceName `devices.device_name` — legado
+ * @param string      $imei       IMEI da câmera
+ * @returns string Placa; senão o nome legado; senão `(sem placa) <imei>`
+ */
+function manutencao_rotulo_veiculo(?string $plate, ?string $deviceName, string $imei): string
+{
+    $placa = trim((string)$plate);
+    return $placa !== '' ? $placa : placa_do_device($deviceName, $imei);
+}
+
 // ── Dados de apoio (selects do formulário) ──────────────────────────────────
-$devWhere = $is_admin ? '1=1' : 'customer_id = :cid';
+// Escopo por `d.customer_id` (dono atual da câmera, o mesmo filtro de antes); a
+// placa vem da instalação aberta. LEFT JOIN: câmera livre continua na lista.
+$devWhere = $is_admin ? '1=1' : 'd.customer_id = :cid';
 $devParams = $is_admin ? [] : [':cid' => $customer_id];
-$devices = $db->prepare("SELECT imei, device_name FROM devices WHERE $devWhere AND is_active=1 ORDER BY device_name");
+$devices = $db->prepare("
+    SELECT d.imei, d.device_name, v.plate
+    FROM devices d
+    LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+    LEFT JOIN vehicles v ON v.id = di.vehicle_id
+    WHERE $devWhere AND d.is_active = 1
+    ORDER BY COALESCE(NULLIF(v.plate, ''), NULLIF(d.device_name, ''), d.imei)
+");
 $devices->execute($devParams);
 $devices = $devices->fetchAll(PDO::FETCH_ASSOC);
 
@@ -252,13 +282,15 @@ include __DIR__ . '/../web/layout_base.php';
     $where = $is_admin ? '1=1' : 'r.customer_id = :cid';
     $params = $is_admin ? [] : [':cid' => $customer_id];
     if ($q !== '') {
-        $where .= " AND (r.name LIKE :q1 OR d.device_name LIKE :q2 OR dr.name LIKE :q3)";
-        foreach (['q1', 'q2', 'q3'] as $k) $params[":$k"] = "%$q%";
+        $where .= " AND (r.name LIKE :q1 OR d.device_name LIKE :q2 OR dr.name LIKE :q3 OR v.plate LIKE :q4)";
+        foreach (['q1', 'q2', 'q3', 'q4'] as $k) $params[":$k"] = "%$q%";
     }
 
     $countStmt = $db->prepare("
         SELECT COUNT(*) FROM maintenance_reminders r
         LEFT JOIN devices d ON d.imei = r.imei
+        LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+        LEFT JOIN vehicles v ON v.id = di.vehicle_id
         LEFT JOIN drivers dr ON dr.id = r.driver_id
         WHERE $where
     ");
@@ -268,9 +300,11 @@ include __DIR__ . '/../web/layout_base.php';
     $offset = ($page - 1) * $perPage;
 
     $stmt = $db->prepare("
-        SELECT r.*, d.device_name, dr.name AS driver_name
+        SELECT r.*, d.device_name, v.plate AS vehicle_plate, dr.name AS driver_name
         FROM maintenance_reminders r
         LEFT JOIN devices d ON d.imei = r.imei
+        LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
+        LEFT JOIN vehicles v ON v.id = di.vehicle_id
         LEFT JOIN drivers dr ON dr.id = r.driver_id
         WHERE $where
         ORDER BY r.is_active DESC, r.name
@@ -302,7 +336,8 @@ include __DIR__ . '/../web/layout_base.php';
             <tbody>
                 <?php foreach ($reminders as $r):
                     $progress = maintenance_reminder_progress($db, $r);
-                    $vinculo = $r['device_name'] ? placa_do_device($r['device_name'], $r['imei'])
+                    $vinculo = !empty($r['imei'])
+                             ? manutencao_rotulo_veiculo($r['vehicle_plate'] ?? null, $r['device_name'] ?? null, $r['imei'])
                              : ($r['driver_name'] ?? '—');
                 ?>
                 <tr style="<?= $r['is_active'] ? '' : 'opacity:.5' ?>">
@@ -387,7 +422,7 @@ include __DIR__ . '/../web/layout_base.php';
                     <option value="">— Selecione —</option>
                     <?php foreach ($devices as $d): ?>
                     <option value="<?= htmlspecialchars($d['imei']) ?>" <?= (($editReminder['imei'] ?? '') === $d['imei']) ? 'selected' : '' ?>>
-                        <?= htmlspecialchars(placa_do_device($d['device_name'], $d['imei'])) ?>
+                        <?= htmlspecialchars(manutencao_rotulo_veiculo($d['plate'] ?? null, $d['device_name'] ?? null, $d['imei'])) ?>
                     </option>
                     <?php endforeach; ?>
                 </select>

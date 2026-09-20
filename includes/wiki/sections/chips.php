@@ -31,7 +31,7 @@
 <tr><td>Editar</td><td>Traz o chip para o formulário ao lado; <em>Salvar</em> grava ("Chip atualizado"). Operadora, número, ICCID e a marca <em>Ativo</em> podem ser alterados</td></tr>
 <tr><td>Câmera vinculada</td><td>Aparece só ao editar, em <strong>somente leitura</strong>: mostra o IMEI da câmera que usa o chip, ou "Nenhuma — chip livre". Não é um campo para escolher câmera (veja o aviso abaixo)</td></tr>
 <tr><td>Desativar (desmarcar <em>Ativo</em>)</td><td>Só é permitido com o chip <strong>livre</strong>. Se ele estiver numa câmera, a tela recusa e informa o IMEI dela: desvincule antes, em Equipamentos</td></tr>
-<tr><td>Remover</td><td>Pede confirmação ("Remover este chip?") e exclui o registro definitivamente</td></tr>
+<tr><td>Remover</td><td>Pede confirmação ("Remover este chip?") e exclui o registro definitivamente. Como em Desativar, só é permitido com o chip <strong>livre</strong>: se ele estiver numa câmera, a tela recusa e informa o IMEI dela — desvincule antes, em Equipamentos</td></tr>
 <tr><td>Clicar no IMEI</td><td>Abre a ficha do veículo em que essa câmera está instalada agora. Se a câmera ainda não foi instalada num veículo, não há ficha para abrir</td></tr>
 <tr><td>Pesquisar</td><td>Filtra por operadora, número, ICCID ou IMEI</td></tr>
 <tr><td>Exportar Excel / PDF</td><td>Baixa a lista (operadora, número, ICCID, IMEI, equipamento e status), respeitando a pesquisa</td></tr>

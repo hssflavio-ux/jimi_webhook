@@ -919,7 +919,7 @@ require_once __DIR__ . '/../web/layout_base.php';
         </div>
         <?= csrf_field() ?>
         <div style="display:flex;gap:8px;justify-content:flex-end;">
-            <button class="btn btn-outline btn-sm" onclick="closeImportModal()">Cancelar</button>
+            <button class="btn btn-outline btn-sm" id="import-cancel" onclick="closeImportModal()">Cancelar</button>
             <button class="btn btn-primary btn-sm" onclick="submitImport()">Importar</button>
         </div>
         <div id="import-result" style="margin-top:12px;font-size:12px;"></div>
@@ -968,7 +968,14 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function showImportModal() { document.getElementById('import-modal').style.display = 'flex'; }
-function closeImportModal() { document.getElementById('import-modal').style.display = 'none'; }
+// Se o lote gravou algo, a lista por trás do modal está velha — mas só recarrega
+// AO FECHAR (v4.22.1): recarregar sozinho apagava o resultado, e com ele as
+// linhas ignoradas que o servidor conta ("linha 3: IMEI já cadastrado").
+var importPrecisaRecarregar = false;
+function closeImportModal() {
+    document.getElementById('import-modal').style.display = 'none';
+    if (importPrecisaRecarregar) location.reload();
+}
 
 function submitImport() {
     var file = document.getElementById('import-file').files[0];
@@ -1011,9 +1018,29 @@ function submitImport() {
         fetch('', { method: 'POST', body: formData })
             .then(function(r) { return r.text(); })
             .then(function(html) {
-                document.getElementById('import-result').innerHTML =
-                    '<div class="badge badge-success">Importação concluída. Recarregando...</div>';
-                setTimeout(function() { location.reload(); }, 1500);
+                // A resposta é a página inteira; o resultado do lote vem no
+                // mesmo aviso (.toast) que o servidor já renderiza — "N
+                // importado(s), M ignorado(s). Avisos: linha 3: …". Antes era
+                // descartado e a tela sempre dizia "Importação concluída".
+                var toast = new DOMParser().parseFromString(html, 'text/html').querySelector('.toast');
+                var tipo = 'warning';
+                var texto = 'Não foi possível ler o resultado da importação. Recarregue a página e confira a lista de equipamentos.';
+                if (toast) {
+                    var m = /toast-(success|warning|error)/.exec(toast.className);
+                    tipo = m ? m[1] : 'info';
+                    texto = toast.textContent.replace(/\s+/g, ' ').trim();
+                }
+                var aviso = document.createElement('div');
+                aviso.className = 'badge badge-' + tipo;
+                // .badge é uma pílula de uma linha; o resultado pode listar até 10 linhas ignoradas.
+                aviso.style.cssText = 'white-space:normal;border-radius:var(--radius-md);padding:8px 12px;font-size:12px;line-height:1.4';
+                aviso.textContent = texto;
+                var box = document.getElementById('import-result');
+                box.innerHTML = '';
+                box.appendChild(aviso);
+                // Recarrega ao fechar se algo foi gravado — ou se o resultado não pôde ser lido.
+                importPrecisaRecarregar = (tipo === 'success' || !toast);
+                document.getElementById('import-cancel').textContent = 'Fechar';
             })
             .catch(function() {
                 document.getElementById('import-result').innerHTML =

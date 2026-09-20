@@ -102,5 +102,5 @@
 </div>
 
 <div class="callout tip">
-<strong>Veículo aparece com o nome gravado no equipamento.</strong> A lista e o seletor <em>Ativo (veículo)</em> mostram o nome cadastrado no <a href="#equipamentos">equipamento</a>; quando ele está em branco, o veículo aparece como <span class="mono">(sem placa)</span> seguido do IMEI. Se aparecer assim, ajuste o nome do equipamento para reconhecer o veículo na hora de escolher.
+<strong>Veículo aparece pela placa.</strong> A lista e o seletor <em>Ativo (veículo)</em> mostram a placa do veículo em que a câmera está <strong>instalada agora</strong> (a placa cadastrada em <a href="#ativos">Ativos</a>, escrita do jeito que você digitou). Uma câmera que ainda não foi instalada em nenhum veículo aparece como <span class="mono">(sem placa)</span> seguido do IMEI — ou, se for um equipamento antigo, com o nome que ele já tinha no cadastro. Se aparecer assim, instale a câmera num veículo em <a href="#ativos">Ativos</a> para o lembrete passar a mostrar a placa. O lembrete acompanha a câmera: se ela for instalada em outro veículo, a placa mostrada aqui passa a ser a do novo. A pesquisa também procura pela placa.
 </div>

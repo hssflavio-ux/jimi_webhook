@@ -24,21 +24,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete' && $id > 0) {
         // v4.15.0 — o "antes" é lido IMEDIATAMENTE antes do DELETE: depois a
         // linha não existe mais para consultar.
-        $beforeDel = $db->prepare("SELECT carrier, msisdn, iccid, imei, customer_id, is_active FROM sim_cards WHERE id = ?");
-        $beforeDel->execute([$id]);
+        // v4.22.1 — o SELECT passou a respeitar o escopo do cliente: o IMEI
+        // lido aqui alimenta a guarda abaixo e vai para a mensagem, e sem o
+        // filtro um usuário leria o IMEI vinculado ao chip de OUTRO cliente.
+        $beforeDel = $db->prepare("SELECT carrier, msisdn, iccid, imei, customer_id, is_active FROM sim_cards WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
+        $beforeDel->execute($is_admin ? [$id] : [$id, $customer_id]);
         $beforeRow = $beforeDel->fetch(PDO::FETCH_ASSOC);
 
-        $stmt = $db->prepare("DELETE FROM sim_cards WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
-        $params = [$id];
-        if (!$is_admin) $params[] = $customer_id;
-        $stmt->execute($params);
-        // rowCount()>0 evita logar um DELETE "fantasma" quando o `AND
-        // customer_id=?` de escopo bloqueou silenciosamente a exclusão de um
-        // chip de outro cliente.
-        if ($beforeRow && $stmt->rowCount() > 0) {
-            audit_log('sim_card.delete', 'sim_card', $id, $beforeRow, null);
+        if ($beforeRow && !empty($beforeRow['imei'])) {
+            // Mesma regra de "desativar" (mais abaixo): chip só sai livre. Remover
+            // um chip vinculado deixaria a câmera sem chip sem ninguém perceber —
+            // o operador precisa desvincular primeiro, em /equipamentos.
+            $error = 'Este chip está vinculado à câmera de IMEI ' . $beforeRow['imei'] . '. Desvincule em /equipamentos (edite a câmera e selecione "Nenhum" em Chip) antes de remover.';
+        } else {
+            $stmt = $db->prepare("DELETE FROM sim_cards WHERE id = ?" . ($is_admin ? '' : ' AND customer_id = ?'));
+            $params = [$id];
+            if (!$is_admin) $params[] = $customer_id;
+            $stmt->execute($params);
+            // rowCount()>0 evita logar um DELETE "fantasma" quando o `AND
+            // customer_id=?` de escopo bloqueou silenciosamente a exclusão de um
+            // chip de outro cliente.
+            if ($beforeRow && $stmt->rowCount() > 0) {
+                audit_log('sim_card.delete', 'sim_card', $id, $beforeRow, null);
+            }
+            $success = 'Chip removido.';
         }
-        $success = 'Chip removido.';
     } elseif ($action === 'save') {
         $carrier = trim($_POST['carrier'] ?? '');
         $msisdn  = trim($_POST['msisdn'] ?? '');
@@ -63,7 +73,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($carrier) && empty($msisdn) && empty($iccid)) {
             $error = 'Preencha ao menos um campo (Operadora, Número ou ICCID).';
         } elseif ($id === 0 && $owner_id === null) {
-            $error = 'Selecione o cliente do chip. Sua sessão está sem cliente definido — salvar assim deixaria o chip sem vínculo e invisível na lista.';
+            // v4.22.1 — o texto antigo mandava "selecionar o cliente do chip", mas
+            // este formulário NÃO tem campo de cliente: o dono vem do contexto
+            // de cliente da sessão (o seletor do topo do menu lateral).
+            $error = 'Não há um cliente definido para gravar este chip. Escolha o cliente no seletor do topo do menu lateral e salve de novo — se a lista estiver vazia, peça ao administrador para vincular o seu usuário a um cliente. Salvar assim deixaria o chip sem vínculo e invisível na lista.';
         } elseif ($active === 0 && $currentImei) {
             // Fluxo correto: chip só desativa livre. O operador precisa
             // desvincular primeiro, em /equipamentos, para não perder de
