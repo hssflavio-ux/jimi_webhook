@@ -216,6 +216,10 @@ function wiki_registry(): array {
             'group' => 'operacoes', 'screen' => 'comandos', 'handler' => 'comandos.php',
             'summary' => 'Enviar comandos remotos aos equipamentos e acompanhar a resposta.',
         ]),
+        wiki_sec('comandos-sms', 'Comandos por SMS', [
+            'group' => 'operacoes', 'screen' => 'comandos-sms', 'handler' => 'comandos_sms.php',
+            'summary' => 'Enviar os mesmos comandos pela rede da operadora, por SMS — cada envio consome crédito.',
+        ]),
         // Fora do menu desde a v4.13.10 ("a tela ainda não está funcional"): a
         // wiki não a promove enquanto o menu a esconde. O parcial fica guardado.
         wiki_sec('parametros', 'Parâmetros', [
@@ -226,6 +230,14 @@ function wiki_registry(): array {
         wiki_sec('firmwares', 'Firmware', [
             'group' => 'operacoes', 'screen' => 'firmwares', 'handler' => 'firmwares.php', 'admin_only' => true,
             'summary' => 'Ver a versão de firmware de cada câmera e atualizá-la à distância.',
+        ]),
+        wiki_sec('config-sms', 'SMS (configuração)', [
+            'group' => 'operacoes', 'screen' => 'config-sms', 'handler' => 'config_sms.php', 'admin_only' => true,
+            'summary' => 'Conta do provedor de SMS, teste de credencial e saldo, e como receber a entrega e a resposta.',
+        ]),
+        wiki_sec('configuracoes-ia', 'Configurações IA', [
+            'group' => 'operacoes', 'screen' => 'configuracoes-ia', 'handler' => 'configuracoes_ia.php', 'admin_only' => true,
+            'summary' => 'Ler e ajustar à distância os alertas de IA (ADAS/DMS) e de velocidade das câmeras.',
         ]),
         wiki_sec('exportar', 'Exportar', [
             'group' => 'operacoes', 'screen' => 'exportar', 'handler' => 'exportar.php',
