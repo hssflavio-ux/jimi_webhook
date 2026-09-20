@@ -19,6 +19,7 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+require_admin(); // v4.22.1 — exclusiva do administrador (ver handlers/auditoria.php)
 require_permission('auditoria', 'view');
 
 $db          = Database::getInstance()->getConnection();

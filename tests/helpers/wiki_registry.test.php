@@ -115,6 +115,15 @@ foreach ($reg as $s) {
 }
 checa('admin_only == linha require_admin(); do handler', [], $divergem);
 
+// Auditoria é exclusiva do administrador (v4.22.1): a tela-mãe é conferida acima
+// pelo registro, mas os 3 relatórios-irmãos não têm seção própria — são
+// alcançáveis por URL direta, então cada um precisa da mesma trava.
+$irmaosSemTrava = [];
+foreach (['auditoria_negados.php', 'auditoria_cadastro.php', 'auditoria_login.php'] as $irmao) {
+    if (!tem_require_admin($RAIZ, $irmao)) $irmaosSemTrava[] = $irmao;
+}
+checa('relatórios-irmãos da Auditoria têm require_admin();', [], $irmaosSemTrava);
+
 echo "== ações batem com o que os handlers exigem ==\n";
 $exigidas = acoes_exigidas($RAIZ);
 $divergem = [];

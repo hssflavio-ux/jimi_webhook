@@ -34,6 +34,11 @@
  */
 
 require_once __DIR__ . '/../includes/auth.php';
+// v4.22.1 — exclusiva do administrador (decisão do dono do produto, 20/09/2026).
+// `require_permission()` abaixo continua valendo (RBAC fino de view/export), mas
+// `can()` é permissivo por omissão: sem esta linha, quem não tem grupo abria a
+// Auditoria. A mesma linha vai nos 3 relatórios-irmãos — abrem por URL direta.
+require_admin();
 require_permission('auditoria', 'view');
 
 $db          = Database::getInstance()->getConnection();

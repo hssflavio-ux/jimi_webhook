@@ -206,7 +206,7 @@ function wiki_registry(): array {
             'summary' => 'Gestão dos usuários do sistema (da sua empresa e dos seus clientes).',
         ]),
         wiki_sec('auditoria', 'Auditoria', [
-            'group' => 'cadastros', 'screen' => 'auditoria', 'handler' => 'auditoria.php',
+            'group' => 'cadastros', 'screen' => 'auditoria', 'handler' => 'auditoria.php', 'admin_only' => true,
             'actions' => ['export'],
             'summary' => 'Consulta de quem fez o quê no sistema: alterações de cadastro, acessos negados, logins e comandos enviados.',
         ]),

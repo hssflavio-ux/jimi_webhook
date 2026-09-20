@@ -1,5 +1,5 @@
 <?php defined('WIKI_SECTION') || exit; ?>
-<p><strong>Objetivo:</strong> Saber quem fez o quê, quando e em qual registro — quem excluiu um chip, quem mudou um cadastro, quem tentou abrir uma tela sem permissão, quem entrou no sistema e quando. A Auditoria é <strong>somente consulta</strong>: mostra o histórico e não altera nada. Os registros nascem sozinhos, no momento em que a ação acontece, e não há botão para editar ou apagar nenhum deles.</p>
+<p><strong>Objetivo:</strong> Saber quem fez o quê, quando e em qual registro — quem excluiu um chip, quem mudou um cadastro, quem tentou abrir uma tela sem permissão, quem entrou no sistema e quando. A Auditoria é <strong>somente consulta</strong>: mostra o histórico e não altera nada. Os registros nascem sozinhos, no momento em que a ação acontece, e não há botão para editar ou apagar nenhum deles. A Auditoria é <strong>exclusiva do administrador</strong> do sistema.</p>
 
 <div class="mockup">
 <div class="mockup-header">Auditoria — Tudo</div>
@@ -29,12 +29,11 @@
 
 <table class="tbl-mock">
 <tr><th>Aba</th><th>O que mostra</th><th>Filtros</th><th>Exporta?</th></tr>
-<tr><td>Tudo</td><td>Todas as fontes juntas: alterações de cadastro, acessos negados, login e sessão, e comandos enviados aos equipamentos</td><td>Cliente*, Usuário, Ação contém, Entidade, De, Até</td><td>Não</td></tr>
-<tr><td>Acessos Negados</td><td>Toda vez que alguém tentou abrir uma tela sem permissão e toda tentativa de login que falhou</td><td>Cliente*, Usuário, De, Até</td><td>Sim</td></tr>
-<tr><td>Alterações de Cadastro</td><td>Todo cadastro criado, alterado ou excluído (chips, motoristas, geocercas, usuários, clientes, equipamentos, veículos, grupos de permissão e outros), com o valor <strong>antes</strong> e <strong>depois</strong> quando existe</td><td>Cliente*, Usuário, Entidade (lista das que já aparecem no histórico), De, Até</td><td>Sim</td></tr>
-<tr><td>Login e Sessão</td><td>Entradas e saídas do sistema (com sucesso ou falha), troca de cliente, o início e o fim de quando um revendedor passa a atuar como um cliente e as ações sobre o cadastro do próprio cliente (criar, alterar, desativar)</td><td>Cliente*, Usuário, De, Até</td><td>Sim</td></tr>
+<tr><td>Tudo</td><td>Todas as fontes juntas: alterações de cadastro, acessos negados, login e sessão, e comandos enviados aos equipamentos</td><td>Cliente, Usuário, Ação contém, Entidade, De, Até</td><td>Não</td></tr>
+<tr><td>Acessos Negados</td><td>Toda vez que alguém tentou abrir uma tela sem permissão e toda tentativa de login que falhou</td><td>Cliente, Usuário, De, Até</td><td>Sim</td></tr>
+<tr><td>Alterações de Cadastro</td><td>Todo cadastro criado, alterado ou excluído (chips, motoristas, geocercas, usuários, clientes, equipamentos, veículos, grupos de permissão e outros), com o valor <strong>antes</strong> e <strong>depois</strong> quando existe</td><td>Cliente, Usuário, Entidade (lista das que já aparecem no histórico), De, Até</td><td>Sim</td></tr>
+<tr><td>Login e Sessão</td><td>Entradas e saídas do sistema (com sucesso ou falha), troca de cliente, o início e o fim de quando um revendedor passa a atuar como um cliente e as ações sobre o cadastro do próprio cliente (criar, alterar, desativar)</td><td>Cliente, Usuário, De, Até</td><td>Sim</td></tr>
 </table>
-<p style="font-size:12px;color:var(--muted)">* O filtro Cliente só aparece para o administrador da plataforma e para o revendedor.</p>
 
 <h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Ler a lista</h4>
 
@@ -42,7 +41,7 @@
 <tr><th>Coluna</th><th>O que significa</th></tr>
 <tr><td>Quando</td><td>Data e hora da ação, no horário de Brasília</td></tr>
 <tr><td>Autor</td><td>Nome e e-mail de quem fez. O nome e o e-mail ficam <strong>congelados no momento do registro</strong>: se o usuário for renomeado ou removido depois, o histórico continua mostrando quem ele era na hora</td></tr>
-<tr><td>Cliente</td><td>A qual cliente a ação pertence. Esta coluna só aparece quando nenhum cliente está filtrado (administrador da plataforma)</td></tr>
+<tr><td>Cliente</td><td>A qual cliente a ação pertence. Esta coluna só aparece quando nenhum cliente está filtrado</td></tr>
 <tr><td>Ação</td><td>O que foi feito, no formato <span class="mono">entidade.verbo</span> (veja a tabela abaixo)</td></tr>
 <tr><td>Entidade</td><td>O tipo de registro afetado e o seu número (ex.: <span class="mono">sim_card #12</span>)</td></tr>
 <tr><td>Status</td><td><strong>success</strong>: feito. <strong>denied</strong>: negado (acesso sem permissão ou login que falhou). <strong>error</strong>: comando que falhou. <strong>aguardando</strong>: comando enviado que ainda não teve resposta</td></tr>
@@ -66,20 +65,20 @@
 <table class="tbl-mock">
 <tr><th>Filtro</th><th>Como funciona</th></tr>
 <tr><td>De / Até</td><td>Vem preenchido com <strong>hoje</strong>. O teto é de <strong>31 dias por consulta</strong>; se você pedir mais, o período é ajustado e a tela avisa</td></tr>
-<tr><td>Usuário</td><td>Lista os usuários do cliente em foco (todos, para o administrador da plataforma). Filtrar por usuário deixa de fora as tentativas de login e os comandos enviados (pela plataforma ou por SMS), porque esses registros não guardam o usuário</td></tr>
+<tr><td>Usuário</td><td>Lista os usuários do cliente escolhido no filtro Cliente (todos, quando nenhum cliente está filtrado). Filtrar por usuário deixa de fora as tentativas de login e os comandos enviados (pela plataforma ou por SMS), porque esses registros não guardam o usuário</td></tr>
 <tr><td>Ação contém</td><td>Só na aba Tudo. Procura o texto em qualquer parte do nome da ação. Ex.: <span class="mono">delete</span> traz todas as exclusões; <span class="mono">sim_card</span> traz tudo que envolve chips</td></tr>
 <tr><td>Entidade</td><td>Restringe a um tipo de registro (na aba Tudo, digitado; em Alterações de Cadastro, escolhido numa lista). Ex.: <span class="mono">sim_card</span></td></tr>
 </table>
 
 <h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Exportar</h4>
-<p>As abas <strong>Acessos Negados</strong>, <strong>Alterações de Cadastro</strong> e <strong>Login e Sessão</strong> têm os botões <strong>Exportar Excel</strong>, <strong>Exportar PDF</strong> e <strong>Exportar CSV</strong>. O arquivo sai na hora, com os mesmos filtros da tela (e não só a página que você está vendo), até <strong>10.000 linhas</strong>. Exportar exige a permissão de <strong>exportação</strong> na Auditoria: quem só tem a de visualização enxerga os botões, mas a exportação é recusada. A aba <strong>Tudo</strong> não exporta.</p>
+<p>As abas <strong>Acessos Negados</strong>, <strong>Alterações de Cadastro</strong> e <strong>Login e Sessão</strong> têm os botões <strong>Exportar Excel</strong>, <strong>Exportar PDF</strong> e <strong>Exportar CSV</strong>. O arquivo sai na hora, com os mesmos filtros da tela (e não só a página que você está vendo), até <strong>10.000 linhas</strong>. O administrador que pertence a um grupo de permissão que não marca a <strong>exportação</strong> da Auditoria vê os botões, mas a exportação é recusada; quem não pertence a nenhum grupo exporta sem restrição. A aba <strong>Tudo</strong> não exporta.</p>
 
 <div class="callout info">
-<strong>Cada um vê só o que é do seu cliente.</strong> Quem não é administrador da plataforma consulta apenas os registros do próprio cliente; o revendedor escolhe, um por vez, entre os clientes sob a sua gestão. A tela nunca mostra registros de cliente que você não pode ver.
+<strong>O administrador vê todos os clientes.</strong> Sem filtro, a lista traz os registros de todos os clientes, e a coluna <strong>Cliente</strong> diz a qual cada um pertence. Para olhar um cliente de cada vez, escolha-o no filtro <strong>Cliente</strong>.
 </div>
 
 <div class="callout warn">
-<strong>Tentativas de login e comandos da plataforma só aparecem sem filtro de cliente.</strong> Uma tentativa de login guarda apenas o e-mail digitado — ainda não se sabe quem é o usuário nem a qual cliente pertence — e os comandos enviados pela plataforma não guardam o cliente. Por isso esses registros só aparecem para o administrador da plataforma, com o filtro Cliente em <em>Todos os clientes</em>. Nas abas <strong>Acessos Negados</strong> e <strong>Login e Sessão</strong>, quem consulta um cliente específico vê os acessos negados por falta de permissão e as saídas do sistema, mas não os logins. Os comandos por SMS guardam o cliente e aparecem normalmente.
+<strong>Tentativas de login e comandos da plataforma só aparecem sem filtro de cliente.</strong> Uma tentativa de login guarda apenas o e-mail digitado — ainda não se sabe quem é o usuário nem a qual cliente pertence — e os comandos enviados pela plataforma não guardam o cliente. Por isso esses registros só aparecem com o filtro Cliente em <em>Todos os clientes</em>. Nas abas <strong>Acessos Negados</strong> e <strong>Login e Sessão</strong>, quem consulta um cliente específico vê os acessos negados por falta de permissão e as saídas do sistema, mas não os logins. Os comandos por SMS guardam o cliente e aparecem normalmente.
 </div>
 
 <div class="callout info">
@@ -91,5 +90,5 @@
 </div>
 
 <div class="callout">
-<strong>Quem pode abrir a Auditoria.</strong> A tela é concedida por grupo de permissão, como as demais: <em>visualizar</em> abre as quatro abas e <em>exportar</em> libera os arquivos. Ela não é restrita ao administrador. Atenção: quem <strong>não pertence a nenhum grupo de permissão</strong> não tem restrição alguma no sistema e, por isso, também abre a Auditoria (sempre limitada ao próprio cliente).
+<strong>Quem pode abrir a Auditoria.</strong> Só o <strong>administrador</strong>. A tela não é concedida por grupo de permissão — marcá-la num grupo não a abre para quem não é administrador — e o item nem aparece no menu lateral dos demais usuários. Quem não é administrador e digitar o endereço recebe o aviso de acesso restrito, e a tentativa fica registrada na aba <strong>Acessos Negados</strong>.
 </div>

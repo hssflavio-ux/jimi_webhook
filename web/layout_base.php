@@ -98,10 +98,10 @@ $navGroups = [
             ['route' => 'config-smtp',         'label' => 'Servidor de E-mail',  'href' => '/config-smtp'],
             // 'config-parametros' saiu daqui na v4.9.16 → menu Parâmetros (só admin).
             ['route' => 'usuarios',            'label' => 'Usuários',            'href' => '/usuarios'],
-            // v4.15.0 — grantável por grupo (não admin_only): não guarda
-            // credencial de terceiro nem manda comando a equipamento, mesma
-            // razão que a mantém fora de $navBottom.
-            ['route' => 'auditoria',           'label' => 'Auditoria',           'href' => '/auditoria'],
+            // v4.22.1 — Auditoria SAIU deste grupo: passou a ser exclusiva do
+            // administrador (decisão do dono do produto, 20/09/2026) e item de
+            // grupo não respeita `admin_only` — ver $navBottom. (Na v4.15.0 era
+            // grantável por grupo e ficava aqui de propósito; deixou de valer.)
         ],
     ],
 ];
@@ -141,6 +141,12 @@ $navBottom = [
     // item dentro de um grupo é filtrado só por can(), que é permissivo por
     // omissão. No grupo Cadastros ela apareceria para todo usuário sem grupo.
     ['route' => 'config-sms', 'label' => 'SMS',        'icon' => 'gear',     'href' => '/config-sms',
+     'admin_only' => true],
+    // v4.22.1 — Auditoria é exclusiva do administrador (require_admin() nos 4
+    // handlers). Estava no grupo Cadastros desde a v4.15.0, mas item de grupo é
+    // filtrado só por can() — permissivo por omissão — e a mostraria a todo
+    // usuário sem grupo; em $navBottom o `admin_only` é filtrado pelo papel.
+    ['route' => 'auditoria',  'label' => 'Auditoria',  'icon' => 'file',     'href' => '/auditoria',
      'admin_only' => true],
     ['route' => 'exportar',   'label' => 'Exportar',   'icon' => 'download', 'href' => '/exportar'],
     ['route' => 'wiki',       'label' => 'Ajuda',      'icon' => 'book',     'href' => '/wiki'],
