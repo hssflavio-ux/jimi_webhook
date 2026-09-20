@@ -122,7 +122,7 @@ function wiki_registry(): array {
             'group' => 'relatorios', 'screen' => 'relatorios',
             'summary' => 'Guardar uma combinação de filtros e reaplicá-la em um clique.',
         ]),
-        $rel('rel-posicoes', 'Posições', 'rel_posicoes.php', 'Histórico de posições de um ativo em um período, com trajeto no mapa.'),
+        $rel('rel-posicoes', 'Posições', 'rel_posicoes.php', 'Histórico de posições de um ativo em um período, com hodômetro e link para o mapa.'),
         $rel('rel-deslocamento', 'Deslocamento', 'rel_deslocamento.php', 'Deslocamentos do veículo com duração, velocidade máxima e distância.'),
         $rel('rel-desatualizados', 'Desatualizados', 'rel_desatualizados.php', 'Equipamentos que passaram do tempo tolerado sem se comunicar.'),
         $rel('rel-alarmes', 'Alertas Videomonitoramento', 'rel_alarmes.php', 'Histórico dos alarmes das câmeras (tudo que não é evento de condução).'),

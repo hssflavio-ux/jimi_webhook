@@ -6,7 +6,7 @@
 </div>
 
 <div class="callout info">
-<strong>Nem toda linha da matriz pode ser liberada a um grupo.</strong> Algumas telas são <strong>exclusivas do administrador</strong>, e marcar a linha delas aqui <strong>não abre a tela</strong> para quem não é administrador. Na matriz, as linhas <em>SMS — Allcance</em>, <em>Parâmetros</em>, <em>Configurações IA</em>, <em>Firmware</em> e <em>Auditoria</em> trazem o aviso "(só admin)". <em>Clientes</em> e <em>Usuários</em> seguem a mesma regra, embora a linha não tenha o aviso. Em <em>Comandos por SMS</em>, ao contrário, o acesso é uma permissão à parte, justamente porque cada disparo gasta crédito de SMS.
+<strong>Nem toda linha da matriz pode ser liberada a um grupo.</strong> Algumas telas são <strong>exclusivas do administrador</strong>, e marcar a linha delas aqui <strong>não abre a tela</strong> para quem não é administrador. Na matriz, as linhas <em>SMS — Allcance</em>, <em>Parâmetros</em>, <em>Configurações IA</em>, <em>Firmware</em> e <em>Auditoria</em> trazem o aviso "(só admin)". <em>Clientes</em>, <em>Usuários</em> e <em>Perfis de Parâmetros</em> seguem a mesma regra, embora a linha não tenha o aviso. Em <em>Comandos por SMS</em>, ao contrário, o acesso é uma permissão à parte, justamente porque cada disparo gasta crédito de SMS.
 </div>
 
 <table class="tbl-mock">

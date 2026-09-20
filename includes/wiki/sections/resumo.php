@@ -1,5 +1,5 @@
 <?php defined('WIKI_SECTION') || exit; ?>
-<p><strong>Objetivo:</strong> Visão executiva 360° da frota. É a tela inicial após o login. Mostra indicadores em tempo real, mapa de calor das posições recentes, velocidade da frota, dispositivos desatualizados, ociosidade, status por modelo e gráficos de alarmes e ocorrências. <strong>Só os quatro indicadores do topo</strong> se atualizam sozinhos, a cada 30 segundos; o restante da tela muda quando você a recarrega.</p>
+<p><strong>Objetivo:</strong> Visão executiva 360° da frota. É a tela inicial após o login. Mostra indicadores em tempo real, mapa de calor das posições recentes, velocidade da frota, dispositivos desatualizados, ociosidade, status por modelo e gráficos de alarmes e ocorrências. <strong>Os quatro indicadores do topo e a Ociosidade</strong> se atualizam sozinhos, a cada 30 segundos; o restante da tela muda quando você a recarrega.</p>
 
 <div class="mockup">
 <div class="mockup-header">Resumo — Visão 360°</div>
@@ -41,7 +41,7 @@
 <tr><th>Bloco</th><th>O que mostra</th><th>Atualização</th></tr>
 <tr><td>Indicadores (4 cartões)</td><td><strong>Equipamentos</strong>: ativos sobre o total cadastrado. <strong>Conectividade</strong>: quantos equipamentos ativos estão On (comunicaram nos últimos 5 minutos) e quantos Off. <strong>Ocorrências</strong>: total e quantas aguardam tratativa. <strong>Desatualizados</strong>: quantos estão fora da tolerância de comunicação e, abaixo, quantos deles estão com a ignição ligada</td><td>Automática (30s)</td></tr>
 <tr><td>Mapa de Posições Recentes</td><td>Posições dos veículos nas <strong>últimas 2 horas</strong>, com camada de calor e um ponto por posição — clique no ponto para ver a placa e a velocidade</td><td>Ao carregar a tela</td></tr>
-<tr><td>Velocidade da Frota</td><td>Quantos equipamentos com ignição ligada, nos últimos 30 minutos, estão parados, até 20 km/h, até 60 km/h e acima de 60 km/h. Cada equipamento conta uma vez, na faixa em que aparece</td><td>Ao carregar a tela</td></tr>
+<tr><td>Velocidade da Frota</td><td>Quantos equipamentos com ignição ligada, nos últimos 30 minutos, estão parados, até 20 km/h, até 60 km/h e acima de 60 km/h. Um equipamento que mudou de faixa nesse período (por exemplo, andava e depois parou) pode aparecer em mais de uma faixa, então a soma das faixas pode passar do número de equipamentos</td><td>Ao carregar a tela</td></tr>
 <tr><td>Desatualizados</td><td>Barra que separa os equipamentos desatualizados por ignição ligada (mais urgente) e desligada. O critério é o mesmo do relatório <a href="#rel-desatualizados" style="color:inherit">Desatualizados</a>: último sinal recebido além de 5 minutos com a ignição ligada ou 30 minutos com ela desligada</td><td>Ao carregar a tela</td></tr>
 <tr><td>Ociosidade</td><td>Veículos com ignição ligada e parados nos últimos 30 minutos</td><td>Automática (30s)</td></tr>
 <tr><td>Status de Equipamentos por Modelo</td><td>Para cada modelo (até 6), quantos equipamentos ativos estão On e Off e a porcentagem online</td><td>Ao carregar a tela</td></tr>
@@ -56,8 +56,8 @@
     <li><strong>Top 3 por ocorrências</strong> — total de ocorrências de cada cliente; não muda com os botões de período</li>
     <li><strong>Top 3 por desatualizados</strong> — mesmo critério do indicador Desatualizados</li>
 </ul>
-<p>Para olhar a operação de um desses clientes por dentro, use o seletor de cliente do menu lateral ou o botão <strong>Entrar como</strong> — veja <em>Trocar Cliente</em> em <a href="#primeiros-passos" style="color:inherit">Primeiros Passos</a>.</p>
+<p>Para olhar a operação de um desses clientes por dentro, use o seletor de cliente do menu lateral. O administrador com perfil revendedor tem ainda o botão <strong>Entrar como</strong> — veja <em>Trocar Cliente</em> em <a href="#primeiros-passos" style="color:inherit">Primeiros Passos</a>.</p>
 
 <div class="callout info">
-<strong>Indicadores do topo nunca ficam velhos:</strong> parte dos números vem de uma fotografia recalculada a cada poucos minutos. Se essa fotografia estiver vencida, a tela recalcula os indicadores do topo na hora em vez de mostrar números antigos.
+<strong>Números recentes:</strong> os indicadores do topo normalmente refletem os últimos minutos de operação e se atualizam sozinhos enquanto a tela está aberta.
 </div>

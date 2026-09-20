@@ -24,7 +24,7 @@
 </div>
 
 <div class="callout info">
-<strong>Alarme sem nome, só com número.</strong> Raramente um alarme aparece como <span class="mono">Código 1234 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que ainda não está no catálogo do sistema — que mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos. Assim que o código é cadastrado, o nome aparece também nos alarmes antigos, sem precisar refazer nada. Hoje não há nenhum nesta situação: os dois últimos (<span class="mono">1047</span>, capotamento, e <span class="mono">146</span>, curva brusca) foram cadastrados.
+<strong>Alarme sem nome, só com número.</strong> Raramente um alarme aparece como <span class="mono">Código 1234 (JTT)</span> em vez de um nome. Isso significa que o equipamento enviou um código que ainda não está no catálogo do sistema — que mostra o número em vez de inventar um rótulo que poderia estar errado. O registro é válido: data, hora e local estão corretos. Assim que o código é cadastrado, o nome aparece também nos alarmes antigos, sem precisar refazer nada.
 </div>
 
 <h4 style="font-size:14px;font-weight:600;margin:24px 0 8px">Eventos de diagnóstico <span class="badge" style="background:#fce4eb;color:#c83532">admin</span></h4>
