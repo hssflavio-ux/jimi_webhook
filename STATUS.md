@@ -1,4 +1,40 @@
-# STATUS.md — Jimi Webhook System v4.22.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.22.1 (YUV Parity)
+
+> ### 📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)
+>
+> Wiki com 48 seções e nenhuma exceção `PENDENTE etapa 2` (entraram Manutenção, Painel, Auditoria,
+> Comandos por SMS, SMS e Configurações IA; seções antigas com comportamento velho corrigidas), mais
+> correções de código pedidas pelo dono do produto (Manutenção, importação de câmeras, Chips).
+> Detalhe no CHANGELOG `4.22.1`. Testes: `wiki_access` 122 verificações, `wiki_registry` 11, 0 falhas.
+>
+> 🔴 **Mudança de acesso a comunicar** (decisão do dono, 20/09/2026): a **Auditoria é só do
+> administrador** (`require_admin()` nos 4 handlers, item no menu inferior só-admin). Revendedor de
+> verdade e usuário sem grupo **perdem** o acesso. Os ramos de revendedor dos handlers da Auditoria
+> (`$isAdmin` inclui `user_type='revendedor'`) ficaram inalcançáveis — cleanup adiado.
+>
+> ⚠️ **NÃO verificado em navegador nem executado** (sem MySQL/`.env` local, Playwright não rodou):
+> Manutenção, importação de câmeras, Chips, menu e `/wiki` com os 3 perfis — conferir em homolog.
+>
+> 🔴 **Pendências de produto achadas nesta rodada — NÃO corrigidas (decisão do dono):**
+> - **Acesso/tenant:** `/grupos-permissao` sem `require_admin()` (já na v4.22.0); Manutenção: salvar
+>   não confere que o IMEI é do cliente, `LEFT JOIN devices` sem escopo, `?edit=ID` sem `customer_id`;
+>   Chips: a guarda de "Desativar" lê `sim_cards` sem filtro de cliente (vaza IMEI de outro cliente) e
+>   "Remover" de id fora do escopo diz "Chip removido."; Resumo: ranking "Visão por Clientes" não
+>   escopa por revendedor; gravação da tratativa de ocorrência não filtra por cliente; "Aplicar em
+>   outras câmeras" (Configurações IA) pode alcançar câmeras de outros clientes para o admin.
+> - **Dados/UX:** "Placa" nas telas de operação lê `devices.device_name` (legado), não
+>   `vehicles.plate`; "Online" vale 10 min em Ativos e 5 min em Equipamentos; importação de câmeras:
+>   "linha N" desvia com linhas em branco, câmeras nascem sem chip, linha de 1 coluna ou arquivo com
+>   ponto-e-vírgula some sem aviso, reimportar o mesmo arquivo pode deixar a lista atrás da janela
+>   velha; badges `badge-ok/aguardando/erro/neutro` não existem no CSS (Entrega/Contato sem cor em
+>   Comandos por SMS); link "ajuste em SMS" aparece a quem não abre a tela; o valor gravado no
+>   Detalhe de acessos negados por `require_admin()` provavelmente é `router`.
+>
+> **Decisões em aberto:** título completo no índice da wiki (um rótulo curto no registro também
+> resolveria o "Ao Vivo" ambíguo nos atalhos dos cards da v4.23.0); "Ver na câmera" do Playback está
+> como fato sem medição em câmera real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG
+> 4.18.2. **Adiados:** minors de conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/
+> Playback/Ocorrências sem todas as colunas reais; textos de 1 linha imprecisos) — revisar depois.
 
 > ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
 >
@@ -64,56 +100,7 @@
 > 77/77 — sem regressão na refatoração do `risk_builder.php`). **Sem conferência visual da tela
 > logada nesta sessão** — a mudança não foi vista no navegador com ocorrência real.
 
-> ### 📍 16/09/2026 (depois da velocidade) — Todo cálculo de deslocamento passa a usar hodômetro, não GPS (v4.21.7)
->
-> Pedido do dono do produto: os relatórios de Deslocamento mostravam "Distância" (calculada por
-> GPS, Haversine entre pontos consecutivos) e "Hodômetro" (leitura real do sensor) com valores
-> diferentes — explicado na conversa como duas fontes/metodologias distintas. Decisão do dono do
-> produto: **basear TUDO no hodômetro real**, considerando o equipamento que ainda manda leitura
-> zerada uma falha de CONFIGURAÇÃO, não uma limitação de modelo (diverge da medição registrada na
-> memória `hodometro-bateria-medicao-producao`, que achara só 3 de 8 modelos com leitura real —
-> mantida como estava, não corrigida, por não ter sido o pedido).
->
-> **Escopo, decidido por perguntas explícitas antes de mexer em código** (dono do produto pediu
-> para não decidir sozinho): TODOS os pontos que calculam deslocamento por GPS entram no escopo —
-> `trip_builder.php`, `state_builder.php` e `pushgps.php`, não só o relatório. Sem fallback para
-> GPS quando o hodômetro está inválido (mostra "—"). Sem backfill de `trips`/`device_state_segments`
-> já gravados (só viagens/segmentos novos). Filtro de detecção de viagem (`isRealTrip()`) continua
-> em GPS/velocidade — trocar isso arriscaria deixar de REGISTRAR uma viagem real por hodômetro
-> temporariamente inválido, um custo maior que mostrar "—" numa coluna.
->
-> **Em `/relatorios/deslocamento`**: "Distância" passou a ser hodômetro final menos inicial do
-> trecho (o que a coluna "Hodômetro" já calculava); "Hodômetro" passou a ser a leitura ABSOLUTA do
-> contador no fim do trecho (nova). As duas são recalculadas AO VIVO de `gps_data.mileage` — nunca
-> lidas de `trips.distance_km` —, então valem também para viagens antigas sem precisar de backfill.
->
-> **Achados no caminho, corrigidos**: (1) `handlers/rel_deslocamento_replay.php` tinha DUAS contas
-> de distância na MESMA tela discordando entre si — o KPI de resumo lia `trips.distance_km` (GPS)
-> enquanto o contador "Percorrido" ao vivo já usava hodômetro; unificadas. (2) esse mesmo contador
-> ao vivo tratava `mileage=0` como leitura válida (`odometer_km(0) = 0.0`, não null) — equipamento
-> sem hodômetro real mostrava "0.0 km" fixo a viagem inteira em vez de "—"; corrigido descartando
-> `mileage <= 0` antes de converter. (3) `scripts/worker.php` (relatório agendado "trips", export
-> por e-mail) ainda lia `t.distance_km` puro — seria a última tela a continuar mostrando GPS depois
-> de tudo o resto corrigido; ganhou a mesma subquery ao vivo.
->
-> **Entregue**: `odometer_delta_from_points()` (`includes/functions.php`) — varredura compartilhada
-> (primeira/última leitura válida de `mileage` num array de pontos) usada por `trip_builder.php`,
-> `rel_deslocamento_rota.php` e `rel_deslocamento_replay.php`. `trip_builder.php`/`state_builder.php`
-> passaram a persistir hodômetro (nullable) em vez de Haversine em `distance_km`, mantendo uma
-> distância GPS interna só para o filtro de qualidade. `pushgps.php` (`calculateDistance()`) busca
-> a última leitura válida por `gps_time` (não por ordem de chegada — pontos atrasados existem) e
-> alimenta `device_statistics.total_distance_km` com o delta de hodômetro, sem mudar a stored
-> procedure. `calculate_distance()` (lei dos cossenos, único chamador era `pushgps.php`) removida
-> por ficar sem uso.
->
-> **Verificação**: `php -l` limpo no projeto inteiro; `tests/helpers/odometro_horimetro.test.php`
-> ganhou 6 casos para `odometer_delta_from_points()` (27/27); suíte de helpers sem banco rodada
-> por completo, nada quebrou. **Sem MySQL nesta sessão** — nenhum webhook real gerou linha em
-> `trips`/`device_state_segments`/`gps_data` para conferir o cálculo fim a fim; `trip_builder.php`,
-> `state_builder.php` e `pushgps.php` não foram exercitados contra banco. Precisa de conferência em
-> homolog/produção (câmera real, viagem completa) antes do próximo deploy.
-
-> Entradas anteriores a "📍 16/09/2026 (depois da velocidade) — Todo cálculo de deslocamento passa a usar hodômetro, não GPS" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 17/09/2026 — Velocidade passa a valer para QUALQUER alarme na tela de tratativa, não só Excesso de Velocidade" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 
