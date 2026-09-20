@@ -93,7 +93,6 @@ checa('a matriz foi lida (sanidade)', true, count($telas) > 25);
 // Tela sem seção PRECISA constar aqui com o motivo escrito. Remover a entrada
 // quando a seção nascer — o teste reclama de exceção obsoleta.
 $EXCECOES = [
-    'wiki'                => 'é a própria Central de Ajuda',
     'config-dispositivos' => 'aberta pela ficha do veículo (aba Configurações); documentada dentro de Ativos',
     'config-parametros'   => 'fora do menu desde a v4.13.10, junto com Parâmetros',
 ];

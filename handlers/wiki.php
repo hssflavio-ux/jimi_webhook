@@ -1,6 +1,6 @@
 <?php
 /**
- * JIMI Webhook System — Wiki / Central de Ajuda v4.22.0
+ * JIMI Webhook System — Wiki / Central de Ajuda v4.22.0, v4.23.0
  * Rota: /wiki
  *
  * Documentação do sistema para o USUÁRIO FINAL: mockups visuais das telas,
@@ -36,7 +36,13 @@
  * - Tela nova entra em TRÊS lugares: $screenByHandler, $screens e o registro
  *   (tests/helpers/wiki_registry.test.php trava).
  *
-
+ * Atualizada na v4.23.0:
+ * - Card de abertura por perfil (admin/revendedor/cliente): descrição do papel,
+ *   5 atalhos das telas mais usadas (filtrados pelo que o perfil pode abrir) e
+ *   contador "N de M telas".
+ * - Seção "Meu acesso": lista de telas liberadas e bloqueadas, com o motivo,
+ *   gerada dinamicamente (sem parcial).
+ *
  * Duas regras de negócio que o usuário PRECISA entender e que só existem aqui:
  * o sistema notifica por OCORRÊNCIA e não por alarme (12 alarmes em rajada =
  * 1 aviso, e isso é o desenho funcionando), e o link do relatório grande é
@@ -51,6 +57,17 @@ require_login();
 $user     = get_jimi_user() ?: [];
 $registry = wiki_registry();
 $access   = wiki_compute_access($registry, (string)($user['role'] ?? ''), 'can');
+$perfil   = wiki_profile($user);
+$grupoNome = null;
+if (!empty($user['permission_group_id'])) {
+    try {
+        $st = Database::getInstance()->getConnection()->prepare('SELECT name FROM permission_groups WHERE id = ?');
+        $st->execute([(int)$user['permission_group_id']]);
+        $grupoNome = $st->fetchColumn() ?: null;
+    } catch (\Throwable $e) {
+        $grupoNome = null; // o card mostra só o perfil, sem o nome do grupo
+    }
+}
 
 $page_title    = 'Central de Ajuda';
 $current_route = 'wiki';
@@ -448,6 +465,16 @@ $extra_head = <<<'HEAD'
 .wiki-access-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); }
 .wiki-access-no { color: var(--muted); }
 .wiki-access-extra { color: var(--warning-text-strong); }
+/* ── Card de perfil (v4.23.0) ─────────────────────── */
+.wiki-card { border: 1px solid var(--hairline); border-radius: 16px; padding: 18px 20px; margin: 0 0 28px; background: var(--canvas); }
+.wiki-card-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; font-size: 14px; color: var(--ink); }
+.wiki-card-top span { color: var(--muted); font-size: 13px; }
+.wiki-card p { margin: 8px 0 0; color: var(--body); }
+.wiki-card-count a { color: var(--primary); }
+.wiki-card-go { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+.wiki-card-go > span { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.wiki-shortcut { padding: 6px 14px; border-radius: 100px; background: var(--primary-soft); color: var(--primary); font-size: 13px; font-weight: 600; text-decoration: none; }
+.wiki-meu-acesso ul { margin: 6px 0 14px; padding-left: 18px; line-height: 1.7; color: var(--body); }
 </style>
 HEAD;
 
@@ -463,6 +490,7 @@ require_once __DIR__ . '/../web/layout_base.php';
 
     <!-- ── Content ──────────────────────────────────── -->
     <div class="wiki-content" id="wikiContent">
+<?= wiki_render_card($perfil, $grupoNome, $registry, $access) ?>
 <?= wiki_render_body($registry, $access) ?>
 
 <p style="text-align:center;margin-top:48px;font-size:12px;color:var(--muted);padding-bottom:40px">

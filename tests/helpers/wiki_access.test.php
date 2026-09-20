@@ -137,5 +137,48 @@ $htmlSemMapa = texto_normal(wiki_render_body($reg, []));
 checa('seção ausente do mapa não vaza o parcial (rel-posicoes)', false, strpos($htmlSemMapa, marcador('rel-posicoes')) !== false);
 checa('seção ausente do mapa vira link com cadeado no índice', true, strpos(wiki_render_toc($reg, []), 'class="locked"') !== false);
 
+echo "== perfil e card ==\n";
+checa('role admin → admin', 'admin', wiki_profile(['role' => 'admin', 'user_type' => 'revendedor']));
+checa('user_type revendedor → revendedor', 'revendedor', wiki_profile(['role' => 'user', 'user_type' => 'revendedor']));
+checa('demais → cliente', 'cliente', wiki_profile(['role' => 'user', 'user_type' => 'cliente']));
+checa('sem role e sem user_type → cliente', 'cliente', wiki_profile([]));
+
+$idsVisiveis = array_column(wiki_visible($reg), 'id');
+foreach (['admin', 'revendedor', 'cliente'] as $p) {
+    $info = wiki_profile_info($p);
+    checa("atalhos de $p existem no registro", [], array_values(array_diff($info['shortcuts'], $idsVisiveis)));
+    checa("atalhos de $p têm ao menos 6 opções (reposição)", true, count($info['shortcuts']) >= 6);
+}
+
+$cardCli = wiki_render_card('cliente', null, $reg, wiki_compute_access($reg, 'cliente', $tudo));
+checa('card mostra o perfil', true, strpos($cardCli, 'Seu perfil: Cliente') !== false);
+checa('card sem grupo explica o "vê tudo, exceto admin"', true, strpos($cardCli, 'exceto as áreas restritas a administradores') !== false);
+checa('card com grupo mostra o nome', true, strpos(wiki_render_card('cliente', 'Supervisão', $reg, wiki_compute_access($reg, 'cliente', $tudo)), 'Grupo Supervisão') !== false);
+preg_match_all('/href="#([a-z0-9-]+)" class="wiki-shortcut"/', $cardCli, $sc);
+checa('card mostra exatamente 5 atalhos (a lista tem reposição)', 5, count($sc[1]));
+
+$semRastreamento = fn($s, $a = 'view') => $s !== 'rastreamento';
+$cardSem = wiki_render_card('cliente', null, $reg, wiki_compute_access($reg, 'cliente', $semRastreamento));
+preg_match_all('/href="#([a-z0-9-]+)" class="wiki-shortcut"/', $cardSem, $sc2);
+checa('atalho bloqueado sai e o próximo entra (continua 5)', 5, count($sc2[1]));
+checa('atalho para tela bloqueada não aparece', false, in_array('rastreamento', $sc2[1], true));
+
+$soRastreamento = fn($s, $a = 'view') => $s === 'rastreamento';
+$cardPouco = wiki_render_card('cliente', 'Restrito', $reg, wiki_compute_access($reg, 'cliente', $soRastreamento));
+preg_match_all('/href="#([a-z0-9-]+)" class="wiki-shortcut"/', $cardPouco, $sc3);
+checa('grupo restrito: só sobra o atalho liberado, sem botão morto', ['rastreamento'], $sc3[1]);
+
+echo "== contador \"N de M telas\" ==\n";
+$telas = array_values(array_filter(wiki_visible($reg), fn($s) => $s['handler'] !== null));
+$m = count($telas);
+checa('contador mostra M do registro', true, strpos($cardCli, "de $m telas") !== false);
+$cardBloq = wiki_render_card('cliente', null, $reg, wiki_compute_access($reg, 'cliente', $nada));
+checa('sem nenhuma permissão: 0 de M', true, strpos($cardBloq, "0 de $m telas") !== false);
+
+echo "== Meu acesso ==\n";
+$meu = wiki_render_meu_acesso($reg, wiki_compute_access($reg, 'cliente', $nada));
+checa('lista bloqueadas com o motivo', true, strpos($meu, WIKI_MOTIVO_GRUPO) !== false);
+checa('Meu acesso entra no corpo da página', true, strpos(wiki_render_body($reg, wiki_compute_access($reg, 'cliente', $tudo)), 'id="meu-acesso"') !== false);
+
 echo "\n$total verificações, $falhas falha(s)\n";
 exit($falhas > 0 ? 1 : 0);

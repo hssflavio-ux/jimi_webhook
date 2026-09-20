@@ -1,6 +1,6 @@
 <?php
 /**
- * Central de Ajuda — renderizador (v4.22.0).
+ * Central de Ajuda — renderizador (v4.22.0, v4.23.0).
  *
  * Recebe o registro e o mapa de acesso (wiki_compute_access) e devolve HTML.
  * Seção bloqueada NUNCA inclui o parcial: o conteúdo dela não chega ao
@@ -133,8 +133,69 @@ function wiki_render_body(array $registry, array $access): string {
         $out .= wiki_heading($sec, $bloqueada) . "\n";
         $out .= $bloqueada
             ? wiki_stub($sec, $acc)
-            : wiki_access_strip($sec, $acc) . wiki_include_section($sec['id']);
+            : wiki_access_strip($sec, $acc)
+                . (!empty($sec['dynamic']) ? wiki_render_meu_acesso($registry, $access) : wiki_include_section($sec['id']));
         $out .= "\n";
     }
     return $out;
+}
+
+/** Seções que são uma tela (têm handler) e não estão ocultas — a base do "N de M". */
+function wiki_telas(array $registry): array {
+    return array_values(array_filter(wiki_visible($registry), fn($s) => $s['handler'] !== null));
+}
+
+/**
+ * Card de abertura por perfil (spec §4.5).
+ *
+ * @param string  $perfil   admin|revendedor|cliente (wiki_profile()).
+ * @param ?string $grupo    Nome do grupo de permissão, ou null se não tem.
+ * @param array   $registry Registro.
+ * @param array   $access   Mapa de wiki_compute_access().
+ */
+function wiki_render_card(string $perfil, ?string $grupo, array $registry, array $access): string {
+    $info   = wiki_profile_info($perfil);
+    $porId  = [];
+    foreach (wiki_visible($registry) as $s) $porId[$s['id']] = $s;
+    $telas  = wiki_telas($registry);
+    $livres = count(array_filter($telas, fn($s) => ($access[$s['id']] ?? wiki_acesso_padrao())['state'] === 'liberada'));
+
+    $linhaGrupo = $grupo !== null
+        ? 'Grupo ' . wiki_esc($grupo)
+        : 'Sem grupo de permissão: você vê tudo, exceto as áreas restritas a administradores.';
+
+    $atalhos = '';
+    $n = 0;
+    foreach ($info['shortcuts'] as $id) {
+        if ($n >= 5) break;
+        if (!isset($porId[$id]) || ($access[$id] ?? wiki_acesso_padrao())['state'] !== 'liberada') continue;
+        $atalhos .= '<a href="#' . wiki_esc($id) . '" class="wiki-shortcut">' . wiki_esc($porId[$id]['title']) . '</a>';
+        $n++;
+    }
+
+    return '<div class="wiki-card">'
+        . '<div class="wiki-card-top"><strong>Seu perfil: ' . wiki_esc($info['label']) . '</strong>'
+        . '<span>' . $linhaGrupo . '</span></div>'
+        . '<p>' . wiki_esc($info['daily']) . '</p>'
+        . '<p class="wiki-card-count">Você tem acesso a ' . $livres . ' de ' . count($telas) . ' telas. '
+        . '<a href="#meu-acesso">Ver meu acesso completo</a></p>'
+        . ($atalhos !== '' ? '<div class="wiki-card-go"><span>Comece por aqui</span>' . $atalhos . '</div>' : '')
+        . '</div>';
+}
+
+/** Corpo da seção "Meu acesso": liberado × bloqueado, com o motivo. */
+function wiki_render_meu_acesso(array $registry, array $access): string {
+    $liberadas  = '';
+    $bloqueadas = '';
+    foreach (wiki_telas($registry) as $s) {
+        $acc = $access[$s['id']] ?? wiki_acesso_padrao();
+        if ($acc['state'] === 'liberada') {
+            $liberadas  .= '<li><a href="#' . wiki_esc($s['id']) . '">' . wiki_esc($s['title']) . '</a></li>';
+        } else {
+            $bloqueadas .= '<li><a href="#' . wiki_esc($s['id']) . '">' . wiki_esc($s['title']) . '</a> — '
+                . wiki_esc((string)$acc['reason']) . '</li>';
+        }
+    }
+    return '<div class="wiki-meu-acesso" id="meu-acesso"><h4>Liberado para você</h4><ul>' . ($liberadas ?: '<li>Nenhuma tela.</li>') . '</ul>'
+        . '<h4>Bloqueado</h4><ul>' . ($bloqueadas ?: '<li>Nada bloqueado.</li>') . '</ul></div>';
 }

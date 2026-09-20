@@ -56,3 +56,46 @@ function wiki_compute_access(array $registry, string $role, callable $can): arra
     }
     return $out;
 }
+
+/**
+ * Perfil para o card de abertura. `role` vem primeiro: um admin com
+ * user_type='revendedor' é admin (reseller_scope_ids() o trata como sem
+ * restrição).
+ *
+ * @param array $user Linha de get_jimi_user() (pode ser vazia).
+ * @return string admin|revendedor|cliente
+ */
+function wiki_profile(array $user): string {
+    if (($user['role'] ?? '') === 'admin') return 'admin';
+    if (($user['user_type'] ?? '') === 'revendedor') return 'revendedor';
+    return 'cliente';
+}
+
+/**
+ * Texto e atalhos do card. As listas têm mais de 5 ids de propósito: o card
+ * mostra os 5 primeiros que o usuário PODE abrir, então um bloqueado é
+ * substituído pelo próximo. Ids de seção do registro (rótulo = título dela).
+ *
+ * @return array{label:string,daily:string,shortcuts:string[]}
+ */
+function wiki_profile_info(string $perfil): array {
+    $info = [
+        'admin' => [
+            'label'     => 'Administrador',
+            'daily'     => 'Você cadastra clientes, usuários e equipamentos, define permissões e ajusta as configurações da plataforma.',
+            'shortcuts' => ['clientes', 'usuarios', 'grupos-permissao', 'equipamentos', 'comandos', 'firmwares', 'auditoria'],
+        ],
+        'revendedor' => [
+            'label'     => 'Revendedor',
+            'daily'     => 'Você acompanha vários clientes, entra na operação de cada um e compara o desempenho entre eles.',
+            'shortcuts' => ['resumo', 'rastreamento', 'ocorrencias-dashboard', 'ativos', 'rel-comum', 'rel-status-frota', 'video-aovivo'],
+        ],
+        'cliente' => [
+            'label'     => 'Cliente',
+            'daily'     => 'Você acompanha a sua frota, trata as ocorrências dos motoristas e tira relatórios.',
+            'shortcuts' => ['rastreamento', 'ocorrencias-dashboard', 'video-aovivo', 'rel-alarmes', 'ativos', 'rel-posicoes', 'motoristas'],
+        ],
+    ];
+    return $info[$perfil] ?? $info['cliente'];
+}
+

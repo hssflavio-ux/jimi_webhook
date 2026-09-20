@@ -71,7 +71,12 @@ function wiki_registry(): array {
 
     return [
         wiki_sec('intro', 'Visão Geral do Sistema', ['level' => 2]),
+        wiki_sec('meu-acesso', 'Meu acesso', [
+            'level' => 2, 'screen' => 'wiki', 'dynamic' => true,
+            'summary' => 'O que está liberado e o que está bloqueado para você.',
+        ]),
         wiki_sec('primeiros-passos', 'Primeiros Passos', ['level' => 2]),
+
         wiki_sec('resumo', 'Resumo', [
             'level' => 2, 'sub' => true, 'badge' => 'tela inicial',
             'screen' => 'resumo', 'handler' => 'resumo.php',

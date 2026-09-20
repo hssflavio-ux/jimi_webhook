@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.23.0
+
+**Central de Ajuda (`/wiki`) ganha um card de boas-vindas personalizado por perfil e a seção "Meu acesso".**
+
+- **Adicionado** `wiki_profile(array $user): string` (`includes/wiki_access.php`) — devolve `admin|revendedor|cliente` a partir de `role` e `user_type`; `role admin` tem prioridade (um admin com `user_type=revendedor` é admin, como `reseller_scope_ids()` o trata).
+- **Adicionado** `wiki_profile_info(string $perfil): array` (`includes/wiki_access.php`) — texto do papel e lista de até 7 atalhos por perfil (exibe os 5 primeiros que o usuário pode abrir; bloqueado é substituído pelo próximo).
+- **Adicionado** `wiki_telas(array $registry): array` (`includes/wiki_render.php`) — seções visíveis com `handler !== null`; é a base do contador "N de M telas".
+- **Adicionado** `wiki_render_card(string $perfil, ?string $grupo, array $registry, array $access): string` (`includes/wiki_render.php`) — card de abertura: perfil, grupo (ou "sem grupo"), descrição do papel, contador de telas, 5 atalhos filtrados pelo que o perfil pode abrir e link para "Meu acesso".
+- **Adicionado** `wiki_render_meu_acesso(array $registry, array $access): string` (`includes/wiki_render.php`) — duas listas: telas liberadas (com link) e telas bloqueadas (com link e motivo).
+- **Adicionado** seção `meu-acesso` em `includes/wiki_registry.php` (logo após `intro`, `dynamic=true` — sem parcial: o corpo é gerado por `wiki_render_meu_acesso`). `screen='wiki'` faz o resolvedor e os testes tratarem a tela como qualquer outra.
+- **Alterado** `wiki_render_body()` (`includes/wiki_render.php`) — seção com `dynamic=true` chama `wiki_render_meu_acesso()` em vez de incluir um parcial.
+- **Alterado** `handlers/wiki.php` — após `wiki_compute_access()`, resolve `$perfil` e `$grupoNome` (SELECT em `permission_groups`, com try-catch; sem grupo = `null`, e o card exibe \"Sem grupo de permissão\"). `wiki_render_card()` é emitido logo antes de `wiki_render_body()`.
+- **Removido** a exceção `'wiki' => 'é a própria Central de Ajuda'` de `$EXCECOES` em `tests/helpers/wiki_registry.test.php` — a tela `wiki` agora tem seção (`meu-acesso`).
+- **Verificação**: `php tests/helpers/wiki_access.test.php` (143 verificações) e `php tests/helpers/wiki_registry.test.php` (11 verificações), 0 falhas; lint global limpo; `node --check tests/wiki.spec.js`. Playwright não rodou (sem MySQL/`.env` local); conferir em homolog após o deploy.
+
 ## [Unreleased] — 4.22.1
 
 **A Central de Ajuda (`/wiki`) fica completa — 48 seções, nenhuma pendente — e as seções antigas que descreviam comportamento velho foram corrigidas. No caminho, a Auditoria passa a ser exclusiva do administrador (mudança de acesso) e quatro defeitos de produto achados na revisão foram corrigidos.**

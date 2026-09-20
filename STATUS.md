@@ -1,4 +1,21 @@
-# STATUS.md — Jimi Webhook System v4.22.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.23.0 (YUV Parity)
+
+> ### 📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e "Meu acesso" (v4.23.0)
+>
+> `/wiki` abre agora com um card personalizado que mostra o **perfil do usuário** (admin /
+> revendedor / cliente), o papel dele na plataforma, um contador "N de M telas" com acesso e
+> 5 atalhos filtrados pelo que o perfil pode abrir (se um atalho estiver bloqueado, o próximo
+> da lista substitui). Abaixo do card, a seção **"Meu acesso"** lista as telas liberadas e as
+> bloqueadas, com o motivo. Conteúdo gerado dinamicamente (sem parcial) pela seção `meu-acesso`
+> (`dynamic=true`) do registro. Detalhe no CHANGELOG `4.23.0`.
+> Testes: `wiki_access` 143 verificações, `wiki_registry` 11, 0 falhas.
+>
+> ⚠️ **NÃO verificado em navegador nem executado** (sem MySQL/`.env` local, Playwright não rodou):
+> card e "Meu acesso" nos três perfis — conferir em homolog após o deploy.
+>
+> **Decisão em aberto:** título completo no índice da wiki vs. rótulo curto (ex.: o atalho
+> "Ao Vivo" é ambíguo — vídeo ao vivo ou rastreamento ao vivo?). Um campo de rótulo curto
+> no registro resolveria os dois pontos de uma vez.
 
 > ### 📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)
 >
@@ -30,11 +47,10 @@
 >   Comandos por SMS); link "ajuste em SMS" aparece a quem não abre a tela; o valor gravado no
 >   Detalhe de acessos negados por `require_admin()` provavelmente é `router`.
 >
-> **Decisões em aberto:** título completo no índice da wiki (um rótulo curto no registro também
-> resolveria o "Ao Vivo" ambíguo nos atalhos dos cards da v4.23.0); "Ver na câmera" do Playback está
-> como fato sem medição em câmera real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG
-> 4.18.2. **Adiados:** minors de conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/
-> Playback/Ocorrências sem todas as colunas reais; textos de 1 linha imprecisos) — revisar depois.
+> **Decisões em aberto (v4.22.1):** "Ver na câmera" do Playback está como fato sem medição em câmera
+> real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG 4.18.2. **Adiados:** minors de
+> conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/Playback/Ocorrências sem todas as
+> colunas reais; textos de 1 linha imprecisos) — revisar depois.
 
 > ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
 >
