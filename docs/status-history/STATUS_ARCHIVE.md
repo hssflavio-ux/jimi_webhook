@@ -2,6 +2,43 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 17/09/2026 — Velocidade passa a valer para QUALQUER alarme na tela de tratativa, não só Excesso de Velocidade (v4.21.8)
+>
+> Usuário perguntou se DMS/ADAS mandam velocidade na string do alarme, já que a coluna "Velocidade"
+> (v4.21.6) existia na tela de tratativa mas vinha vazia pra esses alarmes. Investigação sistemática
+> (skill `systematic-debugging`): `pushalarm.php` já extrai `gpsSpeed`/`speed` de QUALQUER alarme —
+> não há gate por código na extração. O gate está em `occ_overspeed_kmh()` (v4.21.6), que só calcula
+> valor pros 5 códigos de Excesso de Velocidade e retorna `null` pra tudo o mais, **mesmo quando
+> `alarms.speed` está preenchido**.
+>
+> **Verificado em produção (SSH read-only autorizado pelo usuário, script de diagnóstico removido
+> depois)**, porque a doc oficial da Jimi afirma que `gpsSpeed` "only exist when reporting overspeed
+> alerts" — mesma classe de erro do `CHECK`/`MILE#`/`FILELIST` já documentada no `CLAUDE.md`, então
+> não bastava confiar na doc. Real: dos 1.892 alarmes DMS/ADAS das últimas semanas, 1.868 (98,7%)
+> trazem `speed` > 0 (JT/T 1.554/1.558 = 99,7%; JIMI 314/334 = 94%). Amostra: `143 — DMS: Distração
+> do Motorista` chegou com `raw_data.msg.gpsSpeed=46`, já gravado em `alarms.speed=46.00`; `264-3 —
+> ADAS: Distância Insegura (HMW)` com `64.2`. `alert_value`/`alertValue` fica em `0` nesses alarmes
+> nos dois protocolos (confirma que é campo multi-uso, correto ele ficar de fora do caso geral).
+>
+> **Achado ao investigar**: o Mapa de Risco (`scripts/risk_builder.php`, `rb_alarm_speed()`) já
+> tratava velocidade como dado válido pra QUALQUER alarme desde que existe (`speed_band`, gráfico
+> "Índice por velocidade" em `mapa_risco.php`) — só a tela de ocorrência ficou pra trás, com sua
+> própria lógica restrita a overspeed. Resposta à segunda pergunta do usuário ("já temos estatística
+> de velocidade no mapa de risco?"): sim, e é ela que virou o ponto único.
+>
+> **Entregue**: `alarm_speed_kmh()` (`includes/functions.php`) — `rb_alarm_speed()` movida de
+> `risk_builder.php` pra ponto único (mesma função, sem mudança de comportamento no Mapa de Risco).
+> `occ_event_speed_kmh()` (`ocorrencias_dashboard.php`) combina `occ_overspeed_kmh()` (inalterada,
+> ainda o único caminho pro `alert_value` JIMI) com o novo ponto único como fallback — usada na
+> tabela "Alarmes Agrupados" E no balão do mapa. SELECT de eventos da ocorrência passou a trazer
+> `a.car_speed`, que faltava.
+>
+> **Verificação**: `php -l` limpo no projeto inteiro; `tests/helpers/alarm_speed.test.php` (novo,
+> 16 checagens) cobre `alarm_speed_kmh()` isolado e confere por leitura de fonte que as duas telas
+> usam o ponto único; suíte de helpers sem banco rodada por completo, nada quebrou (`risk_map.test.php`
+> 77/77 — sem regressão na refatoração do `risk_builder.php`). **Sem conferência visual da tela
+> logada nesta sessão** — a mudança não foi vista no navegador com ocorrência real.
+
 > ### 📍 16/09/2026 (depois da velocidade) — Todo cálculo de deslocamento passa a usar hodômetro, não GPS (v4.21.7)
 >
 > Pedido do dono do produto: os relatórios de Deslocamento mostravam "Distância" (calculada por
