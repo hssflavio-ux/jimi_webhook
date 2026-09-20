@@ -286,11 +286,16 @@ include __DIR__ . '/../web/layout_base.php';
         foreach (['q1', 'q2', 'q3', 'q4'] as $k) $params[":$k"] = "%$q%";
     }
 
+    // `v.customer_id = r.customer_id` (nas duas consultas abaixo): a placa só vale se
+    // o veículo que detém a câmera AGORA é do MESMO cliente do lembrete. Câmera
+    // reatribuída a outro cliente (ou IMEI de outro cliente forjado no salvar)
+    // faria a lista mostrar a placa de um veículo alheio; sem o par, cai no nome
+    // legado / "(sem placa)".
     $countStmt = $db->prepare("
         SELECT COUNT(*) FROM maintenance_reminders r
         LEFT JOIN devices d ON d.imei = r.imei
         LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
-        LEFT JOIN vehicles v ON v.id = di.vehicle_id
+        LEFT JOIN vehicles v ON v.id = di.vehicle_id AND v.customer_id = r.customer_id
         LEFT JOIN drivers dr ON dr.id = r.driver_id
         WHERE $where
     ");
@@ -304,7 +309,7 @@ include __DIR__ . '/../web/layout_base.php';
         FROM maintenance_reminders r
         LEFT JOIN devices d ON d.imei = r.imei
         LEFT JOIN device_installations di ON di.device_id = d.id AND di.removed_at IS NULL
-        LEFT JOIN vehicles v ON v.id = di.vehicle_id
+        LEFT JOIN vehicles v ON v.id = di.vehicle_id AND v.customer_id = r.customer_id
         LEFT JOIN drivers dr ON dr.id = r.driver_id
         WHERE $where
         ORDER BY r.is_active DESC, r.name
