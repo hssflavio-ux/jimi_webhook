@@ -1,4 +1,29 @@
-# STATUS.md — Jimi Webhook System v4.24.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.24.1 (YUV Parity)
+
+> ### 📍 23/09/2026 — Dados Estendidos: padrão de relatório, lista única e motivo da transmissão (v4.24.1)
+>
+> Três pedidos do dono do produto sobre `/dados-estendidos`: **(1)** seguir o padrão do frontend —
+> a tela usava `<table class="table">`, rótulo "Equipamento" e abas com estilo inline; agora usa
+> `.filtro-rotulo`/`.filtro-campo`, campo **Placa** (valor = IMEI, texto por `placa_do_device()`),
+> `.table-wrap`, `report_sort_link()`/`report_pagination()`, título e botão **Gerar** iguais aos de
+> `rel_posicoes.php`; **(2)** as duas abas viraram **uma lista única por data/hora** (`UNION ALL` de
+> `gps_data` e `device_events`; cada ramo se limita a `offset + perPage` linhas antes da união);
+> **(3)** a coluna **Motivo da transmissão** mostra `código — nome PT-BR` a partir da tabela oficial
+> do `postMethod` (`0x00`–`0x0F`), convertida de hex para o inteiro que o device manda.
+>
+> 🔴 **Premissa corrigida:** o projeto afirmava (CHANGELOG `4.17.11`, `4.21.5`, `4.23.1`, `4.24.0`) que
+> o `postMethod` "não tem tabela oficial". Tem: está DENTRO da célula de descrição do campo, separada
+> por `<br>`, em hex — sem linha própria por valor, e por isso passou despercebida. Agora em
+> `includes/gps_extras.php` (`POST_METHOD_LABELS`, `post_method_label()`). Os `27`/`28` medidos em
+> produção continuam fora da tabela: aparecem como "Sem descrição do fabricante", sem nome inventado.
+>
+> ✅ Testado contra MySQL local com 157 linhas semeadas (posições + extensões): páginas 1–4 contíguas,
+> sem duplicata, em ASC e DESC; helper `dados_estendidos` 48/48; `wiki_registry` 11/11; os 4 campos do
+> filtro com a mesma borda, rótulo Placa e nenhuma opção com IMEI cru; screenshot conferido. Dados de
+> teste removidos. Sem migração — **não** precisa de segundo deploy. ⚠️ `tests/filtros.spec.js` ›
+> "o campo do veículo se chama PLACA em toda tela" falha **antes** de chegar em `/dados-estendidos`, por
+> `/equipamentos?action=novo` (a v4.11.0 removeu o campo Placa de lá) — não é desta mudança, mas o
+> teste está vermelho e essa rota deveria sair da lista.
 
 > ### 📍 22/09/2026 — Tela "Dados Estendidos" — gpsMode/postType/postMethod + extensão do terminal (v4.24.0)
 >
@@ -41,24 +66,7 @@
 > reaplicação idempotente). `bash -n scripts/deploy.sh` limpo. Registrada em `scripts/deploy.sh` e
 > na skill `db-setup`. **Falta**: segundo deploy em homolog/produção (regra do CLAUDE.md).
 
-> ### 📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e "Meu acesso" (v4.23.0)
->
-> `/wiki` abre agora com um card personalizado que mostra o **perfil do usuário** (admin /
-> revendedor / cliente), o papel dele na plataforma, um contador "N de M telas" com acesso e
-> 5 atalhos filtrados pelo que o perfil pode abrir (se um atalho estiver bloqueado, o próximo
-> da lista substitui). Abaixo do card, a seção **"Meu acesso"** lista as telas liberadas e as
-> bloqueadas, com o motivo. Conteúdo gerado dinamicamente (sem parcial) pela seção `meu-acesso`
-> (`dynamic=true`) do registro. Detalhe no CHANGELOG `4.23.0`.
-> Testes: `wiki_access` 143 verificações, `wiki_registry` 11, 0 falhas.
->
-> ⚠️ **NÃO verificado em navegador nem executado** (sem MySQL/`.env` local, Playwright não rodou):
-> card e "Meu acesso" nos três perfis — conferir em homolog após o deploy.
->
-> **Decisão em aberto:** título completo no índice da wiki vs. rótulo curto (ex.: o atalho
-> "Ao Vivo" é ambíguo — vídeo ao vivo ou rastreamento ao vivo?). Um campo de rótulo curto
-> no registro resolveria os dois pontos de uma vez.
-
-> Entradas anteriores a "📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e 'Meu acesso' (v4.23.0)" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a 22/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

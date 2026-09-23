@@ -1,26 +1,31 @@
 <?php
 /**
- * bycamera — Dados Estendidos v4.24.0
+ * bycamera — Dados Estendidos v4.24.1
  * Rota: /dados-estendidos
  *
- * Consulta somente-leitura, por dispositivo, de dois conjuntos de dados que
- * já são GRAVADOS pelo webhook mas nunca tinham tela nenhuma (achado ao
- * conferir se `gpsMode`/`postMethod` eram tratados, 22/09/2026):
+ * Consulta somente-leitura, por placa, de dois conjuntos de dados que já são
+ * GRAVADOS pelo webhook mas nunca tinham tela nenhuma (achado ao conferir se
+ * `gpsMode`/`postMethod` eram tratados, 22/09/2026). Os dois vêm numa lista
+ * ÚNICA, ordenada por data/hora — a v4.24.0 os separava em duas abas:
  *
- *   Aba "Transmissão GPS": `gps_data.gps_mode`/`post_type`/`post_method`
- *   (§1.3 Push GPS Data). `gpsMode` e `postType` têm tabela oficial de
- *   valores (includes/gps_extras.php); `postMethod` NÃO tem — mostrado cru,
- *   sem rótulo inventado (CHANGELOG 4.17.11).
+ *   Linha "Posição GPS": `gps_data.gps_mode`/`post_type`/`post_method`/`speed`
+ *   (§1.3 Push GPS Data). Os três campos têm tabela oficial de valores
+ *   (includes/gps_extras.php); o `postMethod` — o MOTIVO da transmissão — vem
+ *   como inteiro e é mostrado "código — nome PT-BR".
  *
- *   Aba "Extensão do Terminal": `device_events` (só `pushTerminalTransInfo.php`
- *   grava, §1.15 Push Extension Data). O `content` de cada linha é decodificado
- *   por `parse_extension_content()`/`extension_content_render()`
+ *   Linha de extensão: `device_events` (só `pushTerminalTransInfo.php` grava,
+ *   §1.15 Push Extension Data). O `content` de cada linha é decodificado por
+ *   `parse_extension_content()`/`extension_content_render()`
  *   (includes/gps_extras.php) — formato NÃO é JSON válido, ver o cabeçalho
  *   daquele arquivo.
  *
  * Exclusiva do administrador (decisão do dono do produto, 22/09/2026) — mesmo
  * padrão da Auditoria (v4.22.1): `require_admin()` além de
  * `require_permission()`, porque `can()` é permissivo por omissão.
+ *
+ * Visual: barra de filtros no padrão dos relatórios (`.filtro-rotulo` /
+ * `.filtro-campo`, campo do veículo = PLACA cujo valor é o IMEI), grade em
+ * `.table-wrap` e `report_pagination()` — ver tests/filtros.spec.js.
  */
 
 require_once __DIR__ . '/../includes/auth.php';
@@ -39,7 +44,6 @@ $scopeCust  = report_customer_scope($filtroCust, $isAdmin, $customerId);
 $customers  = $isAdmin ? report_customer_options($db) : [];
 $devices    = report_device_options($db, $scopeCust);
 
-$tab   = ($_GET['tab'] ?? 'gps') === 'extensao' ? 'extensao' : 'gps';
 $imei  = trim((string)($_GET['imei'] ?? ''));
 $imeisVisiveis = array_column($devices, 'imei');
 if ($imei !== '' && !in_array($imei, $imeisVisiveis, true)) {
@@ -51,6 +55,10 @@ $dateTo   = $_GET['date_to']   ?? brt_today();
 [$dateFrom, $dateTo, $rangeClamped] = clamp_report_range($dateFrom, $dateTo);
 [$utcFrom, $utcTo] = brt_day_range_to_utc($dateFrom, $dateTo);
 
+// Só data/hora ordena; mais recente primeiro (é uma tela de diagnóstico: o que
+// o equipamento mandou agora importa mais que o que mandou de manhã).
+[$sort, $order] = report_sort_params(['ts'], 'ts', 'DESC');
+
 $page    = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 50;
 
@@ -60,194 +68,176 @@ $rows       = [];
 
 if ($imei !== '') {
     try {
-        if ($tab === 'gps') {
-            $stmtCount = $db->prepare("SELECT COUNT(*) FROM gps_data WHERE imei = :imei AND gps_time BETWEEN :df AND :dt");
-            $stmtCount->execute([':imei' => $imei, ':df' => $utcFrom, ':dt' => $utcTo]);
-            $totalRows  = (int)$stmtCount->fetchColumn();
-            $totalPages = max(1, (int)ceil($totalRows / $perPage));
-            $page       = min($page, $totalPages);
-            $offset     = ($page - 1) * $perPage;
+        // Nomes de parâmetro distintos por ramo: o PDO não deixa repetir o mesmo
+        // placeholder nomeado na mesma consulta.
+        $params = [
+            ':g_imei' => $imei, ':g_df' => $utcFrom, ':g_dt' => $utcTo,
+            ':e_imei' => $imei, ':e_df' => $utcFrom, ':e_dt' => $utcTo,
+        ];
 
-            $stmt = $db->prepare("
-                SELECT gps_time, gps_mode, post_type, post_method, speed
-                FROM gps_data
-                WHERE imei = :imei AND gps_time BETWEEN :df AND :dt
-                ORDER BY gps_time DESC
-                LIMIT :lim OFFSET :off
-            ");
-            $stmt->bindValue(':imei', $imei);
-            $stmt->bindValue(':df', $utcFrom);
-            $stmt->bindValue(':dt', $utcTo);
-            $stmt->bindValue(':lim', $perPage, PDO::PARAM_INT);
-            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } else {
-            $stmtCount = $db->prepare("SELECT COUNT(*) FROM device_events WHERE imei = :imei AND event_time BETWEEN :df AND :dt");
-            $stmtCount->execute([':imei' => $imei, ':df' => $utcFrom, ':dt' => $utcTo]);
-            $totalRows  = (int)$stmtCount->fetchColumn();
-            $totalPages = max(1, (int)ceil($totalRows / $perPage));
-            $page       = min($page, $totalPages);
-            $offset     = ($page - 1) * $perPage;
+        $stmtCount = $db->prepare("
+            SELECT (SELECT COUNT(*) FROM gps_data
+                     WHERE imei = :g_imei AND gps_time BETWEEN :g_df AND :g_dt)
+                 + (SELECT COUNT(*) FROM device_events
+                     WHERE imei = :e_imei AND event_time BETWEEN :e_df AND :e_dt)
+        ");
+        $stmtCount->execute($params);
+        $totalRows  = (int)$stmtCount->fetchColumn();
+        $totalPages = max(1, (int)ceil($totalRows / $perPage));
+        $page       = min($page, $totalPages);
+        $offset     = ($page - 1) * $perPage;
 
-            $stmt = $db->prepare("
-                SELECT event_time, raw_data
-                FROM device_events
-                WHERE imei = :imei AND event_time BETWEEN :df AND :dt
-                ORDER BY event_time DESC
-                LIMIT :lim OFFSET :off
-            ");
-            $stmt->bindValue(':imei', $imei);
-            $stmt->bindValue(':df', $utcFrom);
-            $stmt->bindValue(':dt', $utcTo);
-            $stmt->bindValue(':lim', $perPage, PDO::PARAM_INT);
-            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Lista única = UNION ALL das duas fontes. Cada ramo se limita a
+        // `offset + perPage` linhas ANTES da união: a página pedida só pode
+        // conter as primeiras N de cada lado, então o MySQL não precisa juntar
+        // (e ordenar) o período inteiro — gps_data chega a milhares de linhas
+        // por dia por equipamento. $order vem de report_sort_params() (só
+        // ASC/DESC) e $limite de inteiros: interpolar aqui é seguro.
+        $limite = $offset + $perPage;
+        $stmt = $db->prepare("
+            SELECT * FROM (
+                (SELECT gps_time AS ts, 'gps' AS src, id AS rid,
+                        gps_mode, post_type, post_method, speed,
+                        NULL AS raw_data
+                   FROM gps_data
+                  WHERE imei = :g_imei AND gps_time BETWEEN :g_df AND :g_dt
+                  ORDER BY gps_time $order, id $order
+                  LIMIT $limite)
+                UNION ALL
+                (SELECT event_time, 'ext', id,
+                        NULL, NULL, NULL, NULL,
+                        CAST(raw_data AS CHAR)
+                   FROM device_events
+                  WHERE imei = :e_imei AND event_time BETWEEN :e_df AND :e_dt
+                  ORDER BY event_time $order, id $order
+                  LIMIT $limite)
+            ) u
+            ORDER BY ts $order, src, rid $order
+            LIMIT :lim OFFSET :off
+        ");
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        $stmt->bindValue(':lim', $perPage, PDO::PARAM_INT);
+        $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Decodifica aqui (não no SQL) — raw_data é JSON válido, content
-            // dentro dele não é (ver includes/gps_extras.php).
-            foreach ($rows as &$r) {
-                $payload = json_decode($r['raw_data'], true) ?: [];
-                $extId   = (int)($payload['extensionId'] ?? 0);
-                $content = $payload['content'] ?? null;
-                $r['extension_id'] = $extId;
-                $r['decoded'] = $extId > 0
-                    ? extension_content_render($extId, parse_extension_content(is_string($content) ? $content : null))
-                    : [];
-            }
-            unset($r);
+        // Decodifica aqui (não no SQL) — raw_data é JSON válido, content
+        // dentro dele não é (ver includes/gps_extras.php).
+        foreach ($rows as &$r) {
+            if ($r['src'] !== 'ext') continue;
+            $payload = json_decode((string)$r['raw_data'], true) ?: [];
+            $extId   = (int)($payload['extensionId'] ?? 0);
+            $content = $payload['content'] ?? null;
+            $r['extension_id'] = $extId;
+            $r['decoded'] = $extId > 0
+                ? extension_content_render($extId, parse_extension_content(is_string($content) ? $content : null))
+                : [];
         }
+        unset($r);
     } catch (PDOException $e) {
-        Logger::warning('dados_estendidos: consulta falhou', ['erro' => $e->getMessage(), 'tab' => $tab]);
+        Logger::warning('dados_estendidos: consulta falhou', ['erro' => $e->getMessage()]);
     }
 }
 
 $page_title    = 'Dados Estendidos';
 $current_route = 'dados-estendidos';
 require_once __DIR__ . '/../web/layout_base.php';
-
-$qsBase = $_GET;
-unset($qsBase['tab'], $qsBase['page']);
 ?>
 
-<div class="mb-16" style="display:flex;gap:4px;border-bottom:1px solid var(--hairline);">
-    <a href="?<?= htmlspecialchars(http_build_query(['tab' => 'gps'] + $qsBase)) ?>"
-       style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
-       color:<?= $tab === 'gps' ? 'var(--primary)' : 'var(--muted)' ?>;
-       border-bottom:2px solid <?= $tab === 'gps' ? 'var(--primary)' : 'transparent' ?>;margin-bottom:-1px;">
-       Transmissão GPS
-    </a>
-    <a href="?<?= htmlspecialchars(http_build_query(['tab' => 'extensao'] + $qsBase)) ?>"
-       style="padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;
-       color:<?= $tab === 'extensao' ? 'var(--primary)' : 'var(--muted)' ?>;
-       border-bottom:2px solid <?= $tab === 'extensao' ? 'var(--primary)' : 'transparent' ?>;margin-bottom:-1px;">
-       Extensão do Terminal
-    </a>
-</div>
-
-<div class="card mb-16">
-    <form method="get" class="form-row" style="flex-wrap:wrap;align-items:flex-end;gap:12px;">
-        <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
-        <?php if ($isAdmin && $customers): ?>
-        <div class="form-group" style="margin:0;">
-            <label>Cliente</label>
-            <select name="customer_id">
-                <option value="">Todos os clientes</option>
-                <?php foreach ($customers as $c): ?>
-                <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($c['name']) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <?php endif; ?>
-        <div class="form-group" style="margin:0;">
-            <label>Equipamento</label>
-            <select name="imei" required>
-                <option value="">Selecione…</option>
-                <?php foreach ($devices as $d): ?>
-                <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $imei === $d['imei'] ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($d['device_name'] ?: $d['imei']) ?> (<?= htmlspecialchars($d['imei']) ?>)
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-        <div class="form-group" style="margin:0;">
-            <label>De</label>
-            <input type="date" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>">
-        </div>
-        <div class="form-group" style="margin:0;">
-            <label>Até</label>
-            <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>">
-        </div>
-        <button type="submit" class="btn btn-primary">Filtrar</button>
-    </form>
-    <?php if (!empty($rangeClamped)): ?>
-        <div style="font-size:12px;color:var(--warning-text);margin-top:8px;">Período ajustado — teto de <?= REPORT_RANGE_MAX_DAYS ?> dias por consulta.</div>
+<div class="flex-between mb-16">
+    <h2 style="font-size:18px;font-weight:600;color:var(--ink);">Dados Estendidos</h2>
+    <?php if ($imei !== ''): ?>
+    <div style="display:flex;gap:8px;">
+        <?= report_back_button('/dados-estendidos') ?>
+    </div>
     <?php endif; ?>
 </div>
 
-<?php if ($imei === ''): ?>
-<div class="card">
-    <p style="color:var(--muted);font-size:13px;text-align:center;padding:24px;">Selecione um equipamento para ver os dados.</p>
-</div>
-<?php elseif ($tab === 'gps'): ?>
-<div class="card">
-    <div class="flex-between mb-16">
-        <h2 style="font-size:16px;font-weight:600;color:var(--ink);">Transmissão GPS</h2>
-        <span style="font-size:12px;color:var(--muted);"><?= $totalRows ?> registro(s)</span>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px;">
-        <strong>Modo</strong> e <strong>Posicionamento</strong> têm tabela oficial do fabricante.
-        <strong>Post Method</strong> não tem — o fabricante nunca publicou o significado dos
-        valores, só exemplos de payload; mostrado aqui do jeito que chegou, sem legenda inventada.
-    </p>
-    <div style="overflow:auto;">
-    <table class="table">
-        <thead><tr><th>Data/Hora</th><th>Modo</th><th>Posicionamento</th><th>Post Method</th><th>Velocidade</th></tr></thead>
-        <tbody>
-        <?php foreach ($rows as $r): ?>
-            <tr>
-                <td style="font-size:12px;white-space:nowrap;"><?= fmt_brt($r['gps_time']) ?></td>
-                <td style="font-size:12px;">
-                    <span class="badge badge-<?= (int)$r['gps_mode'] === 1 ? 'warning' : 'success' ?>"><?= gps_mode_label($r['gps_mode']) ?></span>
-                </td>
-                <td style="font-size:12px;"><span class="badge badge-info"><?= post_type_label($r['post_type']) ?></span></td>
-                <td class="text-mono" style="font-size:12px;" title="Sem tabela oficial de valores">
-                    <?= $r['post_method'] === null ? '—' : htmlspecialchars((string)$r['post_method']) ?>
-                </td>
-                <td class="text-mono" style="font-size:12px;"><?= $r['speed'] === null ? '—' : (int)$r['speed'] . ' km/h' ?></td>
-            </tr>
-        <?php endforeach; ?>
-        <?php if (!$rows): ?>
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Nenhuma posição no período.</td></tr>
+<div class="card mb-24" style="padding:16px 20px;">
+    <form method="GET" style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;">
+        <?php if ($isAdmin && $customers): ?>
+        <div>
+            <label for="flt-customer_id" class="filtro-rotulo">Cliente</label>
+            <select id="flt-customer_id" name="customer_id" class="filtro-campo" style="min-width:170px;">
+                <option value="">Todos</option>
+                <?php foreach ($customers as $c): ?>
+                <option value="<?= (int)$c['id'] ?>" <?= (string)$scopeCust === (string)$c['id'] ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
         <?php endif; ?>
-        </tbody>
-    </table>
-    </div>
+        <div>
+            <label for="flt-imei" class="filtro-rotulo">Placa</label>
+            <select id="flt-imei" name="imei" class="filtro-campo" style="min-width:180px;" required>
+                <option value="">— Selecione —</option>
+                <?php foreach ($devices as $d): ?>
+                <option value="<?= htmlspecialchars($d['imei']) ?>" <?= $imei === $d['imei'] ? 'selected' : '' ?>><?= htmlspecialchars(placa_do_device($d['device_name'] ?? null, $d['imei'])) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label for="flt-date_from" class="filtro-rotulo">Período (máx. <?= REPORT_RANGE_MAX_DAYS ?> dias)</label>
+            <div style="display:flex;gap:4px;">
+                <input type="date" id="flt-date_from" name="date_from" value="<?= htmlspecialchars($dateFrom) ?>" class="filtro-campo" style="width:130px;">
+                <input type="date" name="date_to" value="<?= htmlspecialchars($dateTo) ?>" class="filtro-campo" style="width:130px;">
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Gerar</button>
+    </form>
 </div>
-<?php else: ?>
-<div class="card">
-    <div class="flex-between mb-16">
-        <h2 style="font-size:16px;font-weight:600;color:var(--ink);">Extensão do Terminal</h2>
-        <span style="font-size:12px;color:var(--muted);"><?= $totalRows ?> registro(s)</span>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px;">
-        Dado enviado pelo equipamento via §1.15 Push Extension Data
-        (<code>/pushTerminalTransInfo</code>) — status do terminal (tensão, bateria, rede…) ou
-        leitor serial. ICCID e o conteúdo do leitor serial não são decodificados nesta versão;
-        aparecem truncados, sem legenda inventada.
-    </p>
-    <div style="overflow:auto;">
-    <table class="table">
-        <thead><tr><th>Data/Hora</th><th>Tipo</th><th>Dados</th></tr></thead>
-        <tbody>
-        <?php foreach ($rows as $r): ?>
+
+<?php if ($imei !== '' && $rangeClamped): ?>
+<div class="card mb-16" style="padding:10px 16px;border-left:3px solid var(--warning);font-size:13px;color:var(--muted);">
+    O período foi ajustado para o máximo de <?= REPORT_RANGE_MAX_DAYS ?> dias: <?= htmlspecialchars(date('d/m/Y', strtotime($dateFrom))) ?> a <?= htmlspecialchars(date('d/m/Y', strtotime($dateTo))) ?>.
+</div>
+<?php endif; ?>
+
+<div class="table-wrap">
+    <table>
+        <thead>
             <tr>
-                <td style="font-size:12px;white-space:nowrap;"><?= fmt_brt($r['event_time']) ?></td>
-                <td style="font-size:12px;"><span class="badge badge-info"><?= htmlspecialchars(extension_id_label($r['extension_id'])) ?></span></td>
-                <td style="font-size:12px;">
+                <th><?= report_sort_link('ts', 'Data/Hora', $sort, $order, 'DESC') ?></th>
+                <th>Tipo</th>
+                <th>Motivo da transmissão</th>
+                <th>Modo</th>
+                <th>Posicionamento</th>
+                <th>Velocidade</th>
+                <th>Dados da extensão</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php if (empty($rows)): ?>
+            <tr><td colspan="7"><div class="empty-state"><p><?= $imei !== '' ? 'Nenhum registro no período.' : 'Selecione uma placa e clique em Gerar.' ?></p></div></td></tr>
+            <?php else: ?>
+            <?php foreach ($rows as $r): ?>
+            <?php if ($r['src'] === 'gps'): ?>
+            <tr>
+                <td class="text-mono"><?= fmt_brt($r['ts'], 'd/m/Y H:i:s') ?></td>
+                <td style="white-space:nowrap;"><span class="badge badge-primary">Posição GPS</span></td>
+                <td>
+                    <?php if ($r['post_method'] === null): ?>—
+                    <?php else: $nomeMotivo = post_method_name($r['post_method']); ?>
+                    <span class="text-mono"><?= (int)$r['post_method'] ?></span> —
+                    <span<?= $nomeMotivo === null ? ' title="Código fora da tabela publicada pelo fabricante (0x00–0x0F)" style="color:var(--muted);"' : '' ?>><?= htmlspecialchars($nomeMotivo ?? 'Sem descrição do fabricante') ?></span>
+                    <?php endif; ?>
+                </td>
+                <td style="white-space:nowrap;">
+                    <?php if ($r['gps_mode'] === null): ?>—
+                    <?php else: ?><span class="badge badge-<?= (int)$r['gps_mode'] === 1 ? 'warning' : 'success' ?>"><?= htmlspecialchars(gps_mode_label($r['gps_mode'])) ?></span><?php endif; ?>
+                </td>
+                <td><?= htmlspecialchars(post_type_label($r['post_type'])) ?></td>
+                <td class="text-mono"><?= $r['speed'] === null ? '—' : number_format((float)$r['speed'], 1) . ' km/h' ?></td>
+                <td>—</td>
+            </tr>
+            <?php else: ?>
+            <tr>
+                <td class="text-mono"><?= fmt_brt($r['ts'], 'd/m/Y H:i:s') ?></td>
+                <td style="white-space:nowrap;"><span class="badge"><?= htmlspecialchars(extension_id_label($r['extension_id'])) ?></span></td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td>
                     <?php if ($r['decoded']): ?>
                         <?php foreach ($r['decoded'] as $par): ?>
                             <div><strong><?= htmlspecialchars($par['label']) ?>:</strong> <?= htmlspecialchars($par['value']) ?></div>
@@ -255,30 +245,12 @@ unset($qsBase['tab'], $qsBase['page']);
                     <?php else: ?>—<?php endif; ?>
                 </td>
             </tr>
-        <?php endforeach; ?>
-        <?php if (!$rows): ?>
-            <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px;">Nenhum evento de extensão no período.</td></tr>
-        <?php endif; ?>
+            <?php endif; ?>
+            <?php endforeach; endif; ?>
         </tbody>
     </table>
-    </div>
 </div>
-<?php endif; ?>
 
-<?php if ($imei !== '' && $totalPages > 1): ?>
-<div class="mt-16" style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:12px;">
-    <?php
-    $qs = $_GET;
-    for ($p = 1; $p <= $totalPages; $p++):
-        $qs['page'] = $p;
-        $active = $p === $page;
-    ?>
-        <a href="?<?= htmlspecialchars(http_build_query($qs)) ?>"
-           style="padding:4px 8px;<?= $active ? 'font-weight:600;color:var(--primary);' : 'color:var(--muted);' ?>">
-           <?= $p ?>
-        </a>
-    <?php endfor; ?>
-</div>
-<?php endif; ?>
+<?= report_pagination($page, $totalPages, $totalRows, 'registros') ?>
 
 <?php require_once __DIR__ . '/../web/layout_base_close.php'; ?>

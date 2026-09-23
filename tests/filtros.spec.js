@@ -31,7 +31,7 @@ const ASSINATURA = (sel) => `[...document.querySelectorAll('${sel}')].map(el=>{c
   return [c.borderTopWidth,c.borderTopStyle,c.borderTopColor,c.borderTopLeftRadius].join(' ')})`;
 
 test.describe('Barras de filtro — padrão visual', () => {
-    for (const rota of ['/comandos', '/video/downloads', '/relatorios/alarmes']) {
+    for (const rota of ['/comandos', '/video/downloads', '/relatorios/alarmes', '/dados-estendidos']) {
         test(`${rota}: todo campo do filtro tem a MESMA borda`, async ({ authedPage }) => {
             await authedPage.goto(rota);
             await authedPage.waitForLoadState('domcontentloaded');
@@ -70,7 +70,7 @@ test.describe('Barras de filtro — padrão visual', () => {
         // fazia parecer que eram campos diferentes.
         const rotas = ['/ativos', '/ativos/novo', '/equipamentos?action=novo', '/relatorios',
                        '/config-dispositivos', '/comandos', '/video/downloads',
-                       '/video/playback', '/relatorios/alarmes'];
+                       '/video/playback', '/relatorios/alarmes', '/dados-estendidos'];
         for (const rota of rotas) {
             const resp = await authedPage.goto(rota);
             expect(resp && resp.status(), rota + ' não abriu').toBeLessThan(400);
@@ -87,7 +87,7 @@ test.describe('Barras de filtro — padrão visual', () => {
 
     test('🔴 o filtro de veículo é por PLACA, não por IMEI', async ({ authedPage }) => {
         test.setTimeout(120000);
-        for (const rota of ['/comandos', '/video/downloads', '/video/playback', '/relatorios/alarmes']) {
+        for (const rota of ['/comandos', '/video/downloads', '/video/playback', '/relatorios/alarmes', '/dados-estendidos']) {
             await authedPage.goto(rota);
             await authedPage.waitForLoadState('domcontentloaded');
 

@@ -38,6 +38,39 @@ checa('postType 2 = LBS',              'LBS',  post_type_label(2));
 checa('postType 3 = WiFi',             'WiFi', post_type_label(3));
 checa('postType fora da tabela = —',   '—',    post_type_label(0));
 
+echo "== post_method_label() — motivo da transmissão (tabela oficial §1.3, hex → inteiro) ==\n";
+// Os 16 valores da doc (0x00–0x0F), conferidos ao vivo em 23/09/2026. O device
+// manda INTEIRO; a doc publica em hex — a conversão é o próprio `(int)`.
+$esperadoMotivos = [
+    0  => 'Envio por intervalo de tempo',
+    1  => 'Envio por intervalo de distância',
+    2  => 'Envio por ponto de inflexão',
+    3  => 'Envio por mudança de status do ACC',
+    4  => 'Reenvio do último ponto GPS ao voltar a ficar parado',
+    5  => 'Envio do último ponto válido ao recuperar a rede',
+    6  => 'Atualização de efemérides com envio forçado de GPS',
+    7  => 'Envio por acionamento da tecla lateral',
+    8  => 'Envio após ligar o equipamento',
+    9  => 'Envio por comando GPSON',
+    10 => 'Envio da última posição com o equipamento parado (hora atualizada)',
+    11 => 'Envio após consulta de dados WiFi',
+    12 => 'Envio por comando LJDW (localizar imediatamente)',
+    13 => 'Envio da última posição com o equipamento parado',
+    14 => 'Envio Gpsdup (periódico com o equipamento parado)',
+    15 => 'Envio após sair do modo de rastreamento',
+];
+foreach ($esperadoMotivos as $cod => $nome) {
+    checa("postMethod $cod (0x" . strtoupper(dechex($cod)) . ")", "$cod — $nome", post_method_label($cod));
+}
+checa('a tabela tem exatamente 16 entradas (0x00–0x0F)', 16, count(POST_METHOD_LABELS));
+checa('chave hex da doc = inteiro do device (0x0A == 10)', true, isset(POST_METHOD_LABELS[10]) && POST_METHOD_LABELS[10] === POST_METHOD_LABELS[0x0A]);
+checa('string "3" (formato PDO) casa como inteiro', '3 — Envio por mudança de status do ACC', post_method_label('3'));
+checa('27 (medido em produção, fora da tabela) NÃO ganha nome inventado', '27 — Sem descrição do fabricante', post_method_label(27));
+checa('28 idem', '28 — Sem descrição do fabricante', post_method_label(28));
+checa('post_method_name de valor fora da tabela = null', null, post_method_name(27));
+checa('postMethod null = —', '—', post_method_label(null));
+checa('postMethod vazio = —', '—', post_method_label(''));
+
 echo "== parse_extension_content() — payloads REAIS da doc oficial ==\n";
 // extensionId 8197, exemplo oficial: token=...&data_list=[{...,"content":"{8193:23.4}",...}]
 checa('8197 — {8193:23.4} vira [8193=>23.4]', [8193 => 23.4], parse_extension_content('{8193:23.4}'));

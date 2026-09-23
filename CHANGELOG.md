@@ -5,6 +5,33 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.24.1
+
+**Dados Estendidos: padrão de frontend dos relatórios, as duas abas viram uma lista única por data/hora, e o "motivo da transmissão" (`postMethod`) ganha nome em PT-BR.**
+
+Três pedidos do dono do produto sobre `/dados-estendidos`.
+
+### Fixed
+- 🔴 **`postMethod` TEM tabela oficial — a premissa das versões anteriores estava errada.** O CHANGELOG `4.17.11`, `4.21.5`, `4.23.1` e `4.24.0` afirmam que o campo "não tem tabela de valores". Tem: a doc (§1.3 Push GPS Data) a publica **dentro da célula de descrição do campo**, uma linha por valor separada por `<br>` e em **hexadecimal** (`0x00` … `0x0F`, 16 valores). Ela não vem como linhas de tabela próprias como as de `gpsMode`/`postType`, e é por isso que a busca por "a tabela do campo" passou por cima. O device manda o valor como **inteiro**; a conversão hex→inteiro é o próprio `(int)` do PHP, e as chaves de `POST_METHOD_LABELS` foram escritas em hex para espelhar a doc linha a linha.
+  - ⚠️ **`27` e `28` (medidos em produção, CHANGELOG `4.17.11`) continuam FORA da tabela** — o maior valor publicado é `0x0F` = 15. Aparecem como `27 — Sem descrição do fabricante`, com o número intacto e **sem nome inventado**. Os valores medidos e a tabela oficial não se contradizem: a doc é que está incompleta.
+
+### Changed
+- **`/dados-estendidos` segue o padrão de frontend dos relatórios** (`web/layout_base.php` → `.filtro-campo`, v4.9.38), o mesmo de `rel_posicoes.php`: barra de filtro num card com `.filtro-rotulo`/`.filtro-campo`, campo **Placa** (o valor continua o IMEI; o texto vem de `placa_do_device()`, então equipamento sem placa aparece como `(sem placa) <imei>` e não como número cru), período com o teto de 31 dias, botão **Gerar**, título de 18 px com **Voltar**, grade em `.table-wrap` com `.empty-state`, `report_sort_link()` no cabeçalho Data/Hora e `report_pagination()`. Antes era `<table class="table">`, rótulo "Equipamento" (que a convenção "o filtro de veículo é por PLACA" proíbe), abas e paginação com estilo inline e o aviso de período ajustado num texto solto.
+- 🔴 **As duas abas viraram UMA lista, ordenada por data/hora** (mais recente primeiro; o cabeçalho inverte). Cada linha é uma coisa que o equipamento enviou: **Posição GPS** (`gps_data`) ou uma mensagem de extensão do terminal (`device_events`). Colunas: Data/Hora · Tipo · Motivo da transmissão · Modo · Posicionamento · Velocidade · Dados da extensão — o que não se aplica ao tipo da linha fica em "—".
+  - **A consulta é um `UNION ALL` de duas tabelas, e paginar isso ingenuamente varre o período inteiro.** `gps_data` chega a milhares de linhas por dia por equipamento. Cada ramo se limita a `offset + perPage` linhas **antes** da união (a página pedida só pode conter as primeiras N de cada lado), e o desempate é `ts, src, id` para a paginação ser determinística quando uma posição e um evento caem no mesmo segundo.
+  - O total da paginação é a soma de dois `COUNT(*)` na mesma consulta; a ordem das colunas de cada ramo é idêntica (`NULL` onde não se aplica) e `raw_data` entra como `CAST(... AS CHAR)` para o `UNION` não misturar `JSON` com `NULL`.
+- **"Post Method" virou "Motivo da transmissão", mostrado como `código — nome`** (ex.: `3 — Envio por mudança de status do ACC`). O código é sempre o inteiro que o equipamento mandou; o nome é a tradução fiel de cada linha da doc (o texto original em inglês está em comentário, ao lado, em `POST_METHOD_LABELS`).
+- **Wiki** (`includes/wiki/sections/dados-estendidos.php`): descreve a lista única, traz a tabela completa dos 16 motivos (código, hex e nome) e o aviso sobre códigos fora dela. Sai o callout "Post Method não tem legenda porque o fabricante não publicou uma", que estava errado.
+
+### Added
+- `post_method_name()` e `post_method_label()` em `includes/gps_extras.php`, mais `POST_METHOD_LABELS` (0x00–0x0F).
+- **Testes:** `tests/helpers/dados_estendidos.test.php` passou de 24 para 48 verificações — cada um dos 16 valores, chave hex = inteiro (`0x0A` == 10), string do PDO (`"3"`), `27`/`28` sem nome inventado, `null` e vazio. `/dados-estendidos` entrou nas varreduras de `tests/filtros.spec.js` (mesma borda em todo campo do filtro; rótulo **Placa**; nenhuma opção com IMEI cru).
+
+### Notes
+- **Verificação:** contra MySQL local com 157 linhas semeadas (5 + 120 posições, 32 mensagens de extensão): páginas 1–4 contíguas, sem duplicata nem perda, em ASC e DESC (o total bate com a soma das duas tabelas); `wiki_registry` 11/11; os 4 campos do filtro com a mesma borda computada, rótulo Placa, nenhuma opção com IMEI cru; screenshot conferido. Os dados de teste e a sessão injetada foram removidos.
+- ⚠️ **`tests/filtros.spec.js` › "o campo do veículo se chama PLACA em toda tela" está vermelho por outra rota**, e o laço aborta no primeiro erro: `/equipamentos?action=novo` não tem rótulo "Placa" (a v4.11.0 tirou o campo de lá — o CLAUDE.md registra). Como `/dados-estendidos` é a última da lista, ela nunca chega a ser conferida por esse teste; foi verificada à parte. Pré-existente, sem relação com esta mudança — mas essa rota deveria sair da lista, ou o teste não protege nada.
+- Sem migração: **não** exige o segundo deploy descrito no CLAUDE.md.
+
 ## [Unreleased] — 4.24.0
 
 **Tela nova "Dados Estendidos" (`/dados-estendidos`, só admin) — expõe dois conjuntos de dados que já eram gravados pelo webhook e nunca tinham tela nenhuma.**

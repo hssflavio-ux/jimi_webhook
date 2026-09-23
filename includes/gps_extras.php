@@ -4,11 +4,17 @@
  * post_method) e da Extensão do Terminal (device_events, §1.15 Push Extension
  * Data — extensionId 8197/8199), usados pela tela /dados-estendidos.
  *
- * gpsMode e postType têm tabela de valores oficial
- * (https://docs.jimicloud.com/integration/integration.html §1.3 e §1.15,
- * conferidos ao vivo em 22/09/2026); postMethod NÃO tem — só aparece em
- * exemplo de payload, com 8 valores observados em produção sem legenda
- * nenhuma (CHANGELOG 4.17.11). Nenhum rótulo foi inventado para ele.
+ * gpsMode, postType e postMethod têm tabela de valores oficial
+ * (https://docs.jimicloud.com/integration/integration.html §1.3 e §1.15).
+ *
+ * 🔴 A tabela do postMethod está DENTRO da célula de descrição do campo, em
+ * HEXADECIMAL (`0x00`…`0x0F`), enquanto o device manda o valor como INTEIRO —
+ * por isso as chaves de POST_METHOD_LABELS são escritas em hex (espelham a doc
+ * linha a linha) e o PHP as compara já como inteiro. Até a v4.24.0 o projeto
+ * afirmava que o postMethod "não tinha tabela oficial": a tabela existia, só
+ * não estava numa linha própria e passou despercebida (CHANGELOG 4.17.11).
+ * Valores fora de 0x00–0x0F (27 e 28 já medidos em produção) continuam sem
+ * significado publicado e NÃO recebem nome inventado.
  */
 
 /** gpsMode (§1.3 Push GPS Data) — tabela oficial. */
@@ -42,6 +48,57 @@ function post_type_label($type): string
 {
     if ($type === null || $type === '') return '—';
     return POST_TYPE_LABELS[(int)$type] ?? '—';
+}
+
+/**
+ * postMethod (§1.3 Push GPS Data) — "motivo da transmissão": por que o
+ * equipamento enviou AQUELA posição. Tabela oficial, tradução fiel de cada
+ * linha (o texto original em inglês vai no comentário, para conferência).
+ */
+const POST_METHOD_LABELS = [
+    0x00 => 'Envio por intervalo de tempo',                                       // Upload by time interval
+    0x01 => 'Envio por intervalo de distância',                                   // Upload by distance interval
+    0x02 => 'Envio por ponto de inflexão',                                        // Inflection point upload
+    0x03 => 'Envio por mudança de status do ACC',                                 // Upload by ACC status change
+    0x04 => 'Reenvio do último ponto GPS ao voltar a ficar parado',               // Re-upload the last GPS point when back to static
+    0x05 => 'Envio do último ponto válido ao recuperar a rede',                   // Upload the last effective point when network recovers
+    0x06 => 'Atualização de efemérides com envio forçado de GPS',                 // Update ephemeris and upload GPS data compulsorily
+    0x07 => 'Envio por acionamento da tecla lateral',                             // Upload location when side key triggered
+    0x08 => 'Envio após ligar o equipamento',                                     // Upload location after power on
+    0x09 => 'Envio por comando GPSON',                                            // Upload by command "GPSON"
+    0x0A => 'Envio da última posição com o equipamento parado (hora atualizada)', // Upload the last longitude and latitude when device is static; time updated
+    0x0B => 'Envio após consulta de dados WiFi',                                  // Upload after WIFI data query
+    0x0C => 'Envio por comando LJDW (localizar imediatamente)',                   // upload by command LJDW (locate immediately)
+    0x0D => 'Envio da última posição com o equipamento parado',                   // Upload the last longitude and latitude when device is static
+    0x0E => 'Envio Gpsdup (periódico com o equipamento parado)',                  // Gpsdup upload (Upload regularly in a static state)
+    0x0F => 'Envio após sair do modo de rastreamento',                            // Upload after exit tracking mode
+];
+
+/**
+ * Nome PT-BR do motivo da transmissão.
+ *
+ * @param int|string|null $method postMethod como veio do banco (inteiro)
+ * @returns string|null Nome, ou null se o valor não consta da tabela oficial
+ *                      (ou se não há valor).
+ */
+function post_method_name($method): ?string
+{
+    if ($method === null || $method === '') return null;
+    return POST_METHOD_LABELS[(int)$method] ?? null;
+}
+
+/**
+ * "Código — nome" do motivo da transmissão, para exibição em texto puro.
+ * O código é sempre o INTEIRO recebido; valor fora da tabela oficial mostra o
+ * código com o aviso, nunca um nome inventado.
+ *
+ * @param int|string|null $method
+ * @returns string  '3 — Envio por mudança de status do ACC' | '27 — Sem descrição do fabricante' | '—'
+ */
+function post_method_label($method): string
+{
+    if ($method === null || $method === '') return '—';
+    return (int)$method . ' — ' . (post_method_name($method) ?? 'Sem descrição do fabricante');
 }
 
 /** extensionId (§1.15 Push Extension Data) — os dois únicos documentados. */
