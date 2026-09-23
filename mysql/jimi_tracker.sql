@@ -708,7 +708,7 @@ BEGIN
         p_imei, p_gps_time, p_lat, p_lon, p_speed, 
         COALESCE(p_dist, 0), p_gsm, 1, 1, p_acc, NOW()
     )
-    -- 🔴 O COALESCE das seis comparações NÃO é decoração (v4.17.5). A linha em
+    --  O COALESCE das seis comparações NÃO é decoração (v4.17.5). A linha em
     -- `device_statistics` costuma ser criada por `_heartbeat`/`_event`, que a
     -- inserem SEM `last_gps_time` — e `p_gps_time >= NULL` é NULL, não TRUE:
     -- o `IF` cai no ramo *else* e mantém a posição em NULL. Como
@@ -719,7 +719,7 @@ BEGIN
     -- aqui, ativo não selecionável em `/rastreamento`. As outras três
     -- `update_device_stats_after_*` sempre usaram esta mesma sentinela.
     --
-    -- ⚠️ As SEIS linhas levam COALESCE. O `ON DUPLICATE KEY UPDATE` avalia da
+    --  As SEIS linhas levam COALESCE. O `ON DUPLICATE KEY UPDATE` avalia da
     -- esquerda para a direita e as seguintes já veem o valor NOVO de
     -- `last_gps_time`, então só a primeira seria estritamente necessária — mas
     -- isso amarra a correção à ORDEM das linhas, e reordenar o bloco traria o
@@ -762,7 +762,7 @@ BEGIN
     )
     VALUES (p_imei, p_hb_time, p_bat, p_gsm, p_acc, 1, NOW())
     ON DUPLICATE KEY UPDATE
-        -- 🔴 last_acc_status vem ANTES de last_heartbeat_time de proposito: o
+        --  last_acc_status vem ANTES de last_heartbeat_time de proposito: o
         -- ON DUPLICATE KEY UPDATE avalia da esquerda para a direita e as linhas
         -- seguintes ja veem os valores NOVOS. Invertido, o GREATEST leria o
         -- proprio p_hb_time e a comparacao viraria sempre verdadeira, sumindo

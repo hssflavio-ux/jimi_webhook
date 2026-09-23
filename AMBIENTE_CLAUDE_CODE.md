@@ -45,10 +45,15 @@ Code).
   em `modelSettings.claude-sonnet-5.effortLevel`.
 - **`permissions.defaultMode: "auto"`** — Auto Mode ligado: o agente age sem parar para confirmar
   ações de baixo risco, mas ainda para em decisões genuinamente do usuário (ver `autoMode` abaixo).
-- **`autoMode.soft_deny`** — duas exceções que EXIGEM confirmação mesmo em Auto Mode, específicas
+- **`autoMode.soft_deny`** — exceções que EXIGEM confirmação mesmo em Auto Mode, específicas
   deste projeto:
   - `Bash(scripts/deploy.sh:*)` quando o alvo é `186.248.143.197` / `bycamera.ia.br` (produção)
   - `Bash(scripts/rollback.sh:*)`
+  - `Bash(ssh:*)` para `186.248.143.197` / `bycamera.ia.br` (acesso remoto a produção)
+  > ⚠️ **Divergência encontrada em 22/09/2026**: o Mac só tinha as regras de `deploy.sh` e `ssh`;
+  > faltava `rollback.sh`. Foi adicionada no Mac nesta sessão para unificar. Se a outra máquina
+  > (Windows) só tiver `deploy.sh` + `rollback.sh` (como documentado acima originalmente), falta
+  > adicionar a regra de `ssh` lá — ver checklist §10.
 - **`autoMode.environment`** — bloco de contexto que o Auto Mode usa para julgar risco: registra
   que o repositório `hssflavio-ux/jimi_webhook` é **PÚBLICO** (qualquer push publica), que os
   segredos vivem só em `.env` (gitignored, parseado à mão por `config/database.php`), quais hosts
@@ -57,7 +62,19 @@ Code).
   staging, não sensível por padrão). Vale recriar esse bloco na outra máquina se o Auto Mode for
   usado lá também — é ele que evita o agente tratar homolog como produção ou vice-versa.
 - **Outras chaves relevantes**: `autoUpdatesChannel: "latest"`, `tui: "fullscreen"`,
-  `skipDangerousModePermissionPrompt: true`, `agentPushNotifEnabled: true`.
+  `skipDangerousModePermissionPrompt: true`, `agentPushNotifEnabled: true`. (`autoUpdatesChannel`
+  faltava no Mac — adicionada em 22/09/2026 para igualar.)
+- **Plugins/skills adicionais ligados no Mac, não documentados aqui até 22/09/2026**:
+  `superpowers@claude-plugins-official`, `remember@claude-plugins-official`,
+  `security-guidance@claude-plugins-official`, `claude-md-management@claude-plugins-official`
+  (além de `context-mode`, já documentado). É por isso que skills como
+  `superpowers:brainstorming`/`systematic-debugging`/`writing-plans` e `remember:remember`
+  aparecem disponíveis no Mac — uso real e pesado (`superpowers:brainstorming` 10x,
+  `superpowers:writing-plans` 7x no histórico do Mac). Ver checklist §10 para replicar no Windows.
+  O Mac também tem um `skillOverrides` desligando 9 skills genéricas não usadas neste projeto PHP
+  (`code-reviewer`, `mcp-builder`, `senior-architect/backend/frontend/fullstack`,
+  `ui-design-system`, `webapp-testing`, `ignore-optimizer`) — preferência de ruído, não obrigatório
+  replicar.
 - **Hook global** (`~/.claude/settings.json` → `hooks.SessionStart`): roda
   `context-mode-cache-heal.mjs` (`~/.claude/hooks/`) a cada início de sessão — é infraestrutura do
   plugin context-mode (§4), não deste projeto.
@@ -98,11 +115,14 @@ Só estas três existem hoje, **cada uma um único arquivo `SKILL.md`**, sem fro
 - **`status-archive`** — como arquivar o log cronológico do topo do `STATUS.md` para
   `docs/status-history/STATUS_ARCHIVE.md`, mantendo as 3 entradas mais recentes inline.
 
-**Pendência conhecida**: a versão mais recente do `CLAUDE.md` (puxada nesta sessão) já referencia
-uma **quarta skill, `protocolo-comandos`** (`.claude/skills/protocolo-comandos/SKILL.md`, sobre
-catálogo de comandos JT/T, firmware, vídeo, chunked body do Apache, `FILELIST`/`VIDEOUPLOAD`,
-Query APIs JIMI×JT/T) — o arquivo **ainda não existe** em nenhuma das duas máquinas. É conteúdo a
-escrever (ou resgatar de alguma sessão anterior que não persistiu o arquivo), não algo para copiar.
+**Pendência resolvida em 22/09/2026 (sessão no Mac)**: a quarta skill, `protocolo-comandos`
+(`.claude/skills/protocolo-comandos/SKILL.md`, sobre catálogo de comandos JT/T, firmware, vídeo,
+chunked body do Apache, `FILELIST`/`VIDEOUPLOAD`, Query APIs JIMI×JT/T), já existia **escrita
+localmente no Mac** (não se sabe se veio de uma sessão anterior ou foi escrita e nunca versionada),
+mas ficava fora do `git` porque a exceção do `.gitignore` (ver §3.2) só cobria `deploy`,
+`db-setup` e `status-archive`. Corrigido nesta sessão: adicionada a exceção
+`!.claude/skills/protocolo-comandos/` e o arquivo foi commitado — a partir do próximo `git pull`
+ele chega em qualquer máquina, Windows incluído. Ver §10.
 
 ### 3.2 Por que elas não viajavam pelo git (corrigido nesta sessão)
 
@@ -182,6 +202,13 @@ Não há `.mcp.json` neste repositório — toda a configuração de plugins/MCP
   screenshot/E2E visual pontual.
 - **Marketplaces conhecidos** (`extraKnownMarketplaces`): `context-engineering-kit`
   (`NeoLabHQ/context-engineering-kit`) e `context-mode` (`mksglu/context-mode`).
+  > ⚠️ **Divergência em 22/09/2026**: o Mac tem `context-mode` também, mas não
+  > `context-engineering-kit` (não precisa — `reflexion` fica desligado por decisão do usuário) —
+  > e tem TRÊS que faltam aqui: `interface-design` (`Dammyjay93/interface-design`),
+  > `anthropic-agent-skills` (`anthropics/skills`) e `karpathy-skills`
+  > (`forrestchang/andrej-karpathy-skills`), sem uso registrado no histórico do Mac, e
+  > `ponytail` (`DietrichGebert/ponytail`), com 3 usos reais (`ponytail-audit` 2x,
+  > `ponytail-gain` 1x). Ver §10.
 
 ## 5. Sistema de memória (aprendizados entre sessões)
 
@@ -252,7 +279,9 @@ instrução lá:
   ainda pede senha mesmo entrando por chave (são coisas diferentes); `plink` do PuTTY como
   alternativa quando a chave não vale. Detalhe operacional completo na skill `deploy` (§3.1).
 
-## 7. Ambiente de desenvolvimento local (Windows)
+## 7. Ambiente de desenvolvimento local (Windows + Mac)
+
+### 7.1 Windows
 
 Já documentado em `scripts/dev-windows.ps1` e `.env.example` (ambos no git — chegam sozinhos), mas
 o resumo de como efetivamente se trabalha aqui:
@@ -276,6 +305,60 @@ o resumo de como efetivamente se trabalha aqui:
   asserções no MySQL), suíte Playwright em `tests/` (`npx playwright test` ou
   `scripts/run-tests.ps1`) — specs autenticados pulam (não falham) sem `TEST_EMAIL`/`TEST_PASSWORD`.
 
+### 7.2 Mac — provisionado em 22/09/2026 (não existia até então)
+
+Até esta sessão o Mac não tinha ambiente de dev nenhum montado — só o código e o Claude Code,
+sem `.env`, sem MySQL server (só a lib cliente `mysql-client` do Homebrew) e sem `node_modules`.
+Provisionado do zero nesta sessão, para chegar perto da paridade com o Windows:
+
+- **PHP**: continua no `8.5.10` (Homebrew) do sistema — **não trocado de propósito**, por pedido
+  do usuário ("não é importante nesse momento"). Different do `8.3` de produção/Windows — ver
+  achado abaixo sobre por que isso importa mais do que parece.
+- **MySQL 8.4** via Homebrew (`brew install mysql@8.4` — o formula `mysql` sozinho instala uma
+  versão muito mais nova, incompatível, ver bug abaixo). Keg-only, linkado com
+  `brew link mysql@8.4 --force`; sobe com `brew services start mysql@8.4`. Banco `jimi_tracker`
+  criado e populado com `mysql/jimi_tracker.sql` + as 61 migrações em ordem, `2.0.0` até `4.21.5`
+  (a mesma lista que a skill `db-setup` deveria ter — ela ainda está parada em `4.9.14`, ver §3.1
+  do AGENTS/CLAUDE; a lista completa e correta usada aqui foi extraída de
+  `scripts/deploy.sh:414-484`, que é a fonte de verdade real). Senha de root gerada localmente
+  (aleatória, só no `.env` deste Mac, não reproduzida aqui).
+- **`.env` criado** a partir de `.env.example`, só com as chaves essenciais para rodar localmente
+  (`DB_*`, `WEBHOOK_TOKEN`, `SYSTEM_VERSION`, `APP_URL=http://localhost:8000`) — as variáveis de
+  FTP/vídeo/SMTP/SMS/IoTHub ficaram de fora de propósito: são infraestrutura que só existe nos
+  servidores reais (produção/homolog), sem equivalente local.
+- **Node 24** instalado via `brew install node@24`, **keg-only, sem linkar** — não altera o `node`
+  global do sistema (Homebrew tinha só um `node` genérico em v26, usado por outros projetos deste
+  Mac). Para este projeto, usar o binário completo:
+  `/opt/homebrew/opt/node@24/bin/npm install` / `npx playwright test`. `npm install` +
+  `npx playwright install chromium` já rodados — suíte Playwright pronta para uso.
+- **Servidor de dev**: `php -S 127.0.0.1:8000 -t . server.php` (equivalente Mac do que
+  `dev-windows.ps1` faz no Windows) — não existe ainda um script `.sh` dedicado; rodar manualmente.
+- **`/ping` validado**: responde `v4.23.0` corretamente.
+
+**Dois bugs reais encontrados ao provisionar** (não são do ambiente — são do código, expostos por
+rodar num MySQL/servidor mais novo/diferente do que qualquer pessoa tinha testado até agora):
+
+1. 🔴 **`mysql/jimi_tracker.sql` tinha emoji dentro do CORPO de duas stored procedures**
+   (`update_device_stats_after_gps`, comentários `-- 🔴`/`-- ⚠️`) — MySQL 8.4 (e também a v26 que
+   instalei por engano antes de trocar) recusa com `ERROR 4089: Definition of stored routine
+   contains an invalid utf8mb3 character string`, porque o dicionário interno de rotinas do MySQL
+   é limitado a utf8mb3 independente do charset da conexão/tabela. Isso **quebra qualquer
+   instalação nova do zero** (exatamente o caminho que a skill `db-setup` documenta) — corrigido
+   nesta sessão removendo só os 4 emojis de DENTRO dos blocos `DELIMITER //...DELIMITER ;` do
+   arquivo (script usado: busca por bloco delimitado + regex de emoji, não um find-replace cego —
+   emoji em comentário FORA de rotina, que existe aos montes nos outros `.sql`, não tem esse
+   problema e foi deixado como está). Commitado junto com o resto desta sessão.
+2. ⚠️ **`config/WebhookHandler.php:34` lê `getenv('WEBHOOK_TOKEN')` ANTES de `env_load()` ter
+   rodado** — `env_load()` só é disparado de dentro do `Database::__construct()`, chamado na
+   linha seguinte (36). Em produção isso nunca aparece porque os workers do PHP-FPM ficam quentes
+   e alguma requisição anterior (qualquer uma, não precisa ser webhook) já rodou `env_load()`
+   naquele worker antes. Rodando com `php -S` (que não reaproveita estado entre requisições) ou
+   — mais preocupante — num worker de PHP-FPM **recém-reiniciado**, o PRIMEIRO webhook a chegar
+   cai no fallback `'a12341234123'` e é rejeitado com `401 Unauthorized` mesmo com o token certo.
+   Foi isso, e não a versão do PHP, que fez `scripts/test_e2e.sh` falhar em bloco nesta máquina.
+   **Não corrigido** — é código de produção (autenticação de webhook), fora do escopo desta
+   sessão (sincronizar ambiente); fica registrado para decisão do usuário.
+
 ## 8. Mapa de documentação do próprio repo (já vem pelo git)
 
 Não duplicado aqui — só o índice de onde procurar o quê:
@@ -291,25 +374,91 @@ Não duplicado aqui — só o índice de onde procurar o quê:
 - `DESIGN.md` / `DESIGN-coinbase.md` — design system (Coinbase: azul `#0052ff`, sidebar
   near-black, CTAs pill).
 - `docs/COMANDOS_128_CONSULTA.md`, `docs/FILA_OFFLINE_COMANDOS.md`, `docs/QUERY_APIS_IOTHUB.md` —
-  medições de protocolo (proNo 128, fila offline, Query APIs JIMI×JT/T) que vão alimentar a skill
-  `protocolo-comandos` ainda não escrita (§3.1).
+  medições de protocolo (proNo 128, fila offline, Query APIs JIMI×JT/T) que alimentaram a skill
+  `protocolo-comandos`, já escrita e versionada desde 22/09/2026 (§3.1).
 
 ## 9. Checklist para deixar a outra máquina parecida com esta
 
-1. `git clone`/`git pull` o repo — traz código, `CLAUDE.md`/`AGENTS.md`, `skills-lock.json` e,
-   a partir de agora, as três skills do projeto (§3.2).
+1. `git clone`/`git pull` o repo — traz código, `CLAUDE.md`/`AGENTS.md`, `skills-lock.json` e as
+   **quatro** skills do projeto, `protocolo-comandos` incluída desde 22/09/2026 (§3.2).
 2. Instalar Claude Code, logar com a mesma conta — plugins de marketplace (`hallmark`,
    `find-skills`) reinstalam a partir do `skills-lock.json`; `context-mode` precisa ser
    habilitado manualmente se não vier por padrão (marketplace `mksglu/context-mode`).
 3. Ajustar `~/.claude/settings.json` na máquina nova (§2): modelo `sonnet`, `effortLevel: xhigh`
-   se desejado, `permissions.defaultMode: auto`, e (se for usar Auto Mode) recriar o bloco
-   `autoMode.environment`/`soft_deny` específico deste projeto.
+   se desejado, `permissions.defaultMode: auto`, `autoUpdatesChannel: latest`, e (se for usar Auto
+   Mode) recriar o bloco `autoMode.environment`/`soft_deny` completo — as **três** regras
+   (`deploy.sh`, `rollback.sh`, `ssh` para produção), não só duas. Ver §10 para o checklist
+   detalhado do que replicar de cada lado.
 4. Escrever `.env` local a partir de `.env.example` (§7) — nenhum valor real chega pelo git.
-5. Instalar PHP 8.3 + MySQL portátil (ou serviço) e rodar a skill `db-setup` — **conferir antes
-   se a lista de migrações precisa de atualização** (hoje para em v4.9.14, o projeto está em
-   v4.23.0; ver §3.1).
-6. `npm install` só se for rodar a suíte Playwright.
-7. Parear a extensão `claude-in-chrome` de novo (pareamento é por dispositivo, §4).
-8. Decidir sobre a memória (§5): deixar reconstruir sozinha ou copiar a pasta manualmente.
-9. Escrever a skill `protocolo-comandos` que falta (§3.1) — pendência que já existe nesta
-   máquina também, não é regressão da outra.
+5. Instalar MySQL **8.4** (ou a versão que bater com produção) e rodar a skill `db-setup` —
+   **atualizada e validada ponta-a-ponta em 22/09/2026** (61 migrações, `2.0.0` → `4.21.5`; ver
+   §7.2 sobre o bug de emoji em stored procedure que ela agora documenta).
+6. `npm install` só se for rodar a suíte Playwright — no Mac isso foi feito com uma instalação
+   `keg-only` do Node 24 via Homebrew, sem mexer no Node global da máquina (§7.2); adaptar à
+   ferramenta de versionamento de Node disponível em cada máquina.
+7. `claude-in-chrome`: não precisou de pareamento manual nesta sessão — a extensão já respondia
+   às ferramentas MCP assim que instalada, mesmo com `chromeExtension` vazio em `~/.claude.json`.
+   Só investigar mais se as ferramentas `mcp__claude-in-chrome__*` falharem na prática.
+8. Decidir sobre a memória (§5): deixar reconstruir sozinha ou copiar a pasta manualmente — sem
+   mudança nesta sessão (o Mac tem só 6 arquivos de memória contra as 34 relatadas no Windows;
+   não há como copiar de uma sessão que só enxerga o Mac).
+9. Ver §10 — checklist específico do que EXISTE/É USADO no Mac e falta replicar no Windows.
+
+## 10. Itens do Mac que faltam no Windows (levantado e ajustado em 22/09/2026)
+
+Comparação feita nesta sessão entre o retrato deste documento (autoria original: Windows,
+22/09/2026, antes do meio-dia) e o estado real do Mac no mesmo dia. Tudo que dava para ajustar
+**a partir desta máquina** (repositório git + `~/.claude/settings.json` local) já foi feito; o que
+segue é o que só pode ser aplicado abrindo o Claude Code **no Windows**.
+
+### 10.1 Já ajustado nesta sessão (não precisa repetir manualmente — chega pelo `git pull`)
+
+- Skill `protocolo-comandos` versionada (§3.1/§3.2) — chega no próximo `git pull` de qualquer
+  máquina.
+- `mysql/jimi_tracker.sql` sem emoji dentro de stored procedure (§7.2) — corrige a instalação
+  fresca em qualquer máquina, Windows incluído (não é preciso reinstalar o banco do Windows, que
+  já está de pé; só importa para quem monta um banco novo do zero a partir de agora).
+- Skill `db-setup` com a lista de 61 migrações atualizada (`2.0.0` → `4.21.5`), extraída de
+  `scripts/deploy.sh` e validada de ponta a ponta.
+
+### 10.2 Só ajustável abrindo o Claude Code no Windows (editar `~/.claude/settings.json` de lá)
+
+1. **`autoMode.soft_deny`** — adicionar a regra que falta:
+   `Bash(ssh:*) para 186.248.143.197 / bycamera.ia.br — acesso remoto a produção`
+   (o Mac tinha essa e não tinha `rollback.sh`; ficou corrigido no Mac. O Windows, pelo
+   documentado aqui, tem `rollback.sh` mas não tem a de `ssh` — falta essa última lá).
+2. **`autoUpdatesChannel: "latest"`** — conferir se já está lá (o Mac não tinha até esta sessão).
+3. **Plugins a habilitar, se quiser o mesmo conjunto de skills disponíveis no Mac** (uso real,
+   não especulativo — contagens do histórico do Mac entre parênteses):
+   - `superpowers@claude-plugins-official` (`brainstorming` 10x, `writing-plans` 7x,
+     `subagent-driven-development` 5x, `systematic-debugging` 5x, `executing-plans` 2x,
+     `test-driven-development` 1x) — é de onde vêm as skills de processo
+     (`superpowers:brainstorming`, `superpowers:systematic-debugging` etc.) citadas no próprio
+     prompt de sistema do Claude Code.
+   - `remember@claude-plugins-official` — mantém o histórico de sessão em `.remember/`
+     (`now.md`, `recent.md`, `archive.md`) que aparece nos hooks de `SessionStart`/consolidação.
+   - `claude-md-management@claude-plugins-official` (`claude-md-improver` 1x,
+     `revise-claude-md` 1x) — auditoria/atualização deste próprio `CLAUDE.md`.
+   - `security-guidance@claude-plugins-official` — sem uso isolado no histórico, mas ligado; é o
+     que dá a skill `security-review`.
+4. **Marketplace `ponytail`** (`DietrichGebert/ponytail`) — único dos "extras" do Mac com uso
+   real (`ponytail-audit` 2x, `ponytail-gain` 1x). `interface-design`, `anthropic-agent-skills` e
+   `karpathy-skills` também estão registrados no Mac mas **sem nenhum uso** no histórico — só
+   adicionar no Windows se for usar de fato, não por completude.
+5. **NÃO fazer**: reativar `reflexion@context-engineering-kit` — está desligado no Windows
+   deliberadamente (decisão de usuário registrada em memória); o Mac nem tem o marketplace
+   `context-engineering-kit` registrado, e está certo assim.
+
+### 10.3 Ambiente de dev local — decisão consciente de NÃO igualar agora
+
+- **PHP**: Mac em 8.5.10 (Homebrew), Windows em 8.3.32 — **mantido divergente a pedido do
+  usuário** ("não é importante nesse momento", 22/09/2026). Vale lembrar que essa divergência já
+  se mostrou real na prática (§7.2, achado nº2: `WebhookHandler.php` só falhou visivelmente sob
+  execução "fria", que o Mac expôs e o Windows/produção não) — não é só uma diferença de número
+  de versão.
+- **MySQL**: Windows usa 8.0.37 portátil, Mac usa 8.4 (Homebrew) — ambas mais antigas que a `26.x`
+  que o Homebrew instala por padrão hoje (que quebra o schema, §7.2). Não há ação pendente aqui;
+  registrado só para quem for reinstalar do zero em qualquer uma das duas não pegar a versão
+  default do Homebrew sem querer.
+- **Node**: Windows em v24.14.1, Mac agora em v24.21.0 (keg-only, via `node@24`, sem tocar no
+  Node global v26 do sistema) — mesma linha major, suficiente para a suíte Playwright.
