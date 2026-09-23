@@ -29,10 +29,17 @@ abstract class WebhookHandler {
     protected $allowSingleObjectPayload = false;
 
     public function __construct($handlerName) {
+        // env_load() precisa rodar ANTES de ler o token: em produção isso passava
+        // despercebido porque algum request anterior no mesmo worker do PHP-FPM já
+        // tinha carregado o .env, mas um worker recém-reiniciado (ou qualquer SAPI
+        // que não reaproveite estado, como `php -S`) cai no fallback abaixo e
+        // rejeita o primeiro webhook mesmo com o token certo.
+        env_load();
+
         $this->handlerName = $handlerName;
         $this->startTime = microtime(true);
         $this->validToken = getenv('WEBHOOK_TOKEN') ?: 'a12341234123';
-        
+
         try {
             $this->db = Database::getInstance()->getConnection();
         } catch (Exception $e) {
