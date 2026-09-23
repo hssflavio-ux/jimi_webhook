@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.23.1
+
+**`gps_data.gps_mode` estava com o comentário da coluna TROCADO com `post_type` desde o dump original do schema.**
+
+Pedido do dono do produto: conferir se `gpsMode` e `postMethod` (§1.3 Push GPS Data) estavam sendo tratados em `handlers/pushgps.php`. Os dois já eram extraídos e gravados corretamente — nenhum código mudou. Conferido ao vivo contra a doc oficial (`https://docs.jimicloud.com/integration/integration.html`, §1.3):
+
+- `gpsMode`: `0: Real-time upload` / `1: Re-upload`.
+- `postType`: `1: GPS` / `2: LBS` / `3: WiFi`.
+- `postMethod`: sem tabela de valores publicada (só aparece em exemplo de payload) — mesmo achado já registrado no CHANGELOG `4.17.11`, sem mudança.
+
+`gps_data.gps_mode` estava comentado `'0=GPS, 1=LBS, 2=WiFi'` desde o dump original (13/06/2026) — essa é a definição de `postType`, copiada para a coluna errada. `gps_data.post_type` já estava certo (`migration_v2.0.0.sql`) e `alarms.gps_mode` também (`'0: Real-time upload, 1: Re-upload'`) — só `gps_data.gps_mode` tinha a legenda trocada. `migration_v4.19.2.sql` já usava a interpretação CORRETA na prática ("11% dos pontos chegam reenviados, `gps_mode=1`"), então o dado sempre foi gravado certo — só a documentação embutida na coluna mentia. Sem impacto em runtime: nenhum código decodifica `gps_mode` em rótulo nenhum hoje.
+
+- **Corrigido** comentário de `gps_data.gps_mode` (migração `v4.23.1`) para bater com a doc oficial.
+- **Verificação**: aplicada e conferida contra MySQL local (`SHOW FULL COLUMNS`); reaplicação é idempotente (`MODIFY COLUMN`); `bash -n scripts/deploy.sh` limpo. `mysql/jimi_tracker.sql` (dump base) não é retrocorrigido — mesma convenção da `status_bits`/v4.21.5.
+
 ## [Unreleased] — 4.23.0
 
 **Central de Ajuda (`/wiki`) ganha um card de boas-vindas personalizado por perfil e a seção "Meu acesso".**

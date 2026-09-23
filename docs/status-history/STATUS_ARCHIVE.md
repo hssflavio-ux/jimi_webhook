@@ -2,6 +2,33 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
+>
+> `/wiki` deixou de ser um HTML escrito à mão (parou em 14/08/2026, sem nada que a ligasse ao resto):
+> agora é gerada de um **registro** (`includes/wiki_registry.php`, 42 seções, um parcial por seção em
+> `includes/wiki/sections/`) e de um **resolvedor de acesso** (`includes/wiki_access.php`) que decide
+> como o handler decide (`require_admin()` + `can()`). Seção sem acesso vira stub bloqueado com o
+> motivo; as demais ganham a faixa "Seu acesso". Renderizador **falha fechado** (seção fora do mapa
+> de acesso = bloqueada). Travas: `tests/helpers/wiki_access.test.php` (110/110),
+> `tests/helpers/wiki_registry.test.php` (10/10 — matriz `$screens` ↔ registro, `admin_only` ↔
+> `require_admin();`, `actions` ↔ `require_permission()`/`can()`, só `parametros` oculto) e
+> `tests/wiki.spec.js` (âncoras do índice). Regra de processo: tela nova entra em **TRÊS** lugares
+> (router, matriz e registro da wiki) — `CLAUDE.md`. Badge "admin" agora vem do handler: Grupos de
+> Permissão, Config. Ocorrências/Notificações e Servidor de E-mail deixam de exibi-lo.
+>
+> 🔴 **Pendência (decisão do dono do produto, NÃO corrigida aqui):** `/grupos-permissao` **não exige
+> admin** — usuário não-admin sem grupo de permissão consegue criar/editar/excluir grupos (achado
+> 19/09/2026, ao montar o registro; o teste de `admin_only` só confere a wiki contra o handler).
+>
+> ⚠️ **Verificação em navegador NÃO feita** (sem MySQL/`.env` local; Playwright não rodou): conferir
+> `/wiki` em homolog após o deploy — perfil admin, perfil com grupo restrito e usuário sem grupo.
+>
+> **Decisão em aberto:** o índice lateral agora mostra o título COMPLETO das seções ("BI — Business
+> Intelligence", "O que vale para todos os relatórios") em vez dos rótulos curtos de antes. Um campo
+> de rótulo curto no registro resolveria isso e também os atalhos ambíguos dos cards previstos para
+> a v4.23.0 (ex.: "Ao Vivo"). **Parâmetros** continua oculto na wiki porque o menu o esconde desde a
+> v4.13.10.
+
 > ### 📍 17/09/2026 — Velocidade passa a valer para QUALQUER alarme na tela de tratativa, não só Excesso de Velocidade (v4.21.8)
 >
 > Usuário perguntou se DMS/ADAS mandam velocidade na string do alarme, já que a coluna "Velocidade"

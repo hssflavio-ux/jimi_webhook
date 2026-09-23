@@ -75,13 +75,15 @@ mysql -u root -p jimi_tracker < mysql/migration_v4.19.2.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.20.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.21.0.sql
 mysql -u root -p jimi_tracker < mysql/migration_v4.21.5.sql
+mysql -u root -p jimi_tracker < mysql/migration_v4.23.1.sql
 ```
 
 Lista extraída de `scripts/deploy.sh` (bloco `run_migration`, fonte de verdade real) e validada
 ponta-a-ponta em 22/09/2026: 61 migrações, `2.0.0` -> `4.21.5`, banco novo criado do zero e todas
-aplicadas sem erro. Antes disso ela ficava parada na v4.9.14 enquanto o projeto ja estava na
-v4.23.0 -- mesma classe de defeito ja registrada aqui uma vez (parou na v4.9.5 enquanto o deploy
-aplicava v4.9.8/v4.9.9, banco novo saia sem `alarm_types.is_diagnostic`,
+aplicadas sem erro (a v4.23.1, seguinte, entrou depois por conferência pontual — mesmo padrão,
+não repetida ponta-a-ponta). Antes disso ela ficava parada na v4.9.14 enquanto o projeto ja estava
+na v4.23.0 -- mesma classe de defeito ja registrada aqui uma vez (parou na v4.9.5 enquanto o
+deploy aplicava v4.9.8/v4.9.9, banco novo saia sem `alarm_types.is_diagnostic`,
 `tests/helpers/diagnostico_guard.test.php` abortava com codigo 2). Sempre que atualizar, conferir
 contra `scripts/deploy.sh`, nao copiar de memoria.
 

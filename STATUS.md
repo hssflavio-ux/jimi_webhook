@@ -1,4 +1,20 @@
-# STATUS.md — Jimi Webhook System v4.23.0 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.23.1 (YUV Parity)
+
+> ### 📍 22/09/2026 — gps_data.gps_mode: comentário da coluna corrigido (v4.23.1)
+>
+> Pedido do dono do produto: conferir se `gpsMode` e `postMethod` (§1.3 Push GPS Data) estavam
+> sendo tratados em `handlers/pushgps.php`. Os dois já eram extraídos e gravados — nenhum código
+> mudou. Achado: `gps_data.gps_mode` estava comentado `'0=GPS, 1=LBS, 2=WiFi'` desde o dump
+> original do schema — essa é a definição de `postType`, copiada para a coluna errada. Conferido
+> ao vivo contra a doc oficial: `gpsMode` é `0: Real-time upload / 1: Re-upload` (igual ao já
+> correto `alarms.gps_mode`); `postType` é `1: GPS / 2: LBS / 3: WiFi` (igual ao já correto
+> `gps_data.post_type`). `postMethod` continua sem tabela oficial publicada — mesmo achado do
+> CHANGELOG `4.17.11`, sem mudança. Sem impacto em runtime (nada decodifica `gps_mode` em rótulo
+> hoje); corrigido via migração `v4.23.1` só no COMENTÁRIO da coluna. Detalhe no CHANGELOG `4.23.1`.
+>
+> ✅ Aplicada e conferida contra MySQL local (`SHOW FULL COLUMNS`, tipo/default inalterados,
+> reaplicação idempotente). `bash -n scripts/deploy.sh` limpo. Registrada em `scripts/deploy.sh` e
+> na skill `db-setup`. **Falta**: segundo deploy em homolog/produção (regra do CLAUDE.md).
 
 > ### 📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e "Meu acesso" (v4.23.0)
 >
@@ -51,33 +67,6 @@
 > real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG 4.18.2. **Adiados:** minors de
 > conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/Playback/Ocorrências sem todas as
 > colunas reais; textos de 1 linha imprecisos) — revisar depois.
-
-> ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
->
-> `/wiki` deixou de ser um HTML escrito à mão (parou em 14/08/2026, sem nada que a ligasse ao resto):
-> agora é gerada de um **registro** (`includes/wiki_registry.php`, 42 seções, um parcial por seção em
-> `includes/wiki/sections/`) e de um **resolvedor de acesso** (`includes/wiki_access.php`) que decide
-> como o handler decide (`require_admin()` + `can()`). Seção sem acesso vira stub bloqueado com o
-> motivo; as demais ganham a faixa "Seu acesso". Renderizador **falha fechado** (seção fora do mapa
-> de acesso = bloqueada). Travas: `tests/helpers/wiki_access.test.php` (110/110),
-> `tests/helpers/wiki_registry.test.php` (10/10 — matriz `$screens` ↔ registro, `admin_only` ↔
-> `require_admin();`, `actions` ↔ `require_permission()`/`can()`, só `parametros` oculto) e
-> `tests/wiki.spec.js` (âncoras do índice). Regra de processo: tela nova entra em **TRÊS** lugares
-> (router, matriz e registro da wiki) — `CLAUDE.md`. Badge "admin" agora vem do handler: Grupos de
-> Permissão, Config. Ocorrências/Notificações e Servidor de E-mail deixam de exibi-lo.
->
-> 🔴 **Pendência (decisão do dono do produto, NÃO corrigida aqui):** `/grupos-permissao` **não exige
-> admin** — usuário não-admin sem grupo de permissão consegue criar/editar/excluir grupos (achado
-> 19/09/2026, ao montar o registro; o teste de `admin_only` só confere a wiki contra o handler).
->
-> ⚠️ **Verificação em navegador NÃO feita** (sem MySQL/`.env` local; Playwright não rodou): conferir
-> `/wiki` em homolog após o deploy — perfil admin, perfil com grupo restrito e usuário sem grupo.
->
-> **Decisão em aberto:** o índice lateral agora mostra o título COMPLETO das seções ("BI — Business
-> Intelligence", "O que vale para todos os relatórios") em vez dos rótulos curtos de antes. Um campo
-> de rótulo curto no registro resolveria isso e também os atalhos ambíguos dos cards previstos para
-> a v4.23.0 (ex.: "Ao Vivo"). **Parâmetros** continua oculto na wiki porque o menu o esconde desde a
-> v4.13.10.
 
 > Entradas anteriores a "📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 

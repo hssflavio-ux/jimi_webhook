@@ -482,6 +482,7 @@ if [ "$SKIP_MIGRATE" -eq 0 ] && [ -f .env ]; then
     run_migration "4.20.0" "mysql/migration_v4.20.0.sql" "mapa de risco ADAS/DMS - alarm_types.risk_group + risk_events/risk_exposure/risk_day_state"
     run_migration "4.21.0" "mysql/migration_v4.21.0.sql" "alarm_types.is_driving - Alertas Dirigibilidade (conducao sem video, camera e rastreador)"
     run_migration "4.21.5" "mysql/migration_v4.21.5.sql" "gps_data.status_bits - bitmask de status do pushgps (doc oficial 1.3), gravado cru"
+    run_migration "4.23.1" "mysql/migration_v4.23.1.sql" "corrige comentario de gps_data.gps_mode (era a definicao de postType, trocada)"
 fi
 
 # ─── 3c. Permissões ──────────────────────────────────────────
