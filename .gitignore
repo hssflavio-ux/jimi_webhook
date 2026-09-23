@@ -61,7 +61,29 @@ Thumbs.db
 
 # Ferramentas de IA locais (estado de sessão, planos, configurações)
 .opencode/
-.claude/
+# `.claude/*` (não `.claude/`) de propósito: um diretório inteiro excluído
+# não pode ser "desexcluído" por negação depois — o git nem lista o que tem
+# dentro (ver `git help gitignore`, nota sobre re-incluir com pai excluído).
+# Excluindo só os FILHOS diretos, a exceção abaixo consegue liberar um deles.
+.claude/*
+# Exceção: as skills ESCRITAS PARA ESTE PROJETO (deploy, db-setup,
+# status-archive — instruções específicas do jimi_webhook: comando de deploy,
+# ordem de migração, formato do STATUS.md) SÃO parte do ambiente versionado.
+# Sem esta exceção elas nunca saem desta máquina: um `git pull` num checkout
+# novo simplesmente não as traz — descoberto ao levantar o ambiente para
+# outro computador (ver AMBIENTE_CLAUDE_CODE.md).
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/deploy/
+!.claude/skills/db-setup/
+!.claude/skills/status-archive/
+# Skills de MARKETPLACE (hallmark, find-skills...) ficam de fora de propósito:
+# `skills-lock.json` (esse sim versionado) já registra fonte+hash de cada uma,
+# e o próprio Claude Code as reinstala a partir dali — vendorizar a cópia
+# inteira aqui (a do hallmark sozinha passa de 100 arquivos) poluiria o
+# histórico de um projeto PHP com conteúdo genérico de outro repo.
+# settings.json/settings.local.json continuam de fora também, de propósito
+# (estado e permissões locais da máquina, não do projeto).
 # Framework de agentes externo (skills/workflows genéricos, memória de sessão)
 # — não faz parte da aplicação, ver CLAUDE.md §"Not part of the application".
 .agents/
