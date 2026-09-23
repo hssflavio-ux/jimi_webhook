@@ -5,6 +5,21 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.24.0
+
+**Tela nova "Dados Estendidos" (`/dados-estendidos`, só admin) — expõe dois conjuntos de dados que já eram gravados pelo webhook e nunca tinham tela nenhuma.**
+
+Pedido do dono do produto: verificar se `gpsMode`/`postMethod` tinham algum lugar de visualização, e conferir a tabela `device_events` (suspeita de conter informação relevante nunca exposta). As duas suspeitas se confirmaram.
+
+- **Adicionado** `includes/gps_extras.php` — `gps_mode_label()`/`post_type_label()` (tabela oficial §1.3 Push GPS Data, conferida ao vivo contra `docs.jimicloud.com/integration`); `parse_extension_content()`/`extension_content_render()`/`extension_id_label()` para o `content` de `device_events` (§1.15 Push Extension Data, extensionId 8197/8199).
+  - 🔴 `content` de `device_events` **não é JSON válido** — formato `{8193:23.4}` / `{1:"base64...",2:"base64..."}` (chave inteira sem aspas). `parse_extension_content()` usa um parser dedicado (regex por par `chave:valor`), não `json_decode()`.
+  - `postMethod` **não tem** tabela oficial de valores — só aparece em exemplo de payload (8 valores observados em produção, sem legenda, CHANGELOG `4.17.11`). Exibido cru, sem rótulo inventado.
+  - ICCID (key 5 de 8197, BCD) e o conteúdo do leitor serial (8199) **não são decodificados** nesta versão — mostrados truncados, mesma razão.
+- **Adicionado** `handlers/dados_estendidos.php` — duas abas: "Transmissão GPS" (`gps_data.gps_mode`/`post_type`/`post_method` por equipamento/período) e "Extensão do Terminal" (`device_events` decodificado). Molde de `auditoria.php`: `require_admin()` + `require_permission()`, escopo por `report_customer_scope()`, período por `brt_day_range_to_utc()`/`clamp_report_range()`.
+- **Adicionado** rota em `handlers/router.php` (`$renamedRoutes` + `$screenByHandler`), entrada em `handlers/grupos_permissao.php` (`$screens`), seção `dados-estendidos` em `includes/wiki_registry.php` + parcial `includes/wiki/sections/dados-estendidos.php`, item em `web/layout_base.php` `$navBottom` (`admin_only`, ícone `activity` novo) — os TRÊS lugares + nav de toda tela nova (CLAUDE.md).
+- **Fora do escopo, por decisão do dono do produto**: `/pushextendedkks` (Push JIMI Extended Data, §1.18, ~20 sub-schemas) não foi implementado — sem evidência de uso real nesta operação (já listado em `docs/PRD.md` §9.1).
+- **Verificação**: `php -l` limpo em todos os arquivos tocados; `tests/helpers/dados_estendidos.test.php` (novo, 24 verificações) cobre o parser contra os DOIS payloads reais da doc oficial + casos de borda; `tests/helpers/wiki_registry.test.php` (11 verificações) confirma admin_only/actions/parcial batendo com o handler. Testado de ponta a ponta contra MySQL local (sessão injetada, sem depender de senha): aba GPS com dado real de produção (`gps_mode=0` → "Tempo real"); aba Extensão com os dois payloads reais semeados manualmente, decodificação conferida linha a linha; usuário não-admin recebe 403.
+
 ## [Unreleased] — 4.23.1
 
 **`gps_data.gps_mode` estava com o comentário da coluna TROCADO com `post_type` desde o dump original do schema.**

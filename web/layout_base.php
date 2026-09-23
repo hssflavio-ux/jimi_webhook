@@ -130,6 +130,13 @@ $navBottom = [
     // instrução pra equipamento em operação, mesmo perfil de quem usa.
     ['route' => 'configuracoes-ia', 'label' => 'Configurações IA', 'icon' => 'brain', 'href' => '/configuracoes-ia',
      'admin_only' => true],
+    // v4.24.0 — vizinha de Comandos/Configurações IA por pedido do dono do
+    // produto: mesmo perfil de gente (quem opera equipamento), mesma razão
+    // de $navBottom (não no grupo Cadastros) que Firmware/SMS/Auditoria —
+    // só $navBottom respeita `admin_only`, item de grupo é filtrado só por
+    // can(), permissivo por omissão.
+    ['route' => 'dados-estendidos', 'label' => 'Dados Estendidos', 'icon' => 'activity', 'href' => '/dados-estendidos',
+     'admin_only' => true],
     // v4.9.32 — vizinha de Parâmetros pela mesma razão que ela é vizinha de
     // Comandos: as três mandam instrução para equipamento em operação. Entra em
     // $navBottom, e não no grupo Cadastros, porque só $navBottom respeita
@@ -217,6 +224,8 @@ function nav_icon($name) {
         // v4.13.0 — Configurações IA: chip/CPU, não um cérebro desenhado à mão
         // (arriscado ficar ruim em 24px) — mesma ideia de "processamento de IA".
         'brain' => '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9" y="9" width="6" height="6" rx="1"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="15" x2="23" y2="15"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="15" x2="4" y2="15"/>',
+        // v4.24.0 — Dados Estendidos: linha de pulso (telemetria/diagnóstico).
+        'activity' => '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
     ];
     return $icons[$name] ?? '';
 }

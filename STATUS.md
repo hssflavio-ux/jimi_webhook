@@ -1,4 +1,29 @@
-# STATUS.md — Jimi Webhook System v4.23.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.24.0 (YUV Parity)
+
+> ### 📍 22/09/2026 — Tela "Dados Estendidos" — gpsMode/postType/postMethod + extensão do terminal (v4.24.0)
+>
+> Pedido do dono do produto: verificar se `gpsMode`/`postMethod` tinham tela e conferir
+> `device_events` (suspeita de dado relevante nunca exposto). Confirmado nos dois: nenhum dos
+> dois tinha ponto de visualização, e `device_events` é 100% write-only (só
+> `pushTerminalTransInfo.php` grava, §1.15 Push Extension Data — extensionId 8197 status do
+> terminal, 8199 leitor serial). Nova tela **`/dados-estendidos`, exclusiva do administrador**,
+> agrupada na sidebar junto de Comandos/Comandos SMS/Configurações IA, com duas abas:
+> "Transmissão GPS" (`gps_data.gps_mode`/`post_type`/`post_method`) e "Extensão do Terminal"
+> (`device_events` decodificado). Detalhe no CHANGELOG `4.24.0`.
+>
+> 🔴 **`content` de `device_events` não é JSON válido** (`{8193:23.4}`, chave sem aspas) —
+> `parse_extension_content()` (`includes/gps_extras.php`) é um parser dedicado, não
+> `json_decode()`. `postMethod` e o ICCID/leitor-serial de `device_events` continuam **sem
+> decodificação** — sem tabela oficial ou fora do escopo desta versão, mostrados crus/truncados,
+> sem rótulo inventado.
+>
+> ✅ Testado de ponta a ponta contra MySQL local (sessão injetada): aba GPS com dado real de
+> produção; aba Extensão com os dois payloads reais da doc oficial semeados manualmente,
+> decodificação conferida linha a linha; usuário não-admin recebe 403. Testes:
+> `dados_estendidos` 24 verificações, `wiki_registry` 11, 0 falhas.
+>
+> **Fora do escopo, decisão do dono do produto**: `/pushextendedkks` (§1.18, ~20 sub-schemas,
+> sem evidência de uso real nesta operação) não foi implementado.
 
 > ### 📍 22/09/2026 — gps_data.gps_mode: comentário da coluna corrigido (v4.23.1)
 >
@@ -33,42 +58,7 @@
 > "Ao Vivo" é ambíguo — vídeo ao vivo ou rastreamento ao vivo?). Um campo de rótulo curto
 > no registro resolveria os dois pontos de uma vez.
 
-> ### 📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)
->
-> Wiki com 48 seções e nenhuma exceção `PENDENTE etapa 2` (entraram Manutenção, Painel, Auditoria,
-> Comandos por SMS, SMS e Configurações IA; seções antigas com comportamento velho corrigidas), mais
-> correções de código pedidas pelo dono do produto (Manutenção, importação de câmeras, Chips).
-> Detalhe no CHANGELOG `4.22.1`. Testes: `wiki_access` 122 verificações, `wiki_registry` 11, 0 falhas.
->
-> 🔴 **Mudança de acesso a comunicar** (decisão do dono, 20/09/2026): a **Auditoria é só do
-> administrador** (`require_admin()` nos 4 handlers, item no menu inferior só-admin). Revendedor de
-> verdade e usuário sem grupo **perdem** o acesso. Os ramos de revendedor dos handlers da Auditoria
-> (`$isAdmin` inclui `user_type='revendedor'`) ficaram inalcançáveis — cleanup adiado.
->
-> ⚠️ **NÃO verificado em navegador nem executado** (sem MySQL/`.env` local, Playwright não rodou):
-> Manutenção, importação de câmeras, Chips, menu e `/wiki` com os 3 perfis — conferir em homolog.
->
-> 🔴 **Pendências de produto achadas nesta rodada — NÃO corrigidas (decisão do dono):**
-> - **Acesso/tenant:** `/grupos-permissao` sem `require_admin()` (já na v4.22.0); Manutenção: salvar
->   não confere que o IMEI é do cliente, `LEFT JOIN devices` sem escopo, `?edit=ID` sem `customer_id`;
->   Chips: a guarda de "Desativar" lê `sim_cards` sem filtro de cliente (vaza IMEI de outro cliente) e
->   "Remover" de id fora do escopo diz "Chip removido."; Resumo: ranking "Visão por Clientes" não
->   escopa por revendedor; gravação da tratativa de ocorrência não filtra por cliente; "Aplicar em
->   outras câmeras" (Configurações IA) pode alcançar câmeras de outros clientes para o admin.
-> - **Dados/UX:** "Placa" nas telas de operação lê `devices.device_name` (legado), não
->   `vehicles.plate`; "Online" vale 10 min em Ativos e 5 min em Equipamentos; importação de câmeras:
->   "linha N" desvia com linhas em branco, câmeras nascem sem chip, linha de 1 coluna ou arquivo com
->   ponto-e-vírgula some sem aviso, reimportar o mesmo arquivo pode deixar a lista atrás da janela
->   velha; badges `badge-ok/aguardando/erro/neutro` não existem no CSS (Entrega/Contato sem cor em
->   Comandos por SMS); link "ajuste em SMS" aparece a quem não abre a tela; o valor gravado no
->   Detalhe de acessos negados por `require_admin()` provavelmente é `router`.
->
-> **Decisões em aberto (v4.22.1):** "Ver na câmera" do Playback está como fato sem medição em câmera
-> real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG 4.18.2. **Adiados:** minors de
-> conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/Playback/Ocorrências sem todas as
-> colunas reais; textos de 1 linha imprecisos) — revisar depois.
-
-> Entradas anteriores a "📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a "📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e 'Meu acesso' (v4.23.0)" arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 

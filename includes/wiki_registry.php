@@ -244,6 +244,10 @@ function wiki_registry(): array {
             'group' => 'operacoes', 'screen' => 'configuracoes-ia', 'handler' => 'configuracoes_ia.php', 'admin_only' => true,
             'summary' => 'Ler e ajustar à distância os alertas de IA (ADAS/DMS) e de velocidade das câmeras.',
         ]),
+        wiki_sec('dados-estendidos', 'Dados Estendidos', [
+            'group' => 'operacoes', 'screen' => 'dados-estendidos', 'handler' => 'dados_estendidos.php', 'admin_only' => true,
+            'summary' => 'Dados de diagnóstico gravados pelo equipamento mas sem tela própria: modo/tipo de transmissão do GPS e a extensão de status do terminal (tensão, bateria, rede).',
+        ]),
         wiki_sec('exportar', 'Exportar', [
             'group' => 'operacoes', 'screen' => 'exportar', 'handler' => 'exportar.php',
             'summary' => 'Fila de geração de relatórios grandes, com download ao concluir.',

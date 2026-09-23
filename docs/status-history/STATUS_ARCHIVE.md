@@ -2,6 +2,41 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 20/09/2026 — Wiki completa, Auditoria exclusiva do administrador e correções de produto (v4.22.1)
+>
+> Wiki com 48 seções e nenhuma exceção `PENDENTE etapa 2` (entraram Manutenção, Painel, Auditoria,
+> Comandos por SMS, SMS e Configurações IA; seções antigas com comportamento velho corrigidas), mais
+> correções de código pedidas pelo dono do produto (Manutenção, importação de câmeras, Chips).
+> Detalhe no CHANGELOG `4.22.1`. Testes: `wiki_access` 122 verificações, `wiki_registry` 11, 0 falhas.
+>
+> 🔴 **Mudança de acesso a comunicar** (decisão do dono, 20/09/2026): a **Auditoria é só do
+> administrador** (`require_admin()` nos 4 handlers, item no menu inferior só-admin). Revendedor de
+> verdade e usuário sem grupo **perdem** o acesso. Os ramos de revendedor dos handlers da Auditoria
+> (`$isAdmin` inclui `user_type='revendedor'`) ficaram inalcançáveis — cleanup adiado.
+>
+> ⚠️ **NÃO verificado em navegador nem executado** (sem MySQL/`.env` local, Playwright não rodou):
+> Manutenção, importação de câmeras, Chips, menu e `/wiki` com os 3 perfis — conferir em homolog.
+>
+> 🔴 **Pendências de produto achadas nesta rodada — NÃO corrigidas (decisão do dono):**
+> - **Acesso/tenant:** `/grupos-permissao` sem `require_admin()` (já na v4.22.0); Manutenção: salvar
+>   não confere que o IMEI é do cliente, `LEFT JOIN devices` sem escopo, `?edit=ID` sem `customer_id`;
+>   Chips: a guarda de "Desativar" lê `sim_cards` sem filtro de cliente (vaza IMEI de outro cliente) e
+>   "Remover" de id fora do escopo diz "Chip removido."; Resumo: ranking "Visão por Clientes" não
+>   escopa por revendedor; gravação da tratativa de ocorrência não filtra por cliente; "Aplicar em
+>   outras câmeras" (Configurações IA) pode alcançar câmeras de outros clientes para o admin.
+> - **Dados/UX:** "Placa" nas telas de operação lê `devices.device_name` (legado), não
+>   `vehicles.plate`; "Online" vale 10 min em Ativos e 5 min em Equipamentos; importação de câmeras:
+>   "linha N" desvia com linhas em branco, câmeras nascem sem chip, linha de 1 coluna ou arquivo com
+>   ponto-e-vírgula some sem aviso, reimportar o mesmo arquivo pode deixar a lista atrás da janela
+>   velha; badges `badge-ok/aguardando/erro/neutro` não existem no CSS (Entrega/Contato sem cor em
+>   Comandos por SMS); link "ajuste em SMS" aparece a quem não abre a tela; o valor gravado no
+>   Detalhe de acessos negados por `require_admin()` provavelmente é `router`.
+>
+> **Decisões em aberto (v4.22.1):** "Ver na câmera" do Playback está como fato sem medição em câmera
+> real; a frase sobre `writeconfig.txt` se apoia só no CHANGELOG 4.18.2. **Adiados:** minors de
+> conteúdo da wiki (mockups de Auditoria/Exportar/Agendamentos/Playback/Ocorrências sem todas as
+> colunas reais; textos de 1 linha imprecisos) — revisar depois.
+
 > ### 📍 19/09/2026 — Central de Ajuda sensível ao perfil e travada contra desatualização (v4.22.0)
 >
 > `/wiki` deixou de ser um HTML escrito à mão (parou em 14/08/2026, sem nada que a ligasse ao resto):

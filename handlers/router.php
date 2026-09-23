@@ -133,6 +133,12 @@ if (empty($segments)) {
         // própria (catálogo próprio, reprocessado das planilhas do
         // fabricante). Ver includes/ia_config_catalog.php.
         'configuracoes-ia'    => 'configuracoes_ia.php',
+        // v4.24.0 — gpsMode/postType/postMethod (gps_data) e a extensão do
+        // terminal (device_events, pushTerminalTransInfo) são gravados desde
+        // sempre e nunca tiveram tela. `require_admin()` no handler, mesmo
+        // padrão da Auditoria (v4.22.1): dado de diagnóstico do equipamento,
+        // não operação de frota.
+        'dados-estendidos'    => 'dados_estendidos.php',
         // v4.20.0 — Mapa de Risco ADAS/DMS (item de topo, logo abaixo do BI).
         'mapa-risco'          => 'mapa_risco.php',
         'grupos-permissao'    => 'grupos_permissao.php',
@@ -374,6 +380,10 @@ $screenByHandler = [
     // require_admin() dentro do handler, porque manda comando de texto pra
     // equipamento em operação.
     'configuracoes_ia.php'      => 'configuracoes-ia',
+    // v4.24.0 — entra aqui E em `$screens` (grupos_permissao.php) E no
+    // registro da wiki (regra do CLAUDE.md — TRÊS lugares, sempre). Trava
+    // efetiva é `require_admin()` dentro do handler.
+    'dados_estendidos.php'      => 'dados-estendidos',
     'usuarios.php'              => 'usuarios',
     'wiki.php'                  => 'wiki',
     // v4.15.0 — entra aqui E em `$screens` (grupos_permissao.php): só aqui =

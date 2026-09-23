@@ -71,6 +71,11 @@ $screens = [
     // `require_permission('auditoria', …)` — e o `$screenByHandler` do router
     // precisa dela —, mas marcá-la num grupo não abre a tela a quem não é admin.
     'auditoria'             => 'Auditoria (só admin)',
+    // v4.24.0 — exclusiva do administrador desde que nasceu (decisão do dono
+    // do produto, 22/09/2026), mesmo padrão da Auditoria: `require_admin()`
+    // no handler, chave aqui só porque `require_permission()` e o
+    // `$screenByHandler` do router exigem.
+    'dados-estendidos'      => 'Dados Estendidos (só admin)',
 ];
 // NOTA (v4.8.5): `checklist` e `wiki` entraram aqui porque uma tela que o
 // router protege mas que a matriz não lista é uma tela IMPOSSÍVEL de liberar —
