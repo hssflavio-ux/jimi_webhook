@@ -449,7 +449,36 @@ segue é o que só pode ser aplicado abrindo o Claude Code **no Windows**.
    deliberadamente (decisão de usuário registrada em memória); o Mac nem tem o marketplace
    `context-engineering-kit` registrado, e está certo assim.
 
-### 10.3 Ambiente de dev local — decisão consciente de NÃO igualar agora
+### 10.3 Aplicado no Windows em 22/09/2026 (sessão seguinte, depois do `git pull`)
+
+Os itens de §10.1 chegaram sozinhos pelo `git pull` (skill `protocolo-comandos`, `db-setup`
+atualizada, `jimi_tracker.sql` sem emoji em stored procedure) — nenhuma ação manual precisou. De
+§10.2, aplicado direto em `~/.claude/settings.json` **desta máquina** (Windows):
+
+1. ✅ `autoMode.soft_deny` ganhou a regra de `ssh` para produção — as três máquinas (Mac/Windows)
+   agora têm o mesmo trio: `deploy.sh`, `rollback.sh`, `ssh` para `186.248.143.197`/`bycamera.ia.br`.
+2. ✅ `autoUpdatesChannel: "latest"` já estava presente (não era pendência real do Windows, só do
+   Mac na sessão anterior).
+3. ✅ Habilitados os quatro plugins do marketplace oficial com uso real comprovado no Mac:
+   `superpowers@claude-plugins-official`, `remember@claude-plugins-official`,
+   `claude-md-management@claude-plugins-official`, `security-guidance@claude-plugins-official`.
+4. ✅ `ponytail` registrado em `extraKnownMarketplaces` (`DietrichGebert/ponytail`) e habilitado
+   como `ponytail@ponytail` em `enabledPlugins`. ⚠️ **A chave `ponytail@ponytail` é um palpite por
+   convenção** (repetiu o padrão `<id>@<id>` que `context-mode@context-mode` e
+   `reflexion@context-engineering-kit` já usam) — não foi possível confirmar o nome exato do
+   plugin dentro do marketplace a partir desta sessão (sem acesso interativo ao seletor de
+   plugins). Conferir no primeiro `/plugin` aberto nesta máquina; se o nome vier diferente,
+   corrigir a chave em `enabledPlugins`.
+   `interface-design`, `anthropic-agent-skills` e `karpathy-skills` ficaram de fora, como o Mac
+   também decidiu — zero uso registrado em qualquer uma das duas máquinas.
+5. Não fiz o `skillOverrides` de 9 skills genéricas desligadas no Mac — o próprio §10.2 já
+   descreve isso como preferência de ruído, não obrigatório para a paridade.
+6. `reflexion@context-engineering-kit` continua `false` — não reativado, como instruído.
+
+Depois deste ajuste, reiniciar o Claude Code (ou `/reload-plugins`) para os plugins novos
+carregarem.
+
+### 10.4 Ambiente de dev local — decisão consciente de NÃO igualar agora
 
 - **PHP**: Mac em 8.5.10 (Homebrew), Windows em 8.3.32 — **mantido divergente a pedido do
   usuário** ("não é importante nesse momento", 22/09/2026). Vale lembrar que essa divergência já
