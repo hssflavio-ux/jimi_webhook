@@ -100,7 +100,8 @@ Contagens reais de uso (globais, de `~/.claude.json` → `skillUsage`, acumulada
 
 ### 3.1 Skills escritas para este projeto (`.claude/skills/`)
 
-Só estas três existem hoje, **cada uma um único arquivo `SKILL.md`**, sem front-matter de
+Existem **sete** (as três abaixo desde o início; `protocolo-comandos` e as três de 23/09/2026 vêm
+logo em seguida), **cada uma um único arquivo `SKILL.md`**, sem front-matter de
 `metadata` (só `name` + `description`):
 
 - **`deploy`** — comando de deploy com `sudo`, qual chave SSH funciona de qual máquina para
@@ -124,6 +125,27 @@ mas ficava fora do `git` porque a exceção do `.gitignore` (ver §3.2) só cobr
 `!.claude/skills/protocolo-comandos/` e o arquivo foi commitado — a partir do próximo `git pull`
 ele chega em qualquer máquina, Windows incluído. Ver §10.
 
+**Enxugamento do `CLAUDE.md` em 23/09/2026 (`/doctor`) — três skills novas + uma ampliada.** O
+`CLAUDE.md` é lido em **toda** sessão (54,2 mil caracteres, ~13,5 mil tokens est., acima do piso de
+40 mil do aviso de arquivo grande). Quatro blocos de tarefa específica foram **movidos sem alteração**
+(nada resumido nem apagado) para skills, que só carregam quando o assunto aparece; na raiz ficou um
+stub de 2–5 linhas com a regra crítica ("nunca faça X") e o ponteiro. Resultado: 35,0 mil caracteres
+(~8,7 mil tokens est.), abaixo do piso; as três descrições novas custam ~0,4 mil tokens na listagem.
+
+| Skill | Recebeu do `CLAUDE.md` | Aciona ao mexer em |
+|---|---|---|
+| `protocolo-comandos` (já existia) | polling de `/commandstatus`, fila offline do hub, `serverFlagId`, `commands.response_payload` | `sendcommand.php`, `commandstatus.php`, `comandos.php`, `iothub_command.php`… |
+| `mapa-risco` (nova) | Mapa de Risco: `risk_group` por código, `RISK_GROUP_CATEGORY`, filtros, worker por `id` | `mapa_risco.php`, `risk_map.php`, `risk_builder.php` |
+| `catalogo-alarmes` (nova) | catálogo `alarm_types`: nome resolvido uma vez, renomear quebra o motor, JT/T base×composto, `is_driving` | `pushalarm.php`, `occurrence_engine.php`, `rel_alarmes.php`, migração de alarme |
+| `estado-frota` (nova) | conectividade On/Off, snapshot que tem de vencer, segmento×`device_statistics` | `fleet_state.php`, `metrics_rollup.php`, `resumo.php`, `rastreamento.php` |
+
+**Como isso chega à outra máquina:** as skills são arquivos do repositório, então viajam pelo git —
+**desde que o `.gitignore` as libere** (§3.2). Foram adicionadas as três exceções; sem elas as skills
+novas ficariam só nesta máquina, exatamente o problema descrito no início desta seção. Depois de
+`git pull` na outra máquina, abrir uma sessão nova (ou `/reload-skills`) e conferir com
+`git check-ignore -v .claude/skills/mapa-risco/SKILL.md` (sem saída = liberada). **Regra daqui em
+diante: skill nova do projeto = uma linha `!.claude/skills/<nome>/` no `.gitignore` no mesmo commit.**
+
 ### 3.2 Por que elas não viajavam pelo git (corrigido nesta sessão)
 
 `.gitignore` tinha uma regra plana `.claude/` que escondia o diretório inteiro. Ajustado para:
@@ -135,9 +157,13 @@ ele chega em qualquer máquina, Windows incluído. Ver §10.
 !.claude/skills/deploy/
 !.claude/skills/db-setup/
 !.claude/skills/status-archive/
+!.claude/skills/protocolo-comandos/
+!.claude/skills/mapa-risco/
+!.claude/skills/catalogo-alarmes/
+!.claude/skills/estado-frota/
 ```
 
-Isso versiona só as três skills do projeto — deixa de fora `settings.json`/`settings.local.json`
+Isso versiona só as sete skills do projeto — deixa de fora `settings.json`/`settings.local.json`
 (estado/permissões da máquina) e qualquer skill de **marketplace** cacheada localmente (ex.:
 `hallmark`, que sozinha passa de 100 arquivos de referência de design, sem relação com este
 projeto PHP). Skills de marketplace são reinstaladas a partir do `skills-lock.json` (esse sim
@@ -380,7 +406,8 @@ Não duplicado aqui — só o índice de onde procurar o quê:
 ## 9. Checklist para deixar a outra máquina parecida com esta
 
 1. `git clone`/`git pull` o repo — traz código, `CLAUDE.md`/`AGENTS.md`, `skills-lock.json` e as
-   **quatro** skills do projeto, `protocolo-comandos` incluída desde 22/09/2026 (§3.2).
+   **sete** skills do projeto (`deploy`, `db-setup`, `status-archive`, `protocolo-comandos` desde
+   22/09/2026, e `mapa-risco`, `catalogo-alarmes`, `estado-frota` desde 23/09/2026 — §3.1/§3.2).
 2. Instalar Claude Code, logar com a mesma conta — plugins de marketplace (`hallmark`,
    `find-skills`) reinstalam a partir do `skills-lock.json`; `context-mode` precisa ser
    habilitado manualmente se não vier por padrão (marketplace `mksglu/context-mode`).
@@ -420,6 +447,9 @@ segue é o que só pode ser aplicado abrindo o Claude Code **no Windows**.
   já está de pé; só importa para quem monta um banco novo do zero a partir de agora).
 - Skill `db-setup` com a lista de 61 migrações atualizada (`2.0.0` → `4.21.5`), extraída de
   `scripts/deploy.sh` e validada de ponta a ponta.
+- Skills `mapa-risco`, `catalogo-alarmes` e `estado-frota` (enxugamento do `CLAUDE.md`, 23/09/2026 —
+  §3.1) e `CLAUDE.md` 35% menor — chegam no próximo `git pull`; as três exceções do `.gitignore`
+  vêm no mesmo commit.
 
 ### 10.2 Só ajustável abrindo o Claude Code no Windows (editar `~/.claude/settings.json` de lá)
 

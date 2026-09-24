@@ -78,6 +78,11 @@ Thumbs.db
 !.claude/skills/db-setup/
 !.claude/skills/status-archive/
 !.claude/skills/protocolo-comandos/
+# Skills criadas em 23/09/2026 ao enxugar o CLAUDE.md (/doctor). UMA exceção por skill
+# nova: esquecer a exceção faz a skill nunca sair desta máquina.
+!.claude/skills/mapa-risco/
+!.claude/skills/catalogo-alarmes/
+!.claude/skills/estado-frota/
 # Skills de MARKETPLACE (hallmark, find-skills...) ficam de fora de propósito:
 # `skills-lock.json` (esse sim versionado) já registra fonte+hash de cada uma,
 # e o próprio Claude Code as reinstala a partir dali — vendorizar a cópia
