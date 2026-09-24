@@ -31,7 +31,7 @@ const ASSINATURA = (sel) => `[...document.querySelectorAll('${sel}')].map(el=>{c
   return [c.borderTopWidth,c.borderTopStyle,c.borderTopColor,c.borderTopLeftRadius].join(' ')})`;
 
 test.describe('Barras de filtro — padrão visual', () => {
-    for (const rota of ['/comandos', '/video/downloads', '/relatorios/alarmes', '/dados-estendidos']) {
+    for (const rota of ['/comandos', '/video/downloads', '/relatorios/alarmes', '/dados-estendidos', '/mapa-risco']) {
         test(`${rota}: todo campo do filtro tem a MESMA borda`, async ({ authedPage }) => {
             await authedPage.goto(rota);
             await authedPage.waitForLoadState('domcontentloaded');

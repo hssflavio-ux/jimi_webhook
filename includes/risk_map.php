@@ -88,6 +88,39 @@ const RISK_GROUP_LABELS = [
     'conducao_prolongada'     => 'Condução prolongada',
 ];
 
+/**
+ * Comportamento → origem do alerta: ADAS (o que a câmera vê da estrada) ou DMS
+ * (o que ela vê do motorista). Espelha os blocos `-- ADAS` / `-- DMS` de
+ * mysql/migration_v4.20.0.sql, e `tests/helpers/risk_map.test.php` LÊ essa
+ * migração para conferir.
+ *
+ * 🔴 Comportamento novo em RISK_GROUP_LABELS tem de entrar aqui também: sem isso
+ * ele some da lista agrupada do filtro (não há seção onde colocá-lo).
+ */
+const RISK_GROUP_CATEGORY = [
+    'colisao_frontal'         => 'ADAS',
+    'colisao_pedestre'        => 'ADAS',
+    'distancia_insegura'      => 'ADAS',
+    'saida_faixa'             => 'ADAS',
+    'mudanca_faixa_frequente' => 'ADAS',
+    'excesso_placa'           => 'ADAS',
+    'obstaculo_frente'        => 'ADAS',
+    'uso_celular'             => 'DMS',
+    'fadiga'                  => 'DMS',
+    'bocejo'                  => 'DMS',
+    'piscadas_frequentes'     => 'DMS',
+    'distracao'               => 'DMS',
+    'cinto'                   => 'DMS',
+    'fumando'                 => 'DMS',
+    'bebendo_comendo'         => 'DMS',
+    'maos_fora_volante'       => 'DMS',
+    'motorista_nao_detectado' => 'DMS',
+    'conducao_prolongada'     => 'DMS',
+];
+
+/** Ordem das seções do filtro de comportamento. */
+const RISK_CATEGORY_ORDER = ['DMS', 'ADAS'];
+
 const RISK_DAY_PERIOD_LABELS = [
     'madrugada' => 'Madrugada (0–6 h)',
     'manha'     => 'Manhã (6–12 h)',
@@ -135,6 +168,75 @@ function risk_weight(?string $level): int
 function risk_group_label(?string $group): string
 {
     return RISK_GROUP_LABELS[$group ?? ''] ?? (($group ?? '') !== '' ? $group : '—');
+}
+
+/**
+ * Comportamentos do filtro, agrupados por origem (DMS, ADAS).
+ *
+ * A lista mostra o que o sistema JÁ RECEBEU (`$received`, vindo de risk_events):
+ * um comportamento que nenhum equipamento nunca mandou — hoje `excesso_placa` e
+ * `obstaculo_frente`, que só existem no JT/T e dependem do ADAS da câmera — só
+ * atrapalha a escolha, e volta sozinho no dia em que o primeiro alerta chegar.
+ * Um comportamento SELECIONADO entra mesmo sem ter sido recebido: modelo salvo
+ * ou link antigo não pode perder item em silêncio ao abrir a tela.
+ *
+ * @param string[] $received Valores de risk_group com pelo menos um alerta gravado
+ * @param string[] $selected Valores de risk_group escolhidos no filtro
+ * @returns array<string,string[]> ['DMS' => [...], 'ADAS' => [...]], na ordem de
+ *                                 RISK_GROUP_LABELS; seção vazia continua no array
+ */
+function risk_groups_by_category(array $received, array $selected = []): array
+{
+    $show = array_flip(array_merge($received, $selected));
+    $out  = array_fill_keys(RISK_CATEGORY_ORDER, []);
+    foreach (RISK_GROUP_LABELS as $group => $_label) {
+        $cat = RISK_GROUP_CATEGORY[$group] ?? null;
+        if ($cat !== null && isset($show[$group])) {
+            $out[$cat][] = $group;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Lista de ids separados por vírgula (`?vehicle_id=3,7`).
+ *
+ * Aceita o valor ÚNICO antigo (`?vehicle_id=3`) sem tratamento à parte, que é
+ * o que mantém funcionando link, modelo salvo e exportação anteriores. Descarta
+ * o que não for inteiro positivo e repete-se uma vez só.
+ *
+ * @param string $raw
+ * @returns int[] Vazio = sem filtro
+ */
+function risk_parse_id_list(string $raw): array
+{
+    $ids = [];
+    foreach (explode(',', $raw) as $part) {
+        $part = trim($part);
+        if ($part !== '' && ctype_digit($part) && (int)$part > 0) {
+            $ids[(int)$part] = true;
+        }
+    }
+    return array_keys($ids);
+}
+
+/**
+ * Lista de comportamentos separados por vírgula (`?risk_group=fadiga,cinto`).
+ * Só passa o que consta de RISK_GROUP_LABELS — o valor vai para uma consulta.
+ *
+ * @param string $raw
+ * @returns string[] Vazio = sem filtro
+ */
+function risk_parse_group_list(string $raw): array
+{
+    $groups = [];
+    foreach (explode(',', $raw) as $part) {
+        $part = trim($part);
+        if ($part !== '' && isset(RISK_GROUP_LABELS[$part])) {
+            $groups[$part] = true;
+        }
+    }
+    return array_keys($groups);
 }
 
 /**

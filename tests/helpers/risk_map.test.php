@@ -198,5 +198,67 @@ checa('todo comportamento da migração tem rótulo',   [], array_values(array_d
 checa('todo rótulo tem tipo na migração',            [], array_values(array_diff($rotulos, $naMigracao)));
 checa('migração marca exclusões',                    true, in_array(RISK_GROUP_EXCLUDED, $m[1], true));
 
+echo "== Origem do comportamento (DMS / ADAS) ==\n";
+$catKeys = array_keys(RISK_GROUP_CATEGORY);
+sort($catKeys);
+checa('a categoria cobre EXATAMENTE os comportamentos com rótulo', $rotulos, $catKeys);
+$categorias = array_values(array_unique(RISK_GROUP_CATEGORY));
+sort($categorias);
+checa('só existem as categorias ADAS e DMS',         ['ADAS', 'DMS'], $categorias);
+
+// A migração separa os dois blocos por comentário; cada comportamento de cada
+// bloco tem de cair na categoria que o nome do bloco diz.
+$temBlocos = (bool)preg_match('/^-- ADAS\r?\n(.*?)^-- DMS\r?\n(.*?)^-- Fora do mapa/ms', $sql, $blk);
+checa('a migração tem os blocos -- ADAS e -- DMS',   true, $temBlocos);
+if ($temBlocos) {
+    foreach ([1 => 'ADAS', 2 => 'DMS'] as $i => $cat) {
+        preg_match_all("/SET risk_group = '([a-z_]+)'/", $blk[$i], $g);
+        $errados = array_values(array_filter(array_unique($g[1]), fn($x) => (RISK_GROUP_CATEGORY[$x] ?? null) !== $cat));
+        checa("bloco $cat da migração bate com RISK_GROUP_CATEGORY", [], $errados);
+        checa("bloco $cat da migração não está vazio",   true, count($g[1]) > 0);
+    }
+}
+
+echo "== Lista de comportamentos do filtro ==\n";
+$todos = array_keys(RISK_GROUP_LABELS);
+$porCat = risk_groups_by_category($todos);
+checa('as seções saem na ordem DMS, ADAS',           ['DMS', 'ADAS'], array_keys($porCat));
+checa('com tudo recebido, cada grupo aparece uma vez', count($todos), count($porCat['DMS']) + count($porCat['ADAS']));
+checa('ADAS tem 7 comportamentos, DMS 11',           [7, 11], [count($porCat['ADAS']), count($porCat['DMS'])]);
+checa('a ordem interna segue RISK_GROUP_LABELS',     ['uso_celular', 'fadiga'], array_slice($porCat['DMS'], 0, 2));
+
+$recebidos = array_values(array_diff($todos, ['excesso_placa', 'obstaculo_frente']));
+$semDois = risk_groups_by_category($recebidos);
+checa('nunca recebido NÃO aparece (excesso em placa)',    false, in_array('excesso_placa', $semDois['ADAS'], true));
+checa('nunca recebido NÃO aparece (obstáculo à frente)',  false, in_array('obstaculo_frente', $semDois['ADAS'], true));
+checa('sobram 5 comportamentos ADAS',                5, count($semDois['ADAS']));
+checa('o DMS não é afetado',                         11, count($semDois['DMS']));
+
+$selecionado = risk_groups_by_category($recebidos, ['excesso_placa']);
+checa('selecionado volta mesmo sem ter sido recebido', true, in_array('excesso_placa', $selecionado['ADAS'], true));
+checa('…na posição do catálogo, não no fim',         ['mudanca_faixa_frequente', 'excesso_placa'], array_slice($selecionado['ADAS'], 4, 2));
+
+$nada = risk_groups_by_category([]);
+checa('sem nada recebido as duas seções ficam vazias', ['DMS' => [], 'ADAS' => []], $nada);
+checa('valor que não é comportamento é ignorado',    ['DMS' => [], 'ADAS' => []], risk_groups_by_category(['xyz'], ['abc']));
+
+echo "== Parâmetros de lista (?vehicle_id=3,7 · ?risk_group=fadiga,cinto) ==\n";
+checa('id único antigo continua valendo',            [5], risk_parse_id_list('5'));
+checa('vários ids, na ordem',                        [3, 7, 12], risk_parse_id_list('3,7,12'));
+checa('id repetido entra uma vez',                   [3, 7], risk_parse_id_list('3,7,3'));
+checa('espaço em volta é ignorado',                  [3, 7], risk_parse_id_list(' 3 , 7 '));
+checa('lixo, zero e negativo são descartados',       [4], risk_parse_id_list('abc,0,-2,4,1.5,'));
+checa('vazio = sem filtro',                          [], risk_parse_id_list(''));
+checa('só lixo = sem filtro',                        [], risk_parse_id_list('x,y'));
+checa('injeção não passa como id',                   [1], risk_parse_id_list('1,2); DROP TABLE x;--'));
+
+checa('comportamento único antigo continua valendo', ['fadiga'], risk_parse_group_list('fadiga'));
+checa('vários comportamentos, na ordem',             ['fadiga', 'cinto'], risk_parse_group_list('fadiga,cinto'));
+checa('comportamento repetido entra uma vez',        ['fadiga'], risk_parse_group_list('fadiga,fadiga'));
+checa('desconhecido é descartado',                   ['cinto'], risk_parse_group_list('nao_existe,cinto'));
+checa('"excluido" não é comportamento da tela',      [], risk_parse_group_list('excluido'));
+checa('injeção não passa como comportamento',       [], risk_parse_group_list("fadiga' OR '1'='1") );
+checa('vazio = sem filtro',                          [], risk_parse_group_list(''));
+
 printf("\n%d de %d verificações OK\n", $total - $falhas, $total);
 exit($falhas === 0 ? 0 : 1);

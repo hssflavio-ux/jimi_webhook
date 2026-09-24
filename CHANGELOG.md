@@ -5,6 +5,31 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.25.0
+
+**Mapa de Risco: os filtros de veículo e de comportamento aceitam VÁRIOS, e o comportamento sai em seções DMS e ADAS listando só o que o sistema já recebeu.**
+
+Pedido do dono do produto sobre `/mapa-risco`: (1) escolher um, vários ou todos os veículos; (2) escolher os tipos de comportamento de risco — todos os DMS, todos os ADAS, alguns de cada ou qualquer mistura; (3) a lista de comportamento mostrava alertas que o sistema nunca recebeu (*Excesso em placa de trânsito*, *Obstáculo à frente*).
+
+### Added
+- **Filtro de veículo em lista suspensa com marcação** (`web/components/select_multi.php`, o mesmo de `/relatorios/alarmes`): um, vários ou todos; busca a partir de 8 opções. Vazio = todos.
+- **Filtro de comportamento em UMA lista com duas seções, DMS e ADAS**, cada uma com **todos / nenhum** próprios. É o que permite "todos os DMS" sem tocar nos ADAS, e a mistura livre. A alternativa de dois filtros separados foi descartada: com DMS em "Todos" e 2 itens de ADAS marcados, o resultado seria ambíguo (todo o DMS ou nenhum?).
+- **`select_multi.php` ganhou seções, de forma retrocompatível**: variável opcional `$msel_groups` (`[['label' => 'DMS', 'options' => [...]], …]`) e um terceiro parâmetro opcional em `mselTodos(id, marcar, grupo)`. Sem `$msel_groups` a saída é a de antes — `/relatorios/alarmes` e `/bi` não mudaram, e os testes do componente continuam verdes. A busca **esconde o cabeçalho de uma seção sem itens à vista** e o "todos" da seção **respeita a busca em curso** (não marca o que a pessoa não está vendo).
+- `includes/risk_map.php`: `RISK_GROUP_CATEGORY` (comportamento → `ADAS`/`DMS`), `risk_groups_by_category()`, `risk_parse_id_list()` e `risk_parse_group_list()` — funções puras, testadas sem banco.
+
+### Changed
+- 🔴 **A lista de comportamento só oferece o que o sistema JÁ RECEBEU** (`mr_group_options()` = `DISTINCT risk_group` de `risk_events`, no escopo do cliente, sem filtro de período — as opções não mudam com as datas). `excesso_placa` (JT/T `264-6`) e `obstaculo_frente` (`264-7`) **somem enquanto nenhuma câmera os enviar** e aparecem sozinhos no dia do primeiro alerta. Um comportamento vindo na URL entra na lista **mesmo sem ter sido recebido**: modelo salvo ou link antigo não perde item em silêncio.
+  - ⚠️ **Difere de `/relatorios/alarmes`**, que lista o catálogo inteiro **de propósito** ("senão só se pode filtrar o que já se sabe existir", comentário em `rel_alarmes.php`). São filtros de coisas diferentes: lá o catálogo de alarmes, aqui o comportamento do motorista dentro do que existe no mapa. Decisão do dono do produto.
+  - **Não é bug de gravação.** Os dois só existem no protocolo JT/T e dependem do recurso ADAS estar ligado na câmera; o caminho `pushalarm.php` → `risk_events` foi lido e **não descarta** nenhum código. É ausência real de dado.
+- **`mr_where()` passou a `IN (...)`** para veículo e comportamento, com um placeholder por valor. Todas as abas, os KPIs e a exportação passam por ela, então nenhuma outra consulta mudou.
+- ⚠️ **O filtro de comportamento só afeta os PONTOS, não as horas dirigidas.** `risk_exposure` não tem comportamento: o denominador do índice continua sendo o tempo de estrada de todos os veículos escolhidos, e o índice de um comportamento isolado é "pontos dele ÷ todas as horas". É o que a aba **Quem → Comportamentos** já fazia e documentava.
+
+### Notes
+- **Compatibilidade:** o parâmetro é o mesmo (`vehicle_id`, `risk_group`), agora com valores por vírgula. `?vehicle_id=3` e `?risk_group=fadiga` continuam valendo como lista de um item; valor inválido é **descartado** (não vira filtro que zera a tela), e modelos salvos em `report_templates` guardam a query string, então não precisaram mudar. O contrato de saída do componente (hidden com vírgulas) é o mesmo de `/relatorios/alarmes`.
+- **A tabela DMS/ADAS foi conferida contra o catálogo real** (`alarm_types.category` das 18 origens, no banco local após a migração `v4.20.0`): as 18 batem, e cada grupo tem uma categoria só. `tests/helpers/risk_map.test.php` também lê os blocos `-- ADAS` / `-- DMS` da migração para travar `RISK_GROUP_CATEGORY`. 🔴 Comportamento novo em `RISK_GROUP_LABELS` **tem de entrar também em `RISK_GROUP_CATEGORY`**, senão some do filtro (registrado no `CLAUDE.md`).
+- **Verificação** (banco local com a `v4.20.0` aplicada e 18 alertas semeados, 3 veículos, DMS e ADAS misturados): 15 cenários de filtro conferidos contra a contagem esperada — sem filtro 18; 1 veículo 7; 2 veículos 13; 3 veículos 18; todos DMS 12; todos ADAS 6; mistura 6; valor único antigo; valor inválido = sem filtro; comportamento nunca recebido zera; veículo + ADAS; veículos + DMS. As 5 abas renderizam com filtros múltiplos. `risk_map.test.php` 111/111; `wiki_registry` 11/11; Playwright 32/32 (`mapa_risco.spec.js` + a varredura de bordas de `filtros.spec.js`, que ganhou `/mapa-risco`, + os 4 testes do componente). Dados de teste removidos; `system_info.version` do banco local restaurado depois da migração.
+- Sem migração: **não** exige o segundo deploy descrito no `CLAUDE.md`.
+
 ## [Unreleased] — 4.24.1
 
 **Dados Estendidos: padrão de frontend dos relatórios, as duas abas viram uma lista única por data/hora, e o "motivo da transmissão" (`postMethod`) ganha nome em PT-BR.**

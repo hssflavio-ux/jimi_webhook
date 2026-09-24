@@ -22,6 +22,14 @@
  *   $msel_labels   array   OPCIONAL, mapa valor => rótulo exibido
  *   $msel_vazio    string  OPCIONAL, texto de "nada selecionado" (default 'Todos')
  *   $msel_busca    int     OPCIONAL, a partir de quantas opções mostrar a busca (default 8)
+ *   $msel_groups   array   OPCIONAL (v4.25.0), seções da lista:
+ *                          [['label' => 'DMS', 'options' => [valores]], …]
+ *
+ * Com `$msel_groups` a lista sai em SEÇÕES, cada uma com o próprio "todos /
+ * nenhum" — é o que permite marcar "todos os DMS" sem tocar nos ADAS. As opções
+ * passam a vir das seções (`$msel_options` continua obrigatório, mas só conta
+ * para decidir se a busca aparece). Sem `$msel_groups` o desenho é exatamente o
+ * de antes: /relatorios/alarmes e /bi não sabem que isto existe.
  *
  * ⚠️ `$msel_labels` existe porque o valor nem sempre é o texto. Em tipo de
  * alarme o valor É o nome; em veículo o valor tem de ser o `imei` (é por ele
@@ -31,6 +39,7 @@
 $msel_labels   = $msel_labels   ?? [];
 $msel_vazio    = $msel_vazio    ?? 'Todos';
 $msel_busca    = $msel_busca    ?? 8;
+$msel_groups   = array_values(array_filter((array)($msel_groups ?? []), fn($g) => !empty($g['options'])));
 $msel_selected = array_values(array_filter((array)$msel_selected, fn($v) => $v !== '' && $v !== null));
 $_msn = count($msel_selected);
 $_msResumo = $_msn === 0
@@ -59,6 +68,14 @@ $_msResumo = $_msn === 0
                    border-radius:100px;color:var(--muted);cursor:pointer;}
 .msel-acoes button:hover{color:var(--primary);border-color:var(--primary);}
 .msel-nada{font-size:11px;color:var(--muted);padding:6px;}
+.msel-grupo{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 6px 3px;margin-top:4px;
+            font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+            border-top:1px solid var(--hairline-soft);}
+.msel-lista > .msel-grupo:first-child{margin-top:0;border-top:0;}
+.msel-grupo button{font-size:11px;text-transform:none;letter-spacing:0;padding:1px 8px;background:none;
+                   border:1px solid var(--hairline);border-radius:100px;color:var(--muted);cursor:pointer;}
+.msel-grupo button:hover{color:var(--primary);border-color:var(--primary);}
+.msel-grupo-acoes{display:flex;gap:4px;}
 </style>
 <script>
 /**
@@ -85,10 +102,15 @@ function mselAbrir(id, forcar) {
     raiz.querySelector('.msel-botao').setAttribute('aria-expanded', abrir ? 'true' : 'false');
     if (abrir) { var b = raiz.querySelector('.msel-busca'); if (b) b.focus(); }
 }
-function mselTodos(id, marcar) {
+/**
+ * Marca/limpa as caixas visíveis. `grupo` (opcional) limita à seção — sem ele,
+ * a lista inteira, como antes das seções existirem.
+ */
+function mselTodos(id, marcar, grupo) {
     var raiz = document.getElementById('msel-' + id);
     raiz.querySelectorAll('.msel-item').forEach(function (it) {
         if (it.style.display === 'none') return;      // respeita a busca em curso
+        if (grupo !== undefined && it.dataset.grupo !== grupo) return;
         it.querySelector('input').checked = marcar;
     });
     mselSync(id);
@@ -101,6 +123,14 @@ function mselBuscar(id, termo) {
         var bate = it.dataset.busca.indexOf(t) > -1;
         it.style.display = bate ? '' : 'none';
         if (bate) achou++;
+    });
+    // Cabeçalho de seção sem nenhum item à vista não fica sozinho na lista.
+    raiz.querySelectorAll('.msel-grupo').forEach(function (h) {
+        var visivel = false;
+        raiz.querySelectorAll('.msel-item').forEach(function (it) {
+            if (it.dataset.grupo === h.dataset.grupo && it.style.display !== 'none') visivel = true;
+        });
+        h.style.display = visivel ? '' : 'none';
     });
     raiz.querySelector('.msel-nada').style.display = achou ? 'none' : 'block';
 }
@@ -132,16 +162,33 @@ document.addEventListener('keydown', function (ev) {
             <button type="button" onclick="mselTodos('<?= htmlspecialchars($msel_id) ?>', false)">Limpar</button>
         </div>
         <div class="msel-lista">
-            <?php foreach ($msel_options as $_opt): ?>
-            <?php $_rot = (string)($msel_labels[$_opt] ?? $_opt); ?>
-            <label class="msel-item" data-busca="<?= htmlspecialchars(mb_strtolower($_rot)) ?>">
+            <?php
+            // Um item da lista; `$_grupo` só existe quando a lista tem seções.
+            $_msItem = function ($_opt, $_grupo = null) use ($msel_labels, $msel_selected, $msel_id) {
+                $_rot = (string)($msel_labels[$_opt] ?? $_opt);
+                ?>
+            <label class="msel-item" data-busca="<?= htmlspecialchars(mb_strtolower($_rot)) ?>"
+                   <?= $_grupo !== null ? 'data-grupo="' . htmlspecialchars((string)$_grupo) . '"' : '' ?>>
                 <input type="checkbox" value="<?= htmlspecialchars((string)$_opt) ?>"
                        data-rotulo="<?= htmlspecialchars($_rot) ?>"
                        <?= in_array($_opt, $msel_selected, true) ? 'checked' : '' ?>
                        onchange="mselSync('<?= htmlspecialchars($msel_id) ?>')">
                 <span><?= htmlspecialchars($_rot) ?></span>
             </label>
-            <?php endforeach; ?>
+                <?php
+            };
+            ?>
+            <?php if ($msel_groups): foreach ($msel_groups as $_g): ?>
+            <?php $_gArg = htmlspecialchars(json_encode((string)$_g['label'])); $_idArg = htmlspecialchars(json_encode((string)$msel_id)); ?>
+            <div class="msel-grupo" data-grupo="<?= htmlspecialchars((string)$_g['label']) ?>">
+                <span><?= htmlspecialchars((string)$_g['label']) ?></span>
+                <span class="msel-grupo-acoes">
+                    <button type="button" onclick="mselTodos(<?= $_idArg ?>, true, <?= $_gArg ?>)">todos</button>
+                    <button type="button" onclick="mselTodos(<?= $_idArg ?>, false, <?= $_gArg ?>)">nenhum</button>
+                </span>
+            </div>
+            <?php foreach ($_g['options'] as $_opt) { $_msItem($_opt, $_g['label']); } ?>
+            <?php endforeach; else: foreach ($msel_options as $_opt) { $_msItem($_opt); } endif; ?>
             <div class="msel-nada" style="display:none;">Nada encontrado.</div>
         </div>
     </div>

@@ -1,7 +1,12 @@
 <?php
 /**
- * bycamera — Mapa de Risco ADAS/DMS v4.20.0
+ * bycamera — Mapa de Risco ADAS/DMS v4.25.0
  * Rota: /mapa-risco — permissão da tela BI (router.php, $screenByHandler)
+ *
+ * Filtros de veículo e comportamento aceitam VÁRIOS (v4.25.0): listas suspensas
+ * com marcação (web/components/select_multi.php), no mesmo parâmetro de antes,
+ * valores separados por vírgula. O comportamento sai em duas seções, DMS e ADAS,
+ * e só lista o que o sistema já recebeu (mr_group_options()).
  *
  * Fonte: risk_events e risk_exposure, gravadas por scripts/risk_builder.php.
  * As regras (peso, faixas, grade de 1 km, jornada contínua) moram em
@@ -68,17 +73,17 @@ if (!isset(MR_TABS[$tab])) {
 $filterCust = $_GET['customer_id'] ?? null;
 $F = [
     // Escopo multi-tenant centralizado — ver report_customer_scope()
-    'cust'    => report_customer_scope($filterCust, $isAdmin, $customerId),
-    'vehicle' => max(0, (int)($_GET['vehicle_id'] ?? 0)),
-    'vtype'   => (string)($_GET['vehicle_type'] ?? ''),
-    'driver'  => (string)($_GET['driver_id'] ?? ''),   // '' todos · 'nd' não identificado · id
-    'group'   => (string)($_GET['risk_group'] ?? ''),
+    'cust'     => report_customer_scope($filterCust, $isAdmin, $customerId),
+    // v4.25.0 — veículos e comportamentos aceitam VÁRIOS (vírgula no mesmo
+    // parâmetro). O valor único de antes (?vehicle_id=3, ?risk_group=fadiga)
+    // continua sendo uma lista de um item. Vazio = sem filtro.
+    'vehicles' => risk_parse_id_list((string)($_GET['vehicle_id'] ?? '')),
+    'vtype'    => (string)($_GET['vehicle_type'] ?? ''),
+    'driver'   => (string)($_GET['driver_id'] ?? ''),   // '' todos · 'nd' não identificado · id
+    'groups'   => risk_parse_group_list((string)($_GET['risk_group'] ?? '')),
 ];
 if (!isset(VEHICLE_ICONS[$F['vtype']])) {
     $F['vtype'] = '';
-}
-if (!isset(RISK_GROUP_LABELS[$F['group']])) {
-    $F['group'] = '';
 }
 if ($F['driver'] !== 'nd' && !ctype_digit($F['driver'])) {
     $F['driver'] = '';
@@ -407,11 +412,18 @@ if (in_array($export, ['xlsx', 'pdf', 'csv'], true)) {
 $customers = [];
 $vehicles  = [];
 $drivers   = [];
+$received  = [];
 try {
     $customers = report_customer_options($db);
     $vehicles  = mr_vehicle_options($db, $F['cust']);
     $drivers   = mr_driver_options($db, $F['cust']);
+    $received  = $tableMissing ? [] : mr_group_options($db, $F['cust']);
 } catch (Throwable $e) {}
+// Só o que o sistema JÁ RECEBEU (+ o que veio selecionado na URL), em DMS e ADAS.
+$groupSections = [];
+foreach (risk_groups_by_category($received, $F['groups']) as $cat => $groups) {
+    $groupSections[] = ['label' => $cat, 'options' => $groups];
+}
 
 require_once __DIR__ . '/../web/components/map_assets.php';
 $extra_head = '<style>
@@ -485,15 +497,19 @@ $expBase = htmlspecialchars(http_build_query($expQ));
             </select>
         </div>
         <?php endif; ?>
-        <div>
-            <label class="filtro-rotulo">Veículo</label>
-            <select name="vehicle_id" class="filtro-campo">
-                <option value="">Todos</option>
-                <?php foreach ($vehicles as $v): ?>
-                <option value="<?= (int)$v['id'] ?>" <?= $F['vehicle'] === (int)$v['id'] ? 'selected' : '' ?>><?= htmlspecialchars($v['plate']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
+        <?php
+        // Veículo: 1, vários ou todos. Valores como STRING — o componente compara
+        // com in_array(..., true) e o hidden volta como texto.
+        $msel_id       = 'mr-veiculos';
+        $msel_label    = 'Veículo';
+        $msel_param    = 'vehicle_id';
+        $msel_options  = array_map(fn($v) => (string)$v['id'], $vehicles);
+        $msel_labels   = array_column($vehicles, 'plate', 'id');
+        $msel_selected = array_map('strval', $F['vehicles']);
+        $msel_vazio    = 'Todos';
+        $msel_groups   = [];
+        include __DIR__ . '/../web/components/select_multi.php';
+        ?>
         <div>
             <label class="filtro-rotulo">Tipo de veículo</label>
             <select name="vehicle_type" class="filtro-campo">
@@ -513,15 +529,19 @@ $expBase = htmlspecialchars(http_build_query($expQ));
                 <?php endforeach; ?>
             </select>
         </div>
-        <div>
-            <label class="filtro-rotulo">Comportamento</label>
-            <select name="risk_group" class="filtro-campo">
-                <option value="">Todos</option>
-                <?php foreach (RISK_GROUP_LABELS as $g => $label): ?>
-                <option value="<?= htmlspecialchars($g) ?>" <?= $F['group'] === $g ? 'selected' : '' ?>><?= htmlspecialchars($label) ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
+        <?php
+        // Comportamento: uma lista com as seções DMS e ADAS. "todos" de cada
+        // seção marca só ela; qualquer mistura entre as duas vale.
+        $msel_id       = 'mr-comportamentos';
+        $msel_label    = 'Comportamento';
+        $msel_param    = 'risk_group';
+        $msel_options  = array_merge(...array_column($groupSections, 'options'));
+        $msel_labels   = RISK_GROUP_LABELS;
+        $msel_selected = $F['groups'];
+        $msel_vazio    = 'Todos';
+        $msel_groups   = $groupSections;
+        include __DIR__ . '/../web/components/select_multi.php';
+        ?>
         <div>
             <label class="filtro-rotulo">Período (máx. <?= RISK_MAX_DAYS ?> dias)</label>
             <div style="display:flex;gap:4px;">
@@ -840,9 +860,13 @@ function mr_where(string $alias, bool $events, array $F, string $from, string $t
         $sql .= " AND $alias.customer_id = :cid";
         $params[':cid'] = $F['cust'];
     }
-    if ($F['vehicle'] > 0) {
-        $sql .= " AND $alias.vehicle_id = :vid";
-        $params[':vid'] = $F['vehicle'];
+    if ($F['vehicles']) {
+        $marks = [];
+        foreach ($F['vehicles'] as $i => $vid) {
+            $marks[] = ":vid$i";
+            $params[":vid$i"] = $vid;
+        }
+        $sql .= " AND $alias.vehicle_id IN (" . implode(',', $marks) . ")";
     }
     if ($F['vtype'] !== '') {
         $sql .= " AND $alias.vehicle_id IN (SELECT id FROM vehicles WHERE vehicle_type = :vt)";
@@ -856,9 +880,13 @@ function mr_where(string $alias, bool $events, array $F, string $from, string $t
     }
     if ($events) {
         $sql .= " AND $alias.false_positive = 0";
-        if ($F['group'] !== '') {
-            $sql .= " AND $alias.risk_group = :rg";
-            $params[':rg'] = $F['group'];
+        if ($F['groups']) {
+            $marks = [];
+            foreach ($F['groups'] as $i => $g) {
+                $marks[] = ":rg$i";
+                $params[":rg$i"] = $g;
+            }
+            $sql .= " AND $alias.risk_group IN (" . implode(',', $marks) . ")";
         }
     }
     return [$sql, $params];
@@ -1229,6 +1257,28 @@ function mr_vehicle_options(PDO $db, ?int $cust): array
     return $db->query("SELECT v.id, v.plate FROM vehicles v
                         WHERE v.is_active = 1 AND $semRastreador
                         ORDER BY v.plate LIMIT 2000")->fetchAll(PDO::FETCH_ASSOC);
+}
+
+/**
+ * Comportamentos que o sistema JÁ RECEBEU, no escopo da tela.
+ *
+ * Alimenta o filtro de comportamento: um que nunca chegou (hoje, excesso em
+ * placa de trânsito e obstáculo à frente — só existem no JT/T e dependem do ADAS
+ * da câmera) não aparece, e volta sozinho quando o primeiro alerta for gravado.
+ * Não filtra por período: as opções não podem mudar conforme as datas.
+ *
+ * @param PDO      $db
+ * @param int|null $cust null só para admin de plataforma (todos)
+ * @returns string[] Valores de risk_group
+ */
+function mr_group_options(PDO $db, ?int $cust): array
+{
+    if ($cust !== null) {
+        $stmt = $db->prepare("SELECT DISTINCT risk_group FROM risk_events WHERE customer_id = :c");
+        $stmt->execute([':c' => $cust]);
+        return $stmt->fetchAll(PDO::FETCH_COLUMN);
+    }
+    return $db->query("SELECT DISTINCT risk_group FROM risk_events")->fetchAll(PDO::FETCH_COLUMN);
 }
 
 /**

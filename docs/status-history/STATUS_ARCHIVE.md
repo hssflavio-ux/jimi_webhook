@@ -2,6 +2,22 @@
 
 Entradas de sessão arquivadas por `.claude/skills/status-archive`. Mais recentes primeiro.
 
+> ### 📍 22/09/2026 — gps_data.gps_mode: comentário da coluna corrigido (v4.23.1)
+>
+> Pedido do dono do produto: conferir se `gpsMode` e `postMethod` (§1.3 Push GPS Data) estavam
+> sendo tratados em `handlers/pushgps.php`. Os dois já eram extraídos e gravados — nenhum código
+> mudou. Achado: `gps_data.gps_mode` estava comentado `'0=GPS, 1=LBS, 2=WiFi'` desde o dump
+> original do schema — essa é a definição de `postType`, copiada para a coluna errada. Conferido
+> ao vivo contra a doc oficial: `gpsMode` é `0: Real-time upload / 1: Re-upload` (igual ao já
+> correto `alarms.gps_mode`); `postType` é `1: GPS / 2: LBS / 3: WiFi` (igual ao já correto
+> `gps_data.post_type`). `postMethod` continua sem tabela oficial publicada — mesmo achado do
+> CHANGELOG `4.17.11`, sem mudança. Sem impacto em runtime (nada decodifica `gps_mode` em rótulo
+> hoje); corrigido via migração `v4.23.1` só no COMENTÁRIO da coluna. Detalhe no CHANGELOG `4.23.1`.
+>
+> ✅ Aplicada e conferida contra MySQL local (`SHOW FULL COLUMNS`, tipo/default inalterados,
+> reaplicação idempotente). `bash -n scripts/deploy.sh` limpo. Registrada em `scripts/deploy.sh` e
+> na skill `db-setup`. **Falta**: segundo deploy em homolog/produção (regra do CLAUDE.md).
+
 > ### 📍 20/09/2026 — Central de Ajuda com card de abertura por perfil e "Meu acesso" (v4.23.0)
 >
 > `/wiki` abre agora com um card personalizado que mostra o **perfil do usuário** (admin /

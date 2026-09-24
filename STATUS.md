@@ -1,4 +1,26 @@
-# STATUS.md — Jimi Webhook System v4.24.1 (YUV Parity)
+# STATUS.md — Jimi Webhook System v4.25.0 (YUV Parity)
+
+> ### 📍 23/09/2026 — Mapa de Risco: filtros de veículo e comportamento com vários itens, seções DMS/ADAS (v4.25.0)
+>
+> Pedido do dono do produto: **(1)** escolher um, vários ou todos os veículos; **(2)** escolher
+> comportamentos DMS e/ou ADAS — todos os DMS, todos os ADAS, alguns de cada ou qualquer mistura;
+> **(3)** a lista mostrava comportamentos que o sistema nunca recebeu (*Excesso em placa de trânsito*,
+> *Obstáculo à frente*). Os dois filtros viraram listas suspensas com marcação (`select_multi.php`, que
+> ganhou seções **retrocompatíveis** — `$msel_groups`, "todos/nenhum" por seção, busca sem cabeçalho
+> órfão); o comportamento sai em **DMS** e **ADAS** (`RISK_GROUP_CATEGORY`) e **só lista o que já foi
+> recebido** (`mr_group_options()`); grupo selecionado na URL entra mesmo sem ter sido recebido.
+> O parâmetro é o mesmo de antes com vírgulas — link e modelo antigos continuam valendo.
+>
+> 🔴 **Os dois "não recebidos" não são falha de gravação:** só existem no JT/T (`264-6`/`264-7`) e
+> dependem do ADAS ligado na câmera; `pushalarm.php` → `risk_events` foi lido e não descarta nenhum.
+> ⚠️ Decisão do dono que **difere** de `/relatorios/alarmes` (lá a lista é o catálogo inteiro, de
+> propósito). O filtro de comportamento afeta só os **pontos** — o denominador (horas dirigidas)
+> continua o de todos os veículos escolhidos.
+>
+> ✅ Testado contra MySQL local com a `v4.20.0` aplicada + 18 alertas semeados: 15 cenários de filtro
+> batem com a contagem esperada, 5 abas renderizam, `risk_map.test.php` 111/111, Playwright 32/32.
+> Tabela DMS/ADAS conferida contra `alarm_types.category`: 18/18. Sem migração — **não** precisa de
+> segundo deploy. **Falta**: deploy.
 
 > ### 📍 23/09/2026 — Dados Estendidos: padrão de relatório, lista única e motivo da transmissão (v4.24.1)
 >
@@ -50,23 +72,7 @@
 > **Fora do escopo, decisão do dono do produto**: `/pushextendedkks` (§1.18, ~20 sub-schemas,
 > sem evidência de uso real nesta operação) não foi implementado.
 
-> ### 📍 22/09/2026 — gps_data.gps_mode: comentário da coluna corrigido (v4.23.1)
->
-> Pedido do dono do produto: conferir se `gpsMode` e `postMethod` (§1.3 Push GPS Data) estavam
-> sendo tratados em `handlers/pushgps.php`. Os dois já eram extraídos e gravados — nenhum código
-> mudou. Achado: `gps_data.gps_mode` estava comentado `'0=GPS, 1=LBS, 2=WiFi'` desde o dump
-> original do schema — essa é a definição de `postType`, copiada para a coluna errada. Conferido
-> ao vivo contra a doc oficial: `gpsMode` é `0: Real-time upload / 1: Re-upload` (igual ao já
-> correto `alarms.gps_mode`); `postType` é `1: GPS / 2: LBS / 3: WiFi` (igual ao já correto
-> `gps_data.post_type`). `postMethod` continua sem tabela oficial publicada — mesmo achado do
-> CHANGELOG `4.17.11`, sem mudança. Sem impacto em runtime (nada decodifica `gps_mode` em rótulo
-> hoje); corrigido via migração `v4.23.1` só no COMENTÁRIO da coluna. Detalhe no CHANGELOG `4.23.1`.
->
-> ✅ Aplicada e conferida contra MySQL local (`SHOW FULL COLUMNS`, tipo/default inalterados,
-> reaplicação idempotente). `bash -n scripts/deploy.sh` limpo. Registrada em `scripts/deploy.sh` e
-> na skill `db-setup`. **Falta**: segundo deploy em homolog/produção (regra do CLAUDE.md).
-
-> Entradas anteriores a 22/09/2026 arquivadas em docs/status-history/STATUS_ARCHIVE.md.
+> Entradas anteriores a v4.24.0 (22/09/2026) arquivadas em docs/status-history/STATUS_ARCHIVE.md.
 
 ## 0. Iniciativa v4.0.0 — YUV Parity (CONCLUÍDA)
 
