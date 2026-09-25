@@ -196,6 +196,8 @@ function wiki_render_meu_acesso(array $registry, array $access): string {
                 . wiki_esc((string)$acc['reason']) . '</li>';
         }
     }
-    return '<div class="wiki-meu-acesso" id="meu-acesso"><h4>Liberado para você</h4><ul>' . ($liberadas ?: '<li>Nenhuma tela.</li>') . '</ul>'
+    // Sem `id` aqui: o título da seção ("Meu acesso") já é o `#meu-acesso`, e um
+    // segundo com o mesmo id deixa a âncora ambígua (o navegador salta no primeiro).
+    return '<div class="wiki-meu-acesso"><h4>Liberado para você</h4><ul>' . ($liberadas ?: '<li>Nenhuma tela.</li>') . '</ul>'
         . '<h4>Bloqueado</h4><ul>' . ($bloqueadas ?: '<li>Nada bloqueado.</li>') . '</ul></div>';
 }
