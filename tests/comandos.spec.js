@@ -35,8 +35,10 @@ test.describe('Comandos — lista única, sem trava de modelo', () => {
         const nomes = cat.map((c) => c.c);
         expect(new Set(nomes).size).toBe(nomes.length);
 
-        // Toda sintaxe é a forma de PLATAFORMA — a de SMS levaria a senha 666666.
-        expect(cat.some((c) => /666666/.test(c.c) || (c.e || []).some((e) => /666666/.test(e.c)))).toBe(false);
+        // Toda sintaxe é a forma de PLATAFORMA — a de SMS (`CMD#666666#...`) levaria
+        // a senha 666666. Procura o `#666666`, e não o número solto: `PASSWORD,666666,123456`
+        // é o exemplo oficial (B023) de um comando cujo ARGUMENTO é a senha antiga.
+        expect(cat.some((c) => /#666666/.test(c.c) || (c.e || []).some((e) => /#666666/.test(e.c)))).toBe(false);
     });
 
     test('🔴 nenhum equipamento fica desabilitado ao escolher um comando específico de modelo', async ({ authedPage }) => {
@@ -62,6 +64,16 @@ test.describe('Comandos — lista única, sem trava de modelo', () => {
         test.skip(!alvo, 'este cliente não tem modelo fora da documentação de nenhum comando');
 
         await authedPage.selectOption('#cmd-sel', 'T:' + alvo.c);
+
+        // O aviso só considera equipamento MARCADO (`atualizarAvisoCompatibilidade`),
+        // e nenhuma linha nasce marcada — marca uma cujo modelo o comando não documenta.
+        const imeiFora = await authedPage.$$eval('.dev-row', (rows, docs) => {
+            const r = rows.find((x) => !docs.includes(x.dataset.modelo));
+            return r ? r.querySelector('.dev-chk').value : null;
+        }, alvo.m);
+        expect(imeiFora, 'há uma linha fora da documentação do comando').toBeTruthy();
+        await authedPage.locator('.dev-chk[value="' + imeiFora + '"]').check();
+
         await expect(authedPage.locator('#lock-note')).toBeVisible();
         await expect(authedPage.locator('#lock-note')).toContainText('envio continua liberado');
 

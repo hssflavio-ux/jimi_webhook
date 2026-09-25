@@ -210,7 +210,10 @@ test.describe('Playback — despacho de comandos', () => {
             // @ts-ignore — a decisão por protocolo mora aqui
             onSubmitRequest(new Event('submit'));
         });
-        await expect.poll(() => enviados.length).toBeGreaterThan(0);
+        // O laço é SERIALIZADO: o canal N+1 só sai depois do callback do canal N
+        // (a câmera não responde a dois 37381 concorrentes). Por isso espera os
+        // três canais chegarem — ler logo após o primeiro envio vê só o canal 1.
+        await expect.poll(() => new Set(enviados.map((e) => JSON.parse(e.content).channel)).size).toBe(3);
 
         expect(enviados.every((e) => e.proNo === 37381), 'JT/T lista o cartão pelo 37381').toBeTruthy();
         expect(enviados.some((e) => String(e.content).indexOf('FILELIST') > -1),

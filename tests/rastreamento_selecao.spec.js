@@ -38,8 +38,10 @@ test.describe('Rastreamento — navegação em coluna única', () => {
     test('Cliente e Ativos na MESMA coluna, cliente acima', async ({ authedPage }) => {
         await authedPage.goto('/rastreamento');
 
-        // Duas colunas (painel + mapa), não as três de antes
-        const grid = authedPage.locator('div[style*="grid-template-columns:300px 1fr"]');
+        // Duas colunas (painel + mapa), não as três de antes. Desde a varredura
+        // de design system (0a639fa) a grade é a classe `.list-with-panel` com a largura do painel em
+        // `--panel-w` (era `grid-template-columns:300px 1fr` inline).
+        const grid = authedPage.locator('div.list-with-panel[style*="--panel-w:300px"]');
         await expect(grid).toHaveCount(1);
 
         // A coluna de clientes separada não existe mais
@@ -212,7 +214,9 @@ test.describe('Rastreamento — a linha do ativo', () => {
         expect(imei).toBeTruthy();
 
         // A linha sob a placa traz IGN, e o IMEI não aparece mais nela.
-        const meta = primeira.locator('.device-meta');
+        // Desde a v4.19.0 a linha pode ter uma segunda `.device-meta` (o motorista
+        // identificado por reconhecimento facial), então a de IGN é achada por conter `.ign-val`.
+        const meta = primeira.locator('.device-meta:has(.ign-val)');
         await expect(meta).toBeVisible();
         const texto = (await meta.textContent()).trim();
         expect(texto).toMatch(/^IGN:\s*(ON|OFF|—)\s*·/);

@@ -26,7 +26,8 @@ for (const format of ['csv', 'xlsx', 'pdf']) {
         await authedPage.selectOption('select[name="report_type"]', 'devices');
         await authedPage.selectOption('select[name="format"]', format);
         await authedPage.click('form:has(input[name="report_name"]) button[type="submit"]');
-        await expect(authedPage.locator('.alert-success')).toContainText('fila');
+        // A confirmação é um card com estilo inline (sem classe `.alert-success`).
+        await expect(authedPage.getByText('adicionado à fila de geração')).toBeVisible();
 
         // 2. Processa a fila (equivalente ao cron de 1 min)
         execFileSync('php', ['scripts/worker.php'], {
@@ -38,7 +39,9 @@ for (const format of ['csv', 'xlsx', 'pdf']) {
         // 3. Job mais recente concluído com link de download
         // (goto em vez de reload — reload após POST re-submeteria o form)
         await authedPage.goto('/exportar');
-        const firstRow = authedPage.locator('#export-tbody tr').first();
+        // Acha o job pelo nome: dois jobs no mesmo segundo empatam em
+        // `ORDER BY created_at DESC`, e o "primeiro da lista" pode ser o do teste anterior.
+        const firstRow = authedPage.locator('#export-tbody tr').filter({ hasText: nome }).first();
         await expect(firstRow).toContainText('Concluído');
         await expect(firstRow).toContainText(format.toUpperCase());
 
@@ -66,11 +69,12 @@ for (const format of ['csv', 'xlsx', 'pdf']) {
  */
 test('relatório agendado de Alarmes sai padronizado por placa, com a URL do mapa', async ({ authedPage }) => {
     await authedPage.goto('/exportar');
-    await authedPage.fill('input[name="report_name"]', `E2E Colunas ${Date.now()}`);
+    const nome = `E2E Colunas ${Date.now()}`;
+    await authedPage.fill('input[name="report_name"]', nome);
     await authedPage.selectOption('select[name="report_type"]', 'alarms');
     await authedPage.selectOption('select[name="format"]', 'csv');
     await authedPage.click('form:has(input[name="report_name"]) button[type="submit"]');
-    await expect(authedPage.locator('.alert-success')).toContainText('fila');
+    await expect(authedPage.getByText('adicionado à fila de geração')).toBeVisible();
 
     execFileSync('php', ['scripts/worker.php'], {
         cwd: path.resolve(__dirname, '..'),
@@ -79,7 +83,7 @@ test('relatório agendado de Alarmes sai padronizado por placa, com a URL do map
     });
 
     await authedPage.goto('/exportar');
-    const href = await authedPage.locator('#export-tbody tr').first()
+    const href = await authedPage.locator('#export-tbody tr').filter({ hasText: nome }).first()
         .locator('a:has-text("Baixar")').getAttribute('href');
     expect(href, 'link de download presente').toBeTruthy();
 

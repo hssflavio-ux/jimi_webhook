@@ -50,7 +50,9 @@ test.describe('Comandos por SMS', () => {
         // wiki. Uma única sintaxe com 666666 aqui quebra todos os envios.
         // (o catálogo exposto não carrega mais a chave crua por comando desde
         // a unificação por nome — checa nome e exemplos, que sobrevivem.)
-        expect(cat.some(c => /666666/.test(c.c) || (c.e || []).some(e => /666666/.test(e.c)))).toBe(false);
+        // Procura o `#666666` (forma de SMS), não o número solto: `PASSWORD,666666,123456`
+        // é o exemplo oficial (B023) de um comando cujo argumento é a senha antiga.
+        expect(cat.some(c => /#666666/.test(c.c) || (c.e || []).some(e => /#666666/.test(e.c)))).toBe(false);
 
         // O saldo é consultado a cada abertura — ou o número, ou o motivo de
         // não ter vindo. O que não pode é a área ficar muda.

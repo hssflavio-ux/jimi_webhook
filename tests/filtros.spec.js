@@ -68,7 +68,10 @@ test.describe('Barras de filtro — padrão visual', () => {
         // O campo já teve TRÊS nomes para a mesma coisa — "Nome do Dispositivo"
         // no cadastro, "Dispositivo" na grade, "Placa" na operação —, o que
         // fazia parecer que eram campos diferentes.
-        const rotas = ['/ativos', '/ativos/novo', '/equipamentos?action=novo', '/relatorios',
+        // `/equipamentos?action=novo` NÃO entra: desde a v4.11.0 a câmera não tem
+        // campo de placa (o "Nome" de lá é só rótulo interno de estoque); a placa
+        // é `vehicles.plate`, cadastrada em `/ativos/novo`.
+        const rotas = ['/ativos', '/ativos/novo', '/relatorios',
                        '/config-dispositivos', '/comandos', '/video/downloads',
                        '/video/playback', '/relatorios/alarmes', '/dados-estendidos'];
         for (const rota of rotas) {

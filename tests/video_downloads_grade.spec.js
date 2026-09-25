@@ -180,6 +180,11 @@ test.describe('Downloads — o alarme de cada arquivo', () => {
         // Medido em produção: 2.999 de 3.000 têm alarme. A margem é generosa
         // de propósito — o que se pega aqui é a resolução ter parado de
         // funcionar, não uma flutuação da fila.
+        // A proporção só diz algo com amostra: uma fila de poucos arquivos (o
+        // banco de dev tem 1, um fixture do test_e2e.sh sem alarme) não prova
+        // nem refuta que a resolução funciona. As asserções acima, que valem
+        // para qualquer tamanho de fila, já rodaram.
+        test.skip(r.total < 10, `fila com ${r.total} arquivo(s) — pequena demais para medir a proporção de anexos de alarme`);
         expect(r.comAlarme, 'a maioria esmagadora da fila é anexo de alarme').toBeGreaterThan(r.total / 2);
     });
 
