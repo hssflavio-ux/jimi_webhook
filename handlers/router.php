@@ -65,7 +65,15 @@ $handlerDir = __DIR__;
 $params = [];
 
 if (empty($segments)) {
-    $handler = 'resumo.php';
+    // 🔴 `/` é o destino do login (login.php) e de todo `require_login()`
+    // (`?redirect=%2F`). O Painel é a tela inicial desde a v4.13.10 — o Resumo
+    // saiu do menu —, mas `/` seguia servindo o Resumo, que ignora o layout que
+    // o usuário salvou em `dashboard_layouts`. Quem não tem `view` no Painel
+    // (grupo de permissão) continua no Resumo, senão tomaria 403 ao logar.
+    // `/resumo` segue no ar. Sem sessão, `can()` é permissivo e o `painel.php`
+    // redireciona ao login como qualquer outra tela.
+    require_once __DIR__ . '/../includes/auth.php';
+    $handler = can('painel') ? 'painel.php' : 'resumo.php';
 } else {
     $first = $segments[0];
     $second = $segments[1] ?? null;

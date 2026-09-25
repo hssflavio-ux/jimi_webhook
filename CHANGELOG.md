@@ -5,6 +5,22 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [Unreleased] — 4.25.1
+
+**Login caía no Resumo, que ignora o layout do usuário: `/` passa a servir o Painel.**
+
+Relato: ao logar (`/login?redirect=%2F`) a tela aberta não batia com a configuração do painel do usuário. O print mostrava o título **"Resumo"** e nenhum item do menu ativo — o Resumo saiu do menu na v4.13.10 ("o Painel substituiu o Resumo como tela inicial"), mas a rota `/` nunca deixou de servi-lo, e é para `/` que o login e todo `require_login()` (`?redirect=%2F`) mandam o usuário. O layout salvo em `dashboard_layouts` só é lido por `/painel`.
+
+### Fixed
+
+- 🔴 `handlers/router.php`: `/` serve `painel.php`; quem não tem `view` no Painel (grupo de permissão) continua no `resumo.php` em vez de tomar 403 logo após o login. `/resumo` segue no ar.
+- `tests/login.spec.js`: spec do fluxo exato do relato (`?redirect=%2F` → `.main-header-title` = "Painel"); falhava antes da correção com "Resumo".
+
+### Não corrigido (levantado na investigação, sem prova em produção)
+
+- `dashboard_occurrence_kpis()`, `dashboard_speed_dist()` e as mesmas leituras de `resumo.php` usam a última snapshot de `metrics_snapshots` **sem conferir a idade** (só equipamentos/desatualizados usam `metrics_snapshot_stale()`); `scripts/metrics_rollup.php` não tem `try/catch` por cliente. Só se manifesta com o cron atrasado ou parado.
+- `login_user()` sempre abre no primeiro cliente vinculado em ordem alfabética, sem lembrar o último usado.
+
 ## [Unreleased] — 4.25.0
 
 **Mapa de Risco: os filtros de veículo e de comportamento aceitam VÁRIOS, e o comportamento sai em seções DMS e ADAS listando só o que o sistema já recebeu.**

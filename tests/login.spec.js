@@ -40,6 +40,20 @@ test.describe('Login', () => {
             await expect(page.locator('.main-header')).toBeVisible();
         });
 
+        // O Painel é a tela inicial (v4.13.10: o Resumo saiu do menu), mas `/`
+        // seguia servindo o Resumo — que ignora o layout salvo pelo usuário.
+        // `?redirect=%2F` é o que o require_login() monta ao abrir `/` deslogado.
+        test('login com destino "/" cai no Painel, não no Resumo', async ({ page }) => {
+            await page.goto('/login?redirect=%2F');
+            await page.fill('#email', CREDS.email);
+            await page.fill('#password', CREDS.password);
+            await Promise.all([
+                page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 }),
+                page.click('button[type="submit"]'),
+            ]);
+            await expect(page.locator('.main-header-title')).toHaveText('Painel');
+        });
+
         test('parâmetro redirect é respeitado (path local)', async ({ page }) => {
             await page.goto('/login?redirect=/ativos');
             await page.fill('#email', CREDS.email);
