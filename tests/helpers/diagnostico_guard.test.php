@@ -104,13 +104,22 @@ foreach ($colisao as [$cod, $mc, $esperado]) {
 // E o inverso: nenhum OUTRO número pode ter caído em cima do JT/T sem que
 // alguém tenha pensado nisso. A lista é o retrato de hoje; crescer sem revisão
 // é o que se quer pegar.
+//
+// v4.18.4 decidiu 4, 5 e 6 de propósito: são os códigos de tipo de alarme JT/T
+// AWSB/AFIF/AFIS (cinto afivelado, falha e sucesso no reconhecimento facial),
+// medidos em produção como "Código 4 (JTT)"/"Código 6 (JTT)". Colidem em número
+// com JIMI 4/5/6 (cerca e excesso de velocidade) e convivem pela mesma razão do
+// 262 — a chave é (alarm_code, protocol). O teste ficou parado em ['262'] desde a
+// v4.17.0 e acusava falha em qualquer banco com a v4.18.4 aplicada.
+$esperadoDupl = ['4', '5', '6', '262'];
 $dupl = $db->query("SELECT alarm_code FROM alarm_types GROUP BY alarm_code
                      HAVING COUNT(DISTINCT protocol) > 1 ORDER BY CAST(alarm_code AS UNSIGNED)")
            ->fetchAll(PDO::FETCH_COLUMN);
-$ok = ($dupl === ['262']);
+$ok = ($dupl === $esperadoDupl);
 if (!$ok) $falhas++;
 printf("  %s %-50s esperado=%-38s obtido=%s\n", $ok ? 'OK ' : 'FALHA',
-       '🔴 só o 262 existe nos dois protocolos', "['262']", '[' . implode(',', $dupl) . ']');
+       '🔴 só 4/5/6 (v4.18.4) e 262 existem nos dois protocolos',
+       '[' . implode(',', $esperadoDupl) . ']', '[' . implode(',', $dupl) . ']');
 
 echo $falhas ? "\n$falhas falha(s)\n" : "\nTodos os " . (count($casos) + count($colisao) + 1) . " casos passaram\n";
 exit($falhas ? 1 : 0);
